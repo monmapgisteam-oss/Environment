@@ -1,26 +1,345 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/* ==========================================================================
+   Байгаль орчны нэгдсэн платформ — дизайн токен
+
+   Хэв маяг: "хээрийн хэмжих хэрэгсэл" — цаасан суурь, үсэг зүйн эрэмбэ,
+   сүүдэргүй, үс шиг нимгэн зураас, өтгөн мэдээллийн сүлжээ.
+
+   Бүх өнгө OKLCH дээр. Ач холбогдол:
+   хэлтсийн 7 өнгө ЗӨВХӨН өнгөний өнцгөөрөө (H) ялгаатай, гэрэлтэлт (L) ба
+   ханалт (C) нь адилхан. Тиймээс аль нь ч нөгөөгөөсөө "бараан" эсвэл
+   "бохир" харагдахгүй, зэрэгцээд нэг гэр бүл мэт унших боломжтой.
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   ХАРАНХУЙ = ҮНДСЭН ГОРИМ. Гүн ногоон-хар суурь, амьд ногоон accent.
+   layout.tsx доторх скрипт data-theme-г үргэлж тавьдаг; хэрэглэгч гэрлийг
+   зориудаар сонгоогүй бол харанхуй.
+   -------------------------------------------------------------------------- */
+:root,
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  /* --- Суурь: хамгийн ард нь тас хар, дээшлэх тусам ногоон-хар --- */
+  --paper: oklch(0 0 0); /* canvas — тас хар #000 */
+  --paper-2: oklch(0.222 0.026 168); /* карт, панел ≈ #0e1f19 */
+  --paper-3: oklch(0.163 0.02 168); /* хажуугийн зурвас */
+  --paper-hi: oklch(0.278 0.034 168); /* hover, идэвхтэй ≈ #132b24 */
+
+  /* --- Бичвэр --- */
+  --ink: oklch(0.965 0.018 165); /* ≈ #eefaf5 */
+  --ink-2: oklch(0.786 0.024 168);
+  --ink-3: oklch(0.673 0.026 168); /* ≈ #8fa59d */
+
+  /* --- Зураас: цагаанаар шингэлсэн, суурь өөрчлөгдөхөд дагана --- */
+  --line: color-mix(in oklab, oklch(0.98 0.02 168) 9%, transparent);
+  --line-2: color-mix(in oklab, oklch(0.98 0.02 168) 18%, transparent);
+
+  /* --- Дохионы өнгө (L 0.83 / өндөр ханалт) --- */
+  --moss: oklch(0.845 0.168 160); /* ≈ #4ee59a — үндсэн accent */
+  --moss-deep: oklch(0.5 0.115 158); /* ≈ #1b6d4c — бараан ногоон */
+  --water: oklch(0.805 0.115 205); /* ≈ #43d7e8 — ус, сенсор */
+  --ochre: oklch(0.835 0.135 82); /* ≈ #f5c451 — анхааруулга */
+  --clay: oklch(0.722 0.163 22); /* ≈ #ff6f71 — ноцтой эрсдэл */
+
+  /* --- Хэлтсийн өнгө: L 0.83 / C 0.13 тогтмол, зөвхөн H ялгаатай --- */
+  --d-oi: oklch(0.83 0.145 160);
+  --d-nogoon: oklch(0.83 0.14 132);
+  --d-amitan: oklch(0.83 0.135 88);
+  --d-hyanalt: oklch(0.83 0.13 30);
+  --d-unelgee: oklch(0.83 0.115 320);
+  --d-zahirgaa: oklch(0.83 0.105 270);
+  --d-orchin: oklch(0.83 0.115 205);
+
+  --tint: 13%;
+  --shadow: 0 24px 50px rgba(0, 0, 0, 0.35);
+
+  /* Хажуугийн зурвасын өргөн — чирэхэд JS-ээс шинэчилнэ (232–460px) */
+  --rail-w: 288px;
+
+  /*
+    Дата дүрслэлийн ГАНЦ өнгө. Диаграм, бөөгнөрөл, газрын зургийн цэг бүгд
+    үүнийг хэрэглэнэ. Ангилал бүрийг өөр өнгөөр ялгах нь дэлгэц дүүрэн өнгө
+    болгож, аль нь утга илэрхийлж байгааг ойлгуулахаа больдог.
+  */
+  --data: #00a8e8;
+}
+
+:root[data-theme="light"] {
+  --data: #0284b8;
+}
+
+/* --------------------------------------------------------------------------
+   ГЭРЭЛ ГОРИМ — ижил өнгөний өнцгүүд, эсрэг гэрэлтэлт дээр
+   -------------------------------------------------------------------------- */
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  --paper: oklch(0.975 0.008 168);
+  --paper-2: oklch(0.995 0.004 168);
+  --paper-3: oklch(0.952 0.012 168);
+  --paper-hi: oklch(0.928 0.018 168);
+
+  --ink: oklch(0.235 0.026 168);
+  --ink-2: oklch(0.462 0.024 168);
+  /* 10–11px текстэд ордог тул WCAG AA (4.5:1) давахаар тохируулсан */
+  --ink-3: oklch(0.538 0.022 168);
+
+  --line: color-mix(in oklab, oklch(0.25 0.03 168) 13%, transparent);
+  --line-2: color-mix(in oklab, oklch(0.25 0.03 168) 24%, transparent);
+
+  --moss: oklch(0.5 0.125 160);
+  --moss-deep: oklch(0.38 0.095 158);
+  --water: oklch(0.52 0.105 220);
+  --ochre: oklch(0.56 0.12 78);
+  --clay: oklch(0.53 0.15 26);
+
+  --d-oi: oklch(0.505 0.115 160);
+  --d-nogoon: oklch(0.505 0.11 132);
+  --d-amitan: oklch(0.505 0.11 88);
+  --d-hyanalt: oklch(0.505 0.135 30);
+  --d-unelgee: oklch(0.505 0.115 320);
+  --d-zahirgaa: oklch(0.505 0.095 270);
+  --d-orchin: oklch(0.505 0.105 205);
+
+  --tint: 9%;
+  --shadow: 0 20px 44px rgba(20, 45, 38, 0.1);
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-paper: var(--paper);
+  --color-paper-2: var(--paper-2);
+  --color-paper-3: var(--paper-3);
+  --color-paper-hi: var(--paper-hi);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-line: var(--line);
+  --color-line-2: var(--line-2);
+
+  --color-data: var(--data);
+  --color-moss: var(--moss);
+  --color-moss-deep: var(--moss-deep);
+  --color-clay: var(--clay);
+  --color-ochre: var(--ochre);
+  --color-water: var(--water);
+
+  --shadow-panel: var(--shadow);
+
+  /* Ганц фонт — гарчиг, бие, тоо бүгд Inter */
+  --font-sans: var(--font-inter);
+  --font-display: var(--font-inter);
+  --font-mono: var(--font-inter);
+
+  --radius-xs: 2px;
+  --radius-sm: 3px;
+  --radius-md: 4px;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+* {
+  border-color: var(--line);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background-color: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  font-feature-settings: "cv05", "ss01";
+}
+
+/* ==========================================================================
+   Туслах классууд
+   ========================================================================== */
+
+/* Горимоос хамаарсан харагдац — JS-гүйгээр */
+:root[data-theme="light"] .dark-only,
+:root[data-theme="dark"] .light-only {
+  display: none;
+}
+
+/*
+  Тоон утга — үргэлж баганаараа эгнэнэ.
+  Тусдаа mono фонт ХЭРЭГЛЭХГҮЙ: систем даяар ганц фонттой байх ёстой тул
+  эгнэлтийг `tabular-nums`-аар хангана (Inter-д бүрэн дэмжигдсэн).
+*/
+.num {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+  letter-spacing: -0.01em;
+}
+
+/* Хэсгийн жижиг гарчиг — заавлын хуудасны маяг */
+.eyebrow {
+  font-size: 10px;
+  line-height: 1;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  font-weight: 600;
+  color: var(--ink-3);
+}
+
+/* Гарчиг — фонт нэг тул эрэмбийг жин, нягтралаар гаргана */
+.display {
+  font-weight: 600;
+  letter-spacing: -0.015em;
+}
+
+/* Хэмжигчийн зурааснууд — "хэрэгсэл"-ийн сэдэл */
+.ruler {
+  height: 6px;
+  background-image: repeating-linear-gradient(
+    to right,
+    var(--line-2) 0 1px,
+    transparent 1px 9px
+  );
+}
+
+/* Хоосон/хүлээгдэж буй талбай */
+.hatch {
+  background-image: repeating-linear-gradient(
+    45deg,
+    color-mix(in oklab, var(--line-2) 65%, transparent) 0 1px,
+    transparent 1px 7px
+  );
+}
+
+/* Маш нарийн хэмжээсийн сүлжээ */
+.paper-grid {
+  background-image:
+    linear-gradient(to right, color-mix(in oklab, var(--line) 50%, transparent) 1px, transparent 1px),
+    linear-gradient(to bottom, color-mix(in oklab, var(--line) 50%, transparent) 1px, transparent 1px);
+  background-size: 26px 26px;
+}
+
+/* Хэлтсийн өнгөөр өнгөлсөн нам гүм дэвсгэр. --tone-г эцэг элемент дээр өгнө. */
+.tinted {
+  background: color-mix(in oklab, var(--tone) var(--tint), transparent);
+}
+
+/*
+  Өргөгдсөн гадаргуу. Сүүдрийг ЗӨВХӨН энд — наалдсан толгой, хөвөгч цэс зэрэгт.
+  Энгийн карт хавтгай хэвээр: гүнийг зураас, суурийн давхаргаар илэрхийлнэ.
+*/
+.elevated {
+  box-shadow: var(--shadow);
+}
+
+/* Accent-ийн нам гүм гэрэлтэлт — идэвхтэй/чухал элемент дээр л */
+.glow {
+  box-shadow: 0 0 0 1px color-mix(in oklab, var(--tone, var(--moss)) 30%, transparent),
+    0 8px 28px -10px color-mix(in oklab, var(--tone, var(--moss)) 45%, transparent);
+}
+
+/* --------------------------------------------------------------------------
+   Хоёр үзүүрт он сонгогчийн бариул — зам нь ил, зөвхөн бариул нь дардаг
+   -------------------------------------------------------------------------- */
+.range-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  pointer-events: none;
+  height: 100%;
+}
+.range-thumb::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  pointer-events: auto;
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+  background: var(--paper-2);
+  border: 1.5px solid var(--moss);
+  cursor: grab;
+}
+.range-thumb::-webkit-slider-thumb:active {
+  cursor: grabbing;
+  background: var(--moss);
+}
+.range-thumb::-moz-range-thumb {
+  pointer-events: auto;
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+  background: var(--paper-2);
+  border: 1.5px solid var(--moss);
+  cursor: grab;
+}
+
+/* --------------------------------------------------------------------------
+   MapLibre — өөрийн загварт нийцүүлэх
+   -------------------------------------------------------------------------- */
+.maplibregl-ctrl-group {
+  background: var(--paper-2) !important;
+  border: 1px solid var(--line-2) !important;
+  border-radius: 2px !important;
+  box-shadow: none !important;
+}
+.maplibregl-ctrl-group button + button {
+  border-top: 1px solid var(--line) !important;
+}
+.maplibregl-ctrl-group button .maplibregl-ctrl-icon {
+  filter: invert(var(--map-icon-invert, 1));
+  opacity: 0.75;
+}
+.maplibregl-ctrl-attrib {
+  background: color-mix(in oklab, var(--paper) 80%, transparent) !important;
+  color: var(--ink-3) !important;
+  font-size: 9.5px !important;
+  border-radius: 2px 0 0 0;
+}
+.maplibregl-ctrl-attrib a {
+  color: var(--ink-3) !important;
+}
+/* Масштаб — газрын зураг дээр дэвсгэргүй, зөвхөн зураас, тоо */
+.maplibregl-ctrl-scale {
+  background: transparent !important;
+  border-color: rgba(255, 255, 255, 0.55) !important;
+  color: #fff !important;
+  font-size: 9.5px !important;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.75);
+}
+:root[data-theme="light"] {
+  --map-icon-invert: 0;
+}
+
+/* ==========================================================================
+   Фокус, сонголт, гүйлгэх зурвас
+   ========================================================================== */
+
+:focus-visible {
+  outline: 2px solid color-mix(in oklab, var(--water) 70%, transparent);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+::selection {
+  background: color-mix(in oklab, var(--moss) 28%, transparent);
+}
+
+::-webkit-scrollbar {
+  width: 11px;
+  height: 11px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--line-2);
+  border: 3px solid var(--paper);
+  border-radius: 99px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--ink-3);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
 }

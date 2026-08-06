@@ -1,36 +1,53 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Байгаль орчны нэгдсэн платформ
 
-## Getting Started
+Байгаль орчны салбарын **7 хэлтсийн** үйл ажиллагааг удирдан зохион байгуулах,
+хянах, шийдвэр гаргалтыг дэмжих цогц вэб платформ.
 
-First, run the development server:
+## Хэлтсүүд
+
+| # | Хэлтэс | Төлөв |
+|---|---|---|
+| 01 | Захиргаа удирдлагын хэлтэс | Мэдээлэл хүлээгдэж буй |
+| 02 | Хүрээлэн буй орчны ашиглалт хамгаалалтын хэлтэс | Мэдээлэл хүлээгдэж буй |
+| 03 | Ойн хэлтэс | Мэдээлэл хүлээгдэж буй |
+| 04 | Амьтан, ургамлыг хамгаалах хэлтэс | Мэдээлэл хүлээгдэж буй |
+| 05 | Ногоон бүсийн ашиглалт, хамгаалалтын хэлтэс | **Дата холбогдсон** |
+| 06 | Байгаль орчны үнэлгээ, уур амьсгалын өөрчлөлтийн хэлтэс | Мэдээлэл хүлээгдэж буй |
+| 07 | Хяналтын хэлтэс | Мэдээлэл хүлээгдэж буй |
+
+Эх сурвалж ирээгүй хэлтэст **зохиомол дата харуулахгүй** — хуудас зориудаар
+хоосон байна.
+
+## Ногоон бүсийн самбар — өрөмдмөл худгийн бүртгэл
+
+Одоогоор холбогдсон цорын ганц эх сурвалж:
+`hudag_2015_2024_SJ` ArcGIS FeatureServer — **12,668 худаг, 2015–2024**.
+
+- Газрын зураг (MapLibre GL) — бөөгнөрүүлэлт, Esri-ийн 7 суурь зураг,
+  улс / аймаг / сумын хил (харагдах хүрээний дүрэмтэй)
+- Шүүлтүүр: хугацаа, аймаг, сум/дүүрэг, гүйцэтгэгч, он, сар — бүгд
+  хоорондоо холбоотой (cross-filter)
+- Диаграм: жилээр, сараар, аймгаар, сумаар, дүүргээр, гүйцэтгэгчээр
+- Бүх зүйл нэг дэлгэцэнд багтана, хуудас гүйхгүй
+
+## Стек
+
+- Next.js 16 (App Router) · React 19 · TypeScript
+- Tailwind CSS v4 — CSS хувьсагчаар токен, OKLCH өнгө
+- MapLibre GL v6 · lucide-react
+- Диаграмыг гуравдагч сангүй, SVG-ээр
+
+## Ажиллуулах
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
+npm run dev     # http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+`predev` / `prebuild` дээр MapLibre-ийн worker файл `public/maplibre/` рүү
+автоматаар хуулагдана.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Дизайн, архитектурын зарчим
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+[CLAUDE.md](CLAUDE.md) — өнгөний систем, хэв маягийн дүрэм, MapLibre-ийн
+онцлог алдаанууд, дата боловсруулалтын шийдлүүд.
