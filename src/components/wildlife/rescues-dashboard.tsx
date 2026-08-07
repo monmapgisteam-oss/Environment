@@ -691,11 +691,12 @@ function StatCell({
   icon: LucideIcon;
 }) {
   return (
-    <div className="flex flex-col px-3.5 py-3">
-      <span className="eyebrow block min-h-[30px] leading-[1.35]">{label}</span>
-      <div className="mt-auto flex items-center gap-2">
-        <Icon size={20} strokeWidth={1.6} className="shrink-0 text-ink-3" />
-        <span className="num truncate text-[17px] leading-none font-medium text-ink">
+    <div className="flex flex-col px-3 py-2">
+      {/* Хоёр мөрийн зай нөөцөлсөн хэвээр, зөвхөн мөр хоорондын зай нягтарсан */}
+      <span className="eyebrow block min-h-[28px] leading-[1.25]">{label}</span>
+      <div className="mt-auto flex items-center gap-1.5">
+        <Icon size={17} strokeWidth={1.6} className="shrink-0 text-ink-3" />
+        <span className="num truncate text-[16px] leading-none font-medium text-ink">
           {num(value)}
         </span>
       </div>
