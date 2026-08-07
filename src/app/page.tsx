@@ -9,7 +9,7 @@ export default function Home() {
     <div className="mx-auto max-w-[1400px] space-y-7">
       <header>
         <div className="eyebrow mb-2.5">Байгаль орчны нэгдсэн платформ</div>
-        <h1 className="display text-[30px] leading-none">Ерөнхий самбар</h1>
+        <h1 className="display text-[31px] leading-none">Ерөнхий самбар</h1>
         <div className="ruler mt-5 opacity-70" aria-hidden />
       </header>
 
@@ -33,7 +33,7 @@ export default function Home() {
                   <d.icon size={16} strokeWidth={1.5} className="text-(--tone)" />
                 </span>
 
-                <h3 className="display mt-3.5 text-[14.5px] leading-snug">{d.name}</h3>
+                <h3 className="display mt-3.5 text-[15.5px] leading-snug">{d.name}</h3>
 
                 <div className="mt-auto flex items-center justify-between gap-2 pt-4">
                   <Badge tone="neutral">{STATUS_LABEL[d.status]}</Badge>

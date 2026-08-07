@@ -75,7 +75,7 @@ export function BarChart({
           <span
             key={d.key}
             className={cn(
-              "num flex-1 text-center text-[9px] transition-colors",
+              "num flex-1 text-center text-[10px] transition-colors",
               selected === d.key ? "text-ink" : "text-ink-3",
             )}
           >
@@ -160,7 +160,7 @@ export function AreaChart({
   const interactive = Boolean(onSelect);
 
   if (data.length < 2) {
-    return <div className="py-6 text-center text-[11px] text-ink-3">Утга алга</div>;
+    return <div className="py-6 text-center text-[12px] text-ink-3">Утга алга</div>;
   }
 
   const W = 100;
@@ -274,7 +274,7 @@ export function AreaChart({
           <span
             key={d.key}
             className={cn(
-              "num flex-1 text-center text-[9px] transition-colors",
+              "num flex-1 text-center text-[10px] transition-colors",
               active === i ? "text-ink" : "text-ink-3",
             )}
           >
@@ -340,9 +340,9 @@ function Tooltip({
           style={{ background: `color-mix(in oklab, ${tone} 10%, transparent)` }}
         >
           <span className="size-1.5 rounded-full" style={{ background: tone }} />
-          <span className="num text-[10.5px] font-medium text-ink">{label}</span>
+          <span className="num text-[11.5px] font-medium text-ink">{label}</span>
           {selected ? (
-            <span className="ml-auto text-[8.5px] tracking-[0.1em] text-ink-3 uppercase">
+            <span className="ml-auto text-[9.5px] tracking-[0.1em] text-ink-3 uppercase">
               сонгосон
             </span>
           ) : null}
@@ -350,13 +350,13 @@ function Tooltip({
 
         <div className="px-2 py-1.5">
           <div className="flex items-baseline gap-1">
-            <span className="num text-[16px] leading-none font-medium" style={{ color: tone }}>
+            <span className="num text-[17px] leading-none font-medium" style={{ color: tone }}>
               {num(value)}
             </span>
-            <span className="text-[9.5px] text-ink-3">{unit}</span>
+            <span className="text-[10.5px] text-ink-3">{unit}</span>
           </div>
 
-          <div className="mt-1.5 flex items-center gap-2 text-[9.5px] text-ink-3">
+          <div className="mt-1.5 flex items-center gap-2 text-[10.5px] text-ink-3">
             <span className="num">{share.toFixed(1)}%</span>
             {delta !== null ? (
               <span
@@ -399,7 +399,7 @@ export function RowChart({
   const max = maxOverride ?? Math.max(...data.map((d) => d.value), 1);
 
   if (data.length === 0) {
-    return <div className="py-5 text-center text-[11px] text-ink-3">Утга алга</div>;
+    return <div className="py-5 text-center text-[12px] text-ink-3">Утга алга</div>;
   }
 
   return (
@@ -417,7 +417,7 @@ export function RowChart({
             <div className="flex items-baseline justify-between gap-2">
               <span
                 className={cn(
-                  "flex min-w-0 items-center gap-1.5 text-[11px] transition-colors",
+                  "flex min-w-0 items-center gap-1.5 text-[12px] transition-colors",
                   selected === d.key ? "font-medium text-ink" : "text-ink-2",
                   !on && "opacity-40",
                 )}
@@ -433,7 +433,7 @@ export function RowChart({
               </span>
               <span
                 className={cn(
-                  "num shrink-0 text-[10.5px] transition-colors",
+                  "num shrink-0 text-[11.5px] transition-colors",
                   selected === d.key ? "text-ink" : "text-ink-3",
                   !on && "opacity-40",
                 )}
@@ -482,15 +482,15 @@ export function YearRange({
     <div>
       {/* Одоогийн муж — хоёр үзүүрт нь ил тоо */}
       <div className="mb-2 flex items-center gap-2">
-        <span className="num rounded-xs border border-line-2 bg-paper px-1.5 py-[3px] text-[11px] font-medium text-ink">
+        <span className="num rounded-xs border border-line-2 bg-paper px-1.5 py-[3px] text-[12px] font-medium text-ink">
           {lo}
         </span>
         <span className="h-px flex-1 bg-line" />
-        <span className="text-[10px] text-ink-3">
+        <span className="text-[11px] text-ink-3">
           {whole ? "бүх хугацаа" : `${hi - lo + 1} жил`}
         </span>
         <span className="h-px flex-1 bg-line" />
-        <span className="num rounded-xs border border-line-2 bg-paper px-1.5 py-[3px] text-[11px] font-medium text-ink">
+        <span className="num rounded-xs border border-line-2 bg-paper px-1.5 py-[3px] text-[12px] font-medium text-ink">
           {hi}
         </span>
       </div>

@@ -6,20 +6,15 @@ import {
   CalendarDays,
   CalendarRange,
   HardHat,
-  Layers,
   LandPlot,
   Loader2,
   Map as MapIcon,
   X,
 } from "lucide-react";
 import { AreaChart, RowChart, YearRange, type Datum } from "@/components/charts";
+import { BasemapGallery } from "@/components/map/basemap-gallery";
 import { FilterBar, FilterMenu, PickList } from "@/components/wells/filter-bar";
-import {
-  BASEMAPS,
-  basemapThumb,
-  defaultBasemap,
-  type Basemap,
-} from "@/components/wells/map";
+import { defaultBasemap, type Basemap, type Extent } from "@/components/wells/map";
 import { getWell, type WellsPayload, type WellDetail } from "@/lib/wells";
 import { asset } from "@/lib/base-path";
 import { cn, num } from "@/lib/utils";
@@ -48,6 +43,15 @@ export function WellsDashboard() {
   const [detail, setDetail] = React.useState<WellDetail | null>(null);
   const [detailLoading, setDetailLoading] = React.useState(false);
   const [basemap, setBasemap] = React.useState<Basemap>(() => defaultBasemap());
+  /*
+    Харагдацын үйлдэл (ArcGIS Dashboard "map extent action"). Асаалттай үед
+    газрын зургийн одоогийн хүрээ БУСАД элементүүдийг шүүнэ — цэгүүд өөрсдөө
+    шүүгдэхгүй (хүрээнээсээ гадуурх цэг ямар ч байсан харагдахгүй тул шүүх нь
+    утгагүй бөгөөд буцаж томрох үед цэг алдагдана).
+  */
+  const [extentOn, setExtentOn] = React.useState(false);
+  const [extent, setExtent] = React.useState<Extent | null>(null);
+
 
   React.useEffect(() => {
     let alive = true;
@@ -75,8 +79,10 @@ export function WellsDashboard() {
    * ингэснээр график бүр өөрийнхөө шүүлтээс бусдаар шүүгдэж, бусад баганууд
    * харагдсаар үлдэнэ (cross-filter).
    */
-  const select = React.useCallback(
-    (skip?: "year" | "aimag" | "soum" | "contractor" | "month") => {
+  type Skip = "year" | "aimag" | "soum" | "contractor" | "month";
+
+  const selectBase = React.useCallback(
+    (skip?: Skip) => {
       if (!data || !range) return new Uint32Array(0);
       const [lo, hi] = range;
       const out = new Uint32Array(data.n);
@@ -98,8 +104,38 @@ export function WellsDashboard() {
     [data, range, aIdx, sIdx, cIdx, month],
   );
 
-  const mapIdx = React.useMemo(() => select(), [select]);
-  const chartIdx = mapIdx;
+  /**
+   * Харагдацын үйлдлийг нэмж хэрэглэнэ. Тусад нь давхарлаж байгаа шалтгаан:
+   * газрын зураг `selectBase`-ийг л уншдаг тул зураг хөдлөх бүрд түүний
+   * индекс дахин тооцогдож, 12 мянган цэг эх сурвалж руу дахин ачаалагдахгүй.
+   */
+  const select = React.useCallback(
+    (skip?: Skip) => {
+      const idx = selectBase(skip);
+      if (!extent || !data) return idx;
+      const [w, s, e, n] = extent;
+      const wide = e - w >= 360;
+      const out = new Uint32Array(idx.length);
+      let k = 0;
+      for (let j = 0; j < idx.length; j++) {
+        const i = idx[j];
+        const y = data.lat[i];
+        if (y < s || y > n) continue;
+        if (!wide) {
+          const x = data.lon[i];
+          // Хүрээ 180°-ын шугам давсан бол w > e болно
+          if (w <= e ? x < w || x > e : x < w && x > e) continue;
+        }
+        out[k++] = i;
+      }
+      return out.subarray(0, k);
+    },
+    [selectBase, extent, data],
+  );
+
+  /** Газрын зураг: харагдацын шүүлтгүй. Диаграм, индикатор: шүүлттэй. */
+  const mapIdx = React.useMemo(() => selectBase(), [selectBase]);
+  const chartIdx = React.useMemo(() => select(), [select]);
 
   /** Бүлэглэж тоолох. `only` нь нэмэлт нөхцөл (жишээ нь зөвхөн УБ). */
   const tally = React.useCallback(
@@ -189,6 +225,33 @@ export function WellsDashboard() {
     [data, tally],
   );
 
+  /* ---------------- Сонголтын хүрээ (zoom action) ----------------
+     Зөвхөн газарзүйн сонголтоос хамаарна: он, сар, гүйцэтгэгч сонгоход
+     зураг үсрэх нь утгагүй (тэдгээр нь улс даяар тархсан).
+     Сум сонгогдсон бол түүнийг, эс бөгөөс аймгийг авна. */
+  const focus = React.useMemo<Extent | null>(() => {
+    if (!data || (aIdx < 0 && sIdx < 0)) return null;
+
+    const xs: number[] = [];
+    const ys: number[] = [];
+    for (let i = 0; i < data.n; i++) {
+      if (sIdx >= 0 && data.si[i] !== sIdx) continue;
+      if (aIdx >= 0 && data.ai[i] !== aIdx) continue;
+      xs.push(data.lon[i]);
+      ys.push(data.lat[i]);
+    }
+    if (!xs.length) return null;
+
+    xs.sort((a, b) => a - b);
+    ys.sort((a, b) => a - b);
+    /* Цөөн цэгтэй үед бүгдийг, олон цэгтэй үед хазайсан 2%-ыг хасна —
+       буруу бичигдсэн ганц координат хүрээг сунгахаас сэргийлнэ. */
+    const trim = xs.length >= 50;
+    const lo = trim ? Math.floor(xs.length * 0.01) : 0;
+    const hi = trim ? Math.ceil(xs.length * 0.99) - 1 : xs.length - 1;
+    return [xs[lo], ys[lo], xs[hi], ys[hi]];
+  }, [data, aIdx, sIdx]);
+
   /* ---------------- Индикатор ---------------- */
   const indicators = React.useMemo(() => {
     if (!data) return null;
@@ -232,7 +295,8 @@ export function WellsDashboard() {
     (aimag ? 1 : 0) +
     (soum ? 1 : 0) +
     (contractor ? 1 : 0) +
-    (month ? 1 : 0);
+    (month ? 1 : 0) +
+    (extentOn ? 1 : 0);
 
   function reset() {
     if (!data) return;
@@ -241,6 +305,8 @@ export function WellsDashboard() {
     setSoum(null);
     setContractor(null);
     setMonth(null);
+    setExtentOn(false);
+    setExtent(null);
   }
 
   /* ---------------- Ачааллаж байна / алдаа ---------------- */
@@ -249,11 +315,11 @@ export function WellsDashboard() {
       <div className="flex h-full items-center justify-center rounded-xs border border-line bg-paper-2">
         {error ? (
           <div className="text-center">
-            <p className="text-[13px] font-medium">Эх сурвалж татагдсангүй</p>
-            <p className="num mt-2 text-[11px] text-ink-3">{error}</p>
+            <p className="text-[14px] font-medium">Эх сурвалж татагдсангүй</p>
+            <p className="num mt-2 text-[12px] text-ink-3">{error}</p>
           </div>
         ) : (
-          <span className="flex items-center gap-2 text-[12.5px] text-ink-3">
+          <span className="flex items-center gap-2 text-[13.5px] text-ink-3">
             <Loader2 size={14} className="animate-spin" />
             Худгийн бүртгэл татаж байна…
           </span>
@@ -362,7 +428,7 @@ export function WellsDashboard() {
           {/*
             Өндрийг агуулгад нь тааруулна: аймаг 6, дүүрэг 9 мөртэй тул
             өөрсдийнхөө хэрэглэх зайг л эзэлнэ. Сум нь 18+ мөртэй учир
-            үлдсэн зайг аваад дотроо гүйнэ.
+            хамгийн доор, үлдсэн зайг аваад дотроо гүйнэ.
           */}
           <GeoPanel
             title="Аймгаар"
@@ -373,19 +439,19 @@ export function WellsDashboard() {
             tone="var(--data)"
           />
           <GeoPanel
+            title="Дүүргээр"
+            count={districtData.length}
+            data={districtData}
+            selected={soum}
+            onSelect={setSoum}
+          />
+          <GeoPanel
             title="Сумаар"
             count={ruralData.length}
             data={ruralData}
             selected={soum}
             onSelect={setSoum}
             grow
-          />
-          <GeoPanel
-            title="Дүүргээр"
-            count={districtData.length}
-            data={districtData}
-            selected={soum}
-            onSelect={setSoum}
           />
         </div>
 
@@ -406,7 +472,6 @@ export function WellsDashboard() {
               <Indicator
                 label="Бүртгэгдсэн худгийн тоо"
                 value={num(indicators.total)}
-                accent
               />
               <Indicator
                 label="Гүйцэтгэгч байгууллага"
@@ -434,10 +499,27 @@ export function WellsDashboard() {
                 visible={mapIdx}
                 basemap={basemap}
                 onSelect={openWell}
+                extent={extentOn}
+                onExtent={setExtent}
+                focus={focus}
               />
 
 
-              <BasemapGallery value={basemap} onChange={setBasemap} />
+              <BasemapGallery
+                value={basemap}
+                onChange={setBasemap}
+                extent={extentOn}
+                onExtentChange={setExtentOn}
+                unit="худаг"
+              />
+
+              {/*
+                Харагдацын үйлдэл асаалттай үед хүрээг тэмдэглэнэ — шүүлтүүр
+                далд ажиллаж байгааг мэдрүүлэх зорилготой.
+              */}
+              {extentOn ? (
+                <div className="pointer-events-none absolute inset-0 z-10 border border-data/45" />
+              ) : null}
 
 
               {(detail || detailLoading) && (
@@ -456,7 +538,7 @@ export function WellsDashboard() {
                     {detailLoading ? (
                       <div className="flex items-center gap-2 py-2 text-ink-3">
                         <Loader2 size={12} className="animate-spin" />
-                        <span className="text-[11px]">Татаж байна…</span>
+                        <span className="text-[12px]">Татаж байна…</span>
                       </div>
                     ) : detail ? (
                       <dl className="space-y-1.5">
@@ -467,7 +549,7 @@ export function WellsDashboard() {
                         <Field k="Гүйцэтгэгч" v={detail.contractor} />
                         <Field
                           k="Паспорт"
-                          v={<span className="num text-[10.5px]">{detail.passport}</span>}
+                          v={<span className="num text-[11.5px]">{detail.passport}</span>}
                         />
                         <Field
                           k="Огноо"
@@ -494,7 +576,7 @@ export function WellsDashboard() {
             Эх сурвалжийн бичиг — Esri болон ArcGIS-ийн ашиглалтын нөхцөл
             шаарддаг. Газрын зургийн доор энгийнээр, дэвсгэргүй.
           */}
-          <p className="shrink-0 px-0.5 text-[9.5px] leading-none text-ink-3">
+          <p className="shrink-0 px-0.5 text-[10.5px] leading-none text-ink-3">
             Суурь зураг: Esri · Дата: ArcGIS FeatureServer
           </p>
         </div>
@@ -503,7 +585,7 @@ export function WellsDashboard() {
         <div className="flex min-h-0 flex-col gap-2.5">
           <Box>
             <Head title="Жилээр">
-              <span className="num text-[10.5px] text-ink-3">
+              <span className="num text-[11.5px] text-ink-3">
                 {wholeRange ? `${data.minYear}–${data.maxYear}` : `${range[0]}–${range[1]}`}
               </span>
             </Head>
@@ -523,7 +605,7 @@ export function WellsDashboard() {
 
           <Box>
             <Head title="Сараар">
-              <span className="text-[10.5px] text-ink-3">улирлын хэлбэлзэл</span>
+              <span className="text-[11.5px] text-ink-3">улирлын хэлбэлзэл</span>
             </Head>
             <div className="p-3">
               <AreaChart
@@ -540,7 +622,7 @@ export function WellsDashboard() {
 
           <Box className="min-h-[140px] flex-1">
             <Head title="Гүйцэтгэгчээр">
-              <span className="num text-[10.5px] text-ink-3">эхний 20</span>
+              <span className="num text-[11.5px] text-ink-3">эхний 20</span>
             </Head>
             <div className="min-h-0 flex-1 overflow-y-auto p-3">
               <RowChart
@@ -558,83 +640,6 @@ export function WellsDashboard() {
 }
 
 /* -------------------------------------------------------------------------- */
-
-function BasemapGallery({
-  value,
-  onChange,
-}: {
-  value: Basemap;
-  onChange: (b: Basemap) => void;
-}) {
-  const [open, setOpen] = React.useState(false);
-  const holder = React.useRef<HTMLDivElement>(null);
-
-  React.useEffect(() => {
-    if (!open) return;
-    const away = (e: MouseEvent) => {
-      if (!holder.current?.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener("mousedown", away);
-    return () => document.removeEventListener("mousedown", away);
-  }, [open]);
-
-  return (
-    <div ref={holder} className="absolute top-2.5 right-2.5 z-20">
-      {/* Зөвхөн икон — газрын зургийг хаах хайрцаг, дэвсгэргүй */}
-      <button
-        onClick={() => setOpen((o) => !o)}
-        title={`Суурь зураг: ${value.name}`}
-        aria-label="Суурь зураг сонгох"
-        className={cn(
-          "flex size-7 items-center justify-center transition-colors",
-          open ? "text-data" : "text-ink-2 hover:text-ink",
-        )}
-        style={{ filter: "drop-shadow(0 1px 2px rgba(0,0,0,.75))" }}
-      >
-        <Layers size={16} strokeWidth={1.75} />
-      </button>
-
-      {open ? (
-        <div className="elevated absolute top-[calc(100%+5px)] right-0 w-[236px] rounded-xs border border-line-2 bg-paper-2 p-2">
-          <div className="eyebrow mb-2">Суурь зураг</div>
-          <div className="grid grid-cols-2 gap-1.5">
-            {BASEMAPS.map((b) => (
-              <button
-                key={b.id}
-                onClick={() => {
-                  onChange(b);
-                  setOpen(false);
-                }}
-                className={cn(
-                  "overflow-hidden rounded-xs border text-left transition-colors",
-                  value.id === b.id
-                    ? "border-data"
-                    : "border-line hover:border-line-2",
-                )}
-              >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={basemapThumb(b)}
-                  alt=""
-                  className="block h-[48px] w-full object-cover"
-                  loading="lazy"
-                />
-                <span
-                  className={cn(
-                    "block truncate border-t border-line px-1.5 py-1 text-[9.5px]",
-                    value.id === b.id ? "font-medium text-ink" : "text-ink-2",
-                  )}
-                >
-                  {b.name}
-                </span>
-              </button>
-            ))}
-          </div>
-        </div>
-      ) : null}
-    </div>
-  );
-}
 
 function GeoPanel({
   title,
@@ -659,7 +664,7 @@ function GeoPanel({
   return (
     <Box className={grow ? "min-h-[120px] flex-1" : "shrink-0"}>
       <Head title={title}>
-        <span className="num text-[10.5px] text-ink-3">{count}</span>
+        <span className="num text-[11.5px] text-ink-3">{count}</span>
       </Head>
       <div className="min-h-0 flex-1 overflow-y-auto p-3">
         <RowChart
@@ -685,31 +690,28 @@ function Box({ className, children }: { className?: string; children: React.Reac
 function Head({ title, children }: { title: string; children?: React.ReactNode }) {
   return (
     <div className="flex shrink-0 items-center justify-between gap-2 border-b border-line px-3 py-2">
-      <h2 className="display text-[12.5px] leading-none">{title}</h2>
+      {/*
+        Том үсэгт `.display`-ийн нягт tracking тохирохгүй тул энд сулруулав —
+        шахсан зай нь зөвхөн жижиг үсэгт зохимжтой.
+      */}
+      <h2 className="display text-[13.5px] leading-none tracking-[0.06em] uppercase">
+        {title}
+      </h2>
       {children}
     </div>
   );
 }
 
-/** Индикаторын нэгж нүд — гарчиг ба тоо, өөр юу ч үгүй */
-function Indicator({
-  label,
-  value,
-  accent,
-}: {
-  label: string;
-  value: string;
-  accent?: boolean;
-}) {
+/**
+ * Индикаторын нэгж нүд — гарчиг ба тоо, өөр юу ч үгүй.
+ * Бүх тоо нэг өнгөтэй (`ink`): гол утгыг accent-аар биш, байрлалаараа
+ * (эхний нүд) ялгана.
+ */
+function Indicator({ label, value }: { label: string; value: string }) {
   return (
     <div className="px-3.5 py-3">
       <span className="eyebrow block leading-[1.35]">{label}</span>
-      <div
-        className={cn(
-          "num mt-2 truncate text-[24px] leading-none font-medium",
-          accent ? "text-data" : "text-ink",
-        )}
-      >
+      <div className="num mt-2 truncate text-[20px] leading-none font-medium text-ink">
         {value}
       </div>
     </div>
@@ -719,10 +721,10 @@ function Indicator({
 function Field({ k, v }: { k: string; v: React.ReactNode }) {
   return (
     <div className="flex gap-2">
-      <dt className="w-[74px] shrink-0 text-[9.5px] tracking-[0.08em] text-ink-3 uppercase">
+      <dt className="w-[74px] shrink-0 text-[10.5px] tracking-[0.08em] text-ink-3 uppercase">
         {k}
       </dt>
-      <dd className="min-w-0 flex-1 text-[11px] leading-snug text-ink">{v}</dd>
+      <dd className="min-w-0 flex-1 text-[12px] leading-snug text-ink">{v}</dd>
     </div>
   );
 }

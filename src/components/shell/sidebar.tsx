@@ -4,6 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Database } from "lucide-react";
+import { RailClose } from "@/components/shell/rail";
 import { DEPARTMENTS } from "@/lib/departments";
 import { cn } from "@/lib/utils";
 
@@ -14,13 +15,13 @@ const MAX_W = 460;
 
 export function Sidebar() {
   const pathname = usePathname();
-  const connected = DEPARTMENTS.filter((d) => d.status === "live").length;
 
   return (
-    <aside className="fixed top-[52px] bottom-0 left-0 z-30 hidden w-(--rail-w) flex-col border-r border-line bg-paper-3 lg:flex">
+    /* `rail-only` — хураасан үед CSS түүнийг бүрэн нуана (globals.css) */
+    <aside className="rail-only fixed top-(--head-h) bottom-0 left-0 z-30 hidden w-(--rail-w) flex-col border-r border-line bg-paper-3 lg:flex">
       <nav className="flex-1 overflow-y-auto">
         {/* ---------------- Хэлтэс ---------------- */}
-        <GroupHead label="Хэлтэс" count={DEPARTMENTS.length} />
+        <GroupHead label="Хэлтэс" trailing={<RailClose />} />
 
         <div className="border-y border-line">
           {DEPARTMENTS.map((d, i) => {
@@ -48,7 +49,7 @@ export function Sidebar() {
                 {/* Дугаар */}
                 <span
                   className={cn(
-                    "num mt-[2px] text-[9.5px] leading-none transition-colors",
+                    "num mt-[2px] text-[10.5px] leading-none transition-colors",
                     active ? "text-(--tone)" : "text-ink-3 group-hover:text-ink-2",
                   )}
                 >
@@ -80,7 +81,7 @@ export function Sidebar() {
                 {/* Нэр */}
                 <span
                   className={cn(
-                    "min-w-0 text-[12px] leading-[1.35] transition-colors",
+                    "min-w-0 text-[13px] leading-[1.35] transition-colors",
                     active ? "font-medium text-ink" : "text-ink-2 group-hover:text-ink",
                   )}
                 >
@@ -121,13 +122,13 @@ export function Sidebar() {
                     active ? "opacity-100" : "opacity-0 group-hover:opacity-40",
                   )}
                 />
-                <span className="num text-[9.5px] leading-none text-ink-3">·</span>
+                <span className="num text-[10.5px] leading-none text-ink-3">·</span>
                 <span className="flex size-[18px] items-center justify-center">
                   <it.icon size={12} strokeWidth={1.75} />
                 </span>
                 <span
                   className={cn(
-                    "truncate text-[12px]",
+                    "truncate text-[13px]",
                     active ? "font-medium text-ink" : "text-ink-2 group-hover:text-ink",
                   )}
                 >
@@ -139,48 +140,17 @@ export function Sidebar() {
         </div>
       </nav>
 
-      {/* ---------------- Доод заалт ---------------- */}
-      <div className="shrink-0 border-t border-line px-3 py-2.5">
-        <div className="mb-1.5 flex items-baseline justify-between">
-          <span className="eyebrow">Холболт</span>
-          <span className="num text-[10.5px] text-ink-2">
-            {connected}
-            <span className="text-ink-3">/{DEPARTMENTS.length}</span>
-          </span>
-        </div>
-        {/* Хэлтэс тус бүрд нэг сегмент */}
-        <div className="flex gap-[3px]" aria-hidden>
-          {DEPARTMENTS.map((d) => (
-            <span
-              key={d.slug}
-              className={cn(
-                "h-1 flex-1 rounded-[1px]",
-                d.status === "live" ? "bg-moss" : "bg-line-2",
-              )}
-            />
-          ))}
-        </div>
-        <div className="mt-2.5 flex items-center justify-between text-[9.5px] text-ink-3">
-          <span className="tracking-[0.14em] uppercase">Хувилбар</span>
-          <span className="num">0.1.0 · alpha</span>
-        </div>
-      </div>
-
       <ResizeHandle />
     </aside>
   );
 }
 
-function GroupHead({ label, count }: { label: string; count?: number }) {
+function GroupHead({ label, trailing }: { label: string; trailing?: React.ReactNode }) {
   return (
     <div className="flex items-center gap-2 px-3 py-2">
       <span className="eyebrow">{label}</span>
       <span className="h-px flex-1 bg-line" />
-      {count !== undefined ? (
-        <span className="num rounded-[2px] border border-line px-1 py-0.5 text-[9.5px] leading-none text-ink-3">
-          {count}
-        </span>
-      ) : null}
+      {trailing}
     </div>
   );
 }

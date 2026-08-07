@@ -45,7 +45,7 @@ function Chip({
     <Link
       href={href}
       className={cn(
-        "flex shrink-0 items-center gap-1.5 rounded-xs border px-2.5 py-1.5 text-[12px] whitespace-nowrap transition-colors",
+        "flex shrink-0 items-center gap-1.5 rounded-xs border px-2.5 py-1.5 text-[13px] whitespace-nowrap transition-colors",
         active
           ? "border-line-2 bg-paper-2 font-medium text-ink"
           : "border-line bg-transparent text-ink-2",

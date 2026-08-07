@@ -56,7 +56,7 @@ export const DEPARTMENTS: Department[] = [
     name: "Амьтан, ургамлыг хамгаалах хэлтэс",
     icon: PawPrint,
     tone: "--d-amitan",
-    status: "pending",
+    status: "live",
   },
   {
     slug: "nogoon-bus",

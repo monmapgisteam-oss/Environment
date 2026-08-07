@@ -44,7 +44,7 @@ export default async function DepartmentPage({
             <div className="mb-3">
               <Badge tone="neutral">{STATUS_LABEL[dept.status]}</Badge>
             </div>
-            <h1 className="display text-[27px] leading-[1.18]">{dept.name}</h1>
+            <h1 className="display text-[28px] leading-[1.18]">{dept.name}</h1>
           </div>
 
           <div
@@ -59,7 +59,7 @@ export default async function DepartmentPage({
 
       <Panel className="border-dashed">
         <div className="hatch flex items-center justify-center px-6 py-24">
-          <span className="bg-paper-2 px-3 text-[13px] text-ink-3">Мэдээлэл алга</span>
+          <span className="bg-paper-2 px-3 text-[14px] text-ink-3">Мэдээлэл алга</span>
         </div>
       </Panel>
     </div>

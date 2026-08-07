@@ -23,7 +23,7 @@ export function FilterBar({
   return (
     <div className="flex shrink-0 flex-wrap items-center gap-1.5 rounded-xs border border-line bg-paper-2 px-2 py-1.5">
       {/* Гарчиг зүүн талд, шүүлтүүрүүд баруун тийш шахагдана */}
-      <span className="shrink-0 text-[11px] font-semibold tracking-[0.12em] text-ink uppercase">
+      <span className="shrink-0 text-[12px] font-semibold tracking-[0.12em] text-ink uppercase">
         {title}
       </span>
 
@@ -34,19 +34,19 @@ export function FilterBar({
 
         {activeCount > 0 ? (
           <>
-            <span className="num rounded-xs border border-data/40 bg-data/12 px-1.5 py-[3px] text-[10px] text-data">
+            <span className="num rounded-xs border border-data/40 bg-data/12 px-1.5 py-[3px] text-[11px] text-data">
               {activeCount} идэвхтэй
             </span>
             <button
               onClick={onReset}
-              className="flex items-center gap-1 text-[10.5px] text-ink-3 transition-colors hover:text-ink"
+              className="flex items-center gap-1 text-[11.5px] text-ink-3 transition-colors hover:text-ink"
             >
               <RotateCcw size={10} />
               Цэвэрлэх
             </button>
           </>
         ) : (
-          <span className="text-[10px] text-ink-3">Шүүлтүүр тавиагүй</span>
+          <span className="text-[11px] text-ink-3">Шүүлтүүр тавиагүй</span>
         )}
       </div>
     </div>
@@ -98,7 +98,7 @@ export function FilterMenu({
       <button
         onClick={() => setOpen((o) => !o)}
         className={cn(
-          "flex items-center gap-1.5 rounded-xs border px-2 py-1 text-[11px] transition-colors",
+          "flex items-center gap-1.5 rounded-xs border px-2 py-1 text-[12px] transition-colors",
           active
             ? "border-data/45 bg-data/10 text-ink"
             : "border-line text-ink-2 hover:border-line-2 hover:text-ink",
@@ -173,27 +173,27 @@ export function PickList({
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder="Хайх…"
-          className="mb-1.5 h-7 w-full rounded-xs border border-line bg-paper px-2 text-[11px] text-ink outline-none placeholder:text-ink-3 focus:border-line-2"
+          className="mb-1.5 h-7 w-full rounded-xs border border-line bg-paper px-2 text-[12px] text-ink outline-none placeholder:text-ink-3 focus:border-line-2"
         />
       ) : null}
 
       <div className="max-h-[220px] overflow-y-auto">
         {shown.length === 0 ? (
-          <p className="py-3 text-center text-[10.5px] text-ink-3">Олдсонгүй</p>
+          <p className="py-3 text-center text-[11.5px] text-ink-3">Олдсонгүй</p>
         ) : (
           shown.map((i) => (
             <button
               key={i.key}
               onClick={() => onPick(selected === i.key ? null : i.key)}
               className={cn(
-                "flex w-full items-baseline justify-between gap-2 rounded-xs px-1.5 py-1 text-left text-[11px] transition-colors",
+                "flex w-full items-baseline justify-between gap-2 rounded-xs px-1.5 py-1 text-left text-[12px] transition-colors",
                 selected === i.key
                   ? "bg-data/12 font-medium text-ink"
                   : "text-ink-2 hover:bg-paper-hi hover:text-ink",
               )}
             >
               <span className="truncate">{i.label}</span>
-              <span className="num shrink-0 text-[10px] text-ink-3">{i.value}</span>
+              <span className="num shrink-0 text-[11px] text-ink-3">{i.value}</span>
             </button>
           ))
         )}

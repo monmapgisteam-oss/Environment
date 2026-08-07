@@ -43,7 +43,7 @@ export function PanelHead({
     >
       <div className="min-w-0">
         {eyebrow ? <div className="eyebrow mb-1.5">{eyebrow}</div> : null}
-        <h2 className="display text-[15px] leading-tight text-ink">{title}</h2>
+        <h2 className="display text-[16px] leading-tight text-ink">{title}</h2>
       </div>
       {action ? <div className="shrink-0">{action}</div> : null}
     </div>
@@ -72,10 +72,10 @@ export function SectionHeader({
 }) {
   return (
     <div className="mb-3.5 flex items-baseline gap-3 border-b border-line pb-2.5">
-      <span className="num text-[10.5px] text-ink-3">{index}</span>
-      <h2 className="display text-[17px] leading-none">{title}</h2>
+      <span className="num text-[11.5px] text-ink-3">{index}</span>
+      <h2 className="display text-[18px] leading-none">{title}</h2>
       {note ? (
-        <span className="ml-auto text-[11px] text-ink-3">{note}</span>
+        <span className="ml-auto text-[12px] text-ink-3">{note}</span>
       ) : null}
     </div>
   );

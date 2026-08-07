@@ -1,73 +1,32 @@
 "use client";
 
-import * as React from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { ChevronRight, Moon, Sun } from "lucide-react";
-import { DEPARTMENTS } from "@/lib/departments";
+import { Moon, Sun } from "lucide-react";
+import { RailOpen } from "@/components/shell/rail";
+import { asset } from "@/lib/base-path";
 
-const LABELS: Record<string, string> = {
-  "": "Ерөнхий самбар",
-  map: "Газрын зураг",
-  reports: "Тайлан",
-  alerts: "Дохиолол",
-  sources: "Дата эх сурвалж",
-  settings: "Тохиргоо",
-  departments: "Хэлтэс",
-};
-
-/** Бүтэн өргөнийг эзлэх толгой: тэмдэг + зам заагч + горимын товч */
+/** Бүтэн өргөнийг эзлэх толгой: тэмдэг + горимын товч */
 export function Header() {
-  const pathname = usePathname();
-  const parts = pathname.split("/").filter(Boolean);
-
-  const crumbs = parts.map((p, i) => {
-    const dept = DEPARTMENTS.find((d) => d.slug === p);
-    return {
-      href: "/" + parts.slice(0, i + 1).join("/"),
-      label: dept?.name ?? LABELS[p] ?? p,
-    };
-  });
-
   return (
-    <header className="elevated sticky top-0 z-40 flex h-[52px] items-center gap-4 border-b border-line bg-paper/85 px-4 backdrop-blur-md lg:px-5">
+    <header className="elevated sticky top-0 z-40 flex h-(--head-h) items-center gap-4 border-b border-line bg-paper/85 px-4 backdrop-blur-md lg:px-5">
+      {/* Зөвхөн зурвас хураагдсан үед гарна — буцааж дэлгэх цорын ганц зам */}
+      <RailOpen />
+
       <Link href="/" className="flex shrink-0 items-center gap-2.5">
         <Mark />
         <span className="hidden leading-none sm:block">
-          <span className="display block text-[13.5px] tracking-tight">
-            Байгаль орчин
+          {/*
+            Том үсэгт `tracking-tight` тохирохгүй — үсгүүд наалдаж уншигдахаа
+            больдог. Тиймээс энд бага зэрэг сунгасан зайтай.
+          */}
+          <span className="display block text-[13.5px] tracking-[0.04em] uppercase">
+            Нийслэлийн байгаль орчны газар
           </span>
           <span className="mt-1.5 block text-[9px] tracking-[0.18em] text-ink-3 uppercase">
             Нэгдсэн платформ
           </span>
         </span>
       </Link>
-
-      <span className="h-5 w-px shrink-0 bg-line" aria-hidden />
-
-      <nav
-        aria-label="Замчлал"
-        className="flex min-w-0 items-center gap-1.5 text-[12.5px]"
-      >
-        <Link href="/" className="shrink-0 text-ink-3 transition-colors hover:text-ink">
-          {LABELS[""]}
-        </Link>
-        {crumbs.map((c, i) => (
-          <React.Fragment key={c.href}>
-            <ChevronRight size={12} className="shrink-0 text-ink-3/60" />
-            <Link
-              href={c.href}
-              className={
-                i === crumbs.length - 1
-                  ? "truncate font-medium text-ink"
-                  : "truncate text-ink-3 transition-colors hover:text-ink"
-              }
-            >
-              {c.label}
-            </Link>
-          </React.Fragment>
-        ))}
-      </nav>
 
       <div className="ml-auto flex shrink-0 items-center gap-2">
         <ThemeToggle />
@@ -103,27 +62,26 @@ function ThemeToggle() {
   );
 }
 
+/**
+ * Албан ёсны тэмдэг.
+ *
+ * Файл нь растераас векторжуулсан 1205 замтай, ~700KB — тиймээс кодод
+ * ШУУД БИЧИХГҮЙ, `public/`-оос зураг болгон дуудна. Инлайн болговол хуудас
+ * бүрийн HTML тэр хэмжээгээр хавагнана.
+ *
+ * `next/image` биш энгийн `img`: сайт статикаар экспортлогддог тул зургийн
+ * оновчлол ажиллахгүй, харин `asset()` нь GitHub Pages-ийн дэд замыг залгана.
+ */
 function Mark() {
   return (
-    <svg width="27" height="27" viewBox="0 0 27 27" aria-hidden className="shrink-0">
-      <rect
-        x="0.5"
-        y="0.5"
-        width="26"
-        height="26"
-        rx="2"
-        fill="var(--paper-2)"
-        stroke="var(--line-2)"
-      />
-      {/* нар — уул/ой — ус: гурван давхарга */}
-      <circle cx="19" cy="7.5" r="2.25" fill="var(--ochre)" />
-      <path d="M4.5 18 L10 8.5 L13.5 14 L16 10.5 L22.5 18 Z" fill="var(--moss)" />
-      <path
-        d="M4.5 21 H22.5"
-        stroke="var(--water)"
-        strokeWidth="1.6"
-        strokeLinecap="round"
-      />
-    </svg>
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={asset("/logo.svg")}
+      alt=""
+      aria-hidden
+      width={38}
+      height={38}
+      className="size-[38px] shrink-0"
+    />
   );
 }

@@ -49,18 +49,18 @@ export function Stat({
       ) : null}
       <div className="eyebrow">{label}</div>
       <div className="mt-2.5 flex items-baseline gap-1.5">
-        <span className="num text-[28px] leading-none font-medium text-ink">
+        <span className="num text-[29px] leading-none font-medium text-ink">
           {typeof value === "number" ? num(value) : value}
         </span>
         {unit ? (
-          <span className="text-[11.5px] font-medium text-ink-3">{unit}</span>
+          <span className="text-[12.5px] font-medium text-ink-3">{unit}</span>
         ) : null}
       </div>
       {delta !== undefined || note ? (
         <div className="mt-2.5 flex items-center gap-2">
           {delta !== undefined ? (
             <span
-              className="num inline-flex items-center gap-0.5 rounded-xs px-1 py-0.5 text-[10.5px] font-medium"
+              className="num inline-flex items-center gap-0.5 rounded-xs px-1 py-0.5 text-[11.5px] font-medium"
               style={{
                 color: deltaColor,
                 background: `color-mix(in oklab, ${deltaColor} 10%, transparent)`,
@@ -71,7 +71,7 @@ export function Stat({
             </span>
           ) : null}
           {note ? (
-            <span className="truncate text-[10.5px] text-ink-3">{note}</span>
+            <span className="truncate text-[11.5px] text-ink-3">{note}</span>
           ) : null}
         </div>
       ) : null}
@@ -103,7 +103,7 @@ export function Badge({
   const c = BADGE_TONE[tone];
   return (
     <span
-      className="inline-flex items-center gap-1.5 rounded-xs border px-1.5 py-0.5 text-[10px] font-medium tracking-wide whitespace-nowrap"
+      className="inline-flex items-center gap-1.5 rounded-xs border px-1.5 py-0.5 text-[11px] font-medium tracking-wide whitespace-nowrap"
       style={{
         color: c,
         borderColor: `color-mix(in oklab, ${c} 35%, transparent)`,
@@ -255,7 +255,7 @@ export function KeyValue({
 }) {
   return (
     <div className="flex items-center justify-between gap-3 border-b border-line py-2 last:border-0">
-      <span className="flex min-w-0 items-center gap-2 text-[12.5px] text-ink-2">
+      <span className="flex min-w-0 items-center gap-2 text-[13.5px] text-ink-2">
         {tone ? (
           <span
             className="size-1.5 shrink-0 rounded-full"
@@ -265,7 +265,7 @@ export function KeyValue({
         ) : null}
         <span className="truncate">{k}</span>
       </span>
-      <span className="num shrink-0 text-[12.5px] font-medium text-ink">{v}</span>
+      <span className="num shrink-0 text-[13.5px] font-medium text-ink">{v}</span>
     </div>
   );
 }

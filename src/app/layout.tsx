@@ -30,14 +30,21 @@ export const metadata: Metadata = {
  *  1. Өнгөний горим — харанхуй нь брэндийн үндсэн горим, гэрлийг зориудаар
  *     сонгосон тохиолдолд л асна.
  *  2. Хажуугийн зурвасын өргөн — хэрэглэгчийн чирж тохируулсан утга.
+ *  3. Зурвас хураагдсан эсэх — эс тэгвээс хуудас нээгдэхэд зурвас нэг
+ *     анивчаад алга болно.
  */
 const bootScript = `
 (function () {
-  var d = document.documentElement, t, w;
-  try { t = localStorage.getItem('theme'); w = localStorage.getItem('railw'); } catch (e) {}
+  var d = document.documentElement, t, w, r;
+  try {
+    t = localStorage.getItem('theme');
+    w = localStorage.getItem('railw');
+    r = localStorage.getItem('rail');
+  } catch (e) {}
   d.setAttribute('data-theme', t === 'light' ? 'light' : 'dark');
   w = parseInt(w, 10);
   if (w >= 232 && w <= 460) d.style.setProperty('--rail-w', w + 'px');
+  if (r === 'off') d.setAttribute('data-rail', 'off');
 })();
 `;
 
@@ -54,7 +61,7 @@ export default function RootLayout({
         <Sidebar />
         <div className="lg:pl-(--rail-w)">
           <MobileNav />
-          <main className="min-h-[calc(100dvh-52px)] px-4 py-5 lg:px-6 lg:py-6">
+          <main className="min-h-[calc(100dvh-var(--head-h))] px-4 py-5 lg:px-6 lg:py-6">
             {children}
           </main>
         </div>
