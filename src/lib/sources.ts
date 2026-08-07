@@ -6,6 +6,7 @@
  * нэмэгдэнэ.
  */
 
+import { RESCUES_SERVICE } from "@/lib/rescues";
 import { WELLS_SERVICE } from "@/lib/wells";
 import { WILDLIFE_SERVICE } from "@/lib/wildlife";
 
@@ -30,5 +31,11 @@ export const SOURCES: Source[] = [
     name: "Зэрлэг амьтны дуудлагын бүртгэл",
     kind: "ArcGIS Survey123",
     url: WILDLIFE_SERVICE,
+  },
+  {
+    slug: "amitan-urgamal",
+    name: "Аврагдсан зэрлэг амьтад 2019–2026",
+    kind: "ArcGIS FeatureServer",
+    url: RESCUES_SERVICE,
   },
 ];

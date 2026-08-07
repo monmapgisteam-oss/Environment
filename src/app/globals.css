@@ -300,6 +300,50 @@ body {
 }
 
 /* --------------------------------------------------------------------------
+   Газрын зураг дээрх зүйлийн тэмдэг.
+
+   Өнгө нь СЭДВЭЭС ХАМААРАХГҮЙ: тэмдэг нь хиймэл дагуулын зураг дээр суудаг
+   тул гэрэл/харанхуй горимоос үл хамааран цайвар диск + бараан зураас.
+   Цагираг нь `--data` — бусад дата дүрслэлтэй нэг өнгө.
+   -------------------------------------------------------------------------- */
+.species-pin {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  border: 2px solid var(--data);
+  background: #f1f5f9;
+  color: #1e293b;
+  cursor: pointer;
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.5),
+    0 0 12px -3px color-mix(in oklab, var(--data) 80%, transparent);
+  transition:
+    width 0.12s,
+    height 0.12s;
+}
+.species-pin svg {
+  width: 17px;
+  height: 17px;
+}
+.species-pin:hover {
+  width: 36px;
+  height: 36px;
+}
+.species-pin:hover svg {
+  width: 20px;
+  height: 20px;
+}
+
+/* Гэрэл зурагтай хувилбар — диск нь бүтнээрээ зураг болно */
+.species-pin.photo {
+  background-size: cover;
+  background-position: center;
+}
+
+/* --------------------------------------------------------------------------
    MapLibre — өөрийн загварт нийцүүлэх
    -------------------------------------------------------------------------- */
 .maplibregl-ctrl-group {

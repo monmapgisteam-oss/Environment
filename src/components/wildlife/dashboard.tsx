@@ -4,17 +4,27 @@ import * as React from "react";
 import dynamic from "next/dynamic";
 import {
   CalendarDays,
+  CalendarRange,
   ChevronLeft,
   ChevronRight,
   HardHat,
   LandPlot,
   Loader2,
   PawPrint,
+  PhoneCall,
   Route,
   Stethoscope,
+  Wallet,
   X,
+  type LucideIcon,
 } from "lucide-react";
-import { AreaChart, RowChart, type Datum } from "@/components/charts";
+import {
+  AreaChart,
+  CategoryChart,
+  RowChart,
+  YearRange,
+  type Datum,
+} from "@/components/charts";
 import { BasemapGallery } from "@/components/map/basemap-gallery";
 import { FilterBar, FilterMenu, PickList } from "@/components/wells/filter-bar";
 import { defaultBasemap, type Basemap, type Extent } from "@/components/wells/map";
@@ -55,7 +65,11 @@ export function WildlifeDashboard() {
   const [route, setRoute] = React.useState<string | null>(null);
   const [officer, setOfficer] = React.useState<string | null>(null);
   const [injured, setInjured] = React.useState<string | null>(null);
-  const [month, setMonth] = React.useState<string | null>(null);
+  /*
+    Сар нь МУЖ хэлбэрээр (жишээ нь 2–6 сарын хооронд). "Сар" сонголт нь
+    тусдаа төлөв БИШ — мужийг [сар, сар] болгож хумидаг товчлол.
+  */
+  const [months, setMonths] = React.useState<[number, number]>([1, 12]);
 
   const [basemap, setBasemap] = React.useState<Basemap>(() => defaultBasemap());
   const [extentOn, setExtentOn] = React.useState(false);
@@ -63,6 +77,8 @@ export function WildlifeDashboard() {
   const [selected, setSelected] = React.useState<number | null>(null);
   /** Томоор харж буй зургийн байрлал (`shownPhotos` доторх индекс) */
   const [viewer, setViewer] = React.useState<number | null>(null);
+  /** Зургийн хуудасны дугаар (0-оос) */
+  const [photoPage, setPhotoPage] = React.useState(0);
 
   /*
     Зураг нь хоёрдогч: бүртгэл ирмэгц самбар ажиллаж эхлэх ёстой тул
@@ -89,6 +105,11 @@ export function WildlifeDashboard() {
 
   /* ---------------- Шүүлтүүр ---------------- */
 
+  /** Бүтэн жил сонгогдсон эсэх — шүүлтүүр тавиагүйтэй адил */
+  const wholeMonths = months[0] === 1 && months[1] === 12;
+  /** Муж нэг сар дээр хумигдсан бол тэр сар — "Сар" шүүлтүүрийн утга */
+  const singleMonth = months[0] === months[1] ? String(months[0]) : null;
+
   /**
    * Шүүлтүүр давсан бичлэгийн индексүүд. `skip`-д заасан хэмжигдэхүүнийг
    * алгасна — ингэснээр диаграм бүр өөрийнхөө шүүлтээс бусдаар шүүгдэж,
@@ -106,12 +127,20 @@ export function WildlifeDashboard() {
         if (skip !== "route" && route && c.route !== route) continue;
         if (skip !== "officer" && officer && c.officer !== officer) continue;
         if (skip !== "injured" && injured && injuredKey(c.injured) !== injured) continue;
-        if (skip !== "month" && month && String(monthOf(c)) !== month) continue;
+        /*
+          Сарын муж бүтэн байвал огт шүүхгүй: огноогүй бичлэгийн сар нь 0
+          тул мужид хэзээ ч багтахгүй бөгөөд бүтэн муж дээр ч алга болно.
+          Сар зориудаар шүүсэн үед л тэднийг хасах нь зөв.
+        */
+        if (skip !== "month" && !wholeMonths) {
+          const m = monthOf(c);
+          if (m < months[0] || m > months[1]) continue;
+        }
         out[k++] = i;
       }
       return out.subarray(0, k);
     },
-    [calls, species, soum, route, officer, injured, month],
+    [calls, species, soum, route, officer, injured, months, wholeMonths],
   );
 
   /*
@@ -195,8 +224,12 @@ export function WildlifeDashboard() {
     const kinds = new Set<string>();
     let hurt = 0;
     let days = 0;
-    let cost = 0;
-    let hours = 0;
+    /*
+      ЗӨВХӨН шатахуун. Идэш, тэжээлийн зардал нь тусдаа талбар бөгөөд
+      индикаторт гарахаа больсон — хоёрыг нэгтгээд "шатахуун" гэж
+      нэрлэвэл тоо нь гарчигтайгаа зөрнө.
+    */
+    let fuel = 0;
     /** Огноогүй бичлэг — сарын диаграмд орж чадахгүй тул тусад нь тоолно */
     let undated = 0;
 
@@ -205,11 +238,10 @@ export function WildlifeDashboard() {
       kinds.add(c.species);
       if (c.injured) hurt++;
       days += c.careDays ?? 0;
-      cost += (c.feedCost ?? 0) + (c.fuelCost ?? 0);
-      hours += c.staffHours ?? 0;
+      fuel += c.fuelCost ?? 0;
       if (monthOf(c) === 0) undated++;
     }
-    return { total: shown.length, kinds: kinds.size, hurt, days, cost, hours, undated };
+    return { total: shown.length, kinds: kinds.size, hurt, days, fuel, undated };
   }, [calls, shown]);
 
   /* ---------------- Сонголт руу ойртох ---------------- */
@@ -240,6 +272,19 @@ export function WildlifeDashboard() {
     return photos.filter((p) => live.has(p.oid));
   }, [photos, shown, calls]);
 
+  /*
+    Зураг нэг хуудсанд ЗУРГААХАН. Илүү олон болбол картыг сунгахгүй,
+    хуудаслаж харуулна.
+
+    Хуудасны дугаарыг рендерийн үед хязгаарлана — шүүлтүүр солигдоход
+    зургийн тоо буурч, хадгалсан дугаар хүрээнээсээ гарах магадлалтай.
+    Үүнийг effect дотор засвал нэг илүү рендер, нэг анивчилт нэмэгдэнэ.
+  */
+  const PER_PAGE = 6;
+  const photoPages = Math.max(1, Math.ceil(shownPhotos.length / PER_PAGE));
+  const page = Math.min(photoPage, photoPages - 1);
+  const pagePhotos = shownPhotos.slice(page * PER_PAGE, page * PER_PAGE + PER_PAGE);
+
   const detail = React.useMemo(
     () => (selected == null ? null : (calls?.find((c) => c.oid === selected) ?? null)),
     [calls, selected],
@@ -251,8 +296,12 @@ export function WildlifeDashboard() {
     (route ? 1 : 0) +
     (officer ? 1 : 0) +
     (injured ? 1 : 0) +
-    (month ? 1 : 0) +
+    (wholeMonths ? 0 : 1) +
     (extentOn ? 1 : 0);
+
+  function clearMonths() {
+    setMonths([1, 12]);
+  }
 
   function reset() {
     setSpecies(null);
@@ -260,7 +309,7 @@ export function WildlifeDashboard() {
     setRoute(null);
     setOfficer(null);
     setInjured(null);
-    setMonth(null);
+    clearMonths();
     setExtentOn(false);
     setExtent(null);
   }
@@ -343,15 +392,39 @@ export function WildlifeDashboard() {
           <PickList items={officerData} selected={officer} onPick={setOfficer} />
         </FilterMenu>
 
+        {/* Улирлын муж — жишээ нь 2–6 сарын хоорондох бүртгэл */}
+        <FilterMenu
+          label="Улирал"
+          icon={CalendarRange}
+          value={wholeMonths ? null : `${months[0]}–${months[1]}-р сар`}
+          active={!wholeMonths}
+          onClear={clearMonths}
+          width={252}
+        >
+          <YearRange
+            min={1}
+            max={12}
+            value={months}
+            onChange={setMonths}
+            unit="сар"
+            whole="бүх сар"
+            format={(m) => `${m}-р сар`}
+          />
+        </FilterMenu>
+
         <FilterMenu
           label="Сар"
           icon={CalendarDays}
-          value={month ? `${month}-р сар` : null}
-          active={Boolean(month)}
-          onClear={() => setMonth(null)}
+          value={singleMonth ? `${singleMonth}-р сар` : null}
+          active={Boolean(singleMonth)}
+          onClear={clearMonths}
           width={200}
         >
-          <PickList items={monthData} selected={month} onPick={setMonth} />
+          <PickList
+            items={monthData}
+            selected={singleMonth}
+            onPick={(k) => setMonths(k ? [Number(k), Number(k)] : [1, 12])}
+          />
         </FilterMenu>
       </FilterBar>
 
@@ -363,7 +436,7 @@ export function WildlifeDashboard() {
             <RowChart data={speciesData} selected={species} onSelect={setSpecies} />
           </Panel>
           <Panel title="Сум, дүүргээр" count={soumData.length} grow>
-            <RowChart data={soumData} selected={soum} onSelect={setSoum} />
+            <CategoryChart data={soumData} selected={soum} onSelect={setSoum} />
           </Panel>
 
           {/*
@@ -372,19 +445,51 @@ export function WildlifeDashboard() {
             бичилт газрын зураг дээр нээгдэнэ.
           */}
           {/*
-            Өндөр нь ХЯЗГААРТАЙ, дотроо гүйнэ. Зураг олон болоход энэ хэсэг
-            тэлж, дээрх хоёр диаграмыг дэлгэцээс шахаж гаргах ёсгүй.
+            Нэг хуудсанд 6 зураг (3×2). Илүү болбол карт сунахгүй — дотроо
+            хуудаслана. Гүйлгэх биш хуудаслах шалтгаан: 3 багана дотор
+            гүйлгэх зурвас нь ямар хэсэг үлдсэнийг мэдрүүлдэггүй.
           */}
-          <Panel title="Зураг" count={shownPhotos.length} bodyClassName="max-h-[196px]">
+          <Panel
+            title="Зураг"
+            right={
+              <span className="flex items-center gap-1.5">
+                <span className="num text-[11.5px] text-ink-3">
+                  {shownPhotos.length}
+                </span>
+                {photoPages > 1 ? (
+                  <>
+                    <button
+                      onClick={() => setPhotoPage((page - 1 + photoPages) % photoPages)}
+                      aria-label="Өмнөх зургууд"
+                      className="flex size-[18px] items-center justify-center rounded-[2px] border border-line text-ink-3 transition-colors hover:border-line-2 hover:text-ink"
+                    >
+                      <ChevronLeft size={11} strokeWidth={2} />
+                    </button>
+                    <span className="num text-[11px] text-ink-3">
+                      {page + 1}/{photoPages}
+                    </span>
+                    <button
+                      onClick={() => setPhotoPage((page + 1) % photoPages)}
+                      aria-label="Дараах зургууд"
+                      className="flex size-[18px] items-center justify-center rounded-[2px] border border-line text-ink-3 transition-colors hover:border-line-2 hover:text-ink"
+                    >
+                      <ChevronRight size={11} strokeWidth={2} />
+                    </button>
+                  </>
+                ) : null}
+              </span>
+            }
+          >
             {shownPhotos.length === 0 ? (
               <p className="py-4 text-center text-[12px] text-ink-3">Зураг алга</p>
             ) : (
               <div className="grid grid-cols-3 gap-1.5">
-                {shownPhotos.map((p, i) => (
+                {pagePhotos.map((p, i) => (
                   <button
                     key={`${p.oid}-${p.id}`}
                     type="button"
-                    onClick={() => setViewer(i)}
+                    /* Үзэгч нь БҮХ зургийг дамждаг тул хуудсын шилжилтийг нэмнэ */
+                    onClick={() => setViewer(page * PER_PAGE + i)}
                     title={photoTitle(p, calls)}
                     className={cn(
                       "block aspect-square overflow-hidden rounded-xs border transition-colors",
@@ -410,18 +515,29 @@ export function WildlifeDashboard() {
         {/* ---- ГОЛ: индикатор + газрын зураг ---- */}
         <div className="flex min-h-0 flex-col gap-2.5">
           <div className="shrink-0 overflow-hidden rounded-xs border border-line bg-paper-2">
-            <div className="grid grid-cols-3 divide-x divide-y divide-line xl:grid-cols-6 xl:divide-y-0">
-              <Stat label="Нийт дуудлага" value={num(stats.total)} />
-              <Stat label="Амьтны зүйл" value={num(stats.kinds)} />
-              <Stat label="Бэртэл гэмтэлтэй" value={num(stats.hurt)} />
-              <Stat label="Асран хамгаалсан хоног" value={num(stats.days)} />
-              <Stat label="Идэш, шатахууны зардал" value={`${num(stats.cost)}₮`} />
-              <Stat label="Зарцуулсан цаг" value={num(stats.hours)} />
+            <div className="grid grid-cols-3 divide-x divide-y divide-line xl:grid-cols-5 xl:divide-y-0">
+              <Stat icon={PhoneCall} label="Нийт дуудлага" value={num(stats.total)} />
+              <Stat icon={PawPrint} label="Амьтны зүйл" value={num(stats.kinds)} />
+              <Stat icon={Stethoscope} label="Бэртэл гэмтэлтэй" value={num(stats.hurt)} />
+              <Stat
+                icon={CalendarDays}
+                label="Асран хамгаалсан хоног"
+                value={num(stats.days)}
+              />
+              <Stat
+                icon={Wallet}
+                label="Шатахууны зардал"
+                value={`${num(stats.fuel)}₮`}
+              />
             </div>
           </div>
 
           <div className="relative flex min-h-[320px] flex-1 flex-col overflow-hidden rounded-xs border border-line bg-paper-2">
             <div className="relative h-full w-full">
+              {/*
+                Бөөгнөрөлгүй, энгийн цэг. Дуудлага одоогоор цөөхөн тул
+                бөөгнөрүүлэх юу ч алга — цэг бүр өөрөө харагдана.
+              */}
               <PointMap
                 points={points}
                 visible={mapIdx}
@@ -430,6 +546,7 @@ export function WildlifeDashboard() {
                 extent={extentOn}
                 onExtent={setExtent}
                 focus={focus}
+                cluster={false}
               />
 
               <BasemapGallery
@@ -511,19 +628,25 @@ export function WildlifeDashboard() {
             <AreaChart
               data={monthData}
               height={80}
-              selected={month}
-              onSelect={setMonth}
+              selected={singleMonth}
+              onSelect={(k) => setMonths(k ? [Number(k), Number(k)] : [1, 12])}
               formatTick={(_d, i) => String(i + 1)}
               unit="дуудлага"
             />
           </Panel>
 
+          {/* Тийм/Үгүй хоёрхон утга — харьцааг бөгжөөр уншихад хялбар */}
           <Panel title="Бэртэл гэмтлээр" count={injuredData.length}>
-            <RowChart data={injuredData} selected={injured} onSelect={setInjured} />
+            <CategoryChart data={injuredData} selected={injured} onSelect={setInjured} />
           </Panel>
 
+          {/*
+            Маршрут одоогоор цөөхөн тул бөгжөөр гарна. Бүртгэл нэмэгдэж
+            ангилал 4-өөс хэтрэхэд `CategoryChart` өөрөө мөрөн диаграм руу
+            шилжинэ — гараар солих шаардлагагүй.
+          */}
           <Panel title="Маршрутаар" count={routeData.length} grow>
-            <RowChart data={routeData} selected={route} onSelect={setRoute} />
+            <CategoryChart data={routeData} selected={route} onSelect={setRoute} />
           </Panel>
 
           <Panel title="Албан хаагчаар" count={officerData.length} grow>
@@ -711,6 +834,7 @@ function Panel({
   title,
   count,
   note,
+  right,
   grow,
   bodyClassName,
   children,
@@ -718,6 +842,8 @@ function Panel({
   title: string;
   count?: number;
   note?: string;
+  /** Гарчгийн баруун талын чөлөөт агуулга — хуудаслалт зэрэг */
+  right?: React.ReactNode;
   /** Үлдсэн зайг эзэлж, дотроо гүйх эсэх */
   grow?: boolean;
   /** Биеийн нэмэлт класс — өндрийн таг зэрэг */
@@ -735,11 +861,12 @@ function Panel({
         <h2 className="display text-[13.5px] leading-none tracking-[0.06em] uppercase">
           {title}
         </h2>
-        {count !== undefined ? (
-          <span className="num text-[11.5px] text-ink-3">{count}</span>
-        ) : note ? (
-          <span className="text-[11.5px] text-ink-3">{note}</span>
-        ) : null}
+        {right ??
+          (count !== undefined ? (
+            <span className="num text-[11.5px] text-ink-3">{count}</span>
+          ) : note ? (
+            <span className="text-[11.5px] text-ink-3">{note}</span>
+          ) : null)}
       </div>
       <div className={cn("min-h-0 flex-1 overflow-y-auto p-3", bodyClassName)}>
         {children}
@@ -748,12 +875,34 @@ function Panel({
   );
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
+/**
+ * Индикаторын нэгж нүд.
+ *
+ * Гарчгийн талбайд ХОЁР МӨРИЙН зай нөөцөлнө. Гарчиг нэг мөрөнд багтвал ч
+ * түүнээс доош байрлах тоо бүх нүдэнд ижил өндөрт таарна — эс тэгвээс
+ * зэрэгцээ тоонууд дээш доош шалдаж, мөр алдагдана.
+ *
+ * Икон нь чимэглэл биш, ЯЛГАХ хэрэгсэл: нүднүүд бүгд ижил хэмжээний
+ * саарал бичвэртэй тул хэрэглэгч алийг нь хайж байгаагаа иконоор нь олно.
+ * Тиймээс тоонытой нэг эгнээнд, гарчгаас том хэмжээтэй байрлана.
+ */
+function Stat({
+  label,
+  value,
+  icon: Icon,
+}: {
+  label: string;
+  value: string;
+  icon: LucideIcon;
+}) {
   return (
-    <div className="px-3.5 py-3">
-      <span className="eyebrow block leading-[1.35]">{label}</span>
-      <div className="num mt-2 truncate text-[20px] leading-none font-medium text-ink">
-        {value}
+    <div className="flex flex-col px-3.5 py-3">
+      <span className="eyebrow block min-h-[30px] leading-[1.35]">{label}</span>
+      <div className="mt-auto flex items-center gap-2">
+        <Icon size={20} strokeWidth={1.6} className="shrink-0 text-ink-3" />
+        <span className="num truncate text-[17px] leading-none font-medium text-ink">
+          {value}
+        </span>
       </div>
     </div>
   );

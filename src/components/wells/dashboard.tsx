@@ -3,13 +3,16 @@
 import * as React from "react";
 import dynamic from "next/dynamic";
 import {
+  Building2,
   CalendarDays,
   CalendarRange,
+  Droplets,
   HardHat,
   LandPlot,
   Loader2,
   Map as MapIcon,
   X,
+  type LucideIcon,
 } from "lucide-react";
 import { AreaChart, RowChart, YearRange, type Datum } from "@/components/charts";
 import { BasemapGallery } from "@/components/map/basemap-gallery";
@@ -470,22 +473,27 @@ export function WellsDashboard() {
             */}
             <div className="grid grid-cols-3 divide-x divide-y divide-line xl:grid-cols-5 xl:divide-y-0">
               <Indicator
+                icon={Droplets}
                 label="Бүртгэгдсэн худгийн тоо"
                 value={num(indicators.total)}
               />
               <Indicator
+                icon={HardHat}
                 label="Гүйцэтгэгч байгууллага"
                 value={num(indicators.contractors)}
               />
               <Indicator
+                icon={MapIcon}
                 label="Бүртгэгдсэн худаг аймгаар"
                 value={num(indicators.aimags)}
               />
               <Indicator
+                icon={LandPlot}
                 label="Бүртгэгдсэн худаг сумаар"
                 value={num(indicators.soums)}
               />
               <Indicator
+                icon={Building2}
                 label="Бүртгэгдсэн худаг дүүргээр"
                 value={num(indicators.districts)}
               />
@@ -703,16 +711,30 @@ function Head({ title, children }: { title: string; children?: React.ReactNode }
 }
 
 /**
- * Индикаторын нэгж нүд — гарчиг ба тоо, өөр юу ч үгүй.
+ * Индикаторын нэгж нүд.
+ *
  * Бүх тоо нэг өнгөтэй (`ink`): гол утгыг accent-аар биш, байрлалаараа
- * (эхний нүд) ялгана.
+ * (эхний нүд) ялгана. Гарчгийн талбайд хоёр мөрийн зай нөөцөлсөн тул
+ * зэрэгцээ нүднүүдийн тоо нэг шугам дээр таарна. Икон нь ижил хэлбэртэй
+ * гарчгуудыг нүдээр ялгах хэрэгсэл.
  */
-function Indicator({ label, value }: { label: string; value: string }) {
+function Indicator({
+  label,
+  value,
+  icon: Icon,
+}: {
+  label: string;
+  value: string;
+  icon: LucideIcon;
+}) {
   return (
-    <div className="px-3.5 py-3">
-      <span className="eyebrow block leading-[1.35]">{label}</span>
-      <div className="num mt-2 truncate text-[20px] leading-none font-medium text-ink">
-        {value}
+    <div className="flex flex-col px-3.5 py-3">
+      <span className="eyebrow block min-h-[30px] leading-[1.35]">{label}</span>
+      <div className="mt-auto flex items-center gap-2">
+        <Icon size={22} strokeWidth={1.6} className="shrink-0 text-ink-3" />
+        <span className="num truncate text-[20px] leading-none font-medium text-ink">
+          {value}
+        </span>
       </div>
     </div>
   );

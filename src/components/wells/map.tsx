@@ -3,6 +3,7 @@
 import * as React from "react";
 import {
   Map as MapLibreMap,
+  Marker,
   ScaleControl,
   prewarm,
   setWorkerUrl,
@@ -114,6 +115,94 @@ const clusterRadius = [
 const GLYPHS = "https://fonts.openmaptiles.org/{fontstack}/{range}.pbf";
 const FONT = ["Open Sans Bold"];
 
+/**
+ * Хэдэн зурган тэмдэглэгээ хүртэл DOM дээр гаргах вэ. Тэмдэглэгээ бүр нь
+ * жинхэнэ элемент бөгөөд зураг татдаг тул олноороо хөтчийг зогсооно.
+ */
+const MARKER_CAP = 250;
+
+/**
+ * Дугуй тэмдэглэгээ. Газрын зураг дээр цэг биш, ЮУ болохыг нь шууд харуулна.
+ *
+ * Агуулга нь хоёр хэлбэртэй байж болно:
+ *  · зургийн хаяг (`/species/…webp`) — дугуй дүүрэн зураг;
+ *  · SVG бичвэр (`<svg …`) — зурсан тэмдэг (зураг байхгүй зүйлд).
+ * Хоёулаа өөрийн кодоос гаралтай тул `innerHTML` аюулгүй.
+ */
+function markerEl(mark: string, onClick: () => void) {
+  const el = document.createElement("button");
+  el.type = "button";
+  if (mark.startsWith("<svg")) {
+    el.className = "species-pin";
+    el.innerHTML = mark;
+  } else {
+    el.className = "species-pin photo";
+    el.style.backgroundImage = `url("${mark}")`;
+  }
+  el.addEventListener("click", (e) => {
+    e.stopPropagation();
+    onClick();
+  });
+  return el;
+}
+
+/**
+ * Тоог бөөгнөрлийн БАРУУН ДЭЭД буланд гаргах шилжилт (em нэгжээр, 10px
+ * бичвэрт). Радиус нь цэгийн тооноос хамааран өөрчлөгддөг ч `text-offset`-д
+ * массив буцаадаг илэрхийлэл бичих боломж хязгаартай тул алхмаар ойртуулав —
+ * алхам бүр нь `clusterRadius`-ийн тухайн мужийн радиусын 0.7 дахин (45°).
+ */
+const badgeOffset = [
+  "step",
+  ["get", "point_count"],
+  ["literal", [1, -1]],
+  10,
+  ["literal", [1.5, -1.5]],
+  100,
+  ["literal", [2.1, -2.1]],
+  1000,
+  ["literal", [2.7, -2.7]],
+] as unknown as ExpressionSpecification;
+
+/**
+ * Тооны дэвсгэр болох сунадаг "шахмал". Дан дугуй зураг байсан бол 4 оронтой
+ * тоо багтахгүй тул `icon-text-fit`-ийн сунах муж (`stretchX/Y`) заана —
+ * икон нь бичвэрийнхээ уртад тааруулж өөрөө сунана.
+ */
+function pillImage() {
+  const w = 26;
+  const h = 20;
+  const r = 9;
+  const c = document.createElement("canvas");
+  c.width = w;
+  c.height = h;
+  const g = c.getContext("2d")!;
+
+  g.beginPath();
+  g.moveTo(r, 0.5);
+  g.arcTo(w - 0.5, 0.5, w - 0.5, h - 0.5, r);
+  g.arcTo(w - 0.5, h - 0.5, 0.5, h - 0.5, r);
+  g.arcTo(0.5, h - 0.5, 0.5, 0.5, r);
+  g.arcTo(0.5, 0.5, w - 0.5, 0.5, r);
+  g.closePath();
+
+  g.fillStyle = "rgba(15,23,32,.92)";
+  g.fill();
+  g.strokeStyle = FIREFLY.glow;
+  g.lineWidth = 1;
+  g.stroke();
+
+  return {
+    data: g.getImageData(0, 0, w, h),
+    options: {
+      // Голын хэсэг нь сунана, булангийн дугуйрал нь хэвээр үлдэнэ
+      stretchX: [[r, w - r] as [number, number]],
+      stretchY: [[r, h - r] as [number, number]],
+      content: [3, 2, w - 3, h - 2] as [number, number, number, number],
+    },
+  };
+}
+
 function baseStyle(b: Basemap): StyleSpecification {
   return {
     version: 8,
@@ -160,6 +249,9 @@ export function WellsMap({
   extent = false,
   onExtent,
   focus = null,
+  cluster = true,
+  clusterLabel = "inside",
+  marks,
 }: {
   points: MapPoints;
   /** Шүүлтүүр давсан цэгүүдийн индекс */
@@ -171,6 +263,19 @@ export function WellsMap({
   onExtent?: (e: Extent | null) => void;
   /** Сонголтын хүрээ — өөрчлөгдөх бүрд зураг тийш нь ойртоно (zoom action) */
   focus?: Extent | null;
+  /**
+   * Бөөгнөрүүлэх эсэх. ЗӨВХӨН анхны зурагдалтад уншигдана — GeoJSON эх
+   * сурвалжийн шинж тул дараа нь солих боломжгүй (самбар бүр өөрийн
+   * зураг үүсгэдэг учир хязгаарлалт биш).
+   */
+  cluster?: boolean;
+  /** Тоог дугуйн дотор бичих үү, баруун дээд буланд тэмдэг болгох уу */
+  clusterLabel?: "inside" | "badge";
+  /**
+   * `oid` → SVG тэмдэг. Өгвөл тухайн цэг дугуй ТЭМДГЭЭР тэмдэглэгдэнэ
+   * (энгийн цэгийн оронд) — бөөгнөрөл задарсан үед л харагдана.
+   */
+  marks?: Record<number, string>;
 }) {
   const holder = React.useRef<HTMLDivElement>(null);
   const map = React.useRef<MapLibreMap | null>(null);
@@ -195,6 +300,10 @@ export function WellsMap({
   const extentCb = React.useRef(onExtent);
   /** Анх үүсгэх үеийн суурь зураг — effect-ийг дахин ажиллуулахгүйн тулд ref */
   const basemapRef = React.useRef(basemap);
+  /** Эх сурвалж үүсгэх үед л уншигдах тохиргоо */
+  const modeRef = React.useRef({ cluster, clusterLabel });
+  /** Зурган тэмдэглэгээ — oid → maplibre marker */
+  const markers = React.useRef(new Map<number, Marker>());
   React.useEffect(() => {
     selectCb.current = onSelect;
   }, [onSelect]);
@@ -290,7 +399,7 @@ export function WellsMap({
       m.addSource("wells", {
         type: "geojson",
         data: { type: "FeatureCollection", features: [] },
-        cluster: true,
+        cluster: modeRef.current.cluster,
         clusterRadius: 48,
         clusterMaxZoom: 15,
       });
@@ -303,38 +412,74 @@ export function WellsMap({
         Өнгө нь firefly-ийн гэрэлтэй нэг байна — бөөгнөрөл задрахад цэг өөр
         өнгө рүү үсрэх нь ижил датаг өөр зүйл мэт харагдуулна.
       */
-      m.addLayer({
-        id: "clusters",
-        type: "circle",
-        source: "wells",
-        filter: ["has", "point_count"],
-        paint: {
-          "circle-color": FIREFLY.glow,
-          "circle-opacity": 0.22,
-          "circle-radius": clusterRadius,
-          "circle-stroke-width": 1.4,
-          "circle-stroke-color": FIREFLY.glow,
-          "circle-stroke-opacity": 0.95,
-        },
-      });
+      const badge = modeRef.current.clusterLabel === "badge";
 
-      m.addLayer({
-        id: "cluster-count",
-        type: "symbol",
-        source: "wells",
-        filter: ["has", "point_count"],
-        layout: {
-          "text-field": ["get", "point_count_abbreviated"],
-          "text-font": FONT,
-          "text-size": ["step", ["get", "point_count"], 10, 100, 11, 1000, 12],
-          "text-allow-overlap": true,
-        },
-        paint: {
-          "text-color": "#ffffff",
-          "text-halo-color": "rgba(0,0,0,.7)",
-          "text-halo-width": 1.2,
-        },
-      });
+      if (modeRef.current.cluster) {
+        m.addLayer({
+          id: "clusters",
+          type: "circle",
+          source: "wells",
+          filter: ["has", "point_count"],
+          paint: {
+            "circle-color": FIREFLY.glow,
+            // Тоо нь дотроо биш бол дугуй нь илүү хоосон, бөгж маягтай
+            "circle-opacity": badge ? 0.14 : 0.22,
+            "circle-radius": clusterRadius,
+            "circle-stroke-width": badge ? 2 : 1.4,
+            "circle-stroke-color": FIREFLY.glow,
+            "circle-stroke-opacity": 0.95,
+          },
+        });
+
+        if (badge) {
+          /*
+            Тоо нь дугуйн БАРУУН ДЭЭД буланд жижиг тэмдэг болж суух хувилбар.
+            Дугуйн дотор нь чөлөөтэй үлдэх тул доорх суурь зураг, цэгийн
+            тархалт харагдсаар байна.
+          */
+          const pill = pillImage();
+          if (!m.hasImage("cluster-pill")) {
+            m.addImage("cluster-pill", pill.data, pill.options);
+          }
+
+          m.addLayer({
+            id: "cluster-count",
+            type: "symbol",
+            source: "wells",
+            filter: ["has", "point_count"],
+            layout: {
+              "icon-image": "cluster-pill",
+              "icon-text-fit": "both",
+              "icon-text-fit-padding": [1, 3, 1, 3],
+              "icon-allow-overlap": true,
+              "text-field": ["get", "point_count_abbreviated"],
+              "text-font": FONT,
+              "text-size": 10,
+              "text-offset": badgeOffset,
+              "text-allow-overlap": true,
+            },
+            paint: { "text-color": "#ffffff" },
+          });
+        } else {
+          m.addLayer({
+            id: "cluster-count",
+            type: "symbol",
+            source: "wells",
+            filter: ["has", "point_count"],
+            layout: {
+              "text-field": ["get", "point_count_abbreviated"],
+              "text-font": FONT,
+              "text-size": ["step", ["get", "point_count"], 10, 100, 11, 1000, 12],
+              "text-allow-overlap": true,
+            },
+            paint: {
+              "text-color": "#ffffff",
+              "text-halo-color": "rgba(0,0,0,.7)",
+              "text-halo-width": 1.2,
+            },
+          });
+        }
+      }
 
       /*
         Бөөгнөрөлд ороогүй дан худаг — firefly загвар.
@@ -390,7 +535,7 @@ export function WellsMap({
       });
 
       // Бөөгнөрөл дээр товшвол задалж ойртоно
-      m.on("click", "clusters", (e) => {
+      if (modeRef.current.cluster) m.on("click", "clusters", (e) => {
         const f = e.features?.[0];
         if (!f) return;
         const id = f.properties?.cluster_id;
@@ -419,7 +564,10 @@ export function WellsMap({
         if (f) selectCb.current(Number(f.properties?.oid));
       });
 
-      for (const id of ["clusters", "wells-halo"]) {
+      const hoverable = modeRef.current.cluster
+        ? ["clusters", "wells-halo"]
+        : ["wells-halo"];
+      for (const id of hoverable) {
         m.on("mouseenter", id, () => {
           m.getCanvas().style.cursor = "pointer";
         });
@@ -583,6 +731,70 @@ export function WellsMap({
       );
     }
   }, [live, points, visible]);
+
+  /* ---------------- Зурган тэмдэглэгээ ----------------
+     Бөөгнөрөлтэй ЗЭРЭГЦЭЖ ажиллана: бөөгнөрөл задарч дан цэг болсон
+     бичлэг л зургаа харуулна. Аль цэг задарсныг зөвхөн MapLibre мэднэ
+     тул `querySourceFeatures`-ээр асууж, зураг тогтох бүрд (`idle`)
+     дахин тааруулна.
+
+     DOM элемент бүр зураг татдаг тул харагдах хүрээ болон `MARKER_CAP`
+     хоёроор хязгаарлана — эс тэгвээс ойртоход хэдэн зуун зураг зэрэг
+     ачаалагдаж хөтөч зогсоно. */
+  React.useEffect(() => {
+    if (!live) return;
+    const markerRefs = markers.current;
+
+    const clear = () => {
+      for (const mk of markerRefs.values()) mk.remove();
+      markerRefs.clear();
+    };
+
+    if (!marks) {
+      clear();
+      return;
+    }
+
+    const sync = () => {
+      const bounds = live.getBounds();
+      const want = new Map<number, { svg: string; pos: [number, number] }>();
+
+      for (const f of live.querySourceFeatures("wells", {
+        filter: ["!", ["has", "point_count"]],
+      })) {
+        if (want.size >= MARKER_CAP) break;
+        const id = Number(f.properties?.oid);
+        if (!Number.isFinite(id) || want.has(id)) continue;
+        const svg = marks[id];
+        if (!svg) continue;
+        const g = f.geometry;
+        if (g.type !== "Point") continue;
+        const pos = g.coordinates as [number, number];
+        if (!bounds.contains(pos)) continue;
+        want.set(id, { svg, pos });
+      }
+
+      // Хуучирсныг авч, шинийг л нэмнэ — бүгдийг дахин үүсгэвэл зураг анивчина
+      for (const [id, mk] of markerRefs) {
+        if (!want.has(id)) {
+          mk.remove();
+          markerRefs.delete(id);
+        }
+      }
+      for (const [id, { svg, pos }] of want) {
+        if (markerRefs.has(id)) continue;
+        const el = markerEl(svg, () => selectCb.current(id));
+        markerRefs.set(id, new Marker({ element: el }).setLngLat(pos).addTo(live));
+      }
+    };
+
+    sync();
+    live.on("idle", sync);
+    return () => {
+      live.off("idle", sync);
+      clear();
+    };
+  }, [live, marks]);
 
   /*
     Өндрийг `h-full`-ээр өгнө. `absolute inset-0` ажиллахгүй —

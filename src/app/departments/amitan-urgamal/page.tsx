@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { WildlifeDashboard } from "@/components/wildlife/dashboard";
+import { WildlifeWorkspace } from "@/components/wildlife/workspace";
 import { getDepartment } from "@/lib/departments";
 
 const DEPT = getDepartment("amitan-urgamal")!;
@@ -16,7 +16,7 @@ export default function AmitanUrgamalPage() {
       className="h-full xl:h-[calc(100dvh-var(--head-h)-3rem)]"
       style={{ "--tone": `var(${DEPT.tone})` } as React.CSSProperties}
     >
-      <WildlifeDashboard />
+      <WildlifeWorkspace />
     </div>
   );
 }

@@ -459,7 +459,224 @@ export function RowChart({
 }
 
 /* --------------------------------------------------------------------------
-   Хоёр үзүүрт он сонгогч (range slider)
+   Бөгж (donut) — ЗӨВХӨН 2–4 ангилалтай үед.
+
+   Хэсгүүдийг өөр өнгөөр БУДАХГҮЙ: дата дүрслэлийн өнгө ганц. Ялгааг нэг
+   өнгөний тунгалагийн шатлалаар (эрэмбээр) гаргана. Ангилал олон бол энэ
+   хэлбэр уншигдахаа больдог тул мөрөн диаграм (`RowChart`) руу шилжинэ.
+   -------------------------------------------------------------------------- */
+
+/** Бөгжний нэг зүсэм — гадна нумаар очиж, дотуур нумаар буцна */
+function donutSlice(c: number, R: number, r: number, a0: number, a1: number) {
+  const p = (rad: number, a: number) => [c + rad * Math.cos(a), c + rad * Math.sin(a)];
+  const big = a1 - a0 > Math.PI ? 1 : 0;
+  const [x0, y0] = p(R, a0);
+  const [x1, y1] = p(R, a1);
+  const [x2, y2] = p(r, a1);
+  const [x3, y3] = p(r, a0);
+  return `M ${x0} ${y0} A ${R} ${R} 0 ${big} 1 ${x1} ${y1} L ${x2} ${y2} A ${r} ${r} 0 ${big} 0 ${x3} ${y3} Z`;
+}
+
+export function PieChart({
+  data,
+  tone = "var(--data)",
+  size = 78,
+  selected,
+  onSelect,
+}: {
+  data: Datum[];
+  tone?: string;
+  size?: number;
+  selected?: string | null;
+  onSelect?: (key: string | null) => void;
+}) {
+  const total = data.reduce((a, d) => a + d.value, 0);
+
+  if (data.length === 0 || total === 0) {
+    return <div className="py-5 text-center text-[12px] text-ink-3">Утга алга</div>;
+  }
+
+  /*
+    Гадна тойрог нь зурагны ирмэгт ЯГ хүрч болохгүй: зураас нь замын
+    голоор татагддаг тул хагас нь viewBox-оос гарч тайрагдана. Тайралт нь
+    дээд, доод, хоёр хажуу дөрвөн цэгт л тохиолддог учир дугуй нь дөрвөн
+    талаасаа шахагдсан мэт харагдана. Тиймээс захаас зай авна.
+  */
+  const PAD = 3;
+  const c = size / 2;
+  const R = c - PAD;
+  const r = R * 0.62;
+  /** Эрэмбийн дагуух тунгалаг — хамгийн олон нь хамгийн тод */
+  const fade = (i: number) => Math.max(1 - i * 0.34, 0.24);
+  /*
+    Дүүргэлт нь ТУНГАЛАГ, хүрээ нь ижил өнгөөр бүтэн — газрын зургийн
+    бөөгнөрөлтэй нэг зарчим. Ингэснээр бөгж дүүрэн өнгө болж дэлгэцийг
+    дарахгүй, хэсгийн ирмэг нь харин тод үлдэнэ.
+  */
+  const FILL = 0.42;
+
+  /*
+    Өнцгийг ХУРИМТЛУУЛЖ бодно. `map`-ийн дотор хуримтлуулагчийг өөрчилвөл
+    рендерийн цэвэр байдал алдагдана (компилятор ч анхааруулна) тул энгийн
+    давталтаар урьдчилж бэлдэнэ. 12 цагийн байрлалаас (−90°) эхэлнэ.
+  */
+  const slices: { d: Datum; i: number; a0: number; a1: number }[] = [];
+  let acc = 0;
+  for (let i = 0; i < data.length; i++) {
+    const a0 = (acc / total) * Math.PI * 2 - Math.PI / 2;
+    acc += data[i].value;
+    const a1 = (acc / total) * Math.PI * 2 - Math.PI / 2;
+    slices.push({ d: data[i], i, a0, a1 });
+  }
+
+  const only = slices.length === 1;
+
+  return (
+    <div className="flex items-center gap-3">
+      <svg
+        width={size}
+        height={size}
+        viewBox={`0 0 ${size} ${size}`}
+        className="shrink-0"
+        role="img"
+      >
+        {/* Гадна хүрээ — бөгж бүрэн тойрог гэдгийг барих зураас */}
+        <circle
+          cx={c}
+          cy={c}
+          r={R}
+          fill="none"
+          stroke={tone}
+          strokeOpacity={0.4}
+          strokeWidth={1}
+        />
+
+        {/*
+          Ганц ангилалтай үед нумын эхлэл, төгсгөл нь давхцаж зам хоосон
+          гардаг тул бүтэн бөгжийг зузаан зураасаар зурна.
+        */}
+        {only ? (
+          <circle
+            cx={c}
+            cy={c}
+            r={(R + r) / 2}
+            fill="none"
+            stroke={tone}
+            strokeOpacity={FILL}
+            strokeWidth={R - r}
+          />
+        ) : (
+          slices.map(({ d, i, a0, a1 }) => {
+            const on = selected == null || selected === d.key;
+            return (
+              <path
+                key={d.key}
+                d={donutSlice(c, R, r, a0, a1)}
+                fill={tone}
+                fillOpacity={on ? fade(i) * FILL : 0.06}
+                stroke={tone}
+                strokeOpacity={on ? Math.max(fade(i), 0.5) : 0.15}
+                strokeWidth={1}
+                className={onSelect ? "cursor-pointer" : undefined}
+                onClick={() => onSelect?.(selected === d.key ? null : d.key)}
+              >
+                <title>{`${d.label} · ${num(d.value)}`}</title>
+              </path>
+            );
+          })
+        )}
+
+        {/* Голд нийт — бөгжний нүх хоосон байх шалтгаангүй */}
+        <text
+          x={c}
+          y={c + 3}
+          textAnchor="middle"
+          className="num fill-ink text-[13px] font-medium"
+        >
+          {num(total)}
+        </text>
+      </svg>
+
+      <div className="min-w-0 flex-1 space-y-1.5">
+        {data.map((d, i) => {
+          const on = selected == null || selected === d.key;
+          return (
+            <button
+              key={d.key}
+              type="button"
+              onClick={() => onSelect?.(selected === d.key ? null : d.key)}
+              className={cn(
+                "flex w-full items-baseline gap-2 text-left transition-opacity",
+                !on && "opacity-40",
+              )}
+            >
+              {/* Тайлбарын тэмдэг нь зүсмийн дүрслэлийг давтана: тунгалаг
+                  дүүргэлт + бүтэн хүрээ */}
+              <span
+                aria-hidden
+                className="size-2 shrink-0 translate-y-[1px] rounded-[1px] border"
+                style={{
+                  background: `color-mix(in oklab, ${tone} ${fade(i) * FILL * 100}%, transparent)`,
+                  borderColor: `color-mix(in oklab, ${tone} ${Math.max(fade(i), 0.5) * 100}%, transparent)`,
+                }}
+              />
+              <span
+                className={cn(
+                  "min-w-0 flex-1 truncate text-[12px]",
+                  selected === d.key ? "font-medium text-ink" : "text-ink-2",
+                )}
+              >
+                {d.label}
+              </span>
+              <span
+                className={cn(
+                  "num shrink-0 text-[12px]",
+                  selected === d.key ? "text-ink" : "text-ink-2",
+                )}
+              >
+                {num(d.value)}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/* --------------------------------------------------------------------------
+   Ангиллын диаграм — хэлбэрээ ӨӨРӨӨ сонгоно.
+
+   Цөөн ангилалтай үед харьцаа нь гол утга (бөгж), олон болоход харьцаа
+   уншигдахаа больж эрэмбэ нь чухал болно (мөрөн диаграм). Дата өсөхөд
+   гараар сольж явахгүйн тулд хилийг энд нэг л газар барина.
+   -------------------------------------------------------------------------- */
+
+export function CategoryChart({
+  data,
+  selected,
+  onSelect,
+  tone,
+  /** Хэдэн ангилал хүртэл бөгжөөр харуулах вэ */
+  pieMax = 4,
+}: {
+  data: Datum[];
+  selected?: string | null;
+  onSelect?: (key: string | null) => void;
+  tone?: string;
+  pieMax?: number;
+}) {
+  return data.length > 0 && data.length <= pieMax ? (
+    <PieChart data={data} tone={tone} selected={selected} onSelect={onSelect} />
+  ) : (
+    <RowChart data={data} tone={tone} selected={selected} onSelect={onSelect} />
+  );
+}
+
+/* --------------------------------------------------------------------------
+   Хоёр үзүүрт муж сонгогч (range slider).
+   Нэр нь түүхэн шалтгаанаар `YearRange` — сар зэрэг бусад дараалалтай
+   хэмжигдэхүүнд ч хэрэглэнэ (`unit`, `format`-оор нэршлийг нь солино).
    -------------------------------------------------------------------------- */
 
 export function YearRange({
@@ -467,11 +684,20 @@ export function YearRange({
   max,
   value,
   onChange,
+  unit = "жил",
+  whole: wholeLabel = "бүх хугацаа",
+  format = String,
 }: {
   min: number;
   max: number;
   value: [number, number];
   onChange: (v: [number, number]) => void;
+  /** Сонгосон мужийн уртыг нэрлэх нэгж: "3 жил", "5 сар" */
+  unit?: string;
+  /** Бүтэн муж сонгогдсон үеийн бичиг */
+  whole?: string;
+  /** Үзүүрийн шошгыг харуулах хэлбэр */
+  format?: (v: number) => string;
 }) {
   const [lo, hi] = value;
   const span = Math.max(max - min, 1);
@@ -483,15 +709,15 @@ export function YearRange({
       {/* Одоогийн муж — хоёр үзүүрт нь ил тоо */}
       <div className="mb-2 flex items-center gap-2">
         <span className="num rounded-xs border border-line-2 bg-paper px-1.5 py-[3px] text-[12px] font-medium text-ink">
-          {lo}
+          {format(lo)}
         </span>
         <span className="h-px flex-1 bg-line" />
-        <span className="text-[11px] text-ink-3">
-          {whole ? "бүх хугацаа" : `${hi - lo + 1} жил`}
+        <span className="shrink-0 text-[11px] text-ink-3">
+          {whole ? wholeLabel : `${hi - lo + 1} ${unit}`}
         </span>
         <span className="h-px flex-1 bg-line" />
         <span className="num rounded-xs border border-line-2 bg-paper px-1.5 py-[3px] text-[12px] font-medium text-ink">
-          {hi}
+          {format(hi)}
         </span>
       </div>
 
@@ -510,7 +736,7 @@ export function YearRange({
           max={max}
           value={lo}
           onChange={(e) => onChange([Math.min(+e.target.value, hi), hi])}
-          aria-label="Эхлэх он"
+          aria-label="Мужийн эхлэл"
           className="range-thumb absolute inset-0 w-full"
         />
         <input
@@ -519,7 +745,7 @@ export function YearRange({
           max={max}
           value={hi}
           onChange={(e) => onChange([lo, Math.max(+e.target.value, lo)])}
-          aria-label="Дуусах он"
+          aria-label="Мужийн төгсгөл"
           className="range-thumb absolute inset-0 w-full"
         />
       </div>
