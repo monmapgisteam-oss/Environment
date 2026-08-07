@@ -13,6 +13,7 @@ import {
 import "maplibre-gl/dist/maplibre-gl.css";
 import { DATA_COLOR } from "@/components/wells/colors";
 import type { BoundarySet } from "@/lib/boundaries";
+import { asset } from "@/lib/base-path";
 
 export type MapPoints = {
   oid: number[];
@@ -75,7 +76,7 @@ let workerReady = false;
 function ensureWorker() {
   if (workerReady) return;
   workerReady = true;
-  setWorkerUrl("/maplibre/maplibre-gl-worker.mjs");
+  setWorkerUrl(asset("/maplibre/maplibre-gl-worker.mjs"));
   prewarm();
 }
 
@@ -378,7 +379,7 @@ export function WellsMap({
     if (!live) return;
     let alive = true;
 
-    fetch("/api/boundaries")
+    fetch(asset("/api/boundaries"))
       .then((r) => (r.ok ? r.json() : null))
       .then((b: BoundarySet | null) => {
         if (!alive || !b) return;

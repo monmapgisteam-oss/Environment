@@ -32,8 +32,11 @@ async function query(
   params: Record<string, string>,
   /**
    * Бүтэн нарийвчлалтай хариу 13MB орчим байдаг бөгөөд Next-ийн дата кэш 2MB-аас
-   * дээшхийг хадгалдаггүй тул кэшлэхийг оролдохгүй. Маршрутын түвшний кэш
-   * (`revalidate = 86400`) хүчинтэй хэвээр — өдөрт нэг л удаа татагдана.
+   * дээшхийг хадгалдаггүй тул кэшлэхийг оролдохгүй. Хариу нь статик экспортын
+   * үед нэг л удаа буюу build дээр татагдана.
+   *
+   * `cache: "no-store"` БИЧИХГҮЙ — маршрутыг динамик болгож, статик экспортод
+   * `out/api/boundaries` файл үүсэхгүй болно.
    */
   cacheable = true,
 ) {
@@ -46,7 +49,7 @@ async function query(
   })}`;
   const res = await fetch(
     url,
-    cacheable ? { next: { revalidate: 86400 } } : { cache: "no-store" },
+    cacheable ? { next: { revalidate: 86400 } } : undefined,
   );
   if (!res.ok) throw new Error(`ArcGIS ${res.status}`);
   return (await res.json()) as { features?: EsriFeature[] };

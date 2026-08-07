@@ -20,7 +20,8 @@ import {
   defaultBasemap,
   type Basemap,
 } from "@/components/wells/map";
-import type { WellsPayload, WellDetail } from "@/lib/wells";
+import { getWell, type WellsPayload, type WellDetail } from "@/lib/wells";
+import { asset } from "@/lib/base-path";
 import { cn, num } from "@/lib/utils";
 
 const WellsMap = dynamic(
@@ -50,7 +51,7 @@ export function WellsDashboard() {
 
   React.useEffect(() => {
     let alive = true;
-    fetch("/api/wells")
+    fetch(asset("/api/wells"))
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
       .then((d: WellsPayload) => {
         if (!alive) return;
@@ -215,9 +216,10 @@ export function WellsDashboard() {
 
   const openWell = React.useCallback((oid: number) => {
     setDetailLoading(true);
-    fetch(`/api/wells/${oid}`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d: WellDetail | null) => setDetail(d))
+    // Статик хостинг тул нэг худгийн дэлгэрэнгүйг шууд ArcGIS-ээс авна
+    getWell(oid)
+      .then((d) => setDetail(d))
+      .catch(() => setDetail(null))
       .finally(() => setDetailLoading(false));
   }, []);
 

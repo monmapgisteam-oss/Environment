@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getBoundaries } from "@/lib/boundaries";
 
 /** Хил өөрчлөгддөггүй тул нэг өдөр кэшилнэ */
-export const revalidate = 86400;
+export const dynamic = "force-static";
 
 export async function GET() {
   try {

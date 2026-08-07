@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getWells } from "@/lib/wells";
 
 /** Шахсан бүртгэлийг клиент рүү. ArcGIS-ийн хариуг 1 цаг кэшилнэ. */
-export const revalidate = 3600;
+export const dynamic = "force-static";
 
 export async function GET() {
   try {
