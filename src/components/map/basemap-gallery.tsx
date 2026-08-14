@@ -21,16 +21,22 @@ import { cn } from "@/lib/utils";
 export function BasemapGallery({
   value,
   onChange,
-  extent,
+  extent = false,
   onExtentChange,
   unit,
 }: {
   value: Basemap;
   onChange: (b: Basemap) => void;
   /** Харагдацын үйлдэл асаалттай эсэх */
-  extent: boolean;
-  onExtentChange: (v: boolean) => void;
-  unit: string;
+  extent?: boolean;
+  /**
+   * Харагдацын үйлдлийг ОРУУЛАХГҮЙ бол өгөхгүй — тэмдэглэгээ нь ч
+   * гарахгүй. Диаграм нь урьдчилан нэгтгэсэн тоо дээр суудаг самбарт
+   * (нүхэн жорлон) хүрээгээр шүүх нь зөвхөн зургийг өөрчилж, доорх
+   * тоонууд хөдөлгөөнгүй үлдэх тул худал дохио болно.
+   */
+  onExtentChange?: (v: boolean) => void;
+  unit?: string;
 }) {
   const [open, setOpen] = React.useState(false);
   const holder = React.useRef<HTMLDivElement>(null);
@@ -103,22 +109,24 @@ export function BasemapGallery({
             Харагдацын үйлдэл — ArcGIS Dashboard-ийн "map extent" зарчим:
             газрын зургийн одоогийн хүрээ бусад элементийн шүүлтүүр болно.
           */}
-          <label className="mt-2 flex cursor-pointer items-start gap-2 border-t border-line pt-2">
-            <input
-              type="checkbox"
-              checked={extent}
-              onChange={(e) => onExtentChange(e.target.checked)}
-              className="mt-[1px] size-3 shrink-0 accent-[var(--data)]"
-            />
-            <span className="min-w-0">
-              <span className="block text-[11.5px] leading-none font-medium text-ink">
-                Харагдацаар шүүх
+          {onExtentChange ? (
+            <label className="mt-2 flex cursor-pointer items-start gap-2 border-t border-line pt-2">
+              <input
+                type="checkbox"
+                checked={extent}
+                onChange={(e) => onExtentChange(e.target.checked)}
+                className="mt-[1px] size-3 shrink-0 accent-[var(--data)]"
+              />
+              <span className="min-w-0">
+                <span className="block text-[11.5px] leading-none font-medium text-ink">
+                  Харагдацаар шүүх
+                </span>
+                <span className="mt-1 block text-[10.5px] leading-snug text-ink-3">
+                  Зургийн хүрээнд багтсан {unit}-аар бусад самбар шинэчлэгдэнэ
+                </span>
               </span>
-              <span className="mt-1 block text-[10.5px] leading-snug text-ink-3">
-                Зургийн хүрээнд багтсан {unit}-аар бусад самбар шинэчлэгдэнэ
-              </span>
-            </span>
-          </label>
+            </label>
+          ) : null}
         </div>
       ) : null}
     </div>

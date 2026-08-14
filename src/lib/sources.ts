@@ -6,7 +6,13 @@
  * нэмэгдэнэ.
  */
 
+import { DAMAGED_SERVICE } from "@/lib/damaged";
+import { LICENSES_SERVICE } from "@/lib/licenses";
+import { PETITIONS_SERVICE } from "@/lib/petitions";
+import { RECLAMATION_SERVICES } from "@/lib/reclamation";
 import { RESCUES_SERVICE } from "@/lib/rescues";
+import { SOIL_SERVICES } from "@/lib/soil";
+import { CITY_SERVICE, PIT_SERVICE } from "@/lib/toilets";
 import { WELLS_SERVICE } from "@/lib/wells";
 import { WILDLIFE_SERVICE } from "@/lib/wildlife";
 
@@ -37,5 +43,59 @@ export const SOURCES: Source[] = [
     name: "Аврагдсан зэрлэг амьтад 2019–2026",
     kind: "ArcGIS FeatureServer",
     url: RESCUES_SERVICE,
+  },
+  {
+    slug: "orchin",
+    name: "Нүхэн жорлонгийн бүртгэл, орчны үнэлгээ",
+    kind: "ArcGIS FeatureServer",
+    url: PIT_SERVICE,
+  },
+  {
+    slug: "orchin",
+    name: "Нийтийн бие засах газар",
+    kind: "ArcGIS FeatureServer",
+    url: CITY_SERVICE,
+  },
+  {
+    slug: "orchin",
+    name: "Хөрсний хяналт шинжилгээ — 2024, 500 цэг",
+    kind: "ArcGIS FeatureServer",
+    url: SOIL_SERVICES[0],
+  },
+  {
+    slug: "orchin",
+    name: "Хөрсний хяналт шинжилгээ — 2023, 500 цэг",
+    kind: "ArcGIS FeatureServer",
+    url: SOIL_SERVICES[1],
+  },
+  {
+    slug: "orchin",
+    name: "Нөхөн сэргээлт — ААН-ийн хөрөнгөөр",
+    kind: "ArcGIS FeatureServer",
+    url: RECLAMATION_SERVICES[0],
+  },
+  {
+    slug: "orchin",
+    name: "Нөхөн сэргээлт — нийслэлийн төсвөөр",
+    kind: "ArcGIS FeatureServer",
+    url: RECLAMATION_SERVICES[1],
+  },
+  {
+    slug: "orchin",
+    name: "Эвдэрсэн газрын талбай",
+    kind: "ArcGIS FeatureServer",
+    url: DAMAGED_SERVICE,
+  },
+  {
+    slug: "orchin",
+    name: "Өргөдлийн талбай, шийдвэрлэлт",
+    kind: "ArcGIS FeatureServer",
+    url: PETITIONS_SERVICE,
+  },
+  {
+    slug: "orchin",
+    name: "Түгээмэл тархацтай ашигт малтмалын тусгай зөвшөөрөл",
+    kind: "ArcGIS FeatureServer",
+    url: LICENSES_SERVICE,
   },
 ];

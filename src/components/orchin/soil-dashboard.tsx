@@ -1,0 +1,597 @@
+"use client";
+
+import * as React from "react";
+import dynamic from "next/dynamic";
+import {
+  Building2,
+  FlaskConical,
+  Gauge,
+  Loader2,
+  MapPin,
+  TriangleAlert,
+  X,
+} from "lucide-react";
+import { RowChart, type Datum } from "@/components/charts";
+import { BasemapGallery } from "@/components/map/basemap-gallery";
+import { OverlayControl } from "@/components/map/overlay-control";
+import { FilterBar, FilterMenu, PickList } from "@/components/wells/filter-bar";
+import {
+  defaultBasemap,
+  type Basemap,
+  type Extent,
+  type MapOverlay,
+  type MapPoints,
+} from "@/components/wells/map";
+import {
+  fetchSoil,
+  pliClass,
+  pliColor,
+  PLI_CLASSES,
+  PLI_RAMP,
+  SOIL_YEARS,
+  type SoilData,
+  type SoilYear,
+} from "@/lib/soil";
+import { cn, num } from "@/lib/utils";
+
+const PointMap = dynamic(
+  () => import("@/components/wells/map").then((m) => m.WellsMap),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex h-full w-full items-center justify-center bg-paper-3">
+        <Loader2 size={16} className="animate-spin text-ink-3" />
+      </div>
+    ),
+  },
+);
+
+/** Тайлбарын шатлалт зурвас — CSS градиент болгосон шатлал */
+const RAMP_CSS = (() => {
+  const lo = PLI_RAMP[0][0];
+  const hi = PLI_RAMP[PLI_RAMP.length - 1][0];
+  const stops = PLI_RAMP.map(
+    ([v, c]) => `${c} ${(((v - lo) / (hi - lo)) * 100).toFixed(1)}%`,
+  );
+  return `linear-gradient(to right, ${stops.join(", ")})`;
+})();
+
+/** Ангиллын өнгө — мужийнхаа дунджаас шатлалаар авна */
+const CLASS_COLOR = [0.6, 1.5, 2.5, 3.6].map(pliColor);
+
+/**
+ * Хөрсний мониторингийн самбар.
+ *
+ * Өмнөх самбаруудаас ялгаатай нь энэ нь ТООЛЛОГО биш ХЭМЖИЛТ: цэг цөөн
+ * (500), гэвч цэг бүр 10–12 элементийн утга агуулна. Тиймээс бүтэц нь
+ * "хэдэн ширхэг вэ" биш "ямар түвшинтэй вэ" гэдэг рүү чиглэв:
+ *  · газрын зураг дээр цэг нь PLI-ийн зэргээрээ өнгө, хэмжээ авна;
+ *  · баруун багана нь тархалт биш ПРОФАЙЛ — элемент бүрийн дундаж;
+ *  · цэг товшиход тэр цэгийн бүтэн профайл нээгдэнэ.
+ */
+export function SoilDashboard() {
+  const [year, setYear] = React.useState<SoilYear>(2024);
+  const [loaded, setLoaded] = React.useState<SoilData | null>(null);
+  const [failed, setFailed] = React.useState<{ year: SoilYear; message: string } | null>(null);
+
+  const [district, setDistrict] = React.useState<string | null>(null);
+  const [grade, setGrade] = React.useState<string | null>(null);
+  const [picked, setPicked] = React.useState<number | null>(null);
+  const [hover, setHover] = React.useState<number | null>(null);
+
+  const [basemap, setBasemap] = React.useState<Basemap>(defaultBasemap);
+  const [overlays, setOverlays] = React.useState<MapOverlay[]>([]);
+
+  React.useEffect(() => {
+    let alive = true;
+    fetchSoil(year)
+      .then((d) => alive && setLoaded(d))
+      .catch((e: Error) => alive && setFailed({ year, message: e.message }));
+    return () => {
+      alive = false;
+    };
+  }, [year]);
+
+  /*
+    Жил солиход өмнөх жилийн мэдээ дэлгэц дээр үлдэх ёсгүй. Үүнийг
+    "цэвэрлэх" гэж effect дотор `setData(null)` дуудахгүй — тэр нь
+    шаталсан зурагдалт үүсгэнэ. Оронд нь татагдсан мэдээ өөрөө жилээ
+    авч явдаг тул сонгосон жилтэй нь ТААРАХГҮЙ бол хоосон гэж үзнэ.
+  */
+  const data = loaded?.year === year ? loaded : null;
+  const error = failed?.year === year ? failed.message : null;
+
+  const points = data?.points;
+
+  /* ---------------- Цэгийн багана (газрын зурагт) ---------------- */
+  const geo = React.useMemo<MapPoints & { pli: Float32Array }>(() => {
+    const n = points?.length ?? 0;
+    const oid = new Array<number>(n);
+    const lon = new Float64Array(n);
+    const lat = new Float64Array(n);
+    const pli = new Float32Array(n);
+    for (let i = 0; i < n; i++) {
+      const p = points![i];
+      oid[i] = p.oid;
+      lon[i] = p.lon;
+      lat[i] = p.lat;
+      pli[i] = p.pli;
+    }
+    return {
+      oid,
+      lon: lon as unknown as number[],
+      lat: lat as unknown as number[],
+      pli,
+    };
+  }, [points]);
+
+  /* ---------------- Шүүлтүүр ----------------
+     Диаграм бүр ӨӨРИЙНХӨӨ хэмжигдэхүүнийг алгасаж шүүгддэг: эс тэгвээс
+     нэгийг сонгосны дараа бусад мөр алга болж, харьцуулах юм үлдэхгүй. */
+  const keep = React.useCallback(
+    (i: number, skip?: "district" | "grade") => {
+      const p = points![i];
+      if (skip !== "district" && district && p.district !== district) return false;
+      if (skip !== "grade" && grade && String(pliClass(p.pli)) !== grade) return false;
+      return true;
+    },
+    [points, district, grade],
+  );
+
+  const visible = React.useMemo(() => {
+    const n = points?.length ?? 0;
+    const out = new Uint32Array(n);
+    let k = 0;
+    for (let i = 0; i < n; i++) if (keep(i)) out[k++] = i;
+    return out.slice(0, k);
+  }, [points, keep]);
+
+  /* ---------------- Задаргаа ---------------- */
+  const gradeData = React.useMemo<Datum[]>(() => {
+    if (!points) return [];
+    const c = [0, 0, 0, 0];
+    for (let i = 0; i < points.length; i++) if (keep(i, "grade")) c[pliClass(points[i].pli)]++;
+    return PLI_CLASSES.map((k, i) => ({ key: k.id, label: k.label, value: c[i] }));
+  }, [points, keep]);
+
+  /*
+    Дүүргийн мөрөнд ХОЁР тоо хэрэгтэй: диаграмд дундаж PLI, шүүлтүүрийн
+    жагсаалтад цэгийн тоо. Нэг удаа тоолж, хоёр хэлбэрт нь буулгана.
+  */
+  const districtRows = React.useMemo(() => {
+    if (!points) return [];
+    const sum = new Map<string, { n: number; pli: number }>();
+    for (let i = 0; i < points.length; i++) {
+      if (!keep(i, "district")) continue;
+      const p = points[i];
+      const hit = sum.get(p.district) ?? { n: 0, pli: 0 };
+      hit.n++;
+      hit.pli += p.pli;
+      sum.set(p.district, hit);
+    }
+    return [...sum]
+      .map(([k, v]) => ({ key: k, label: k, mean: v.pli / v.n, n: v.n }))
+      .sort((a, b) => b.mean - a.mean);
+  }, [points, keep]);
+
+  const districtData = React.useMemo<Datum[]>(
+    () => districtRows.map((d) => ({ key: d.key, label: d.label, value: d.mean })),
+    [districtRows],
+  );
+
+  /**
+   * Элементийн дундаж — энэ самбарын гол диаграм.
+   *
+   * Дундажаар нь буурахаар эрэмбэлнэ: аль элемент энэ хэсэгт хамгийн
+   * их ачаалал өгч байгааг эхний мөрөөс шууд уншина. Утга нь жил бүр
+   * ӨӨР ХЭМЖИГДЭХҮҮН (2024 индекс, 2023 мг/кг) тул гарчигт нь нэгжийг
+   * үргэлж бичнэ.
+   */
+  const elementData = React.useMemo<Datum[]>(() => {
+    if (!data || !points) return [];
+    const sums = data.elements.map(() => ({ n: 0, v: 0 }));
+    for (let i = 0; i < points.length; i++) {
+      if (!keep(i)) continue;
+      const vals = points[i].values;
+      for (let e = 0; e < sums.length; e++) {
+        const v = vals[e];
+        if (v == null) continue;
+        sums[e].n++;
+        sums[e].v += v;
+      }
+    }
+    return data.elements
+      .map((el, e) => ({
+        key: el,
+        label: el,
+        value: sums[e].n ? sums[e].v / sums[e].n : 0,
+      }))
+      .sort((a, b) => b.value - a.value);
+  }, [data, points, keep]);
+
+  const stats = React.useMemo(() => {
+    if (!points) return null;
+    let pli = 0;
+    let over = 0;
+    let worst: { code: string; pli: number } | null = null;
+    const districts = new Set<string>();
+    for (let k = 0; k < visible.length; k++) {
+      const p = points[visible[k]];
+      pli += p.pli;
+      if (p.pli >= 1) over++;
+      if (!worst || p.pli > worst.pli) worst = { code: p.code, pli: p.pli };
+      districts.add(p.district);
+    }
+    const n = visible.length;
+    return {
+      n,
+      districts: districts.size,
+      pli: n ? pli / n : 0,
+      overPct: n ? (over / n) * 100 : 0,
+      worst,
+    };
+  }, [points, visible]);
+
+  /* ---------------- Сонголт руу ойртох (zoom action) ---------------- */
+  const focus = React.useMemo<Extent | null>(() => {
+    if (!points || (!district && !grade)) return null;
+    let w = 180;
+    let s = 90;
+    let e = -180;
+    let n = -90;
+    for (let k = 0; k < visible.length; k++) {
+      const p = points[visible[k]];
+      if (p.lon < w) w = p.lon;
+      if (p.lon > e) e = p.lon;
+      if (p.lat < s) s = p.lat;
+      if (p.lat > n) n = p.lat;
+    }
+    if (w > e) return null;
+    /* Ганц цэг сонгогдвол хүрээ нь цэг болно — багахан талбай нэмнэ */
+    const pad = 0.004;
+    return [w - pad, s - pad, e + pad, n + pad];
+  }, [points, visible, district, grade]);
+
+  const selected = React.useMemo(
+    () => (picked == null ? null : (points?.find((p) => p.oid === picked) ?? null)),
+    [points, picked],
+  );
+
+  const hovered = React.useMemo(
+    () => (hover == null ? null : (points?.find((p) => p.oid === hover) ?? null)),
+    [points, hover],
+  );
+
+  function reset() {
+    setDistrict(null);
+    setGrade(null);
+    setPicked(null);
+  }
+
+  function pickYear(y: SoilYear) {
+    setYear(y);
+    /* Хоёр жилийн цэг ӨӨР — сонголт, шүүлтүүр дамжуулах нь утгагүй */
+    reset();
+  }
+
+  if (error || !data || !stats) {
+    return (
+      <div className="flex h-full items-center justify-center rounded-xs border border-line bg-paper-2">
+        {error ? (
+          <div className="text-center">
+            <p className="text-[14px] font-medium">Эх сурвалж татагдсангүй</p>
+            <p className="num mt-2 text-[12px] text-ink-3">{error}</p>
+          </div>
+        ) : (
+          <span className="flex items-center gap-2 text-[13.5px] text-ink-3">
+            <Loader2 size={14} className="animate-spin" />
+            {year} оны хөрсний мониторингийн мэдээ татаж байна…
+          </span>
+        )}
+      </div>
+    );
+  }
+
+  const activeCount = (district ? 1 : 0) + (grade ? 1 : 0);
+  const metricTitle = data.unit ? `${data.metric}, ${data.unit}` : data.metric;
+
+  return (
+    <div className="flex h-full min-h-0 flex-col gap-2.5">
+      <FilterBar
+        title="Хөрсний мониторинг"
+        activeCount={activeCount}
+        onReset={reset}
+        leading={
+          /* Жил сонгох — хоёр өөр судалгаа, давхарлахгүй сольж харна */
+          <div className="flex shrink-0 items-center gap-1">
+            {SOIL_YEARS.map((y) => {
+              const on = year === y;
+              return (
+                <button
+                  key={y}
+                  onClick={() => pickYear(y)}
+                  aria-pressed={on}
+                  className={cn(
+                    "num rounded-xs border px-2.5 py-1 text-[12px] transition-colors",
+                    on
+                      ? "border-data/45 bg-data/10 text-ink"
+                      : "border-line text-ink-2 hover:border-line-2 hover:text-ink",
+                  )}
+                >
+                  {y}
+                </button>
+              );
+            })}
+          </div>
+        }
+      >
+        <FilterMenu
+          label="Дүүрэг, сум"
+          icon={Building2}
+          value={district}
+          active={Boolean(district)}
+          onClear={() => setDistrict(null)}
+          width={240}
+        >
+          {/* Жагсаалтад дундаж биш ЦЭГИЙН ТОО — сонголтын хэмжээг хэлнэ */}
+          <PickList
+            items={districtRows.map((d) => ({ key: d.key, label: d.label, value: d.n }))}
+            selected={district}
+            onPick={setDistrict}
+          />
+        </FilterMenu>
+
+        <FilterMenu
+          label="PLI зэрэг"
+          icon={Gauge}
+          value={grade ? PLI_CLASSES[Number(grade)].label : null}
+          active={Boolean(grade)}
+          onClear={() => setGrade(null)}
+          width={200}
+        >
+          <PickList items={gradeData} selected={grade} onPick={setGrade} />
+        </FilterMenu>
+      </FilterBar>
+
+      <div className="grid min-h-0 flex-1 gap-2.5 xl:grid-cols-[1fr_340px]">
+        {/* ---- ЗҮҮН: индикатор + зураг ---- */}
+        <div className="flex min-h-0 flex-col gap-2.5">
+          <Card className="shrink-0">
+            <div className="grid grid-cols-2 divide-x divide-y divide-line sm:grid-cols-4 xl:divide-y-0">
+              <Stat icon={MapPin} label="Хяналтын цэг" value={num(stats.n)} />
+              <Stat icon={Building2} label="Дүүрэг, сум" value={num(stats.districts)} />
+              <Stat icon={Gauge} label="Дундаж PLI" value={stats.pli.toFixed(2)} />
+              <Stat
+                icon={TriangleAlert}
+                label="PLI ≥ 1"
+                value={`${stats.overPct.toFixed(0)}%`}
+              />
+            </div>
+          </Card>
+
+          <Card className="relative min-h-[280px] flex-1 overflow-hidden">
+            <div className="relative h-full w-full">
+              {/*
+                Зургийг жил бүрд дахин үүсгэнэ (`key`): зэрэглэлийн өнгө,
+                бөөгнөрөл зэрэг нь эх сурвалж үүсгэх мөчид л уншигддаг.
+              */}
+              <PointMap
+                key={year}
+                points={geo}
+                visible={visible}
+                grades={{ values: geo.pli, stops: PLI_RAMP, heat: true }}
+                basemap={basemap}
+                onSelect={setPicked}
+                onHover={setHover}
+                focus={focus}
+                overlays={overlays}
+                cluster={false}
+              />
+              <BasemapGallery value={basemap} onChange={setBasemap} />
+              <OverlayControl value={overlays} onChange={setOverlays} />
+
+              {/*
+                Hover самбар. Цэг дээр очиход хамгийн чухал гурван зүйл
+                шууд гарна: аль цэг, ямар түвшин, хаана. Товшилт нь
+                бүтэн профайл нээдэг тул энд элемент бүрийг жагсаахгүй —
+                хоёулаа ижил зүйл харуулбал товшилтын утга алдагдана.
+                Хулганы үйлдлийг саатуулахгүйн тулд `pointer-events`
+                унтраасан.
+              */}
+              {hovered ? (
+                <div className="pointer-events-none absolute top-2.5 left-2.5 z-10 max-w-[240px] rounded-xs border border-line bg-paper/92 px-2.5 py-2 backdrop-blur-md">
+                  <div className="flex items-baseline justify-between gap-2">
+                    <span className="num text-[12.5px] leading-none font-medium text-ink">
+                      {hovered.code}
+                    </span>
+                    <span
+                      className="num rounded-xs px-1.5 py-0.5 text-[10.5px] leading-none"
+                      style={{
+                        background: `${pliColor(hovered.pli)}22`,
+                        color: pliColor(hovered.pli),
+                      }}
+                    >
+                      PLI {hovered.pli.toFixed(2)}
+                    </span>
+                  </div>
+                  <div className="mt-1.5 text-[11.5px] leading-snug text-ink-2">
+                    {hovered.district} · {hovered.khoroo}
+                  </div>
+                  <div className="num mt-1 text-[10px] text-ink-3">
+                    {hovered.lat.toFixed(5)}, {hovered.lon.toFixed(5)}
+                  </div>
+                </div>
+              ) : null}
+
+              {/*
+                Тайлбар нь ЗУРВАС — өнгө нь тасралтгүй тул шаталсан
+                жагсаалт худал ангилал үүсгэнэ. Зурвасын доор
+                дэвсгэрийн хилийг (1.0) тэмдэглэв.
+              */}
+              <div className="pointer-events-none absolute bottom-2.5 left-2.5 z-10 w-[164px] rounded-xs border border-line bg-paper/92 px-2.5 py-2 backdrop-blur-md">
+                <div className="eyebrow mb-1.5">PLI</div>
+                <div
+                  className="h-2 w-full rounded-[1px]"
+                  style={{ background: RAMP_CSS }}
+                  aria-hidden
+                />
+                <div className="num mt-1 flex justify-between text-[9.5px] leading-none text-ink-3">
+                  {[0.4, 1, 2, 4].map((v) => (
+                    <span key={v}>{v === 4 ? "4+" : v}</span>
+                  ))}
+                </div>
+                <p className="mt-1.5 text-[9.5px] leading-tight text-ink-3">
+                  1-ээс дээш нь дэвсгэр түвшнээс хэтэрсэн ·
+                  ойртоход хэмжилтийн цэг гарна
+                </p>
+              </div>
+            </div>
+          </Card>
+
+          <p className="shrink-0 px-0.5 text-[10.5px] leading-none text-ink-3">
+            Суурь зураг: Esri · Дата: ArcGIS · {year} оны {num(data.points.length)} цэг ·
+            хэмжилт: {metricTitle}
+          </p>
+        </div>
+
+        {/* ---- БАРУУН: профайл ---- */}
+        <div className="flex min-h-0 flex-col gap-2.5">
+          {/*
+            Цэг сонгогдвол эхний карт нь ТЭР ЦЭГИЙН профайл болно.
+            Нэгтгэсэн дундажаас тухайн цэг рүү шилжих нь энэ датаны гол
+            асуулт — "энд юу нь хэтэрсэн бэ".
+          */}
+          {selected ? (
+            <Card className="min-h-0 flex-1">
+              <Head title="Цэгийн профайл">
+                <button
+                  onClick={() => setPicked(null)}
+                  className="text-ink-3 transition-colors hover:text-ink"
+                  aria-label="Хаах"
+                >
+                  <X size={13} />
+                </button>
+              </Head>
+              <div className="min-h-0 flex-1 overflow-y-auto p-3">
+                <div className="flex items-baseline justify-between gap-2">
+                  <span className="num text-[13px] font-medium text-ink">
+                    {selected.code}
+                  </span>
+                  <span
+                    className="num rounded-xs px-1.5 py-0.5 text-[11px] leading-none"
+                    style={{
+                      background: `${pliColor(selected.pli)}22`,
+                      color: pliColor(selected.pli),
+                    }}
+                  >
+                    PLI {selected.pli.toFixed(2)}
+                  </span>
+                </div>
+                <p className="mt-1 text-[11.5px] leading-snug text-ink-3">
+                  {selected.district} · {selected.khoroo}
+                </p>
+
+                <div className="eyebrow mt-3 mb-2">{metricTitle}</div>
+                <RowChart
+                  data={data.elements
+                    .map((el, e) => ({
+                      key: el,
+                      label: el,
+                      value: selected.values[e] ?? 0,
+                    }))
+                    .sort((a, b) => b.value - a.value)}
+                  format={fmt}
+                />
+              </div>
+            </Card>
+          ) : (
+            <Card className="min-h-0 flex-1">
+              {/* Гарчигт нэгжийг нь үргэлж бичнэ — жил бүр өөр хэмжигдэхүүн */}
+              <Head title="Элементийн дундаж">
+                <span className="text-[10.5px] text-ink-3">{metricTitle}</span>
+              </Head>
+              <div className="min-h-0 flex-1 overflow-y-auto p-3">
+                <RowChart data={elementData} format={fmt} />
+              </div>
+            </Card>
+          )}
+
+          <Card className="shrink-0">
+            <Head title="PLI зэргээр">
+              <span className="num text-[11.5px] text-ink-3">{num(stats.n)}</span>
+            </Head>
+            <div className="p-3">
+              <RowChart
+                data={gradeData}
+                selected={grade}
+                onSelect={setGrade}
+                colorOf={(d) => CLASS_COLOR[Number(d.key)]}
+              />
+            </div>
+          </Card>
+
+          <Card className="shrink-0">
+            {/* Тоо биш ДУНДАЖ: "хаана хэдэн цэг байна" биш "хаана өндөр байна" */}
+            <Head title="Дүүрэг, сумаар — дундаж PLI" />
+            <div className="max-h-[190px] overflow-y-auto p-3">
+              <RowChart
+                data={districtData}
+                selected={district}
+                onSelect={setDistrict}
+                format={(v) => v.toFixed(2)}
+              />
+            </div>
+          </Card>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+
+/** Хэмжилтийн тоо — 100-аас дээш бол бутархай нь утгагүй */
+function fmt(v: number) {
+  return v >= 100 ? v.toFixed(0) : v >= 10 ? v.toFixed(1) : v.toFixed(2);
+}
+
+function Card({ className, children }: { className?: string; children: React.ReactNode }) {
+  return (
+    <div className={cn("flex flex-col rounded-xs border border-line bg-paper-2", className)}>
+      {children}
+    </div>
+  );
+}
+
+function Head({ title, children }: { title: string; children?: React.ReactNode }) {
+  return (
+    <div className="flex shrink-0 items-center justify-between gap-2 border-b border-line px-3 py-2">
+      <h2 className="display text-[13.5px] leading-none tracking-[0.06em] uppercase">
+        {title}
+      </h2>
+      {children}
+    </div>
+  );
+}
+
+function Stat({
+  label,
+  value,
+  icon: Icon,
+}: {
+  label: string;
+  value: string;
+  icon: typeof FlaskConical;
+}) {
+  return (
+    <div className="px-3 py-2.5">
+      <span className="eyebrow block min-h-[28px] leading-[1.25]">{label}</span>
+      <span className="mt-1.5 flex items-center gap-1.5">
+        <Icon size={13} strokeWidth={1.75} className="shrink-0 text-ink-3" />
+        <span className="num truncate text-[16px] leading-none font-medium text-ink">
+          {value}
+        </span>
+      </span>
+    </div>
+  );
+}

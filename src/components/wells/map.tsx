@@ -25,6 +25,22 @@ export type MapPoints = {
 /** Харагдац: [баруун, өмнөд, зүүн, хойд] */
 export type Extent = [number, number, number, number];
 
+/**
+ * Нэмэлт давхарга. Загварыг нь дуудагч тал (домэйны мэдлэгтэй нь) өгнө —
+ * зураг нь зөвхөн зурна.
+ */
+export type MapOverlay = {
+  id: string;
+  data: GeoJSON.FeatureCollection;
+  fill?: {
+    color: string;
+    opacity?: number;
+    /** `gridcode` 1..N-ийн дагуух тунгалагийн шатлал */
+    byGrid?: number[];
+  };
+  line: { color: string; opacity: number; width: number };
+};
+
 /* --------------------------------------------------------------------------
    Esri-ийн суурь зургийн цуглуулга
    -------------------------------------------------------------------------- */
@@ -108,6 +124,92 @@ const clusterRadius = [
   38,
 ] as ExpressionSpecification;
 
+/* --------------------------------------------------------------------------
+   Зэрэглэсэн тэмдгийн илэрхийлэл
+   -------------------------------------------------------------------------- */
+
+/** Олон өнцөгт өөрийн өнгө (`c`) авчраагүй үеийн нөөц өнгө */
+const SHAPE_FALLBACK = FIREFLY.glow;
+
+/** Утга (`g`) → шатлалын өнгө. Хоорондох утга шугаман холилдоно. */
+function gradeColor(stops: [number, string][]): ExpressionSpecification {
+  const e: unknown[] = ["interpolate", ["linear"], ["get", "g"]];
+  for (const [v, c] of stops) e.push(v, c);
+  return e as unknown as ExpressionSpecification;
+}
+
+/**
+ * Утга → дулааны жин (0…1).
+ *
+ * Хамгийн бага утга дээр ч 0 БИШ жин өгнө: тэглэвэл цэвэр цэгүүд
+ * гадаргуунд огт оролцохгүй бөгөөд "хэмжилт байгаа ч цэвэр" ба
+ * "хэмжилт огт байхгүй" хоёр ялгагдахаа болино.
+ */
+function heatWeight(stops: [number, string][]): ExpressionSpecification {
+  const lo = stops[0][0];
+  const hi = stops[stops.length - 1][0];
+  return ["interpolate", ["linear"], ["get", "g"], lo, 0.18, hi, 1] as unknown as ExpressionSpecification;
+}
+
+/**
+ * Шатлалыг дулааны нягтралын өнгө болгоно.
+ *
+ * `heatmap-color`-ийн оролт нь 0…1 нягтрал тул шатлалын утгын мужийг
+ * тэр хэмжээст буулгана. Хамгийн доод шат нь ЗААВАЛ тунгалаг байх
+ * ёстой — эс тэгвээс бүх дэлгэц нэг өнгөөр будагдана.
+ */
+function heatRamp(stops: [number, string][]): ExpressionSpecification {
+  const lo = stops[0][0];
+  const hi = stops[stops.length - 1][0];
+  const e: unknown[] = ["interpolate", ["linear"], ["heatmap-density"], 0, "rgba(0,0,0,0)"];
+  stops.forEach(([v, c], i) => {
+    const t = (v - lo) / (hi - lo);
+    /* Эхний өнгө хэт эрт орвол захын сарнилт хүртэл будагдана */
+    e.push(Math.max(t, i === 0 ? 0.12 : 0), hexRgba(c, i === 0 ? 0.55 : 0.88));
+  });
+  return e as unknown as ExpressionSpecification;
+}
+
+function hexRgba(hex: string, a: number) {
+  const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+  return `rgba(${r},${g},${b},${a})`;
+}
+
+/**
+ * Утга → радиус, ойртох тусам томорно.
+ *
+ * `["zoom"]` нь ЗААВАЛ дээд түвшний `interpolate`-ийн шууд оролт байх
+ * ёстой. Үржүүлэх замаар (`["*", zoom-interpolate, value-interpolate]`)
+ * хослуулбал MapLibre давхаргыг чимээгүйхэн голж, цэг огт зурагдахгүй
+ * болно. Тиймээс zoom нь гадна, утга нь СУУДАЛ бүрийн дотор байрлана.
+ */
+function gradedRadius(stops: [number, string][], scale: number): ExpressionSpecification {
+  const lo = stops[0][0];
+  const hi = stops[stops.length - 1][0];
+  /* Хэмжээний ялгаа 1.9 дахин — өнгөнөөс гадна хоёр дахь суваг болох
+     хэрэгтэй ч цэгүүд бие биенээ дарах хэмжээнд томрох ёсгүй */
+  const at = (z: number) => [
+    "interpolate",
+    ["linear"],
+    ["get", "g"],
+    lo,
+    z * scale,
+    hi,
+    z * 1.9 * scale,
+  ];
+  return [
+    "interpolate",
+    ["linear"],
+    ["zoom"],
+    8,
+    at(1.7),
+    12,
+    at(2.4),
+    16,
+    at(3.6),
+  ] as unknown as ExpressionSpecification;
+}
+
 /**
  * Бөөгнөрлийн тоог бичихэд фонтын glyph хэрэгтэй. Растер хавтан ганцаараа
  * glyph өгдөггүй тул нийтэд нээлттэй OpenMapTiles-ийн фонтын үйлчилгээг заана.
@@ -129,20 +231,34 @@ const MARKER_CAP = 250;
  *  · SVG бичвэр (`<svg …`) — зурсан тэмдэг (зураг байхгүй зүйлд).
  * Хоёулаа өөрийн кодоос гаралтай тул `innerHTML` аюулгүй.
  */
-function markerEl(mark: string, onClick: () => void) {
+function markerEl(
+  mark: string,
+  onClick: () => void,
+  onHover?: (over: boolean) => void,
+) {
   const el = document.createElement("button");
   el.type = "button";
-  if (mark.startsWith("<svg")) {
+
+  if (mark === "pulse") {
+    // Цөм + давтан тэлэх цагираг (globals.css → `.pulse-pin`)
+    el.className = "pulse-pin";
+    el.innerHTML = '<span class="ring"></span><span class="ring d"></span>';
+  } else if (mark.startsWith("<svg")) {
     el.className = "species-pin";
     el.innerHTML = mark;
   } else {
     el.className = "species-pin photo";
     el.style.backgroundImage = `url("${mark}")`;
   }
+
   el.addEventListener("click", (e) => {
     e.stopPropagation();
     onClick();
   });
+  if (onHover) {
+    el.addEventListener("mouseenter", () => onHover(true));
+    el.addEventListener("mouseleave", () => onHover(false));
+  }
   return el;
 }
 
@@ -252,6 +368,12 @@ export function WellsMap({
   cluster = true,
   clusterLabel = "inside",
   marks,
+  pulse = false,
+  onHover,
+  overlays,
+  shapes,
+  grades,
+  weights,
 }: {
   points: MapPoints;
   /** Шүүлтүүр давсан цэгүүдийн индекс */
@@ -276,6 +398,57 @@ export function WellsMap({
    * (энгийн цэгийн оронд) — бөөгнөрөл задарсан үед л харагдана.
    */
   marks?: Record<number, string>;
+  /**
+   * Цэг бүрийг ДОХИОЛОЛ маягийн тэмдэглэгээгээр харуулах эсэх: цөм нь
+   * тогтмол, гадуур нь давтан тэлэх цагираг. Цөөн, тодруулах шаардлагатай
+   * объектод (жишээ нь нийтийн 17 бие засах газар) зориулав.
+   */
+  pulse?: boolean;
+  /** Хулгана тэмдэглэгээ дээр очиход — гарахад `null` */
+  onHover?: (oid: number | null) => void;
+  /**
+   * Нэмэлт хил, бүсийн давхаргууд. Дата давхаргын ДООР суух тул цэг,
+   * бөөгнөрөл нь тэдгээрээр далдлагдахгүй.
+   */
+  overlays?: MapOverlay[];
+  /**
+   * ДАТА олон өнцөгт (талбай, тусгай зөвшөөрөл, эвдэрсэн газар).
+   *
+   * `overlays`-аас ялгаатай нь энэ нь харилцдаг: `properties.oid`-оор
+   * товшилт, hover дамжина, `properties.c`-д өнгөө авч явж болно.
+   * Сонгогдсон талбай нь `selected`-ээр тодорно.
+   *
+   * Талбай нь ЦЭГИЙН ДООР зурагдана — хоёуланг нь өгвөл цэг нь тухайн
+   * талбайн төлөөлөл (жишээ нь төвлөрсөн цэг) байх нь зохимжтой.
+   */
+  shapes?: {
+    data: GeoJSON.FeatureCollection;
+    selected?: number | null;
+  };
+  /**
+   * Цэг бүрийн ХЭМЖИГДЭХҮҮН. Өгвөл зураг ЗЭРЭГЛЭСЭН тэмдгийн горимд
+   * шилжинэ: цэг бүр утгынхаа дагуу шатлалаас өнгө авч, хэмжээгээрээ
+   * ч томорно (ArcGIS-ийн graduated symbol).
+   *
+   * Хэмжигдэхүүн нь ЭРЭМБЭТЭЙ байх ёстой — нэрлэсэн ангиллыг (аймаг,
+   * гүйцэтгэгч) өнгөөр ялгавал дэлгэц утгагүй солонго болно.
+   *
+   * `values` нь `points`-той ижил урттай, `stops` нь [утга, өнгө]
+   * хосуудын ӨСӨХ дараалал.
+   *
+   * `heat` асаавал алсаас ТАСРАЛТГҮЙ ГАДАРГУУ (дулааны зураг) харагдаж,
+   * ойртох тусам цэг рүү шилжинэ. Гадаргуу нь цэгүүдийн хоорондох
+   * утгыг мужлан харуулна — тохиромжтой байдлын үнэлгээний зурагтай
+   * ижил уншигдана.
+   */
+  grades?: { values: ArrayLike<number>; stops: [number, string][]; heat?: boolean };
+  /**
+   * Цэг бүрийн ЖИН (`points`-той ижил урттай). Өгвөл зураг НЯГТРАЛЫН
+   * горимд шилжинэ: алсаас дулааны зураг, ойртоход жингээрээ томордог
+   * цэг. Нэг цэг = нэг бичлэг биш, нүд бүрийн хуримтлал болох үед л
+   * хэрэглэнэ (жишээ нь 145 мянган жорлонг 11 мянган нүдэнд хурааж).
+   */
+  weights?: number[];
 }) {
   const holder = React.useRef<HTMLDivElement>(null);
   const map = React.useRef<MapLibreMap | null>(null);
@@ -297,11 +470,19 @@ export function WellsMap({
     үүсгэх effect нэг л удаа ажиллаж, дотроо үргэлж шинэ функц дуудна.
   */
   const selectCb = React.useRef(onSelect);
+  const hoverCb = React.useRef(onHover);
   const extentCb = React.useRef(onExtent);
   /** Анх үүсгэх үеийн суурь зураг — effect-ийг дахин ажиллуулахгүйн тулд ref */
   const basemapRef = React.useRef(basemap);
   /** Эх сурвалж үүсгэх үед л уншигдах тохиргоо */
-  const modeRef = React.useRef({ cluster, clusterLabel });
+  const modeRef = React.useRef({
+    cluster,
+    clusterLabel,
+    weighted: Boolean(weights),
+    graded: grades?.stops,
+    gradedHeat: Boolean(grades?.heat),
+    shaped: Boolean(shapes),
+  });
   /** Зурган тэмдэглэгээ — oid → maplibre marker */
   const markers = React.useRef(new Map<number, Marker>());
   React.useEffect(() => {
@@ -310,6 +491,9 @@ export function WellsMap({
   React.useEffect(() => {
     extentCb.current = onExtent;
   }, [onExtent]);
+  React.useEffect(() => {
+    hoverCb.current = onHover;
+  }, [onHover]);
 
   /* ---------------- Газрын зураг үүсгэх ---------------- */
   React.useEffect(() => {
@@ -391,6 +575,54 @@ export function WellsMap({
         ["interpolate", ["linear"], ["zoom"], 3, 1, 8, 1.8, 12, 2.4] as ExpressionSpecification,
         0.75,
       );
+
+      /*
+        Дата олон өнцөгт (талбай). Хилийн ДЭЭР, цэгийн ДООР суулгана:
+        энэ нь дата тул засаг захиргааны хилээс чухал, гэхдээ цэгэн
+        давхаргыг дарах ёсгүй.
+
+        Нэмэлт давхаргаас (`overlays`) ялгаатай нь энэ нь ХАРИЛЦДАГ:
+        товшилт, hover нь `oid`-оор дамжина.
+      */
+      if (modeRef.current.shaped) {
+        m.addSource("shapes", {
+          type: "geojson",
+          data: { type: "FeatureCollection", features: [] },
+        });
+
+        m.addLayer({
+          id: "shape-fill",
+          type: "fill",
+          source: "shapes",
+          paint: {
+            "fill-color": ["coalesce", ["get", "c"], SHAPE_FALLBACK] as unknown as ExpressionSpecification,
+            "fill-opacity": ["case", ["boolean", ["feature-state", "on"], false], 0.55, 0.28],
+          },
+        });
+
+        m.addLayer({
+          id: "shape-line",
+          type: "line",
+          source: "shapes",
+          layout: { "line-join": "round" },
+          paint: {
+            "line-color": ["coalesce", ["get", "c"], SHAPE_FALLBACK] as unknown as ExpressionSpecification,
+            /* `["zoom"]` нь дээд түвшний `interpolate`-ийн шууд оролт
+               байх ёстой — сонголтын шалгалтыг СУУДАЛ бүрийн дотор
+               оруулав, эсрэгээр бичвэл давхарга чимээгүйхэн гологдоно */
+            "line-width": [
+              "interpolate",
+              ["linear"],
+              ["zoom"],
+              8,
+              ["case", ["boolean", ["feature-state", "on"], false], 1.8, 0.5],
+              14,
+              ["case", ["boolean", ["feature-state", "on"], false], 2.6, 1.2],
+            ] as unknown as ExpressionSpecification,
+            "line-opacity": 0.9,
+          },
+        });
+      }
 
       /*
         Бөөгнөрүүлэлт (clustering) — 12 мянган цэгийг тархалтаар нь уншуулна.
@@ -481,6 +713,150 @@ export function WellsMap({
         }
       }
 
+      if (modeRef.current.weighted) {
+        /*
+          НЯГТРАЛЫН горим. Нүд бүр олон бичлэгийн хуримтлал тул firefly
+          гурван давхарга утгагүй — алсаас дулааны зураг тархалтыг, ойртоход
+          жингээрээ томордог цэг нүд бүрийн хэмжээг хэлнэ.
+
+          Өнгө нь ГАНЦ: тунгалагаас `--data` руу шилжих шатлал. Улаан-шар
+          "халуун" градиент нь өөр хэмжигдэхүүн (эрсдэл) мэт эндүүрүүлнэ.
+
+          ХАРАГДАХ ХҮРЭЭ (шилжилтийн цонх):
+            z ≤ 11.5   зөвхөн дулааны зураг
+            z 11.5–13  дулаан бүдгэрч, нүд гарч ирнэ (давхцсан үе)
+            z ≥ 13     зөвхөн нүд (~2км масштабаас ойр)
+          Хоёр давхарга давхцах цонх ЗААВАЛ хэрэгтэй — эс тэгвээс нэг нь
+          алга болоод нөгөө нь гарах хүртэл зураг хоосорно.
+        */
+        m.addLayer({
+          id: "cells-heat",
+          type: "heatmap",
+          source: "wells",
+          maxzoom: 13.5,
+          paint: {
+            "heatmap-weight": [
+              "interpolate",
+              ["linear"],
+              ["get", "w"],
+              0,
+              0,
+              60,
+              1,
+            ],
+            "heatmap-intensity": ["interpolate", ["linear"], ["zoom"], 8, 0.7, 13, 1.4],
+            "heatmap-radius": ["interpolate", ["linear"], ["zoom"], 8, 6, 12, 14, 13.5, 22],
+            // Ойртох тусам дулааны зураг арилж, цэгүүд гарч ирнэ
+            "heatmap-opacity": ["interpolate", ["linear"], ["zoom"], 11.5, 0.9, 13, 0],
+            "heatmap-color": [
+              "interpolate",
+              ["linear"],
+              ["heatmap-density"],
+              0,
+              "rgba(0,200,255,0)",
+              0.25,
+              "rgba(0,200,255,.32)",
+              0.6,
+              "rgba(92,225,255,.62)",
+              1,
+              "rgba(230,251,255,.92)",
+            ],
+          },
+        });
+
+        m.addLayer({
+          id: "wells-dot",
+          type: "circle",
+          source: "wells",
+          minzoom: 11.5,
+          paint: {
+            /*
+              Хэмжээ нь ТОГТМОЛ — энгийн цэгэн давхарга.
+
+              Урьд нь радиусыг нүд доторх тоогоор томруулж байсан нь
+              бүтсэнгүй: 220м-ийн нүд тогтмол алхамтай тул том дугуйнууд
+              хоорондоо нийлж, суурь зургийг бүрхсэн эгнээ болж хувирсан.
+              Тоо хэмжээг ДУЛААНЫ зураг аль хэдийн хэлж байгаа тул цэг нь
+              зөвхөн "энд бий" гэдгийг харуулна.
+            */
+            "circle-radius": ["interpolate", ["linear"], ["zoom"], 11.5, 2, 14, 3, 17, 4.5],
+            "circle-color": FIREFLY.glow,
+            "circle-opacity": ["interpolate", ["linear"], ["zoom"], 11.5, 0, 13, 0.9],
+            "circle-stroke-width": 0.6,
+            "circle-stroke-color": "rgba(0,0,0,.45)",
+            "circle-stroke-opacity": ["interpolate", ["linear"], ["zoom"], 11.5, 0, 13, 1],
+          },
+        });
+      } else if (modeRef.current.graded) {
+        /*
+          Зэрэглэсэн тэмдэг. Ангилал ЭРЭМБЭТЭЙ тул хоёр суваг зэрэг
+          ажиллана: өнгө нь зэргийг, ХЭМЖЭЭ нь мөн зэргийг давхар
+          хэлнэ. Зөвхөн өнгөөр ялгавал өнгө ялгах чадвар султай хүнд
+          зураг унших боломжгүй болно.
+        */
+        const stops = modeRef.current.graded;
+        const heat = modeRef.current.gradedHeat;
+        /** Ойртоход гадаргуугаас цэг рүү шилжих уусалт */
+        const fade = (to: number) =>
+          ["interpolate", ["linear"], ["zoom"], 11.5, 0, 13, to] as ExpressionSpecification;
+
+        if (heat) {
+          /*
+            Тасралтгүй гадаргуу. Дулааны давхарга нь цэгийн ЖИНГЭЭР
+            ажиллана: утга нь өндөр цэг орчиндоо илүү нөлөөлж, цэг
+            хоорондын зай мужлагдана. Тиймээс өнгө нь "хэдэн цэг байна"
+            биш "энэ орчны түвшин" гэж уншигдана.
+
+            Цэг сийрэг (500 ширхэг) тул радиус нь жорлонгийнхоос
+            хамаагүй том — эс тэгвээс гадаргуу үүсэхгүй, салангид толбо
+            болно.
+          */
+          m.addLayer({
+            id: "grade-heat",
+            type: "heatmap",
+            source: "wells",
+            maxzoom: 13.5,
+            paint: {
+              "heatmap-weight": heatWeight(stops),
+              "heatmap-intensity": ["interpolate", ["linear"], ["zoom"], 7, 0.8, 13, 1.5],
+              "heatmap-radius": ["interpolate", ["linear"], ["zoom"], 7, 16, 10, 32, 13.5, 64],
+              // Ойртох тусам гадаргуу арилж, цэг гарч ирнэ
+              "heatmap-opacity": ["interpolate", ["linear"], ["zoom"], 11.5, 0.82, 13.4, 0],
+              "heatmap-color": heatRamp(stops),
+            },
+          });
+        }
+
+        m.addLayer({
+          id: "wells-glow",
+          type: "circle",
+          source: "wells",
+          ...(heat ? { minzoom: 11.5 } : {}),
+          paint: {
+            "circle-radius": gradedRadius(stops, 2.4),
+            "circle-color": gradeColor(stops),
+            "circle-blur": 1,
+            "circle-opacity": heat ? fade(0.32) : 0.32,
+          },
+        });
+
+        m.addLayer({
+          id: "wells-dot",
+          type: "circle",
+          source: "wells",
+          ...(heat ? { minzoom: 11.5 } : {}),
+          paint: {
+            "circle-radius": gradedRadius(stops, 1),
+            "circle-color": gradeColor(stops),
+            "circle-opacity": heat ? fade(0.92) : 0.92,
+            /* Нимгэн бараан ирмэг — цайвар суурь зураг дээр цэг арилахаас
+               хамгаална, гэрэлтэлтийг таслахааргүй сул */
+            "circle-stroke-width": 0.7,
+            "circle-stroke-color": "rgba(10,18,26,.55)",
+            "circle-stroke-opacity": heat ? fade(1) : 1,
+          },
+        });
+      } else {
       /*
         Бөөгнөрөлд ороогүй дан худаг — firefly загвар.
 
@@ -533,6 +909,7 @@ export function WellsMap({
           "circle-opacity": 0.95,
         },
       });
+      }
 
       // Бөөгнөрөл дээр товшвол задалж ойртоно
       if (modeRef.current.cluster) m.on("click", "clusters", (e) => {
@@ -559,20 +936,61 @@ export function WellsMap({
         (`circle-blur` нь зөвхөн зурагдалтад нөлөөлдөг — оноход радиусаар л
         тооцогддог тул сарнисан гэрэл дээр санамсаргүй дарагдахгүй.)
       */
-      m.on("click", "wells-halo", (e) => {
+      /*
+        Оноход хэрэглэх давхарга. Цөм нь хэдхэн пиксел тул түүн дээр
+        бариулбал хулганаар оноход хэцүү. Гадна давхарга нь харагдаж
+        буй гэрэлтэй ойролцоо хэмжээтэй бөгөөд цөмийг бүрэн агуулна
+        (`circle-blur` нь зөвхөн зурагдалтад нөлөөлдөг — оноход
+        радиусаараа тооцогдоно).
+      */
+      const hitLayer = modeRef.current.weighted
+        ? "wells-dot"
+        : modeRef.current.graded
+          ? "wells-glow"
+          : "wells-halo";
+      m.on("click", hitLayer, (e) => {
         const f = e.features?.[0];
         if (f) selectCb.current(Number(f.properties?.oid));
       });
 
       const hoverable = modeRef.current.cluster
-        ? ["clusters", "wells-halo"]
-        : ["wells-halo"];
+        ? ["clusters", hitLayer]
+        : [hitLayer];
       for (const id of hoverable) {
         m.on("mouseenter", id, () => {
           m.getCanvas().style.cursor = "pointer";
         });
         m.on("mouseleave", id, () => {
           m.getCanvas().style.cursor = "";
+        });
+      }
+
+      /*
+        Давхарга дээрх hover. Тэмдэглэгээт горимд (`marks`, `pulse`) энэ
+        нь DOM элемент дээр аль хэдийн бариулдаг — эндхийн бариул нь
+        ЦЭГЭН давхаргад зориулав. Хоёулаа ижил `oid` явуулдаг тул
+        давхацсан ч зөрчилдөхгүй.
+      */
+      m.on("mousemove", hitLayer, (e) => {
+        const f = e.features?.[0];
+        if (f) hoverCb.current?.(Number(f.properties?.oid));
+      });
+      m.on("mouseleave", hitLayer, () => hoverCb.current?.(null));
+
+      /* Олон өнцөгт нь мөн товшигдоно — цэгтэй ижил `oid` дамжуулна */
+      if (modeRef.current.shaped) {
+        m.on("click", "shape-fill", (e) => {
+          const f = e.features?.[0];
+          if (f) selectCb.current(Number(f.properties?.oid));
+        });
+        m.on("mousemove", "shape-fill", (e) => {
+          m.getCanvas().style.cursor = "pointer";
+          const f = e.features?.[0];
+          if (f) hoverCb.current?.(Number(f.properties?.oid));
+        });
+        m.on("mouseleave", "shape-fill", () => {
+          m.getCanvas().style.cursor = "";
+          hoverCb.current?.(null);
         });
       }
 
@@ -693,7 +1111,11 @@ export function WellsMap({
       features[k] = {
         type: "Feature",
         geometry: { type: "Point", coordinates: [lon[i], lat[i]] },
-        properties: { oid: oid[i] },
+        properties: weights
+          ? { oid: oid[i], w: weights[i] }
+          : grades
+            ? { oid: oid[i], g: grades.values[i] }
+            : { oid: oid[i] },
       };
     }
 
@@ -730,7 +1152,113 @@ export function WellsMap({
         { padding: 30, duration: 0, maxZoom: 13 },
       );
     }
-  }, [live, points, visible]);
+  }, [live, points, visible, weights, grades]);
+
+  /* ---------------- Дата олон өнцөгт ---------------- */
+  const shapeData = shapes?.data;
+  React.useEffect(() => {
+    if (!live || !shapeData) return;
+    const src = live.getSource("shapes");
+    if (!src || !("setData" in src)) return;
+    /*
+      `promoteId` хэрэглэхгүй: GeoJSON эх сурвалж дээр `feature-state`
+      ажиллахад тоон ID хэрэгтэй тул `id`-г нь features дотор нь өгсөн
+      гэж үзнэ (дуудагч тал `oid`-той тэнцүү `id` тавина).
+    */
+    (src as GeoJSONSource).setData(shapeData);
+  }, [live, shapeData]);
+
+  /* Сонгогдсон талбайг тодруулах — `feature-state`-ээр, дахин зурахгүй */
+  const shapePick = shapes?.selected ?? null;
+  const lastPick = React.useRef<number | null>(null);
+  React.useEffect(() => {
+    if (!live || !shapes) return;
+    const set = (id: number | null, on: boolean) => {
+      if (id == null) return;
+      try {
+        live.setFeatureState({ source: "shapes", id }, { on });
+      } catch {
+        /* Эх сурвалж хараахан ачаалагдаагүй байж болно */
+      }
+    };
+    set(lastPick.current, false);
+    set(shapePick, true);
+    lastPick.current = shapePick;
+  }, [live, shapes, shapePick, shapeData]);
+
+  /* ---------------- Нэмэлт давхарга (хил, бүс) ----------------
+     Дата давхаргын ДООР суулгана: эс тэгвээс бүсийн дүүргэлт цэгүүдийг
+     дардаг. Хамгийн доод дата давхарга нь засаг захиргааны хил тул
+     түүний өмнө оруулна. */
+  React.useEffect(() => {
+    if (!live) return;
+    const list = overlays ?? [];
+    const wanted = new Set(list.map((o) => `ov-${o.id}`));
+
+    // Хасагдсаныг цэвэрлэнэ
+    for (const layer of live.getStyle().layers) {
+      if (!layer.id.startsWith("ov-")) continue;
+      const base = layer.id.replace(/-(fill|line)$/, "");
+      if (wanted.has(base)) continue;
+      if (live.getLayer(layer.id)) live.removeLayer(layer.id);
+    }
+    for (const id of Object.keys(live.getStyle().sources)) {
+      if (id.startsWith("ov-") && !wanted.has(id)) live.removeSource(id);
+    }
+
+    const below = live.getLayer("bnd-country") ? "bnd-country" : undefined;
+
+    for (const o of list) {
+      const src = `ov-${o.id}`;
+      if (!live.getSource(src)) {
+        live.addSource(src, { type: "geojson", data: o.data });
+      }
+
+      if (o.fill && !live.getLayer(`${src}-fill`)) {
+        live.addLayer(
+          {
+            id: `${src}-fill`,
+            type: "fill",
+            source: src,
+            paint: {
+              "fill-color": o.fill.color,
+              /*
+                `gridcode` 1..N → тунгалагийн шатлал. Илэрхийллийн бүтэц
+                нь хувьсах урттай тул TS-ийн `match` загварт таарахгүй —
+                `unknown` дамжуулан хөрвүүлнэ.
+              */
+              "fill-opacity": o.fill.byGrid
+                ? ([
+                    "match",
+                    ["get", "gridcode"],
+                    ...o.fill.byGrid.flatMap((v, i) => [i + 1, v]),
+                    o.fill.byGrid[0],
+                  ] as unknown as ExpressionSpecification)
+                : (o.fill.opacity ?? 0.08),
+            },
+          },
+          below,
+        );
+      }
+
+      if (!live.getLayer(`${src}-line`)) {
+        live.addLayer(
+          {
+            id: `${src}-line`,
+            type: "line",
+            source: src,
+            layout: { "line-join": "round" },
+            paint: {
+              "line-color": o.line.color,
+              "line-opacity": o.line.opacity,
+              "line-width": o.line.width,
+            },
+          },
+          below,
+        );
+      }
+    }
+  }, [live, overlays]);
 
   /* ---------------- Зурган тэмдэглэгээ ----------------
      Бөөгнөрөлтэй ЗЭРЭГЦЭЖ ажиллана: бөөгнөрөл задарч дан цэг болсон
@@ -750,28 +1278,40 @@ export function WellsMap({
       markerRefs.clear();
     };
 
-    if (!marks) {
+    if (!marks && !pulse) {
       clear();
       return;
     }
 
     const sync = () => {
-      const bounds = live.getBounds();
-      const want = new Map<number, { svg: string; pos: [number, number] }>();
+      const want = new Map<number, { mark: string; pos: [number, number] }>();
 
-      for (const f of live.querySourceFeatures("wells", {
-        filter: ["!", ["has", "point_count"]],
-      })) {
-        if (want.size >= MARKER_CAP) break;
-        const id = Number(f.properties?.oid);
-        if (!Number.isFinite(id) || want.has(id)) continue;
-        const svg = marks[id];
-        if (!svg) continue;
-        const g = f.geometry;
-        if (g.type !== "Point") continue;
-        const pos = g.coordinates as [number, number];
-        if (!bounds.contains(pos)) continue;
-        want.set(id, { svg, pos });
+      if (pulse) {
+        /*
+          Дохиоллын горим: бөөгнөрөл байхгүй, цэг цөөн тул эх өгөгдлөөс
+          шууд уншина — `querySourceFeatures` шаардлагагүй.
+        */
+        const { lon, lat, oid } = points;
+        for (let k = 0; k < visible.length && want.size < MARKER_CAP; k++) {
+          const i = visible[k];
+          want.set(oid[i], { mark: "pulse", pos: [lon[i], lat[i]] });
+        }
+      } else if (marks) {
+        const bounds = live.getBounds();
+        for (const f of live.querySourceFeatures("wells", {
+          filter: ["!", ["has", "point_count"]],
+        })) {
+          if (want.size >= MARKER_CAP) break;
+          const id = Number(f.properties?.oid);
+          if (!Number.isFinite(id) || want.has(id)) continue;
+          const mark = marks[id];
+          if (!mark) continue;
+          const g = f.geometry;
+          if (g.type !== "Point") continue;
+          const pos = g.coordinates as [number, number];
+          if (!bounds.contains(pos)) continue;
+          want.set(id, { mark, pos });
+        }
       }
 
       // Хуучирсныг авч, шинийг л нэмнэ — бүгдийг дахин үүсгэвэл зураг анивчина
@@ -781,20 +1321,25 @@ export function WellsMap({
           markerRefs.delete(id);
         }
       }
-      for (const [id, { svg, pos }] of want) {
+      for (const [id, { mark, pos }] of want) {
         if (markerRefs.has(id)) continue;
-        const el = markerEl(svg, () => selectCb.current(id));
+        const el = markerEl(
+          mark,
+          () => selectCb.current(id),
+          hoverCb.current ? (over) => hoverCb.current?.(over ? id : null) : undefined,
+        );
         markerRefs.set(id, new Marker({ element: el }).setLngLat(pos).addTo(live));
       }
     };
 
     sync();
-    live.on("idle", sync);
+    // Дохиоллын горим өгөгдлөөсөө шууд уншдаг тул `idle` сонсох шаардлагагүй
+    if (!pulse) live.on("idle", sync);
     return () => {
-      live.off("idle", sync);
+      if (!pulse) live.off("idle", sync);
       clear();
     };
-  }, [live, marks]);
+  }, [live, marks, pulse, points, visible]);
 
   /*
     Өндрийг `h-full`-ээр өгнө. `absolute inset-0` ажиллахгүй —

@@ -344,6 +344,52 @@ body {
 }
 
 /* --------------------------------------------------------------------------
+   Дохиоллын тэмдэглэгээ — цөөн, тодруулах шаардлагатай объектод.
+
+   Цөм нь тогтмол, гадуур нь хоёр цагираг ээлжлэн тэлж бүдгэрнэ. Хөдөлгөөн
+   нь анхаарал татах ЦОРЫН ГАНЦ зорилготой тул удаан, намуухан: 2.4 секунд.
+   `prefers-reduced-motion` үед доорх ерөнхий дүрэм үүнийг зогсооно.
+   -------------------------------------------------------------------------- */
+.pulse-pin {
+  position: relative;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  /* Хүрээгүй: цөм нь суурь зурагнаас гэрэлтэлтээрээ сална, зураасаар биш */
+  border: none;
+  background: var(--data);
+  cursor: pointer;
+  box-shadow: 0 0 10px 1px color-mix(in oklab, var(--data) 90%, transparent);
+}
+.pulse-pin .ring {
+  position: absolute;
+  inset: -2px;
+  border-radius: 999px;
+  border: 2px solid var(--data);
+  animation: pulse-ring 2.4s cubic-bezier(0.2, 0.6, 0.4, 1) infinite;
+  pointer-events: none;
+}
+/* Хоёр дахь цагираг нь хагас хугацааны зөрүүтэй — тасралтгүй мэдрэгдэнэ */
+.pulse-pin .ring.d {
+  animation-delay: 1.2s;
+}
+.pulse-pin:hover {
+  background: var(--ink);
+}
+
+@keyframes pulse-ring {
+  0% {
+    transform: scale(1);
+    opacity: 0.75;
+  }
+  /* Цөм жижигссэн тул цагираг илүү холдож тэлнэ — нийт хэмжээ хэвээр */
+  100% {
+    transform: scale(5);
+    opacity: 0;
+  }
+}
+
+/* --------------------------------------------------------------------------
    MapLibre — өөрийн загварт нийцүүлэх
    -------------------------------------------------------------------------- */
 .maplibregl-ctrl-group {

@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { ChevronDown } from "lucide-react";
 import { cn, num } from "@/lib/utils";
 
 /* --------------------------------------------------------------------------
@@ -387,6 +388,8 @@ export function RowChart({
   selected,
   onSelect,
   max: maxOverride,
+  base = 0,
+  format,
 }: {
   data: Datum[];
   tone?: string;
@@ -395,8 +398,17 @@ export function RowChart({
   selected?: string | null;
   onSelect?: (key: string | null) => void;
   max?: number;
+  /**
+   * Зурвасын ЭХЛЭХ утга. Тоо хэмжээнд 0 зөв ч 1–4 гэсэн ИНДЕКС дээр
+   * 0-оос эхлүүлбэл бүх зурвас бараг ижил урттай болж ялгаа алга болно.
+   * Индексийн жинхэнэ доод хязгаарыг өгвөл харьцуулалт уншигдана.
+   */
+  base?: number;
+  /** Тооны бичиглэл — бутархай дундажид `num()` тохирохгүй */
+  format?: (v: number) => string;
 }) {
   const max = maxOverride ?? Math.max(...data.map((d) => d.value), 1);
+  const span = Math.max(max - base, 1e-9);
 
   if (data.length === 0) {
     return <div className="py-5 text-center text-[12px] text-ink-3">Утга алга</div>;
@@ -438,14 +450,14 @@ export function RowChart({
                   !on && "opacity-40",
                 )}
               >
-                {num(d.value)}
+                {format ? format(d.value) : num(d.value)}
               </span>
             </div>
             <div className="mt-[3px] h-[2px] w-full overflow-hidden rounded-[1px] bg-paper-hi">
               <div
                 className="h-full transition-[width,opacity]"
                 style={{
-                  width: `${(d.value / max) * 100}%`,
+                  width: `${Math.max(0, Math.min(1, (d.value - base) / span)) * 100}%`,
                   background: color,
                   opacity: on ? 1 : 0.3,
                 }}
@@ -480,7 +492,11 @@ function donutSlice(c: number, R: number, r: number, a0: number, a1: number) {
 export function PieChart({
   data,
   tone = "var(--data)",
-  size = 78,
+  /*
+    Голын тоо нь бөгжний НҮХЭНД багтах ёстой. 145,458 гэх 7 тэмдэгт утга
+    78px бөгжинд халиж байсан тул бөгжийг томсгож, бичвэрийг нь жижигрүүлэв.
+  */
+  size = 96,
   selected,
   onSelect,
 }: {
@@ -589,9 +605,9 @@ export function PieChart({
         {/* Голд нийт — бөгжний нүх хоосон байх шалтгаангүй */}
         <text
           x={c}
-          y={c + 3}
+          y={c + 4}
           textAnchor="middle"
-          className="num fill-ink text-[13px] font-medium"
+          className="num fill-ink text-[11px] font-medium"
         >
           {num(total)}
         </text>
@@ -640,6 +656,175 @@ export function PieChart({
           );
         })}
       </div>
+    </div>
+  );
+}
+
+/* --------------------------------------------------------------------------
+   БҮЛЭГЛЭСЭН мөрөн диаграм.
+
+   Хоёр шатлалтай нэршил ("Сүхбаатар дүүрэг · 6") нэг мөрөнд шахагдвал
+   уншихад хүнд: дүүргийн нэр давтагдаж, хорооны дугаар нь араас нь
+   нуугдана. Дүүргийг ГАРЧИГ болгож, хороог доор нь эгнүүлбэл давталт
+   алга болж, харьцуулалт нэг л баганад цэгцэрнэ.
+   -------------------------------------------------------------------------- */
+
+export type DatumGroup = {
+  key: string;
+  label: string;
+  total: number;
+  rows: Datum[];
+};
+
+export function GroupedRowChart({
+  groups,
+  tone = "var(--data)",
+  selected,
+  onSelect,
+  selectedGroup,
+  onSelectGroup,
+  defaultOpen = "all",
+}: {
+  groups: DatumGroup[];
+  tone?: string;
+  selected?: string | null;
+  onSelect?: (key: string | null) => void;
+  selectedGroup?: string | null;
+  onSelectGroup?: (key: string | null) => void;
+  /** Эхлээд ямар бүлэг задарсан байх вэ */
+  defaultOpen?: "all" | "first" | "none";
+}) {
+  /*
+    Хураалтын төлөв: задарсан бүлгүүдийн НЭРИЙН олонлог. `null` нь
+    "хэрэглэгч гар хүрээгүй" гэсэн үг — тэр үед `defaultOpen` шийднэ.
+
+    Хоёр тусдаа төлөв (олонлог + "хүрсэн" туг) байсныг НЭГТГЭВ: хоёр
+    товшилт нэг багцад орвол хоёр дахь нь хуучин утгыг уншиж, эхнийхийн
+    үр дүн алдагддаг байлаа. Функц хэлбэрийн шинэчлэл үүнээс хамгаална.
+  */
+  const [open, setOpen] = React.useState<Set<string> | null>(null);
+
+  const openByDefault = React.useCallback(
+    (i: number) =>
+      defaultOpen === "all" ? true : defaultOpen === "first" ? i === 0 : false,
+    [defaultOpen],
+  );
+
+  const isOpen = (key: string, i: number) =>
+    open ? open.has(key) : openByDefault(i);
+
+  function toggle(key: string) {
+    setOpen((prev) => {
+      const next = new Set(
+        prev ?? groups.filter((_, i) => openByDefault(i)).map((g) => g.key),
+      );
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
+
+  /* Зурвасыг БҮХ бүлгийн дээд утгаар хэмжинэ — бүлэг бүрийг өөрийнх нь
+     дээд утгаар хэмжвэл өөр өөр масштабтай болж харьцуулах боломжгүй */
+  const max = Math.max(...groups.flatMap((g) => g.rows.map((r) => r.value)), 1);
+
+  if (groups.length === 0) {
+    return <div className="py-5 text-center text-[12px] text-ink-3">Утга алга</div>;
+  }
+
+  return (
+    <div className="space-y-3">
+      {groups.map((g, i) => {
+        const shown = isOpen(g.key, i);
+        return (
+        <div key={g.key}>
+          {/*
+            Гарчгийн мөр ХОЁР үйлдэлтэй: сум нь задлах/хураах, нэр нь
+            шүүх. Нэг товч дээр хоёуланг нь ачаалбал "би шүүх гэсэн юм,
+            яагаад хураачихав" гэсэн эргэлзээ төрнө.
+          */}
+          <div className="mb-1.5 flex items-center gap-1.5 border-b border-line pb-1">
+            <button
+              type="button"
+              onClick={() => toggle(g.key)}
+              aria-expanded={shown}
+              aria-label={shown ? "Хураах" : "Задлах"}
+              className="shrink-0 text-ink-3 transition-colors hover:text-ink"
+            >
+              <ChevronDown
+                size={12}
+                strokeWidth={2}
+                className={cn("transition-transform", !shown && "-rotate-90")}
+              />
+            </button>
+            <button
+              type="button"
+              disabled={!onSelectGroup}
+              onClick={() => onSelectGroup?.(selectedGroup === g.key ? null : g.key)}
+              className={cn(
+                "flex min-w-0 flex-1 items-baseline gap-2 text-left",
+                onSelectGroup && "cursor-pointer",
+              )}
+            >
+              <span
+                className={cn(
+                  "eyebrow min-w-0 flex-1 truncate transition-colors",
+                  selectedGroup === g.key && "text-data",
+                )}
+              >
+                {g.label}
+              </span>
+              <span className="num shrink-0 text-[11.5px] text-ink-2">{num(g.total)}</span>
+            </button>
+          </div>
+
+          <div className={cn("space-y-1 pl-2", !shown && "hidden")}>
+            {g.rows.map((d) => {
+              const on = selected == null || selected === d.key;
+              return (
+                <button
+                  key={d.key}
+                  type="button"
+                  onClick={() => onSelect?.(selected === d.key ? null : d.key)}
+                  className="group block w-full text-left"
+                >
+                  <div className="flex items-baseline justify-between gap-2">
+                    <span
+                      className={cn(
+                        "min-w-0 truncate text-[12px] transition-colors",
+                        selected === d.key ? "font-medium text-ink" : "text-ink-2",
+                        !on && "opacity-40",
+                      )}
+                    >
+                      {d.label}
+                    </span>
+                    <span
+                      className={cn(
+                        "num shrink-0 text-[11.5px] transition-colors",
+                        selected === d.key ? "text-ink" : "text-ink-3",
+                        !on && "opacity-40",
+                      )}
+                    >
+                      {num(d.value)}
+                    </span>
+                  </div>
+                  <div className="mt-[3px] h-[2px] w-full overflow-hidden rounded-[1px] bg-paper-hi">
+                    <div
+                      className="h-full transition-[width,opacity]"
+                      style={{
+                        width: `${(d.value / max) * 100}%`,
+                        background: tone,
+                        opacity: on ? 1 : 0.3,
+                      }}
+                    />
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+        );
+      })}
     </div>
   );
 }

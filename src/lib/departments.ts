@@ -42,7 +42,7 @@ export const DEPARTMENTS: Department[] = [
     name: "Хүрээлэн буй орчны ашиглалт хамгаалалтын хэлтэс",
     icon: Leaf,
     tone: "--d-orchin",
-    status: "pending",
+    status: "live",
   },
   {
     slug: "oi",

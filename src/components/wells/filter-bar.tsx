@@ -13,11 +13,18 @@ export function FilterBar({
   title,
   activeCount,
   onReset,
+  leading,
   children,
 }: {
   title: string;
   activeCount: number;
   onReset: () => void;
+  /**
+   * Гарчгийн ХАЖУУД суух агуулга. `children` нь баруун тийш шахагддаг
+   * шүүлтүүрийн бүлэг тул эх сурвалж сонгох мэт "юуг харах вэ" гэсэн
+   * хяналтыг тэнд тавьж болохгүй — шүүлттэй андуурагдана.
+   */
+  leading?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
@@ -26,6 +33,13 @@ export function FilterBar({
       <span className="shrink-0 text-[12px] font-semibold tracking-[0.12em] text-ink uppercase">
         {title}
       </span>
+
+      {leading ? (
+        <>
+          <span className="mx-0.5 h-4 w-px shrink-0 bg-line" aria-hidden />
+          {leading}
+        </>
+      ) : null}
 
       <div className="ml-auto flex flex-wrap items-center gap-1.5">
         {children}
