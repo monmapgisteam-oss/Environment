@@ -17,7 +17,7 @@ import { cn } from "@/lib/utils";
  * гидрацийн үед серверийн зургийг (`null` → анхны таб) хэрэглээд,
  * дараа нь хадгалсан утга руу шилжинэ.
  */
-function useStored(key: string): string | null {
+export function useStored(key: string): string | null {
   return React.useSyncExternalStore(
     (cb) => {
       window.addEventListener("storage", cb);

@@ -277,28 +277,66 @@ export function ReclamationDashboard() {
         </FilterMenu>
       </FilterBar>
 
-      <div className="grid min-h-0 flex-1 gap-2.5 xl:grid-cols-[1fr_360px]">
-        {/* ---- ЗҮҮН: индикатор + зураг ---- */}
-        <div className="flex min-h-0 flex-col gap-2.5">
-          <Card className="shrink-0">
-            <div className="grid grid-cols-2 divide-x divide-y divide-line sm:grid-cols-4 xl:divide-y-0">
-              <Stat icon={Sprout} label="Талбай" value={num(stats.n)} />
-              <Stat icon={Ruler} label="Нийт га" value={stats.ha.toFixed(1)} />
-              <Stat icon={CalendarRange} label="Хамрах он" value={stats.span} />
-              {/*
-                Төсөвт өртөг нь зөвхөн ААН-ийн эх сурвалжид бий.
-                Нэгжийг нь ХӨРВҮҮЛЭХГҮЙ: талбарын нэр "мян_төг" гэсэн
-                боловч 2.6 га нөхөн сэргээлт 120 мянган төгрөг байх нь
-                эргэлзээтэй. Эх сурвалжийн бичсэнээр нь харуулж,
-                тодруулгыг хэлтсээс авна.
-              */}
-              <Stat
-                icon={Coins}
-                label="Төсөвт өртөг, мян.₮"
-                value={stats.cost ? num(Math.round(stats.cost)) : "—"}
-              />
-            </div>
-          </Card>
+      {/*
+        Нэг МӨР, гурван хэсэг: зүүнд талбайн жагсаалт, дунд газрын зураг
+        (уян), баруунд задаргааны диаграмууд. Жагсаалтын мөр бүр зурган
+        дээрх талбайтайгаа хосолдог (hover, товшилт) тул хажууд нь байх
+        нь ойлгомжтой. xl-ээс доош унавал мөр нь багана болно — нарийн
+        дэлгэцэнд гурван багана зургийг юу ч үлдээхгүй шахна.
+
+        Индикатор нь дээд талд бүтэн өргөнөөр биш, хоёр хажуугийн
+        Индикатор нь дээд талд бүтэн өргөнөөр биш, БАРУУН баганын
+        толгойд 2×2 сүлжээгээр суудаг: тэндээс доош задаргааны диаграмууд
+        үргэлжлэх тул нэгтгэсэн тоо ба задаргаа нэг баганад цуварна.
+      */}
+      <div className="flex min-h-0 flex-1 flex-col gap-2.5">
+        <div className="flex min-h-0 flex-1 flex-col gap-2.5 xl:flex-row">
+          <div className="flex min-h-0 flex-col gap-2.5 xl:w-[300px] xl:shrink-0 2xl:w-[340px]">
+            {/*
+              Талбай цөөхөн тул жагсаалт нь диаграмаас илүү мэдээлэл өгнө:
+              мөр бүр он, хэмжээ, гүйцэтгэгчээ авч явна.
+            */}
+            <Card className="min-h-[120px] flex-1">
+              <Head title="Талбайн жагсаалт">
+                <span className="num text-[11.5px] text-ink-3">{num(shown.length)}</span>
+              </Head>
+              <div className="min-h-0 flex-1 divide-y divide-line overflow-y-auto">
+                {shown.map((s) => (
+                  <button
+                    key={s.oid}
+                    onClick={() => setPicked(picked === s.oid ? null : s.oid)}
+                    onMouseEnter={() => setHover(s.oid)}
+                    onMouseLeave={() => setHover(null)}
+                    className={cn(
+                      "block w-full px-3 py-2 text-left transition-colors hover:bg-paper-hi",
+                      picked === s.oid && "bg-paper-hi",
+                    )}
+                  >
+                    <div className="flex items-baseline justify-between gap-2">
+                      <span className="min-w-0 truncate text-[12px] text-ink">
+                        {s.place}
+                      </span>
+                      <span className="num shrink-0 text-[11.5px] text-ink-2">
+                        {s.ha} га
+                      </span>
+                    </div>
+                    <div className="num mt-1 flex items-center gap-1.5 text-[10.5px] text-ink-3">
+                      <span>{s.year}</span>
+                      <span aria-hidden>·</span>
+                      <span className="min-w-0 truncate">
+                        {s.contractor ?? FUNDING.find((f) => f.id === s.funding)?.label}
+                      </span>
+                    </div>
+                  </button>
+                ))}
+                {shown.length === 0 ? (
+                  <div className="py-5 text-center text-[12px] text-ink-3">
+                    Шүүлтүүрт тохирох талбай алга
+                  </div>
+                ) : null}
+              </div>
+            </Card>
+          </div>
 
           <Card className="relative min-h-[280px] flex-1 overflow-hidden">
             <div className="relative h-full w-full">
@@ -338,93 +376,70 @@ export function ReclamationDashboard() {
             </div>
           </Card>
 
-          <p className="shrink-0 px-0.5 text-[10.5px] leading-none text-ink-3">
-            Суурь зураг: Esri · Дата: ArcGIS · талбайн хүрээг булангийн цэгүүдээс
-            сэргээв
-          </p>
+          {/* ---- БАРУУН: индикатор + задаргаа ---- */}
+          <div className="flex min-h-0 flex-col gap-2.5 xl:w-[360px] xl:shrink-0">
+            {/* Дөрвөн индикатор — хоёр багана, хоёр мөр */}
+            <Card className="shrink-0">
+              <div className="grid grid-cols-2 divide-x divide-y divide-line">
+                <Stat icon={Sprout} label="Талбай" value={num(stats.n)} />
+                <Stat icon={Ruler} label="Нийт га" value={stats.ha.toFixed(1)} />
+                <Stat icon={CalendarRange} label="Хамрах он" value={stats.span} />
+                {/*
+                  Төсөвт өртөг нь зөвхөн ААН-ийн эх сурвалжид бий.
+                  Нэгжийг нь ХӨРВҮҮЛЭХГҮЙ: талбарын нэр "мян_төг" гэсэн
+                  боловч 2.6 га нөхөн сэргээлт 120 мянган төгрөг байх нь
+                  эргэлзээтэй. Эх сурвалжийн бичсэнээр нь харуулж,
+                  тодруулгыг хэлтсээс авна.
+                */}
+                <Stat
+                  icon={Coins}
+                  label="Төсөвт өртөг, мян.₮"
+                  value={stats.cost ? num(Math.round(stats.cost)) : "—"}
+                />
+              </div>
+            </Card>
+
+            <Card className="shrink-0">
+              <Head title="Оноор">
+                <span className="text-[10.5px] text-ink-3">га</span>
+              </Head>
+              <div className="p-3">
+                {/* Он бол цагийн тэнхлэг — эрэмбийг нь хадгалж цуваагаар */}
+                <AreaChart
+                  data={yearSeries}
+                  height={110}
+                  selected={year}
+                  /* Бичлэггүй жилийг сонгуулахгүй: шүүлтүүр нь хоосон үр
+                     дүн буцаах тул сонголт биш, цэвэрлэлт болгоно */
+                  onSelect={(k) =>
+                    setYear(k && byYear.some((d) => d.key === k) ? k : null)
+                  }
+                  unit="га"
+                />
+              </div>
+            </Card>
+
+            {/* Мөрийн СҮҮЛД нь уян карт — дээрх нь тогтмол өндөртэй */}
+            <Card className="min-h-0 flex-1">
+              <Head title="Байршлаар">
+                <span className="text-[10.5px] text-ink-3">га</span>
+              </Head>
+              <div className="min-h-0 flex-1 overflow-y-auto p-3">
+                <RowChart
+                  data={byDistrict}
+                  selected={district}
+                  onSelect={setDistrict}
+                  format={(v) => v.toFixed(1)}
+                />
+              </div>
+            </Card>
+          </div>
         </div>
 
-        {/* ---- БАРУУН: жагсаалт + задаргаа ---- */}
-        <div className="flex min-h-0 flex-col gap-2.5">
-          <Card className="shrink-0">
-            <Head title="Оноор">
-              <span className="text-[10.5px] text-ink-3">га</span>
-            </Head>
-            <div className="p-3">
-              {/* Он бол цагийн тэнхлэг — эрэмбийг нь хадгалж цуваагаар */}
-              <AreaChart
-                data={yearSeries}
-                height={110}
-                selected={year}
-                /* Бичлэггүй жилийг сонгуулахгүй: шүүлтүүр нь хоосон үр
-                   дүн буцаах тул сонголт биш, цэвэрлэлт болгоно */
-                onSelect={(k) =>
-                  setYear(k && byYear.some((d) => d.key === k) ? k : null)
-                }
-                unit="га"
-              />
-            </div>
-          </Card>
-
-          <Card className="shrink-0">
-            <Head title="Байршлаар">
-              <span className="text-[10.5px] text-ink-3">га</span>
-            </Head>
-            <div className="max-h-[150px] overflow-y-auto p-3">
-              <RowChart
-                data={byDistrict}
-                selected={district}
-                onSelect={setDistrict}
-                format={(v) => v.toFixed(1)}
-              />
-            </div>
-          </Card>
-
-          {/*
-            Талбай цөөхөн тул жагсаалт нь диаграмаас илүү мэдээлэл өгнө:
-            мөр бүр он, хэмжээ, гүйцэтгэгчээ авч явна.
-          */}
-          <Card className="min-h-[120px] flex-1">
-            <Head title="Талбайн жагсаалт">
-              <span className="num text-[11.5px] text-ink-3">{num(shown.length)}</span>
-            </Head>
-            <div className="min-h-0 flex-1 divide-y divide-line overflow-y-auto">
-              {shown.map((s) => (
-                <button
-                  key={s.oid}
-                  onClick={() => setPicked(picked === s.oid ? null : s.oid)}
-                  onMouseEnter={() => setHover(s.oid)}
-                  onMouseLeave={() => setHover(null)}
-                  className={cn(
-                    "block w-full px-3 py-2 text-left transition-colors hover:bg-paper-hi",
-                    picked === s.oid && "bg-paper-hi",
-                  )}
-                >
-                  <div className="flex items-baseline justify-between gap-2">
-                    <span className="min-w-0 truncate text-[12px] text-ink">
-                      {s.place}
-                    </span>
-                    <span className="num shrink-0 text-[11.5px] text-ink-2">
-                      {s.ha} га
-                    </span>
-                  </div>
-                  <div className="num mt-1 flex items-center gap-1.5 text-[10.5px] text-ink-3">
-                    <span>{s.year}</span>
-                    <span aria-hidden>·</span>
-                    <span className="min-w-0 truncate">
-                      {s.contractor ?? FUNDING.find((f) => f.id === s.funding)?.label}
-                    </span>
-                  </div>
-                </button>
-              ))}
-              {shown.length === 0 ? (
-                <div className="py-5 text-center text-[12px] text-ink-3">
-                  Шүүлтүүрт тохирох талбай алга
-                </div>
-              ) : null}
-            </div>
-          </Card>
-        </div>
+        <p className="shrink-0 px-0.5 text-[10.5px] leading-none text-ink-3">
+          Суурь зураг: Esri · Дата: ArcGIS · талбайн хүрээг булангийн цэгүүдээс
+          сэргээв
+        </p>
       </div>
     </div>
   );

@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { ChevronDown } from "lucide-react";
+import { useStored } from "@/components/ui/source-tabs";
 import { cn, num } from "@/lib/utils";
 
 /* --------------------------------------------------------------------------
@@ -529,6 +530,7 @@ export function PieChart({
   tone = "var(--data)",
   colorOf,
   note,
+  format = num,
   /*
     Голын тоо нь бөгжний НҮХЭНД багтах ёстой. 145,458 гэх 7 тэмдэгт утга
     78px бөгжинд халиж байсан тул бөгжийг томсгож, бичвэрийг нь жижигрүүлэв.
@@ -551,6 +553,12 @@ export function PieChart({
   colorOf?: (d: Datum) => string;
   /** Тайлбарын мөрөнд гарах хоёр дахь утга ("PLI 1.35") */
   note?: (d: Datum) => string;
+  /**
+   * Тооны бичиглэл — голын нийлбэрт ба тайлбарын мөрөнд хоёуланд нь.
+   * Анхдагч `num()` нь бүхэл болгодог тул 0.07 га гэх бутархай утга
+   * "0" болж, бөгж утгагүй харагдана.
+   */
+  format?: (v: number) => string;
   size?: number;
   selected?: string | null;
   onSelect?: (key: string | null) => void;
@@ -654,7 +662,7 @@ export function PieChart({
                 className={onSelect ? "cursor-pointer" : undefined}
                 onClick={() => onSelect?.(selected === d.key ? null : d.key)}
               >
-                <title>{`${d.label} · ${num(d.value)}`}</title>
+                <title>{`${d.label} · ${format(d.value)}`}</title>
               </path>
             );
           })
@@ -667,7 +675,7 @@ export function PieChart({
           textAnchor="middle"
           className="num fill-ink text-[11px] font-medium"
         >
-          {num(total)}
+          {format(total)}
         </text>
       </svg>
 
@@ -711,7 +719,7 @@ export function PieChart({
                   note && "text-[11px] text-ink-3",
                 )}
               >
-                {num(d.value)}
+                {format(d.value)}
               </span>
               {note ? (
                 <span
@@ -755,6 +763,7 @@ export function GroupedRowChart({
   selectedGroup,
   onSelectGroup,
   defaultOpen = "all",
+  storageKey,
 }: {
   groups: DatumGroup[];
   tone?: string;
@@ -764,6 +773,11 @@ export function GroupedRowChart({
   onSelectGroup?: (key: string | null) => void;
   /** Эхлээд ямар бүлэг задарсан байх вэ */
   defaultOpen?: "all" | "first" | "none";
+  /**
+   * Өгвөл хураалтын төлөв `localStorage`-д үлдэж, хуудас дахин
+   * ачаалахад сэргэнэ. Өгөхгүй бол зөвхөн санах ойд.
+   */
+  storageKey?: string;
 }) {
   /*
     Хураалтын төлөв: задарсан бүлгүүдийн НЭРИЙН олонлог. `null` нь
@@ -772,8 +786,16 @@ export function GroupedRowChart({
     Хоёр тусдаа төлөв (олонлог + "хүрсэн" туг) байсныг НЭГТГЭВ: хоёр
     товшилт нэг багцад орвол хоёр дахь нь хуучин утгыг уншиж, эхнийхийн
     үр дүн алдагддаг байлаа. Функц хэлбэрийн шинэчлэл үүнээс хамгаална.
+
+    Хадгалсан утгыг `useState`-ийн эхлүүлэгчээр УНШИХГҮЙ: сайт статикаар
+    экспортлогддог тул серверийн HTML үргэлж `defaultOpen`-той байх ба
+    зөрвөл гидраци эвдэрнэ. `useStored` (useSyncExternalStore) нь
+    гидрацийн үед серверийн зургийг өгөөд дараа нь хадгалсан утга руу
+    шилжинэ. Товшилтын дараах утга нь `open`-д — `setItem` нь ижил таб
+    дотор `storage` үйл явдал өдөөдөггүй тул давхарлаж барина.
   */
   const [open, setOpen] = React.useState<Set<string> | null>(null);
+  const stored = useStored(storageKey ?? "");
 
   const openByDefault = React.useCallback(
     (i: number) =>
@@ -781,16 +803,35 @@ export function GroupedRowChart({
     [defaultOpen],
   );
 
+  /** Хадгалсан жагсаалт — эвдэрсэн утгыг чимээгүйхэн голно */
+  const restored = React.useMemo(() => {
+    if (!storageKey || stored == null) return null;
+    try {
+      const v: unknown = JSON.parse(stored);
+      return Array.isArray(v) ? new Set(v.map(String)) : null;
+    } catch {
+      return null;
+    }
+  }, [storageKey, stored]);
+
+  const current = open ?? restored;
+
   const isOpen = (key: string, i: number) =>
-    open ? open.has(key) : openByDefault(i);
+    current ? current.has(key) : openByDefault(i);
 
   function toggle(key: string) {
     setOpen((prev) => {
+      const base = prev ?? restored;
       const next = new Set(
-        prev ?? groups.filter((_, i) => openByDefault(i)).map((g) => g.key),
+        base ?? groups.filter((_, i) => openByDefault(i)).map((g) => g.key),
       );
       if (next.has(key)) next.delete(key);
       else next.add(key);
+      if (storageKey) {
+        try {
+          localStorage.setItem(storageKey, JSON.stringify([...next]));
+        } catch {}
+      }
       return next;
     });
   }

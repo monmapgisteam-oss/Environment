@@ -3,7 +3,7 @@
 import * as React from "react";
 import dynamic from "next/dynamic";
 import { Building2, Layers3, Loader2, Ruler, Shovel } from "lucide-react";
-import { RowChart, type Datum } from "@/components/charts";
+import { PieChart, RowChart } from "@/components/charts";
 import { BasemapGallery } from "@/components/map/basemap-gallery";
 import { OverlayControl } from "@/components/map/overlay-control";
 import { FilterBar, FilterMenu, PickList } from "@/components/wells/filter-bar";
@@ -99,20 +99,33 @@ export function DamagedDashboard() {
     };
   }, [data, sites, shown, place, size]);
 
-  /* ---------------- Задаргаа ---------------- */
-  const byPlace = React.useMemo<{ chart: Datum[]; counts: Datum[] }>(() => {
-    const m = new Map<string, { ha: number; n: number }>();
+  /* ---------------- Задаргаа ----------------
+
+     Дүүрэг ба сумыг ТУСАД НЬ. Ялгааг нэрнээс таахгүй — эх сурвалжийн
+     `aimag_name` талбар өөрөө хэлж өгнө: Улаанбаатар (7 дүүрэг) ба Төв
+     (4 сум). Нэрээр ялгах гэвэл бүтэхгүй байсан: энэ давхаргад дүүргийн
+     нэр дагаваргүй бичигдсэн ("Хан Уул", "Багануур").
+
+     Хоёр нь МАСШТАБААР харьцуулшгүй: дүүргүүд 24-22,400 га, сумд нийтдээ
+     0.1 га ч хүрэхгүй. Нэг диаграмд эгнүүлбэл сумын зурвас огт
+     харагдахгүй бөгөөд хамаагүй том мэт сэтгэгдэл төрүүлнэ. */
+  const byPlace = React.useMemo(() => {
+    const m = new Map<string, { ha: number; n: number; soum: boolean }>();
     for (let i = 0; i < (sites?.length ?? 0); i++) {
       if (!keep(i, "place")) continue;
       const s = sites![i];
-      const hit = m.get(s.place) ?? { ha: 0, n: 0 };
+      const hit = m.get(s.place) ?? { ha: 0, n: 0, soum: s.aimag !== "Улаанбаатар" };
       hit.ha += s.ha;
       hit.n++;
       m.set(s.place, hit);
     }
     const rows = [...m].sort((a, b) => b[1].ha - a[1].ha);
+    const datum = ([k, v]: (typeof rows)[number]) => ({ key: k, label: k, value: v.ha });
     return {
-      chart: rows.map(([k, v]) => ({ key: k, label: k, value: v.ha })),
+      districts: rows.filter(([, v]) => !v.soum).map(datum),
+      soums: rows.filter(([, v]) => v.soum).map(datum),
+      /* Шүүлтүүрийн жагсаалтад бүгд НЭГ дороо — тэнд эрэмбэ нь чухал,
+         засаг захиргааны төрөл нь биш */
       counts: rows.map(([k, v]) => ({ key: k, label: k, value: v.n })),
     };
   }, [sites, keep]);
@@ -241,54 +254,106 @@ export function DamagedDashboard() {
 
       <div className="grid min-h-0 flex-1 gap-2.5 xl:grid-cols-[1fr_340px]">
         <div className="flex min-h-0 flex-col gap-2.5">
-          <Card className="shrink-0">
-            <div className="grid grid-cols-2 divide-x divide-y divide-line sm:grid-cols-4 xl:divide-y-0">
-              <Stat icon={Ruler} label="Нийт талбай, га" value={num(Math.round(stats.ha))} />
-              <Stat icon={Shovel} label="Талбайн тоо" value={num(stats.n)} />
-              <Stat icon={Building2} label="Сум, дүүрэг" value={num(stats.places)} />
-              <Stat
-                icon={Layers3}
-                label="Хамгийн том, га"
-                value={stats.biggest >= 10 ? num(Math.round(stats.biggest)) : stats.biggest.toFixed(2)}
-              />
-            </div>
-          </Card>
-
-          <Card className="relative min-h-[280px] flex-1 overflow-hidden">
-            <div className="relative h-full w-full">
-              {/*
-                ЗӨВХӨН олон өнцөгт: эвдэрсэн газрын утга нь байршилд
-                биш хэмжээнд байгаа тул төлөөлөх цэг нь мэдээлэл нэмэхгүй,
-                харин ч жижиг талбайг байгаагаас том мэт харуулна.
-              */}
-              <PointMap
-                points={NO_POINTS}
-                visible={NO_INDEX}
-                shapes={{ data: shapes, selected: picked }}
-                basemap={basemap}
-                onSelect={setPicked}
-                onHover={setHover}
-                focus={focus}
-                overlays={overlays}
-                cluster={false}
-              />
-              <BasemapGallery value={basemap} onChange={setBasemap} />
-              <OverlayControl value={overlays} onChange={setOverlays} />
-
-              {active ? (
-                <div className="pointer-events-none absolute top-2.5 left-2.5 z-10 max-w-[240px] rounded-xs border border-line bg-paper/92 px-2.5 py-2 backdrop-blur-md">
-                  <div className="eyebrow mb-1.5">Эвдэрсэн талбай</div>
-                  <div className="num text-[13px] leading-none font-medium text-ink">
-                    {active.ha >= 1 ? active.ha.toFixed(1) : active.ha.toFixed(3)} га
-                  </div>
-                  <div className="mt-1.5 text-[11.5px] leading-snug text-ink-2">
-                    {active.place}
-                    {active.aimag !== "Улаанбаатар" ? ` · ${active.aimag}` : ""}
-                  </div>
+          {/*
+            Нэг МӨР: зүүнд индикатор ба байршлын задаргаа, баруунд газрын
+            зураг. Индикатор нь дээд талд бүтэн өргөнөөр биш, зүүн
+            баганын толгойд 2×2 сүлжээгээр суудаг — доорх задаргаа нь
+            яг тэдгээр тооны дэлгэрэнгүй тул нэг баганад цуварна.
+            xl-ээс доош унавал мөр нь багана болно.
+          */}
+          <div className="flex min-h-0 flex-1 flex-col gap-2.5 xl:flex-row">
+            <div className="flex min-h-0 flex-col gap-2.5 xl:w-[300px] xl:shrink-0 2xl:w-[340px]">
+              <Card className="shrink-0">
+                <div className="grid grid-cols-2 divide-x divide-y divide-line">
+                  <Stat icon={Ruler} label="Нийт талбай, га" value={num(Math.round(stats.ha))} />
+                  <Stat icon={Shovel} label="Талбайн тоо" value={num(stats.n)} />
+                  <Stat icon={Building2} label="Сум, дүүрэг" value={num(stats.places)} />
+                  <Stat
+                    icon={Layers3}
+                    label="Хамгийн том, га"
+                    value={
+                      stats.biggest >= 10
+                        ? num(Math.round(stats.biggest))
+                        : stats.biggest.toFixed(2)
+                    }
+                  />
                 </div>
+              </Card>
+
+              {/*
+                Сум цөөхөн (4) тул бөгжөөр. Нийт нь 0.1 га ч хүрэхгүй —
+                голын тоог 2 орны нарийвчлалтай бичихгүй бол `num()` нь
+                бүхэл болгож "0" гаргана.
+              */}
+              {byPlace.soums.length > 0 ? (
+                <Card className="shrink-0">
+                  <Head title="Сумаар">
+                    <span className="text-[10.5px] text-ink-3">га</span>
+                  </Head>
+                  <div className="p-3">
+                    <PieChart
+                      data={byPlace.soums}
+                      size={84}
+                      selected={place}
+                      onSelect={setPlace}
+                      format={(v) => v.toFixed(2)}
+                    />
+                  </div>
+                </Card>
               ) : null}
+
+              {/* Баганын СҮҮЛД нь уян карт — үлдсэн зайг энэ эзэлнэ */}
+              <Card className="min-h-0 flex-1">
+                <Head title="Дүүргээр">
+                  <span className="text-[10.5px] text-ink-3">га</span>
+                </Head>
+                <div className="min-h-0 flex-1 overflow-y-auto p-3">
+                  <RowChart
+                    data={byPlace.districts}
+                    selected={place}
+                    onSelect={setPlace}
+                    format={(v) => (v >= 10 ? num(Math.round(v)) : v.toFixed(2))}
+                  />
+                </div>
+              </Card>
             </div>
-          </Card>
+
+            <Card className="relative min-h-[280px] flex-1 overflow-hidden">
+              <div className="relative h-full w-full">
+                {/*
+                  ЗӨВХӨН олон өнцөгт: эвдэрсэн газрын утга нь байршилд
+                  биш хэмжээнд байгаа тул төлөөлөх цэг нь мэдээлэл нэмэхгүй,
+                  харин ч жижиг талбайг байгаагаас том мэт харуулна.
+                */}
+                <PointMap
+                  points={NO_POINTS}
+                  visible={NO_INDEX}
+                  shapes={{ data: shapes, selected: picked }}
+                  basemap={basemap}
+                  onSelect={setPicked}
+                  onHover={setHover}
+                  focus={focus}
+                  overlays={overlays}
+                  cluster={false}
+                />
+                <BasemapGallery value={basemap} onChange={setBasemap} />
+                <OverlayControl value={overlays} onChange={setOverlays} />
+
+                {active ? (
+                  <div className="pointer-events-none absolute top-2.5 left-2.5 z-10 max-w-[240px] rounded-xs border border-line bg-paper/92 px-2.5 py-2 backdrop-blur-md">
+                    <div className="eyebrow mb-1.5">Эвдэрсэн талбай</div>
+                    <div className="num text-[13px] leading-none font-medium text-ink">
+                      {active.ha >= 1 ? active.ha.toFixed(1) : active.ha.toFixed(3)} га
+                    </div>
+                    <div className="mt-1.5 text-[11.5px] leading-snug text-ink-2">
+                      {active.place}
+                      {active.aimag !== "Улаанбаатар" ? ` · ${active.aimag}` : ""}
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            </Card>
+        </div>
 
           <p className="shrink-0 px-0.5 text-[10.5px] leading-none text-ink-3">
             Суурь зураг: Esri · Дата: ArcGIS · {num(data.sites.length)} талбай ·
@@ -297,30 +362,18 @@ export function DamagedDashboard() {
         </div>
 
         <div className="flex min-h-0 flex-col gap-2.5">
-          <Card className="shrink-0">
-            <Head title="Сум, дүүргээр">
-              <span className="text-[10.5px] text-ink-3">га</span>
-            </Head>
-            <div className="max-h-[210px] overflow-y-auto p-3">
-              <RowChart
-                data={byPlace.chart}
-                selected={place}
-                onSelect={setPlace}
-                format={(v) => (v >= 10 ? num(Math.round(v)) : v.toFixed(2))}
-              />
-            </div>
-          </Card>
-
           {/*
             Хэмжээний тархалт — энэ самбарын гол диаграм. Зурвас нь
             ТАЛБАЙН ТОО, ард нь тэдгээрийн эзлэх га. Хоёр тоог зэрэгцүүлж
             байж "олон жижиг" ба "цөөн том" хоёрын ялгаа харагдана.
           */}
-          <Card className="min-h-0 flex-1">
+          {/* Таван мөр тогтмол тул уян байх шаардлагагүй — уян бол доор
+              нь хоосон зай үлдээнэ */}
+          <Card className="shrink-0">
             <Head title="Хэмжээгээр">
               <span className="text-[10.5px] text-ink-3">талбайн тоо · га</span>
             </Head>
-            <div className="min-h-0 flex-1 overflow-y-auto p-3">
+            <div className="p-3">
               <div className="space-y-2.5">
                 {bySize.map((d) => {
                   const max = Math.max(...bySize.map((x) => x.value), 1);
@@ -365,9 +418,10 @@ export function DamagedDashboard() {
             </div>
           </Card>
 
-          <Card className="shrink-0">
+          {/* Баганын СҮҮЛД нь уян карт — үлдсэн зайг энэ эзэлнэ */}
+          <Card className="min-h-[120px] flex-1">
             <Head title="Хамгийн том 8" />
-            <div className="max-h-[180px] divide-y divide-line overflow-y-auto">
+            <div className="min-h-0 flex-1 divide-y divide-line overflow-y-auto">
               {shown
                 .slice(0, 8)
                 .map((i) => sites![i])

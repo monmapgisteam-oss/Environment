@@ -4,17 +4,82 @@ import * as React from "react";
 import {
   Map as MapLibreMap,
   Marker,
-  ScaleControl,
   prewarm,
   setWorkerUrl,
   type ExpressionSpecification,
   type GeoJSONSource,
+  type IControl,
   type StyleSpecification,
 } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { FIREFLY } from "@/components/wells/colors";
 import type { BoundarySet } from "@/lib/boundaries";
 import { asset } from "@/lib/base-path";
+import { num } from "@/lib/utils";
+
+/* --------------------------------------------------------------------------
+   Масштабын ХАРЬЦАА (1:10 000)
+   -------------------------------------------------------------------------- */
+
+/**
+ * CSS пикселийн бодит хэмжээ. Вэбийн жишгээр 1 CSS пиксель = 1/96 инч.
+ *
+ * Дэлгэц бүрийн БОДИТ нягтрал үүнээс өөр (телефон 400+ ppi) тул дэлгэц
+ * дээрх харьцаа нь цаасан зураг шиг үнэн зөв БАЙЖ ЧАДАХГҮЙ — ойролцоо
+ * утга гэдгийг санах хэрэгтэй.
+ */
+const M_PER_CSS_PX = 0.0254 / 96;
+
+/** Гурван нэрлэх орноор бөөрөнхийлнө: 1:9 543 биш 1:9 540 */
+function roundScale(d: number) {
+  const step = Math.pow(10, Math.max(0, Math.floor(Math.log10(d)) - 2));
+  return Math.round(d / step) * step;
+}
+
+/**
+ * Зургийн буланд суух харьцааны заалт.
+ *
+ * Метр/пикселийг ТОМЪЁОГООР бус зургаас нь асууж тооцно: дэлгэцийн хоёр
+ * цэгийг газарзүйн координат руу буулгаад хоорондын зайг хэмжинэ.
+ * Ингэснээр проекц, өргөрөг, дэлгэцийн налуу зэрэг нь өөрөө тооцогдоно.
+ */
+class RatioScaleControl implements IControl {
+  private el: HTMLElement | null = null;
+  private map: MapLibreMap | null = null;
+  private readonly update = () => {
+    const m = this.map;
+    const el = this.el;
+    if (!m || !el) return;
+    const y = m.getContainer().clientHeight / 2;
+    const span = 100;
+    const meters = m.unproject([0, y]).distanceTo(m.unproject([span, y]));
+    if (!Number.isFinite(meters) || meters <= 0) return;
+    el.textContent = `1:${num(roundScale(meters / span / M_PER_CSS_PX))}`;
+  };
+
+  onAdd(map: MapLibreMap) {
+    this.map = map;
+    const el = document.createElement("div");
+    /* Хайрцаггүй, шууд зураг дээр суух тул уншигдац нь зөвхөн сүүдрээс
+       хамаарна — суурь зургийн товчтой ижил `drop-shadow` (хиймэл
+       дагуулын цайвар талбай дээр бичвэр дангаараа алга болно) */
+    el.className = "maplibregl-ctrl num text-[10px] leading-none text-ink-2";
+    el.style.filter = "drop-shadow(0 1px 2px rgba(0,0,0,.75))";
+    this.el = el;
+    map.on("move", this.update);
+    map.on("resize", this.update);
+    this.update();
+    return el;
+  }
+
+  onRemove() {
+    this.map?.off("move", this.update);
+    this.map?.off("resize", this.update);
+    this.el?.remove();
+    this.el = null;
+    this.map = null;
+  }
+}
 
 export type MapPoints = {
   oid: number[];
@@ -515,7 +580,7 @@ export function WellsMap({
     });
 
     // Томруулах товч байхгүй — дугуй эргүүлэх, хос товшилтоор ажиллана
-    m.addControl(new ScaleControl({ maxWidth: 90, unit: "metric" }), "bottom-left");
+    m.addControl(new RatioScaleControl(), "bottom-left");
 
     m.on("load", () => {
       /*

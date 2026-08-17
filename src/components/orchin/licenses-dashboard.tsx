@@ -269,76 +269,21 @@ export function LicensesDashboard() {
         </FilterMenu>
       </FilterBar>
 
-      <div className="grid min-h-0 flex-1 gap-2.5 xl:grid-cols-[1fr_360px]">
-        <div className="flex min-h-0 flex-col gap-2.5">
-          <Card className="shrink-0">
-            <div className="grid grid-cols-2 divide-x divide-y divide-line sm:grid-cols-4 xl:divide-y-0">
-              <Stat icon={Pickaxe} label="Зөвшөөрөл" value={num(stats.n)} />
-              <Stat icon={Building2} label="Эзэмшигч" value={num(stats.holders)} />
-              <Stat icon={Ruler} label="Нийт талбай, га" value={num(Math.round(stats.ha))} />
-              {/* Удахгүй дуусах нь энэ бүртгэлийн үйлдэл шаардах цорын ганц тоо */}
-              <Stat
-                icon={CalendarClock}
-                label={`${now}–${now + 5} онд дуусах`}
-                value={num(stats.soon)}
-              />
-            </div>
-          </Card>
-
-          <Card className="relative min-h-[280px] flex-1 overflow-hidden">
-            <div className="relative h-full w-full">
-              <PointMap
-                points={NO_POINTS}
-                visible={NO_INDEX}
-                shapes={{ data: shapes, selected: picked }}
-                basemap={basemap}
-                onSelect={setPicked}
-                onHover={setHover}
-                focus={focus}
-                cluster={false}
-              />
-              <BasemapGallery value={basemap} onChange={setBasemap} />
-
-              {active ? (
-                <div className="pointer-events-none absolute top-2.5 left-2.5 z-10 max-w-[270px] rounded-xs border border-line bg-paper/92 px-2.5 py-2 backdrop-blur-md">
-                  <div className="eyebrow mb-1.5">{active.code}</div>
-                  <div className="text-[12.5px] leading-snug text-ink">{active.holder}</div>
-                  <div className="num mt-1 text-[11.5px] text-ink-2">
-                    {active.ha} га · {active.mineral}
-                  </div>
-                  <div className="num mt-1 text-[10.5px] text-ink-3">
-                    {active.granted ?? "—"} → {active.expires ?? "—"} ·{" "}
-                    {active.district} {active.khoroo}
-                  </div>
-                </div>
-              ) : null}
-            </div>
-          </Card>
-
-          <p className="shrink-0 px-0.5 text-[10.5px] leading-none text-ink-3">
-            Суурь зураг: Esri · Дата: ArcGIS · {num(data.rows.length)} зөвшөөрөл ·
-            хугацааг {now} оноор тооцов
-          </p>
-        </div>
-
-        <div className="flex min-h-0 flex-col gap-2.5">
-          {/* Энэ самбарын гол диаграм — хэзээ дуусах вэ */}
-          <Card className="shrink-0">
-            <Head title="Дуусах жилээр" />
-            <div className="p-3">
-              {/* Шошгыг таслахгүй: налуу байрлал нь бүтэн онд зай гаргана */}
-              <AreaChart data={byExpiry} height={100} unit="зөвшөөрөл" />
-            </div>
-          </Card>
-
-          <Card className="shrink-0">
-            <Head title="Ашигт малтмалаар" />
-            <div className="max-h-[150px] overflow-y-auto p-3">
-              <RowChart data={byMineral} selected={mineral} onSelect={setMineral} />
-            </div>
-          </Card>
-
-          <Card className="min-h-[120px] flex-1">
+      {/*
+        Индикаторын зурвас ба мөрийн тайлбар нь ДЭЛГЭЦИЙН БҮТЭН ӨРГӨНД,
+        доторх бүх карт нэг мөрөнд эгнэнэ. Хоёр баганын сүлжээ байхаа
+        больсон: диаграмууд индикаторын зэрэгцээ бус, газрын зурагтайгаа
+        нэг өндөрт эхлэх ёстой.
+      */}
+      <div className="flex min-h-0 flex-1 flex-col gap-2.5">
+        {/*
+          Нэг МӨР, гурван хэсэг: зүүнд зөвшөөрлийн жагсаалт, дунд газрын
+          зураг (уян), баруунд индикатор ба задаргаа. Жагсаалтын мөр бүр
+          зурган дээрх талбайтайгаа hover/товшилтоор хосолдог тул хажууд
+          нь байх нь ойлгомжтой. xl-ээс доош унавал мөр нь багана болно.
+        */}
+        <div className="flex min-h-0 flex-1 flex-col gap-2.5 xl:flex-row">
+          <Card className="min-h-[120px] flex-1 xl:w-[300px] xl:flex-none 2xl:w-[340px]">
             {/* Хугацаагаар нь эрэмбэлсэн — эхэнд нь хамгийн түрүүнд дуусах нь */}
             <Head title="Зөвшөөрлийн жагсаалт">
               <span className="num text-[11.5px] text-ink-3">{num(shown.length)}</span>
@@ -377,7 +322,81 @@ export function LicensesDashboard() {
               ) : null}
             </div>
           </Card>
+
+          <Card className="relative min-h-[280px] flex-1 overflow-hidden">
+            <div className="relative h-full w-full">
+              <PointMap
+                points={NO_POINTS}
+                visible={NO_INDEX}
+                shapes={{ data: shapes, selected: picked }}
+                basemap={basemap}
+                onSelect={setPicked}
+                onHover={setHover}
+                focus={focus}
+                cluster={false}
+              />
+              <BasemapGallery value={basemap} onChange={setBasemap} />
+
+              {active ? (
+                <div className="pointer-events-none absolute top-2.5 left-2.5 z-10 max-w-[270px] rounded-xs border border-line bg-paper/92 px-2.5 py-2 backdrop-blur-md">
+                  <div className="eyebrow mb-1.5">{active.code}</div>
+                  <div className="text-[12.5px] leading-snug text-ink">{active.holder}</div>
+                  <div className="num mt-1 text-[11.5px] text-ink-2">
+                    {active.ha} га · {active.mineral}
+                  </div>
+                  <div className="num mt-1 text-[10.5px] text-ink-3">
+                    {active.granted ?? "—"} → {active.expires ?? "—"} ·{" "}
+                    {active.district} {active.khoroo}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          </Card>
+
+          {/* ---- БАРУУН: индикатор + задаргаа ---- */}
+          <div className="flex min-h-0 flex-col gap-2.5 xl:w-[360px] xl:shrink-0">
+            {/* Дөрвөн индикатор — хоёр багана, хоёр мөр */}
+            <Card className="shrink-0">
+              <div className="grid grid-cols-2 divide-x divide-y divide-line">
+                <Stat icon={Pickaxe} label="Зөвшөөрөл" value={num(stats.n)} />
+                <Stat icon={Building2} label="Эзэмшигч" value={num(stats.holders)} />
+                <Stat
+                  icon={Ruler}
+                  label="Нийт талбай, га"
+                  value={num(Math.round(stats.ha))}
+                />
+                {/* Удахгүй дуусах нь энэ бүртгэлийн үйлдэл шаардах цорын ганц тоо */}
+                <Stat
+                  icon={CalendarClock}
+                  label={`${now}–${now + 5} онд дуусах`}
+                  value={num(stats.soon)}
+                />
+              </div>
+            </Card>
+
+            {/* Энэ самбарын гол диаграм — хэзээ дуусах вэ */}
+            <Card className="shrink-0">
+              <Head title="Дуусах жилээр" />
+              <div className="p-3">
+                {/* Шошгыг таслахгүй: налуу байрлал нь бүтэн онд зай гаргана */}
+                <AreaChart data={byExpiry} height={100} unit="зөвшөөрөл" />
+              </div>
+            </Card>
+
+            {/* Мөрийн СҮҮЛД нь уян карт — дээрх нь тогтмол өндөртэй */}
+            <Card className="min-h-0 flex-1">
+              <Head title="Ашигт малтмалаар" />
+              <div className="min-h-0 flex-1 overflow-y-auto p-3">
+                <RowChart data={byMineral} selected={mineral} onSelect={setMineral} />
+              </div>
+            </Card>
+          </div>
         </div>
+
+        <p className="shrink-0 px-0.5 text-[10.5px] leading-none text-ink-3">
+          Суурь зураг: Esri · Дата: ArcGIS · {num(data.rows.length)} зөвшөөрөл ·
+          хугацааг {now} оноор тооцов
+        </p>
       </div>
     </div>
   );

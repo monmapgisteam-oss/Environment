@@ -31,6 +31,7 @@ import {
   PLI_RAMP,
   SOIL_YEARS,
   type SoilData,
+  type SoilMetric,
   type SoilYear,
 } from "@/lib/soil";
 import { cn, num } from "@/lib/utils";
@@ -91,14 +92,6 @@ export function SoilDashboard() {
   const [loaded, setLoaded] = React.useState<SoilData | null>(null);
   const [failed, setFailed] = React.useState<{ year: SoilYear; message: string } | null>(null);
 
-  /*
-    Аль хэмжигдэхүүнийг харуулж байна вэ (2024 онд PI / Igeo). Индексээр
-    барина: жил солиход хэмжигдэхүүний БҮРДЭЛ өөрчлөгддөг тул id-гаар
-    баривал байхгүй зүйл рүү заана. Хязгаараас хальснаас доор нь
-    хамгаалсан.
-  */
-  const [metricIdx, setMetricIdx] = React.useState(0);
-
   const [district, setDistrict] = React.useState<string | null>(null);
   const [grade, setGrade] = React.useState<string | null>(null);
   const [picked, setPicked] = React.useState<number | null>(null);
@@ -127,10 +120,6 @@ export function SoilDashboard() {
   const error = failed?.year === year ? failed.message : null;
 
   const points = data?.points;
-
-  /* Хэмжигдэхүүн цөөрсөн жил рүү шилжвэл индекс хальж болзошгүй */
-  const mi = data ? Math.min(metricIdx, data.metrics.length - 1) : 0;
-  const metric = data?.metrics[mi];
 
   /* ---------------- Цэгийн багана (газрын зурагт) ---------------- */
   const geo = React.useMemo<MapPoints & { pli: Float32Array }>(() => {
@@ -234,34 +223,42 @@ export function SoilDashboard() {
   );
 
   /**
-   * Элементийн дундаж — энэ самбарын гол диаграм.
+   * Элементийн дундаж — ХЭМЖИГДЭХҮҮН БҮРД нэг жагсаалт.
    *
    * Дундажаар нь буурахаар эрэмбэлнэ: аль элемент энэ хэсэгт хамгийн
    * их ачаалал өгч байгааг эхний мөрөөс шууд уншина. Утга нь жил бүр,
    * бүр нэг жилийн дотор ч ӨӨР ХЭМЖИГДЭХҮҮН (2024 онд PI ба Igeo,
    * 2023 онд мг/кг) тул гарчигт нь нэрийг нь үргэлж бичнэ.
+   *
+   * Хэмжигдэхүүн бүрийг тусад нь тоолохын оронд цэгийн НЭГ гүйлтээр
+   * бүгдийг нь хуримтлуулна — 507 цэг × 20 багана нь шүүлтүүр солигдох
+   * бүрд давтагдана.
    */
-  const elementData = React.useMemo<Datum[]>(() => {
-    if (!metric || !points) return [];
-    const sums = metric.elements.map(() => ({ n: 0, v: 0 }));
+  const elementSeries = React.useMemo<Datum[][]>(() => {
+    if (!data || !points) return [];
+    const sums = data.metrics.map((m) => m.elements.map(() => ({ n: 0, v: 0 })));
     for (let i = 0; i < points.length; i++) {
       if (!keep(i)) continue;
-      const vals = points[i].values[mi];
-      for (let e = 0; e < sums.length; e++) {
-        const v = vals[e];
-        if (v == null) continue;
-        sums[e].n++;
-        sums[e].v += v;
+      const vals = points[i].values;
+      for (let m = 0; m < sums.length; m++) {
+        for (let e = 0; e < sums[m].length; e++) {
+          const v = vals[m][e];
+          if (v == null) continue;
+          sums[m][e].n++;
+          sums[m][e].v += v;
+        }
       }
     }
-    return metric.elements
-      .map((el, e) => ({
-        key: el,
-        label: el,
-        value: sums[e].n ? sums[e].v / sums[e].n : 0,
-      }))
-      .sort((a, b) => b.value - a.value);
-  }, [metric, mi, points, keep]);
+    return data.metrics.map((m, mi) =>
+      m.elements
+        .map((el, e) => ({
+          key: el,
+          label: el,
+          value: sums[mi][e].n ? sums[mi][e].v / sums[mi][e].n : 0,
+        }))
+        .sort((a, b) => b.value - a.value),
+    );
+  }, [data, points, keep]);
 
   const stats = React.useMemo(() => {
     if (!points) return null;
@@ -329,11 +326,9 @@ export function SoilDashboard() {
     setYear(y);
     /* Хоёр жилийн цэг ӨӨР — сонголт, шүүлтүүр дамжуулах нь утгагүй */
     reset();
-    /* Хэмжигдэхүүн нь бас өөр бүрдэлтэй — эхнийхээс нь эхэлнэ */
-    setMetricIdx(0);
   }
 
-  if (error || !data || !stats || !metric) {
+  if (error || !data || !stats) {
     return (
       <div className="flex h-full items-center justify-center rounded-xs border border-line bg-paper-2">
         {error ? (
@@ -352,7 +347,9 @@ export function SoilDashboard() {
   }
 
   const activeCount = (district ? 1 : 0) + (grade ? 1 : 0);
-  const metricTitle = metric.unit ? `${metric.label}, ${metric.unit}` : metric.label;
+
+  /** "Бохирдлын индекс (PI)" · "Агууламж, мг/кг" */
+  const metricTitle = (m: SoilMetric) => (m.unit ? `${m.label}, ${m.unit}` : m.label);
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-2.5">
@@ -441,89 +438,81 @@ export function SoilDashboard() {
           дэлгэцэнд гурван багана зургийг юу ч үлдээхгүй шахна.
         */}
         <div className="flex min-h-0 flex-1 flex-col gap-2.5 xl:flex-row">
-          {selected ? (
-            <Card className="min-h-0 flex-1 xl:w-[300px] xl:flex-none 2xl:w-[340px]">
-              <Head title="Цэгийн профайл">
-                <button
-                  onClick={() => setPicked(null)}
-                  className="text-ink-3 transition-colors hover:text-ink"
-                  aria-label="Хаах"
-                >
-                  <X size={13} />
-                </button>
-              </Head>
-              <div className="min-h-0 flex-1 overflow-y-auto p-3">
-                <div className="flex items-baseline justify-between gap-2">
-                  <span className="num text-[13px] font-medium text-ink">
-                    {selected.code}
-                  </span>
-                  <span
-                    className="num rounded-xs px-1.5 py-0.5 text-[11px] leading-none"
-                    style={{
-                      background: `${pliColor(selected.pli)}22`,
-                      color: pliColor(selected.pli),
-                    }}
-                  >
-                    PLI {selected.pli.toFixed(2)}
-                  </span>
-                </div>
-                <p className="mt-1 text-[11.5px] leading-snug text-ink-3">
-                  {selected.district} · {selected.khoroo}
-                </p>
+          {/*
+            Хэмжигдэхүүн БҮРД нэг карт, дээрээс доош. 2024 онд ижил 10
+            элемент дээр PI ба Igeo хоёр индекс бодогдсон тул хоёр карт
+            эгнэнэ; 2023 онд ганц карт бүтэн өндрөө авна.
 
-                <div className="eyebrow mt-3 mb-2">{metricTitle}</div>
-                <RowChart
-                  data={metric.elements
+            Хоёрыг нэг диаграмд хольж БОЛОХГҮЙ (масштаб нь өөр), гэвч
+            зэрэгцүүлж харах нь утгатай: нэг элемент PI-гээр өндөр,
+            Igeo-гоор бага байх нь мэдээлэл юм.
+          */}
+          <div className="flex min-h-0 flex-col gap-2.5 xl:w-[300px] xl:shrink-0 2xl:w-[340px]">
+            {data.metrics.map((m, mi) => {
+              /* Цэг сонгогдвол карт бүр ТЭР ЦЭГИЙН утгыг харуулна —
+                 нэгтгэсэн дундажаас тухайн цэг рүү шилжих нь энэ
+                 датаны гол асуулт ("энд юу нь хэтэрсэн бэ") */
+              const rows: Datum[] = selected
+                ? m.elements
                     .map((el, e) => ({
                       key: el,
                       label: el,
                       value: selected.values[mi][e] ?? 0,
                     }))
-                    .sort((a, b) => b.value - a.value)}
-                  format={fmt}
-                />
-              </div>
-            </Card>
-          ) : (
-            <Card className="min-h-0 flex-1 xl:w-[300px] xl:flex-none 2xl:w-[340px]">
-              {/*
-                Гарчигт хэмжигдэхүүнээ үргэлж бичнэ. 2024 онд ХОЁР
-                индекс байдаг тул нэрийн оронд сэлгэгч гарна — хоёр
-                индексийг нэг диаграмд хольж болохгүй (масштаб өөр),
-                харин сольж харах нь утгатай.
-              */}
-              <Head title="Элементийн дундаж">
-                {data.metrics.length > 1 ? (
-                  <div className="flex shrink-0 items-center gap-1">
-                    {data.metrics.map((m, i) => {
-                      const on = i === mi;
-                      return (
+                    .sort((a, b) => b.value - a.value)
+                : (elementSeries[mi] ?? []);
+
+              return (
+                <Card key={m.id} className="min-h-0 flex-1">
+                  {/* Гарчигт хэмжигдэхүүнээ үргэлж бичнэ — нэг жилийн
+                      дотор ч өөр өөр масштабтай */}
+                  <Head title={selected ? "Цэгийн профайл" : "Элементийн дундаж"}>
+                    <span className="flex min-w-0 items-center gap-1.5">
+                      <span className="truncate text-[10.5px] text-ink-3">
+                        {metricTitle(m)}
+                      </span>
+                      {/* Хаах товч нь ЗӨВХӨН эхний картад — бүх карт
+                          нэг сонголтыг харуулдаг тул давтагдах нь илүүц */}
+                      {selected && mi === 0 ? (
                         <button
-                          key={m.id}
-                          onClick={() => setMetricIdx(i)}
-                          aria-pressed={on}
-                          title={m.unit ? `${m.label}, ${m.unit}` : m.label}
-                          className={cn(
-                            "rounded-xs border px-1.5 py-[3px] text-[10.5px] leading-none transition-colors",
-                            on
-                              ? "border-data/45 bg-data/10 text-ink"
-                              : "border-line text-ink-3 hover:border-line-2 hover:text-ink",
-                          )}
+                          onClick={() => setPicked(null)}
+                          className="shrink-0 text-ink-3 transition-colors hover:text-ink"
+                          aria-label="Хаах"
                         >
-                          {m.id === "pi" ? "PI" : m.id === "igeo" ? "Igeo" : m.label}
+                          <X size={13} />
                         </button>
-                      );
-                    })}
+                      ) : null}
+                    </span>
+                  </Head>
+                  <div className="min-h-0 flex-1 overflow-y-auto p-3">
+                    {/* Цэгийн нэр, түвшин нь эхний картад нэг л удаа */}
+                    {selected && mi === 0 ? (
+                      <>
+                        <div className="flex items-baseline justify-between gap-2">
+                          <span className="num text-[13px] font-medium text-ink">
+                            {selected.code}
+                          </span>
+                          <span
+                            className="num rounded-xs px-1.5 py-0.5 text-[11px] leading-none"
+                            style={{
+                              background: `${pliColor(selected.pli)}22`,
+                              color: pliColor(selected.pli),
+                            }}
+                          >
+                            PLI {selected.pli.toFixed(2)}
+                          </span>
+                        </div>
+                        <p className="mt-1 mb-3 text-[11.5px] leading-snug text-ink-3">
+                          {selected.district} · {selected.khoroo}
+                        </p>
+                      </>
+                    ) : null}
+                    <RowChart data={rows} format={fmt} />
                   </div>
-                ) : (
-                  <span className="text-[10.5px] text-ink-3">{metricTitle}</span>
-                )}
-              </Head>
-              <div className="min-h-0 flex-1 overflow-y-auto p-3">
-                <RowChart data={elementData} format={fmt} />
-              </div>
-            </Card>
-          )}
+                </Card>
+              );
+            })}
+          </div>
 
           <Card className="relative min-h-[280px] flex-1 overflow-hidden">
             <div className="relative h-full w-full">
@@ -670,7 +659,7 @@ export function SoilDashboard() {
 
         <p className="shrink-0 px-0.5 text-[10.5px] leading-none text-ink-3">
           Суурь зураг: Esri · Дата: ArcGIS · {year} оны {num(data.points.length)} цэг ·
-          хэмжилт: {metricTitle}
+          хэмжилт: {data.metrics.map(metricTitle).join(" · ")}
         </p>
       </div>
     </div>

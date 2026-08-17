@@ -245,20 +245,103 @@ export function PetitionsDashboard() {
         </FilterMenu>
       </FilterBar>
 
-      <div className="grid min-h-0 flex-1 gap-2.5 xl:grid-cols-[1fr_360px]">
-        <div className="flex min-h-0 flex-col gap-2.5">
-          <Card className="shrink-0">
-            <div className="grid grid-cols-2 divide-x divide-y divide-line sm:grid-cols-4 xl:divide-y-0">
-              <Stat icon={FileText} label="Өргөдөл" value={num(stats.n)} />
-              <Stat icon={Building2} label="Аж ахуйн нэгж" value={num(stats.companies)} />
-              <Stat icon={Ruler} label="Нийт талбай, га" value={num(Math.round(stats.ha))} />
-              <Stat
-                icon={CheckCircle2}
-                label="Дараагийн шатанд"
-                value={`${stats.passPct.toFixed(0)}%`}
-              />
-            </div>
-          </Card>
+      {/*
+        Индикаторын зурвас ба мөрийн тайлбар нь ДЭЛГЭЦИЙН БҮТЭН ӨРГӨНД,
+        доторх бүх карт нэг мөрөнд эгнэнэ. Хоёр баганын сүлжээ байхаа
+        больсон: диаграмууд индикаторын зэрэгцээ бус, газрын зурагтайгаа
+        нэг өндөрт эхлэх ёстой.
+      */}
+      <div className="flex min-h-0 flex-1 flex-col gap-2.5">
+        <Card className="shrink-0">
+          <div className="grid grid-cols-2 divide-x divide-y divide-line sm:grid-cols-4 xl:divide-y-0">
+            <Stat icon={FileText} label="Өргөдөл" value={num(stats.n)} />
+            <Stat icon={Building2} label="Аж ахуйн нэгж" value={num(stats.companies)} />
+            <Stat icon={Ruler} label="Нийт талбай, га" value={num(Math.round(stats.ha))} />
+            <Stat
+              icon={CheckCircle2}
+              label="Дараагийн шатанд"
+              value={`${stats.passPct.toFixed(0)}%`}
+            />
+          </div>
+        </Card>
+
+        {/*
+          Индикаторын доор нэг МӨР, гурван хэсэг: зүүнд өргөдлийн
+          жагсаалт (сонголт хийвэл түүний тэмдэглэл), дунд газрын
+          зураг, баруунд задаргаа. Жагсаалтын мөр бүр зурган дээрх
+          талбайтайгаа hover/товшилтоор хосолдог тул хажууд нь байх нь
+          ойлгомжтой. xl-ээс доош унавал мөр нь багана болно.
+        */}
+        <div className="flex min-h-0 flex-1 flex-col gap-2.5 xl:flex-row">
+          <div className="flex min-h-0 flex-col xl:w-[300px] xl:shrink-0 2xl:w-[340px]">
+            {/*
+              Сонгосон өргөдлийн шүүлтийн ЭХ БИЧВЭР. Бүлэглэлт нь дата
+              дарж бичихгүй — шийдвэрийн үндэслэл бүтнээрээ энд харагдана.
+            */}
+            {selected ? (
+              <Card className="min-h-0 flex-1">
+                <Head title="Шүүлтийн тэмдэглэл">
+                  <button
+                    onClick={() => setPicked(null)}
+                    className="text-[11px] text-ink-3 transition-colors hover:text-ink"
+                  >
+                    хаах
+                  </button>
+                </Head>
+                <div className="min-h-0 flex-1 overflow-y-auto p-3">
+                  <div className="num text-[12.5px] font-medium text-ink">{selected.reg}</div>
+                  <div className="mt-1 text-[11.5px] text-ink-2">{selected.company}</div>
+                  {selected.place ? (
+                    <div className="mt-1 text-[10.5px] leading-snug text-ink-3">
+                      {selected.place}
+                    </div>
+                  ) : null}
+                  <div className="eyebrow mt-3 mb-1.5">Анхан шатны шүүлт</div>
+                  <p className="text-[11.5px] leading-relaxed text-ink-2">
+                    {selected.screeningRaw || "Тэмдэглэл алга"}
+                  </p>
+                  <div className="eyebrow mt-3 mb-1.5">Дараагийн алхам</div>
+                  <p className="text-[11.5px] leading-relaxed text-ink-2">{selected.stage}</p>
+                </div>
+              </Card>
+            ) : (
+              <Card className="min-h-[120px] flex-1">
+                <Head title="Өргөдлийн жагсаалт">
+                  <span className="num text-[11.5px] text-ink-3">{num(shown.length)}</span>
+                </Head>
+                <div className="min-h-0 flex-1 divide-y divide-line overflow-y-auto">
+                  {shown.map((p) => (
+                    <button
+                      key={p.oid}
+                      onClick={() => setPicked(p.oid)}
+                      onMouseEnter={() => setHover(p.oid)}
+                      onMouseLeave={() => setHover(null)}
+                      className="block w-full px-3 py-2 text-left transition-colors hover:bg-paper-hi"
+                    >
+                      <div className="flex items-baseline justify-between gap-2">
+                        <span className="min-w-0 truncate text-[12px] text-ink">
+                          {p.company}
+                        </span>
+                        <span className="num shrink-0 text-[11.5px] text-ink-2">{p.ha} га</span>
+                      </div>
+                      <div className="num mt-1 flex items-center gap-1.5 text-[10.5px] text-ink-3">
+                        <span>{p.reg}</span>
+                        <span aria-hidden>·</span>
+                        <span className="truncate">
+                          {p.district} {p.khoroo}
+                        </span>
+                      </div>
+                    </button>
+                  ))}
+                  {shown.length === 0 ? (
+                    <div className="py-5 text-center text-[12px] text-ink-3">
+                      Шүүлтүүрт тохирох өргөдөл алга
+                    </div>
+                  ) : null}
+                </div>
+              </Card>
+            )}
+          </div>
 
           <Card className="relative min-h-[280px] flex-1 overflow-hidden">
             <div className="relative h-full w-full">
@@ -289,99 +372,33 @@ export function PetitionsDashboard() {
             </div>
           </Card>
 
-          <p className="shrink-0 px-0.5 text-[10.5px] leading-none text-ink-3">
-            Суурь зураг: Esri · Дата: ArcGIS · {num(data.rows.length)} өргөдөл ·
-            бүгд 2025.05.28-нд бүртгэгдсэн
-          </p>
-        </div>
+          {/* ---- БАРУУН: задаргаа ---- */}
+          <div className="flex min-h-0 flex-col gap-2.5 xl:w-[360px] xl:shrink-0">
+            <Card className="shrink-0">
+              <Head title="Анхан шатны шүүлт" />
+              <div className="p-3">
+                <RowChart
+                  data={byScreening}
+                  selected={screening}
+                  onSelect={setScreening}
+                />
+              </div>
+            </Card>
 
-        <div className="flex min-h-0 flex-col gap-2.5">
-          <Card className="shrink-0">
-            <Head title="Анхан шатны шүүлт" />
-            <div className="p-3">
-              <RowChart
-                data={byScreening}
-                selected={screening}
-                onSelect={setScreening}
-              />
-            </div>
-          </Card>
-
-          <Card className="shrink-0">
-            <Head title="Дараагийн алхам" />
-            <div className="max-h-[150px] overflow-y-auto p-3">
-              <RowChart data={byStage} selected={stage} onSelect={setStage} />
-            </div>
-          </Card>
-
-          {/*
-            Сонгосон өргөдлийн шүүлтийн ЭХ БИЧВЭР. Бүлэглэлт нь дата
-            дарж бичихгүй — шийдвэрийн үндэслэл бүтнээрээ энд харагдана.
-          */}
-          {selected ? (
+            {/* Мөрийн СҮҮЛД нь уян карт — дээрх нь тогтмол өндөртэй */}
             <Card className="min-h-0 flex-1">
-              <Head title="Шүүлтийн тэмдэглэл">
-                <button
-                  onClick={() => setPicked(null)}
-                  className="text-[11px] text-ink-3 transition-colors hover:text-ink"
-                >
-                  хаах
-                </button>
-              </Head>
+              <Head title="Дараагийн алхам" />
               <div className="min-h-0 flex-1 overflow-y-auto p-3">
-                <div className="num text-[12.5px] font-medium text-ink">{selected.reg}</div>
-                <div className="mt-1 text-[11.5px] text-ink-2">{selected.company}</div>
-                {selected.place ? (
-                  <div className="mt-1 text-[10.5px] leading-snug text-ink-3">
-                    {selected.place}
-                  </div>
-                ) : null}
-                <div className="eyebrow mt-3 mb-1.5">Анхан шатны шүүлт</div>
-                <p className="text-[11.5px] leading-relaxed text-ink-2">
-                  {selected.screeningRaw || "Тэмдэглэл алга"}
-                </p>
-                <div className="eyebrow mt-3 mb-1.5">Дараагийн алхам</div>
-                <p className="text-[11.5px] leading-relaxed text-ink-2">{selected.stage}</p>
+                <RowChart data={byStage} selected={stage} onSelect={setStage} />
               </div>
             </Card>
-          ) : (
-            <Card className="min-h-[120px] flex-1">
-              <Head title="Өргөдлийн жагсаалт">
-                <span className="num text-[11.5px] text-ink-3">{num(shown.length)}</span>
-              </Head>
-              <div className="min-h-0 flex-1 divide-y divide-line overflow-y-auto">
-                {shown.map((p) => (
-                  <button
-                    key={p.oid}
-                    onClick={() => setPicked(p.oid)}
-                    onMouseEnter={() => setHover(p.oid)}
-                    onMouseLeave={() => setHover(null)}
-                    className="block w-full px-3 py-2 text-left transition-colors hover:bg-paper-hi"
-                  >
-                    <div className="flex items-baseline justify-between gap-2">
-                      <span className="min-w-0 truncate text-[12px] text-ink">
-                        {p.company}
-                      </span>
-                      <span className="num shrink-0 text-[11.5px] text-ink-2">{p.ha} га</span>
-                    </div>
-                    <div className="num mt-1 flex items-center gap-1.5 text-[10.5px] text-ink-3">
-                      <span>{p.reg}</span>
-                      <span aria-hidden>·</span>
-                      <span className="truncate">
-                        {p.district} {p.khoroo}
-                      </span>
-                    </div>
-                  </button>
-                ))}
-                {shown.length === 0 ? (
-                  <div className="py-5 text-center text-[12px] text-ink-3">
-                    Шүүлтүүрт тохирох өргөдөл алга
-                  </div>
-                ) : null}
-              </div>
-            </Card>
-          )}
+          </div>
         </div>
+
+        <p className="shrink-0 px-0.5 text-[10.5px] leading-none text-ink-3">
+          Суурь зураг: Esri · Дата: ArcGIS · {num(data.rows.length)} өргөдөл ·
+          бүгд 2025.05.28-нд бүртгэгдсэн
+        </p>
       </div>
     </div>
   );

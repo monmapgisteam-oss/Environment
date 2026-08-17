@@ -628,7 +628,11 @@ export function OrchinDashboard() {
               {/*
                 Нүхэн жорлон дээр 111 хороо байдаг тул зөвхөн эхний
                 дүүрэг задарсан байна; нийтийн жорлонгийн 15 мөр бүхэлдээ
-                багтах тул бүгд нээлттэй.
+                багтах тул бүгд нээлттэй. Хэрэглэгчийн хураалт нь
+                хуудас дахин ачаалахад ҮЛДЭНЭ. Түлхүүр нь эх сурвалж
+                тус бүрд тусдаа: хоёр самбарын бүлгийн бүрдэл ба анхны
+                төлөв өөр тул нэг түлхүүрт хийвэл нөгөөгийнх нь
+                сонголтыг дарж бичнэ.
               */}
               <GroupedRowChart
                 groups={khorooGroups}
@@ -637,6 +641,7 @@ export function OrchinDashboard() {
                 selectedGroup={district}
                 onSelectGroup={setDistrict}
                 defaultOpen={pit ? "first" : "all"}
+                storageKey={`orchin.toilets.${source}.groups`}
               />
             </div>
           </Card>
