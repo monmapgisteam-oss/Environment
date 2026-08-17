@@ -10,7 +10,7 @@ import {
   Pickaxe,
   Ruler,
 } from "lucide-react";
-import { BarChart, RowChart, type Datum } from "@/components/charts";
+import { AreaChart, RowChart, type Datum } from "@/components/charts";
 import { BasemapGallery } from "@/components/map/basemap-gallery";
 import { FilterBar, FilterMenu, PickList } from "@/components/wells/filter-bar";
 import {
@@ -326,7 +326,8 @@ export function LicensesDashboard() {
           <Card className="shrink-0">
             <Head title="Дуусах жилээр" />
             <div className="p-3">
-              <BarChart data={byExpiry} height={100} formatTick={(d) => d.label.slice(2)} />
+              {/* Шошгыг таслахгүй: налуу байрлал нь бүтэн онд зай гаргана */}
+              <AreaChart data={byExpiry} height={100} unit="зөвшөөрөл" />
             </div>
           </Card>
 

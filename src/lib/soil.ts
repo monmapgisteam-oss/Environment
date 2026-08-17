@@ -26,6 +26,23 @@ export const SOIL_SERVICES = [
 export const SOIL_YEARS = [2024, 2023] as const;
 export type SoilYear = (typeof SOIL_YEARS)[number];
 
+/**
+ * Нэг жилийн нэг ХЭМЖИГДЭХҮҮН.
+ *
+ * Нэг давхарга нэгээс олон хэмжигдэхүүн агуулж болно: 2024 онд ижил 10
+ * элемент дээр PI ба Igeo гэсэн ХОЁР индекс бодогдсон байна. Тэднийг нэг
+ * жагсаалтад хольж болохгүй (масштаб нь өөр) тул тусад нь барина.
+ */
+export type SoilMetric = {
+  id: string;
+  /** Диаграмын гарчигт бичигдэх нэр */
+  label: string;
+  /** Нэгж — индекс нь нэгжгүй тул хоосон байж болно */
+  unit: string;
+  /** Элементийн тэмдэглэгээ — "As", "Pb" … */
+  elements: string[];
+};
+
 /** Нэг цэгийн хэмжилт */
 export type SoilPoint = {
   oid: number;
@@ -36,19 +53,14 @@ export type SoilPoint = {
   district: string;
   khoroo: string;
   pli: number;
-  /** `SoilData.elements`-тэй ижил дараалалтай утгууд */
-  values: (number | null)[];
+  /** `SoilData.metrics`-тэй ижил дараалалтай: `values[хэмжигдэхүүн][элемент]` */
+  values: (number | null)[][];
 };
 
 export type SoilData = {
   year: SoilYear;
   points: SoilPoint[];
-  /** Элементийн тэмдэглэгээ — "As", "Pb" … */
-  elements: string[];
-  /** Утга юу гэсэн үг вэ (диаграмын гарчигт) */
-  metric: string;
-  /** Нэгж — индекс нь нэгжгүй тул хоосон байж болно */
-  unit: string;
+  metrics: SoilMetric[];
   fetchedAt: string;
 };
 
@@ -62,41 +74,75 @@ const SCHEMA = {
     layer: "Soil_monitoring_2024_500",
     code: "Dugaar",
     district: "DUUREG",
-    metric: "Бохирдлын индекс (PI)",
-    unit: "",
-    elements: {
-      As: "As_PI",
-      Cd: "Cd_PI",
-      Co: "Co_PI",
-      Cr: "Cr_PI",
-      Cu: "Cu_PI",
-      Mo: "Mo_PI",
-      Ni: "Ni_PI",
-      Pb: "Pb_PI",
-      Sr: "Sr_PI",
-      Zn: "Zn_PI",
-    },
+    metrics: [
+      {
+        id: "pi",
+        label: "Бохирдлын индекс (PI)",
+        unit: "",
+        elements: {
+          As: "As_PI",
+          Cd: "Cd_PI",
+          Co: "Co_PI",
+          Cr: "Cr_PI",
+          Cu: "Cu_PI",
+          Mo: "Mo_PI",
+          Ni: "Ni_PI",
+          Pb: "Pb_PI",
+          Sr: "Sr_PI",
+          Zn: "Zn_PI",
+        },
+      },
+      {
+        /*
+          Хоёр дахь индекс. Товчлолыг нь ЗАДЛААГҮЙ: эх сурвалж бүтэн
+          нэрийг өгөөгүй тул PLI-ийн адил хэлтсээс тодруулах ёстой.
+          Ижил 10 элемент дээр бодогдсон ч PI-тэй ӨӨР МАСШТАБТАЙ
+          (PI дундаж 1 орчим, Igeo дундаж 0.2 орчим боловч дээд утга
+          нь 7 хүрдэг) тул нэг диаграмд хольж болохгүй.
+        */
+        id: "igeo",
+        label: "Igeo",
+        unit: "",
+        elements: {
+          As: "As_Igeo",
+          Cd: "Cd_Igeo",
+          Co: "Co_Igeo",
+          Cr: "Cr_Igeo",
+          Cu: "Cu_Igeo",
+          Mo: "Mo_Igeo",
+          Ni: "Ni_Igeo",
+          Pb: "Pb_Igeo",
+          Sr: "Sr_Igeo",
+          Zn: "Zn_Igeo",
+        },
+      },
+    ],
   },
   2023: {
     layer: "Soil_monitoring_2023_500",
     code: "Tseg_num",
     district: "DUUREG_1",
-    metric: "Агууламж",
-    unit: "мг/кг",
-    elements: {
-      As: "As_",
-      B: "B",
-      Cd: "Cd",
-      Co: "Co",
-      Cr: "Cr",
-      Cu: "Cu",
-      Hg: "Hg",
-      Mo: "Mo",
-      Ni: "Ni",
-      Pb: "Pb",
-      Sr: "Sr",
-      Zn: "Zn",
-    },
+    metrics: [
+      {
+        id: "conc",
+        label: "Агууламж",
+        unit: "мг/кг",
+        elements: {
+          As: "As_",
+          B: "B",
+          Cd: "Cd",
+          Co: "Co",
+          Cr: "Cr",
+          Cu: "Cu",
+          Hg: "Hg",
+          Mo: "Mo",
+          Ni: "Ni",
+          Pb: "Pb",
+          Sr: "Sr",
+          Zn: "Zn",
+        },
+      },
+    ],
   },
 } as const;
 
@@ -119,7 +165,9 @@ type Row = Record<string, string | number | null>;
 
 export async function fetchSoil(year: SoilYear): Promise<SoilData> {
   const s = SCHEMA[year];
-  const fields = ["OBJECTID", s.code, s.district, "KH_MON", "PLI", ...Object.values(s.elements)];
+  /* Хэмжигдэхүүн бүрийн баганыг нэг хүсэлтээр татна — 2024 онд 20 багана */
+  const cols = s.metrics.map((m) => Object.values(m.elements) as string[]);
+  const fields = ["OBJECTID", s.code, s.district, "KH_MON", "PLI", ...cols.flat()];
 
   const url =
     `${HOST}/${s.layer}/FeatureServer/0/query?` +
@@ -141,8 +189,12 @@ export async function fetchSoil(year: SoilYear): Promise<SoilData> {
   };
   if (json.error) throw new Error(json.error.message);
 
-  const elements = Object.keys(s.elements);
-  const cols = Object.values(s.elements) as string[];
+  const metrics: SoilMetric[] = s.metrics.map((m) => ({
+    id: m.id,
+    label: m.label,
+    unit: m.unit,
+    elements: Object.keys(m.elements),
+  }));
   const points: SoilPoint[] = [];
 
   for (const f of json.features ?? []) {
@@ -161,19 +213,19 @@ export async function fetchSoil(year: SoilYear): Promise<SoilData> {
       district: String(a[s.district] ?? "Тодорхойгүй"),
       khoroo: khorooLabel(a.KH_MON as string | null),
       pli,
-      values: cols.map((c) => {
-        const v = a[c];
-        return typeof v === "number" && Number.isFinite(v) ? v : null;
-      }),
+      values: cols.map((mc) =>
+        mc.map((c) => {
+          const v = a[c];
+          return typeof v === "number" && Number.isFinite(v) ? v : null;
+        }),
+      ),
     });
   }
 
   return {
     year,
     points,
-    elements,
-    metric: s.metric,
-    unit: s.unit,
+    metrics,
     fetchedAt: new Date().toISOString(),
   };
 }
@@ -183,7 +235,8 @@ export async function fetchSoil(year: SoilYear): Promise<SoilData> {
    -------------------------------------------------------------------------- */
 
 /**
- * Бохирдлын нийлбэр индексийн (PLI) хуваарь.
+ * Бохирдлын ачааллын индексийн (PLI — Pollution Load Index) хуваарь.
+ * Нэршлийг хэлтэс баталсан (2026-08-17).
  *
  * PLI = элементүүдийн PI-ийн геометр дундаж. **1 нь заагдсан хил**:
  * түүнээс доош бол дэвсгэр түвшнээс хэтрээгүй. Дээших зэрэглэлийг

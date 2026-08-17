@@ -8,10 +8,11 @@ import {
   Gauge,
   Loader2,
   MapPin,
+  Trees,
   TriangleAlert,
   X,
 } from "lucide-react";
-import { RowChart, type Datum } from "@/components/charts";
+import { PieChart, RowChart, type Datum } from "@/components/charts";
 import { BasemapGallery } from "@/components/map/basemap-gallery";
 import { OverlayControl } from "@/components/map/overlay-control";
 import { FilterBar, FilterMenu, PickList } from "@/components/wells/filter-bar";
@@ -60,6 +61,22 @@ const RAMP_CSS = (() => {
 const CLASS_COLOR = [0.6, 1.5, 2.5, 3.6].map(pliColor);
 
 /**
+ * Байршлын талбарт ХОЁР ТӨРЛИЙН нэгж холилдсон: нийслэлийн 7 дүүрэг ба
+ * Төв аймгийн 3 сум (Баян, Баяндэлгэр, Мөнгөнморьт). Хоёр жилийн аль
+ * алинд нь яг ийм 7 + 3 байна.
+ *
+ * Нэг жагсаалтад хамт эгнүүлбэл "дүүргээр" гэсэн гарчиг сумдыг дарж
+ * бичих бөгөөд хэмжээ нь ч харьцуулах аргагүй (дүүрэг 29–147 цэгтэй,
+ * сум 10–15). Тиймээс хоёр тусдаа диаграм болгов.
+ *
+ * Ялгах шинж нь нэрийн төгсгөл: эх сурвалж дүүргийг үргэлж "… дүүрэг"
+ * гэж бүтнээр нь бичдэг, сумын нэр дагаваргүй.
+ */
+function isSoum(name: string) {
+  return !name.endsWith("дүүрэг");
+}
+
+/**
  * Хөрсний мониторингийн самбар.
  *
  * Өмнөх самбаруудаас ялгаатай нь энэ нь ТООЛЛОГО биш ХЭМЖИЛТ: цэг цөөн
@@ -73,6 +90,14 @@ export function SoilDashboard() {
   const [year, setYear] = React.useState<SoilYear>(2024);
   const [loaded, setLoaded] = React.useState<SoilData | null>(null);
   const [failed, setFailed] = React.useState<{ year: SoilYear; message: string } | null>(null);
+
+  /*
+    Аль хэмжигдэхүүнийг харуулж байна вэ (2024 онд PI / Igeo). Индексээр
+    барина: жил солиход хэмжигдэхүүний БҮРДЭЛ өөрчлөгддөг тул id-гаар
+    баривал байхгүй зүйл рүү заана. Хязгаараас хальснаас доор нь
+    хамгаалсан.
+  */
+  const [metricIdx, setMetricIdx] = React.useState(0);
 
   const [district, setDistrict] = React.useState<string | null>(null);
   const [grade, setGrade] = React.useState<string | null>(null);
@@ -102,6 +127,10 @@ export function SoilDashboard() {
   const error = failed?.year === year ? failed.message : null;
 
   const points = data?.points;
+
+  /* Хэмжигдэхүүн цөөрсөн жил рүү шилжвэл индекс хальж болзошгүй */
+  const mi = data ? Math.min(metricIdx, data.metrics.length - 1) : 0;
+  const metric = data?.metrics[mi];
 
   /* ---------------- Цэгийн багана (газрын зурагт) ---------------- */
   const geo = React.useMemo<MapPoints & { pli: Float32Array }>(() => {
@@ -174,25 +203,50 @@ export function SoilDashboard() {
       .sort((a, b) => b.mean - a.mean);
   }, [points, keep]);
 
+  /* Дүүрэг — дундаж PLI-аар эрэмбэлсэн мөрөн диаграм */
   const districtData = React.useMemo<Datum[]>(
-    () => districtRows.map((d) => ({ key: d.key, label: d.label, value: d.mean })),
+    () =>
+      districtRows
+        .filter((d) => !isSoum(d.key))
+        .map((d) => ({ key: d.key, label: d.label, value: d.mean })),
     [districtRows],
+  );
+
+  /*
+    Сум — гурав л байдаг тул бөгжөөр. Зүсмийн ХЭМЖЭЭ нь цэгийн тоо
+    (жинхэнэ бүхэл: гурван сумын нийт цэг), ӨНГӨ нь дундаж PLI-ийн
+    шатлалаас гарна. Дундажийг зүсмийн өнцгөөр илэрхийлж БОЛОХГҮЙ —
+    дундаж нэмэгддэггүй тул тойрог нь худал бүхэл болно.
+  */
+  const soumRows = React.useMemo(
+    () => districtRows.filter((d) => isSoum(d.key)).sort((a, b) => b.n - a.n),
+    [districtRows],
+  );
+
+  const soumData = React.useMemo<Datum[]>(
+    () => soumRows.map((d) => ({ key: d.key, label: d.label, value: d.n })),
+    [soumRows],
+  );
+
+  const soumMean = React.useMemo(
+    () => new Map(soumRows.map((d) => [d.key, d.mean])),
+    [soumRows],
   );
 
   /**
    * Элементийн дундаж — энэ самбарын гол диаграм.
    *
    * Дундажаар нь буурахаар эрэмбэлнэ: аль элемент энэ хэсэгт хамгийн
-   * их ачаалал өгч байгааг эхний мөрөөс шууд уншина. Утга нь жил бүр
-   * ӨӨР ХЭМЖИГДЭХҮҮН (2024 индекс, 2023 мг/кг) тул гарчигт нь нэгжийг
-   * үргэлж бичнэ.
+   * их ачаалал өгч байгааг эхний мөрөөс шууд уншина. Утга нь жил бүр,
+   * бүр нэг жилийн дотор ч ӨӨР ХЭМЖИГДЭХҮҮН (2024 онд PI ба Igeo,
+   * 2023 онд мг/кг) тул гарчигт нь нэрийг нь үргэлж бичнэ.
    */
   const elementData = React.useMemo<Datum[]>(() => {
-    if (!data || !points) return [];
-    const sums = data.elements.map(() => ({ n: 0, v: 0 }));
+    if (!metric || !points) return [];
+    const sums = metric.elements.map(() => ({ n: 0, v: 0 }));
     for (let i = 0; i < points.length; i++) {
       if (!keep(i)) continue;
-      const vals = points[i].values;
+      const vals = points[i].values[mi];
       for (let e = 0; e < sums.length; e++) {
         const v = vals[e];
         if (v == null) continue;
@@ -200,32 +254,35 @@ export function SoilDashboard() {
         sums[e].v += v;
       }
     }
-    return data.elements
+    return metric.elements
       .map((el, e) => ({
         key: el,
         label: el,
         value: sums[e].n ? sums[e].v / sums[e].n : 0,
       }))
       .sort((a, b) => b.value - a.value);
-  }, [data, points, keep]);
+  }, [metric, mi, points, keep]);
 
   const stats = React.useMemo(() => {
     if (!points) return null;
     let pli = 0;
     let over = 0;
     let worst: { code: string; pli: number } | null = null;
+    /* Дүүрэг, сум нь ӨӨР засаг захиргааны нэгж — тусад нь тоолно */
     const districts = new Set<string>();
+    const soums = new Set<string>();
     for (let k = 0; k < visible.length; k++) {
       const p = points[visible[k]];
       pli += p.pli;
       if (p.pli >= 1) over++;
       if (!worst || p.pli > worst.pli) worst = { code: p.code, pli: p.pli };
-      districts.add(p.district);
+      (isSoum(p.district) ? soums : districts).add(p.district);
     }
     const n = visible.length;
     return {
       n,
       districts: districts.size,
+      soums: soums.size,
       pli: n ? pli / n : 0,
       overPct: n ? (over / n) * 100 : 0,
       worst,
@@ -272,9 +329,11 @@ export function SoilDashboard() {
     setYear(y);
     /* Хоёр жилийн цэг ӨӨР — сонголт, шүүлтүүр дамжуулах нь утгагүй */
     reset();
+    /* Хэмжигдэхүүн нь бас өөр бүрдэлтэй — эхнийхээс нь эхэлнэ */
+    setMetricIdx(0);
   }
 
-  if (error || !data || !stats) {
+  if (error || !data || !stats || !metric) {
     return (
       <div className="flex h-full items-center justify-center rounded-xs border border-line bg-paper-2">
         {error ? (
@@ -293,7 +352,7 @@ export function SoilDashboard() {
   }
 
   const activeCount = (district ? 1 : 0) + (grade ? 1 : 0);
-  const metricTitle = data.unit ? `${data.metric}, ${data.unit}` : data.metric;
+  const metricTitle = metric.unit ? `${metric.label}, ${metric.unit}` : metric.label;
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-2.5">
@@ -353,21 +412,118 @@ export function SoilDashboard() {
         </FilterMenu>
       </FilterBar>
 
-      <div className="grid min-h-0 flex-1 gap-2.5 xl:grid-cols-[1fr_340px]">
-        {/* ---- ЗҮҮН: индикатор + зураг ---- */}
-        <div className="flex min-h-0 flex-col gap-2.5">
-          <Card className="shrink-0">
-            <div className="grid grid-cols-2 divide-x divide-y divide-line sm:grid-cols-4 xl:divide-y-0">
-              <Stat icon={MapPin} label="Хяналтын цэг" value={num(stats.n)} />
-              <Stat icon={Building2} label="Дүүрэг, сум" value={num(stats.districts)} />
-              <Stat icon={Gauge} label="Дундаж PLI" value={stats.pli.toFixed(2)} />
-              <Stat
-                icon={TriangleAlert}
-                label="PLI ≥ 1"
-                value={`${stats.overPct.toFixed(0)}%`}
-              />
-            </div>
-          </Card>
+      {/*
+        Индикаторын зурвас ба мөрийн тайлбар нь ДЭЛГЭЦИЙН БҮТЭН ӨРГӨНД,
+        доторх бүх диаграм нэг мөрөнд эгнэнэ. Хоёр баганын сүлжээ байхаа
+        больсон: диаграмууд индикаторын зэрэгцээ бус, газрын зурагтайгаа
+        нэг өндөрт эхлэх ёстой.
+      */}
+      <div className="flex min-h-0 flex-1 flex-col gap-2.5">
+        <Card className="shrink-0">
+          <div className="grid grid-cols-2 divide-x divide-y divide-line sm:grid-cols-3 xl:grid-cols-5 xl:divide-y-0">
+            <Stat icon={MapPin} label="Хяналтын цэг" value={num(stats.n)} />
+            <Stat icon={Building2} label="Дүүрэг" value={num(stats.districts)} />
+            <Stat icon={Trees} label="Сум" value={num(stats.soums)} />
+            <Stat icon={Gauge} label="Дундаж PLI" value={stats.pli.toFixed(2)} />
+            <Stat
+              icon={TriangleAlert}
+              label="PLI ≥ 1"
+              value={`${stats.overPct.toFixed(0)}%`}
+            />
+          </div>
+        </Card>
+
+        {/*
+          Индикаторын доор нэг МӨР, гурван хэсэг: зүүнд элементийн
+          профайл, дунд газрын зураг (уян), баруунд задаргааны
+          диаграмууд. Зургийн ӨНДӨР бүтнээрээ үлдэж, зөвхөн өргөн нь
+          хуваагдана. xl-ээс доош унавал мөр нь багана болно — нарийн
+          дэлгэцэнд гурван багана зургийг юу ч үлдээхгүй шахна.
+        */}
+        <div className="flex min-h-0 flex-1 flex-col gap-2.5 xl:flex-row">
+          {selected ? (
+            <Card className="min-h-0 flex-1 xl:w-[300px] xl:flex-none 2xl:w-[340px]">
+              <Head title="Цэгийн профайл">
+                <button
+                  onClick={() => setPicked(null)}
+                  className="text-ink-3 transition-colors hover:text-ink"
+                  aria-label="Хаах"
+                >
+                  <X size={13} />
+                </button>
+              </Head>
+              <div className="min-h-0 flex-1 overflow-y-auto p-3">
+                <div className="flex items-baseline justify-between gap-2">
+                  <span className="num text-[13px] font-medium text-ink">
+                    {selected.code}
+                  </span>
+                  <span
+                    className="num rounded-xs px-1.5 py-0.5 text-[11px] leading-none"
+                    style={{
+                      background: `${pliColor(selected.pli)}22`,
+                      color: pliColor(selected.pli),
+                    }}
+                  >
+                    PLI {selected.pli.toFixed(2)}
+                  </span>
+                </div>
+                <p className="mt-1 text-[11.5px] leading-snug text-ink-3">
+                  {selected.district} · {selected.khoroo}
+                </p>
+
+                <div className="eyebrow mt-3 mb-2">{metricTitle}</div>
+                <RowChart
+                  data={metric.elements
+                    .map((el, e) => ({
+                      key: el,
+                      label: el,
+                      value: selected.values[mi][e] ?? 0,
+                    }))
+                    .sort((a, b) => b.value - a.value)}
+                  format={fmt}
+                />
+              </div>
+            </Card>
+          ) : (
+            <Card className="min-h-0 flex-1 xl:w-[300px] xl:flex-none 2xl:w-[340px]">
+              {/*
+                Гарчигт хэмжигдэхүүнээ үргэлж бичнэ. 2024 онд ХОЁР
+                индекс байдаг тул нэрийн оронд сэлгэгч гарна — хоёр
+                индексийг нэг диаграмд хольж болохгүй (масштаб өөр),
+                харин сольж харах нь утгатай.
+              */}
+              <Head title="Элементийн дундаж">
+                {data.metrics.length > 1 ? (
+                  <div className="flex shrink-0 items-center gap-1">
+                    {data.metrics.map((m, i) => {
+                      const on = i === mi;
+                      return (
+                        <button
+                          key={m.id}
+                          onClick={() => setMetricIdx(i)}
+                          aria-pressed={on}
+                          title={m.unit ? `${m.label}, ${m.unit}` : m.label}
+                          className={cn(
+                            "rounded-xs border px-1.5 py-[3px] text-[10.5px] leading-none transition-colors",
+                            on
+                              ? "border-data/45 bg-data/10 text-ink"
+                              : "border-line text-ink-3 hover:border-line-2 hover:text-ink",
+                          )}
+                        >
+                          {m.id === "pi" ? "PI" : m.id === "igeo" ? "Igeo" : m.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <span className="text-[10.5px] text-ink-3">{metricTitle}</span>
+                )}
+              </Head>
+              <div className="min-h-0 flex-1 overflow-y-auto p-3">
+                <RowChart data={elementData} format={fmt} />
+              </div>
+            </Card>
+          )}
 
           <Card className="relative min-h-[280px] flex-1 overflow-hidden">
             <div className="relative h-full w-full">
@@ -425,10 +581,17 @@ export function SoilDashboard() {
 
               {/*
                 Тайлбар нь ЗУРВАС — өнгө нь тасралтгүй тул шаталсан
-                жагсаалт худал ангилал үүсгэнэ. Зурвасын доор
-                дэвсгэрийн хилийг (1.0) тэмдэглэв.
+                жагсаалт худал ангилал үүсгэнэ.
+
+                Хайрцаггүй, шууд зураг дээр суудаг тул уншигдац нь зөвхөн
+                сүүдрээс хамаарна: хиймэл дагуулын цайвар талбай дээр
+                `text-ink-3` дангаараа алга болно. Суурь зургийн товчтой
+                ижил `drop-shadow` хэрэглэв.
               */}
-              <div className="pointer-events-none absolute bottom-2.5 left-2.5 z-10 w-[164px] rounded-xs border border-line bg-paper/92 px-2.5 py-2 backdrop-blur-md">
+              <div
+                className="pointer-events-none absolute right-2.5 bottom-2.5 z-10 w-[164px]"
+                style={{ filter: "drop-shadow(0 1px 2px rgba(0,0,0,.75))" }}
+              >
                 <div className="eyebrow mb-1.5">PLI</div>
                 <div
                   className="h-2 w-full rounded-[1px]"
@@ -440,109 +603,75 @@ export function SoilDashboard() {
                     <span key={v}>{v === 4 ? "4+" : v}</span>
                   ))}
                 </div>
-                <p className="mt-1.5 text-[9.5px] leading-tight text-ink-3">
-                  1-ээс дээш нь дэвсгэр түвшнээс хэтэрсэн ·
-                  ойртоход хэмжилтийн цэг гарна
-                </p>
               </div>
             </div>
           </Card>
 
-          <p className="shrink-0 px-0.5 text-[10.5px] leading-none text-ink-3">
-            Суурь зураг: Esri · Дата: ArcGIS · {year} оны {num(data.points.length)} цэг ·
-            хэмжилт: {metricTitle}
-          </p>
-        </div>
-
-        {/* ---- БАРУУН: профайл ---- */}
-        <div className="flex min-h-0 flex-col gap-2.5">
-          {/*
-            Цэг сонгогдвол эхний карт нь ТЭР ЦЭГИЙН профайл болно.
-            Нэгтгэсэн дундажаас тухайн цэг рүү шилжих нь энэ датаны гол
-            асуулт — "энд юу нь хэтэрсэн бэ".
-          */}
-          {selected ? (
-            <Card className="min-h-0 flex-1">
-              <Head title="Цэгийн профайл">
-                <button
-                  onClick={() => setPicked(null)}
-                  className="text-ink-3 transition-colors hover:text-ink"
-                  aria-label="Хаах"
-                >
-                  <X size={13} />
-                </button>
-              </Head>
-              <div className="min-h-0 flex-1 overflow-y-auto p-3">
-                <div className="flex items-baseline justify-between gap-2">
-                  <span className="num text-[13px] font-medium text-ink">
-                    {selected.code}
-                  </span>
-                  <span
-                    className="num rounded-xs px-1.5 py-0.5 text-[11px] leading-none"
-                    style={{
-                      background: `${pliColor(selected.pli)}22`,
-                      color: pliColor(selected.pli),
-                    }}
-                  >
-                    PLI {selected.pli.toFixed(2)}
-                  </span>
+          {/* ---- БАРУУН: задаргаа ---- */}
+          <div className="flex min-h-0 flex-col gap-2.5 xl:w-[340px] xl:shrink-0">
+            {/*
+              Сумын карт нь дүүргийнхээс ӨӨР хэлбэртэй байх нь санаатай:
+              гурван мөр нь мөрөн диаграм болоод хагас хоосон карт үлдээх
+              байсан бөгөөд дээрх жагсаалттай хольж уншигдана.
+            */}
+            {soumData.length > 0 ? (
+              <Card className="shrink-0">
+                <Head title="Сумаар">
+                  <span className="text-[10.5px] text-ink-3">цэг · дундаж PLI</span>
+                </Head>
+                <div className="p-3">
+                  <PieChart
+                    data={soumData}
+                    size={84}
+                    selected={district}
+                    onSelect={setDistrict}
+                    colorOf={(d) => pliColor(soumMean.get(d.key) ?? 0)}
+                    note={(d) => (soumMean.get(d.key) ?? 0).toFixed(2)}
+                  />
                 </div>
-                <p className="mt-1 text-[11.5px] leading-snug text-ink-3">
-                  {selected.district} · {selected.khoroo}
-                </p>
+              </Card>
+            ) : null}
 
-                <div className="eyebrow mt-3 mb-2">{metricTitle}</div>
+            <Card className="shrink-0">
+              <Head title="PLI зэргээр">
+                <span className="num text-[11.5px] text-ink-3">{num(stats.n)}</span>
+              </Head>
+              <div className="p-3">
                 <RowChart
-                  data={data.elements
-                    .map((el, e) => ({
-                      key: el,
-                      label: el,
-                      value: selected.values[e] ?? 0,
-                    }))
-                    .sort((a, b) => b.value - a.value)}
-                  format={fmt}
+                  data={gradeData}
+                  selected={grade}
+                  onSelect={setGrade}
+                  colorOf={(d) => CLASS_COLOR[Number(d.key)]}
                 />
               </div>
             </Card>
-          ) : (
+
+            {/*
+              Баганын СҮҮЛД нь уян карт: дээрх хоёр нь тогтмол өндөртэй
+              (`shrink-0`) тул үлдсэн зайг энэ эзэлнэ. Долоон мөр нь ихэвчлэн
+              бүтнээрээ багтдаг ч намхан дэлгэцэнд дотроо гүйнэ.
+            */}
             <Card className="min-h-0 flex-1">
-              {/* Гарчигт нэгжийг нь үргэлж бичнэ — жил бүр өөр хэмжигдэхүүн */}
-              <Head title="Элементийн дундаж">
-                <span className="text-[10.5px] text-ink-3">{metricTitle}</span>
+              {/* Тоо биш ДУНДАЖ: "хаана хэдэн цэг байна" биш "хаана өндөр байна" */}
+              <Head title="Дүүргээр">
+                <span className="text-[10.5px] text-ink-3">дундаж PLI</span>
               </Head>
               <div className="min-h-0 flex-1 overflow-y-auto p-3">
-                <RowChart data={elementData} format={fmt} />
+                <RowChart
+                  data={districtData}
+                  selected={district}
+                  onSelect={setDistrict}
+                  format={(v) => v.toFixed(2)}
+                />
               </div>
             </Card>
-          )}
-
-          <Card className="shrink-0">
-            <Head title="PLI зэргээр">
-              <span className="num text-[11.5px] text-ink-3">{num(stats.n)}</span>
-            </Head>
-            <div className="p-3">
-              <RowChart
-                data={gradeData}
-                selected={grade}
-                onSelect={setGrade}
-                colorOf={(d) => CLASS_COLOR[Number(d.key)]}
-              />
-            </div>
-          </Card>
-
-          <Card className="shrink-0">
-            {/* Тоо биш ДУНДАЖ: "хаана хэдэн цэг байна" биш "хаана өндөр байна" */}
-            <Head title="Дүүрэг, сумаар — дундаж PLI" />
-            <div className="max-h-[190px] overflow-y-auto p-3">
-              <RowChart
-                data={districtData}
-                selected={district}
-                onSelect={setDistrict}
-                format={(v) => v.toFixed(2)}
-              />
-            </div>
-          </Card>
+          </div>
         </div>
+
+        <p className="shrink-0 px-0.5 text-[10.5px] leading-none text-ink-3">
+          Суурь зураг: Esri · Дата: ArcGIS · {year} оны {num(data.points.length)} цэг ·
+          хэмжилт: {metricTitle}
+        </p>
       </div>
     </div>
   );

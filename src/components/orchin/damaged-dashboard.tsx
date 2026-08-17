@@ -298,7 +298,9 @@ export function DamagedDashboard() {
 
         <div className="flex min-h-0 flex-col gap-2.5">
           <Card className="shrink-0">
-            <Head title="Сум, дүүргээр — га" />
+            <Head title="Сум, дүүргээр">
+              <span className="text-[10.5px] text-ink-3">га</span>
+            </Head>
             <div className="max-h-[210px] overflow-y-auto p-3">
               <RowChart
                 data={byPlace.chart}

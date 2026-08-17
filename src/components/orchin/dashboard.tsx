@@ -54,7 +54,7 @@ type SourceId = "pit" | "city";
 
 const SOURCES = [
   { id: "pit" as const, label: "Нүхэн жорлон", icon: Toilet },
-  { id: "city" as const, label: "Нийтийн жорлон", icon: Droplets },
+  { id: "city" as const, label: "Нийтийн ариун цэврийн байгууламж", icon: Droplets },
 ];
 
 /**
@@ -517,7 +517,7 @@ export function OrchinDashboard() {
             >
               <Stat
                 icon={pit ? Toilet : Droplets}
-                label={pit ? "Нүхэн жорлон" : "Нийтийн жорлон"}
+                label={pit ? "Нүхэн жорлон" : "Нийтийн ариун цэврийн байгууламж"}
                 value={num(stats.total)}
               />
               <Stat icon={Building2} label="Дүүрэг" value={num(stats.districts)} />
@@ -578,7 +578,7 @@ export function OrchinDashboard() {
               */}
               {hovered ? (
                 <div className="pointer-events-none absolute top-2.5 left-2.5 z-10 max-w-[260px] rounded-xs border border-line bg-paper/92 px-2.5 py-2 backdrop-blur-md">
-                  <div className="eyebrow mb-1.5">Нийтийн жорлон</div>
+                  <div className="eyebrow mb-1.5">Нийтийн ариун цэврийн байгууламж</div>
                   <div className="text-[12.5px] leading-snug text-ink">
                     {hovered.district}
                     {hovered.khoroo != null ? ` · ${hovered.khoroo}-р хороо` : ""}

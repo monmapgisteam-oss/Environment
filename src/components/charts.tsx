@@ -176,6 +176,9 @@ export function AreaChart({
   const selIdx = selected == null ? -1 : data.findIndex((d) => d.key === selected);
   const active = hover ?? selIdx;
 
+  /** Шошго давхцах нягтрал — доорх тэнхлэгийн тайлбарыг үзнэ үү */
+  const tilt = data.length > 12;
+
   return (
     <div>
       <div
@@ -237,13 +240,22 @@ export function AreaChart({
           />
         ))}
 
-        {/* Товших / hover талбарууд */}
+        {/*
+          Товших / hover талбарууд.
+
+          Шүүлтүүргүй (`onSelect` өгөөгүй) диаграм дээр ч hover самбар
+          гарах ЁСТОЙ — тоог унших нь сонгохоос тусдаа хэрэгцээ. Тиймээс
+          товчийг `disabled` болгохгүй: идэвхгүй товч хулганы үйлдэл
+          цацдаггүй тул самбар бүрмөсөн алга болно. Оронд нь гарын
+          шилжилтээс (`tabIndex={-1}`) хасаж, 25 хоосон зогсоол
+          үүсгэхээс сэргийлнэ.
+        */}
         <div className="absolute inset-0 flex">
           {data.map((d, i) => (
             <button
               key={d.key}
               type="button"
-              disabled={!interactive}
+              tabIndex={interactive ? 0 : -1}
               onMouseEnter={() => setHover(i)}
               onFocus={() => setHover(i)}
               onClick={() => onSelect?.(selected === d.key ? null : d.key)}
@@ -270,16 +282,39 @@ export function AreaChart({
         ) : null}
       </div>
 
-      <div className="mt-1.5 flex">
+      {/*
+        Тэнхлэгийн шошго.
+
+        Цуваа урт болоход хэвтээ шошгууд бие биендээ наалддаг: 25 жилийн
+        цуваанд нэг шошгонд 12px л ноогдох ба хоёр оронтой тоо түүнээс
+        өргөн. Тиймээс 12-оос олон цэгтэй үед НАЛУУЛНА — зэргэлдээ шошго
+        босоо чиглэлд салж, давхцахаа болино.
+
+        Налуу шошгын эргэлтийн тулгуур нь баруун ДЭЭД булан: тэгснээр
+        шошгын төгсгөл цэгийнхээ доор ирж, бичвэр нь зүүн доошоо унжина.
+        Тулгуурыг нүдний голд аваачихын тулд урьдчилж хагас өргөнөөр
+        зүүн тийш шилжүүлнэ. Эргэлт нь байрлалын өндөр эзэлдэггүй тул
+        мөрөнд өндрийг нь гараар өгнө.
+
+        Өнцөг нь 45 биш 60 градус. Шошго хоорондын зай нь өнцгөөс шууд
+        гардаг: 4 оронтой он 10px-д ~24px өргөн, 25 жилийн цуваанд нэг
+        цэгт 13px ноогдоно. 45 градуст хэвтээ ул мөр нь 17px буюу нүднээс
+        өргөн хэвээр (давхцсаар) байх бол 60 градуст 12px болж, хооронд
+        нь бодит завсар үүснэ. Огцом байх тусам өндөр илүү иддэг тул
+        цааш нэмэхгүй.
+      */}
+      <div className={cn("flex", tilt ? "mt-2 h-7 items-start" : "mt-1.5")}>
         {data.map((d, i) => (
-          <span
-            key={d.key}
-            className={cn(
-              "num flex-1 text-center text-[10px] transition-colors",
-              active === i ? "text-ink" : "text-ink-3",
-            )}
-          >
-            {formatTick ? formatTick(d, i) : d.label}
+          <span key={d.key} className="flex min-w-0 flex-1 justify-center">
+            <span
+              className={cn(
+                "num text-[10px] leading-none whitespace-nowrap transition-colors",
+                active === i ? "text-ink" : "text-ink-3",
+                tilt && "origin-top-right -translate-x-1/2 -rotate-[60deg]",
+              )}
+            >
+              {formatTick ? formatTick(d, i) : d.label}
+            </span>
           </span>
         ))}
       </div>
@@ -492,6 +527,8 @@ function donutSlice(c: number, R: number, r: number, a0: number, a1: number) {
 export function PieChart({
   data,
   tone = "var(--data)",
+  colorOf,
+  note,
   /*
     Голын тоо нь бөгжний НҮХЭНД багтах ёстой. 145,458 гэх 7 тэмдэгт утга
     78px бөгжинд халиж байсан тул бөгжийг томсгож, бичвэрийг нь жижигрүүлэв.
@@ -502,6 +539,18 @@ export function PieChart({
 }: {
   data: Datum[];
   tone?: string;
+  /**
+   * Зүсэм бүрийн өнгө. Дээрх дүрмийн ЦОРЫН ГАНЦ үл хамаарах тохиолдол:
+   * ангилал нь өөрөө ЭРЭМБЭТЭЙ шатлалтай (PLI гэх мэт) бөгөөд өнгө нь
+   * тухайн шатлалаас гардаг үед. Нэрлэсэн ангиллыг (сум, гүйцэтгэгч)
+   * өнгөөр ялгах гэж энийг БҮҮ хэрэглэ — солонго болно.
+   *
+   * Өгвөл эрэмбийн тунгалагийн шатлал унтарна: хоёр кодчилол зэрэг
+   * ажиллавал аль нь утга илэрхийлж байгаа нь ойлгомжгүй болно.
+   */
+  colorOf?: (d: Datum) => string;
+  /** Тайлбарын мөрөнд гарах хоёр дахь утга ("PLI 1.35") */
+  note?: (d: Datum) => string;
   size?: number;
   selected?: string | null;
   onSelect?: (key: string | null) => void;
@@ -531,6 +580,11 @@ export function PieChart({
   */
   const FILL = 0.42;
 
+  /* Зүсмийн өнгө ба тунгалаг — `colorOf` өгсөн эсэхээс шалтгаална */
+  const hue = (d: Datum) => (colorOf ? colorOf(d) : tone);
+  const fillOp = (i: number) => (colorOf ? FILL : fade(i) * FILL);
+  const lineOp = (i: number) => (colorOf ? 0.9 : Math.max(fade(i), 0.5));
+
   /*
     Өнцгийг ХУРИМТЛУУЛЖ бодно. `map`-ийн дотор хуримтлуулагчийг өөрчилвөл
     рендерийн цэвэр байдал алдагдана (компилятор ч анхааруулна) тул энгийн
@@ -556,14 +610,18 @@ export function PieChart({
         className="shrink-0"
         role="img"
       >
-        {/* Гадна хүрээ — бөгж бүрэн тойрог гэдгийг барих зураас */}
+        {/*
+          Гадна хүрээ — бөгж бүрэн тойрог гэдгийг барих зураас. Зүсэм нь
+          өөрийн шатлалын өнгөтэй үед энэ хүрээ accent өнгөөр гарвал
+          өөр нэг ангилал мэт уншигдана: саарал зураас болгоно.
+        */}
         <circle
           cx={c}
           cy={c}
           r={R}
           fill="none"
-          stroke={tone}
-          strokeOpacity={0.4}
+          stroke={colorOf ? "var(--line-2)" : tone}
+          strokeOpacity={colorOf ? 1 : 0.4}
           strokeWidth={1}
         />
 
@@ -577,7 +635,7 @@ export function PieChart({
             cy={c}
             r={(R + r) / 2}
             fill="none"
-            stroke={tone}
+            stroke={hue(data[0])}
             strokeOpacity={FILL}
             strokeWidth={R - r}
           />
@@ -588,10 +646,10 @@ export function PieChart({
               <path
                 key={d.key}
                 d={donutSlice(c, R, r, a0, a1)}
-                fill={tone}
-                fillOpacity={on ? fade(i) * FILL : 0.06}
-                stroke={tone}
-                strokeOpacity={on ? Math.max(fade(i), 0.5) : 0.15}
+                fill={hue(d)}
+                fillOpacity={on ? fillOp(i) : 0.06}
+                stroke={hue(d)}
+                strokeOpacity={on ? lineOp(i) : 0.15}
                 strokeWidth={1}
                 className={onSelect ? "cursor-pointer" : undefined}
                 onClick={() => onSelect?.(selected === d.key ? null : d.key)}
@@ -632,8 +690,8 @@ export function PieChart({
                 aria-hidden
                 className="size-2 shrink-0 translate-y-[1px] rounded-[1px] border"
                 style={{
-                  background: `color-mix(in oklab, ${tone} ${fade(i) * FILL * 100}%, transparent)`,
-                  borderColor: `color-mix(in oklab, ${tone} ${Math.max(fade(i), 0.5) * 100}%, transparent)`,
+                  background: `color-mix(in oklab, ${hue(d)} ${fillOp(i) * 100}%, transparent)`,
+                  borderColor: `color-mix(in oklab, ${hue(d)} ${lineOp(i) * 100}%, transparent)`,
                 }}
               />
               <span
@@ -648,10 +706,23 @@ export function PieChart({
                 className={cn(
                   "num shrink-0 text-[12px]",
                   selected === d.key ? "text-ink" : "text-ink-2",
+                  /* Хоёр тоо зэрэг гарвал зүсмийн хэмжээг заасан нь
+                     сүүлдээ биш, урд нь бүдэг байрлана */
+                  note && "text-[11px] text-ink-3",
                 )}
               >
                 {num(d.value)}
               </span>
+              {note ? (
+                <span
+                  className={cn(
+                    "num shrink-0 text-[12px]",
+                    selected === d.key ? "font-medium text-ink" : "text-ink-2",
+                  )}
+                >
+                  {note(d)}
+                </span>
+              ) : null}
             </button>
           );
         })}

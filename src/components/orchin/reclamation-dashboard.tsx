@@ -10,7 +10,7 @@ import {
   Ruler,
   Sprout,
 } from "lucide-react";
-import { BarChart, RowChart, type Datum } from "@/components/charts";
+import { AreaChart, RowChart, type Datum } from "@/components/charts";
 import { BasemapGallery } from "@/components/map/basemap-gallery";
 import { FilterBar, FilterMenu, PickList } from "@/components/wells/filter-bar";
 import {
@@ -125,6 +125,28 @@ export function ReclamationDashboard() {
       .sort((a, b) => a[0] - b[0])
       .map(([y, ha]) => ({ key: String(y), label: String(y), value: ha }));
   }, [sites, keep]);
+
+  /*
+    Цагийн тэнхлэгт ХООСОН ЖИЛ ч суудалтай байх ёстой: 2022, 2024-д
+    бичлэг алга. Тэднийг алгасвал 2021, 2023 зэрэгцэж, тасралтгүй цуваа
+    мэт уншигдана. Талбайт диаграм дээр алдаа нь бүр том: цэгүүд шулуунаар
+    холбогддог тул огт нөхөн сэргээгээгүй жилээр дамжсан "жигд" налуу
+    зурагдана.
+
+    Шүүлтүүрийн жагсаалт нь ЭХ `byYear`-аа хэвээр хэрэглэнэ — тэнд
+    "2022 · 0" гэсэн сонгож болохгүй мөр гарах ёсгүй.
+  */
+  const yearSeries = React.useMemo<Datum[]>(() => {
+    if (byYear.length === 0) return [];
+    const have = new Map(byYear.map((d) => [Number(d.key), d.value]));
+    const lo = Number(byYear[0].key);
+    const hi = Number(byYear[byYear.length - 1].key);
+    const out: Datum[] = [];
+    for (let y = lo; y <= hi; y++) {
+      out.push({ key: String(y), label: String(y), value: have.get(y) ?? 0 });
+    }
+    return out;
+  }, [byYear]);
 
   const byDistrict = React.useMemo<Datum[]>(() => {
     const m = new Map<string, number>();
@@ -325,21 +347,29 @@ export function ReclamationDashboard() {
         {/* ---- БАРУУН: жагсаалт + задаргаа ---- */}
         <div className="flex min-h-0 flex-col gap-2.5">
           <Card className="shrink-0">
-            <Head title="Оноор — га" />
+            <Head title="Оноор">
+              <span className="text-[10.5px] text-ink-3">га</span>
+            </Head>
             <div className="p-3">
-              {/* Он бол цагийн тэнхлэг — эрэмбийг нь хадгалж баганаар */}
-              <BarChart
-                data={byYear}
+              {/* Он бол цагийн тэнхлэг — эрэмбийг нь хадгалж цуваагаар */}
+              <AreaChart
+                data={yearSeries}
                 height={110}
                 selected={year}
-                onSelect={setYear}
-                formatTick={(d) => d.label.slice(2)}
+                /* Бичлэггүй жилийг сонгуулахгүй: шүүлтүүр нь хоосон үр
+                   дүн буцаах тул сонголт биш, цэвэрлэлт болгоно */
+                onSelect={(k) =>
+                  setYear(k && byYear.some((d) => d.key === k) ? k : null)
+                }
+                unit="га"
               />
             </div>
           </Card>
 
           <Card className="shrink-0">
-            <Head title="Байршлаар — га" />
+            <Head title="Байршлаар">
+              <span className="text-[10.5px] text-ink-3">га</span>
+            </Head>
             <div className="max-h-[150px] overflow-y-auto p-3">
               <RowChart
                 data={byDistrict}

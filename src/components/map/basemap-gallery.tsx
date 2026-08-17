@@ -1,13 +1,37 @@
 "use client";
 
 import * as React from "react";
-import { Layers } from "lucide-react";
 import {
   BASEMAPS,
   basemapThumb,
   type Basemap,
 } from "@/components/wells/map";
 import { cn } from "@/lib/utils";
+
+/**
+ * Суурь зургийн икон — ArcGIS-ийн өөрийнх нь тэмдэг (Calcite UI Icons,
+ * `basemap-16`, Apache-2.0). Дөрвөн хавтангийн сүлжээ нь ArcGIS Online-ы
+ * "Basemap" товчтой ижил тул хэрэглэгч танихад амар.
+ *
+ * Хэлбэр нь ДҮҮРГЭСЭН (lucide-ийн зураастай иконуудаас ялгаатай) бөгөөд
+ * 16px-д зориулж оновчилсон тул `viewBox` нь 16 — өөр хэмжээгээр бүү зур,
+ * шугамууд нь пикселийн сүлжээнээс мултарна.
+ */
+function BasemapIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 16 16"
+      width={16}
+      height={16}
+      fill="currentColor"
+      aria-hidden="true"
+      className={className}
+    >
+      <path d="M16 3V0H9v7h7zm-1-2v1h-3V1zm-4 0v2h2v1h-3V1zm-1 5V5h4V3h1v3zM7 0H0v7h7zM6 4h-.33A2.674 2.674 0 0 1 3 1.33V1h3zM1 6V5h.561A.44.44 0 0 1 2 5.439V6zm2 0v-.561A1.44 1.44 0 0 0 1.561 4H1V1h1v.33A3.675 3.675 0 0 0 5.67 5H6v1zm13 3H9v7h7zm-6 6v-3h3v1h-1v1h1v1zm5 0h-1v-3h1zm0-4h-5v-1h5zM7 9H0v7h7zm-1 1v3.09a8.93 8.93 0 0 0-.314.057 2.863 2.863 0 0 1-.051-.12 3.112 3.112 0 0 0-.653-1.06c-.873-.872-1.18-1.093-1.977-1.093A3.301 3.301 0 0 0 1 12.024V10zm-5 5v-1.432l.11-.149a3.727 3.727 0 0 1 1.895-1.545c.397 0 .47 0 1.27.8a2.209 2.209 0 0 1 .438.742c.112.265.328.78.807.78a.816.816 0 0 0 .245-.041c.013-.005.079-.021.235-.05V15z" />
+    </svg>
+  );
+}
 
 /**
  * Газрын зургийн буланд суух суурь зургийн сонголт + харагдацын үйлдэл.
@@ -63,7 +87,7 @@ export function BasemapGallery({
         )}
         style={{ filter: "drop-shadow(0 1px 2px rgba(0,0,0,.75))" }}
       >
-        <Layers size={16} strokeWidth={1.75} />
+        <BasemapIcon />
         {/* Харагдацын үйлдэл асаалттай бол цэгээр сануулна */}
         {extent ? (
           <span className="absolute top-0.5 right-0.5 size-1.5 rounded-full bg-data" />
