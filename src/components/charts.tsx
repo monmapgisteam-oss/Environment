@@ -177,8 +177,16 @@ export function AreaChart({
   const selIdx = selected == null ? -1 : data.findIndex((d) => d.key === selected);
   const active = hover ?? selIdx;
 
-  /** Шошго давхцах нягтрал — доорх тэнхлэгийн тайлбарыг үзнэ үү */
-  const tilt = data.length > 12;
+  const ticks = data.map((d, i) => (formatTick ? formatTick(d, i) : d.label));
+  /*
+    Шошгыг НАЛУУЛАХ эсэх. Хоёр нөхцөл ЗЭРЭГ биелэх ёстой:
+      · цэг олон (нэг шошгонд ноогдох зай багасна),
+      · шошго өөрөө урт (4 оронтой он гэх мэт).
+    Зөвхөн тоогоор шийдвэл сарын дугаар (1…12) шиг нэг оронтой шошго ч
+    налж, ямар ч ашиггүйгээр 28px өндөр иднэ. Зөвхөн уртаар шийдвэл
+    цөөхөн жилийн цуваа дэмий налах байв.
+  */
+  const tilt = data.length > 8 && ticks.some((t) => t.length >= 4);
 
   return (
     <div>
@@ -314,7 +322,7 @@ export function AreaChart({
                 tilt && "origin-top-right -translate-x-1/2 -rotate-[60deg]",
               )}
             >
-              {formatTick ? formatTick(d, i) : d.label}
+              {ticks[i]}
             </span>
           </span>
         ))}

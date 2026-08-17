@@ -594,7 +594,9 @@ export function WellsDashboard() {
           <Box>
             <Head title="Жилээр">
               <span className="num text-[11.5px] text-ink-3">
-                {wholeRange ? `${data.minYear}–${data.maxYear}` : `${range[0]}–${range[1]}`}
+                {wholeRange
+                  ? `/${data.minYear} - ${data.maxYear}/`
+                  : `/${range[0]} - ${range[1]}/`}
               </span>
             </Head>
             <div className="p-3">
@@ -731,7 +733,7 @@ function Indicator({
     <div className="flex flex-col px-3.5 py-3">
       <span className="eyebrow block min-h-[30px] leading-[1.35]">{label}</span>
       <div className="mt-auto flex items-center gap-2">
-        <Icon size={22} strokeWidth={1.6} className="shrink-0 text-ink-3" />
+        <Icon size={26} strokeWidth={1.6} className="shrink-0 text-ink-3" />
         <span className="num truncate text-[20px] leading-none font-medium text-ink">
           {value}
         </span>

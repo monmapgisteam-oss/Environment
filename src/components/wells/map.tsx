@@ -37,6 +37,22 @@ function roundScale(d: number) {
 }
 
 /**
+ * Масштабын харьцааг zoom болгоно (1:60 000 → z 11.69).
+ *
+ * MapLibre-ийн давхаргууд ЗӨВХӨН zoom мэддэг тул масштабаар илэрхийлсэн
+ * дүрмийг (жишээ нь "1:20 000-аас ойр бол бодит цэг") энд хөрвүүлнэ.
+ *
+ * Хамаарал: D = 295 829 384 · cos(φ) / 2^z. Тогтмол нь дэлхийн бүслүүр
+ * (40 075 016.686 м) ба MapLibre-ийн 512px хавтангаас гарна. Өргөрөг
+ * ордог тул анхдагч нь УБ (47.9°) — энэ платформын бүх нягтралын дата
+ * тэнд байна. Өөр өргөрөгт хэрэглэвэл `lat`-аа өгнө.
+ */
+export function zoomForScale(denominator: number, lat = 47.9) {
+  const d0 = 295_829_384 * Math.cos((lat * Math.PI) / 180);
+  return Math.log2(d0 / denominator);
+}
+
+/**
  * Зургийн буланд суух харьцааны заалт.
  *
  * Метр/пикселийг ТОМЪЁОГООР бус зургаас нь асууж тооцно: дэлгэцийн хоёр
@@ -439,6 +455,7 @@ export function WellsMap({
   shapes,
   grades,
   weights,
+  detail,
 }: {
   points: MapPoints;
   /** Шүүлтүүр давсан цэгүүдийн индекс */
@@ -514,6 +531,22 @@ export function WellsMap({
    * хэрэглэнэ (жишээ нь 145 мянган жорлонг 11 мянган нүдэнд хурааж).
    */
   weights?: number[];
+  /**
+   * ДЭЛГЭРЭНГҮЙ цэг. Ойртоход нэгтгэсэн нүдийг сольж, эх сурвалжаас
+   * бодит бичлэгүүдийг харагдацын хүрээгээр татна.
+   *
+   * Зураг нь домэйноо мэдэхгүй: хэзээ (`minZoom`), хаанаас (`load`)
+   * гэдгийг дуудагч тал өгнө. Зураг нь зөвхөн хөдөлгөөнийг сонсох,
+   * давхардсан хүсэлтийг таслах, давхаргыг зурах үүрэгтэй.
+   *
+   * `key` нь шүүлтүүрийн хурууны хээ — өөрчлөгдвөл кэшийг хаяж дахин
+   * татна (эс тэгвээс дүүрэг солиход хуучин цэгүүд үлдэнэ).
+   */
+  detail?: {
+    minZoom: number;
+    key: string;
+    load: (bounds: Extent, signal: AbortSignal) => Promise<GeoJSON.FeatureCollection>;
+  };
 }) {
   const holder = React.useRef<HTMLDivElement>(null);
   const map = React.useRef<MapLibreMap | null>(null);
@@ -547,7 +580,12 @@ export function WellsMap({
     graded: grades?.stops,
     gradedHeat: Boolean(grades?.heat),
     shaped: Boolean(shapes),
+    detailZoom: detail?.minZoom,
   });
+  const detailRef = React.useRef(detail);
+  React.useEffect(() => {
+    detailRef.current = detail;
+  }, [detail]);
   /** Зурган тэмдэглэгээ — oid → maplibre marker */
   const markers = React.useRef(new Map<number, Marker>());
   React.useEffect(() => {
@@ -787,18 +825,46 @@ export function WellsMap({
           Өнгө нь ГАНЦ: тунгалагаас `--data` руу шилжих шатлал. Улаан-шар
           "халуун" градиент нь өөр хэмжигдэхүүн (эрсдэл) мэт эндүүрүүлнэ.
 
-          ХАРАГДАХ ХҮРЭЭ (шилжилтийн цонх):
-            z ≤ 11.5   зөвхөн дулааны зураг
-            z 11.5–13  дулаан бүдгэрч, нүд гарч ирнэ (давхцсан үе)
-            z ≥ 13     зөвхөн нүд (~2км масштабаас ойр)
-          Хоёр давхарга давхцах цонх ЗААВАЛ хэрэгтэй — эс тэгвээс нэг нь
+          ХАРАГДАХ ХҮРЭЭ нь МАСШТАБААР заагдана (zoom-оор биш) — хэлтэс
+          "1:20 000-аас ойр бол бодит цэг, бусад тохиолдолд дулааны зураг"
+          гэж тавьсан. `zoomForScale` нь түүнийг zoom болгоно (1:20 000 →
+          z 13.28). Хоёр шат:
+            алсаас 1:20 000 хүртэл   дулааны зураг
+            1:20 000-аас ойр         бодит цэг
+          Заагт нь давхцах цонх ЗААВАЛ хэрэгтэй — эс тэгвээс нэг давхарга
           алга болоод нөгөө нь гарах хүртэл зураг хоосорно.
         */
+        const zDot = zoomForScale(20_000);
+        /** Шилжилтийн цонхны өргөн (zoom нэгжээр) */
+        const FADE = 0.6;
+        /*
+          Цэг нь ойртоход АЛГА БОЛОХ нь зөвхөн дэлгэрэнгүй давхарга
+          түүнийг солих үед л зөв. Бүх цэг аль хэдийн хөтөч дээр байвал
+          дүрслэх зүйл үлдэхгүй болж зураг хоосорно.
+        */
+        const zDetail = modeRef.current.detailZoom;
+        const dotFade = (full: number): ExpressionSpecification =>
+          zDetail == null
+            ? ["interpolate", ["linear"], ["zoom"], zDot - FADE, 0, zDot, full]
+            : [
+                "interpolate",
+                ["linear"],
+                ["zoom"],
+                zDot - FADE,
+                0,
+                zDot,
+                full,
+                zDetail,
+                full,
+                zDetail + 0.4,
+                0,
+              ];
+
         m.addLayer({
           id: "cells-heat",
           type: "heatmap",
           source: "wells",
-          maxzoom: 13.5,
+          maxzoom: zDot + 0.4,
           paint: {
             "heatmap-weight": [
               "interpolate",
@@ -811,8 +877,8 @@ export function WellsMap({
             ],
             "heatmap-intensity": ["interpolate", ["linear"], ["zoom"], 8, 0.7, 13, 1.4],
             "heatmap-radius": ["interpolate", ["linear"], ["zoom"], 8, 6, 12, 14, 13.5, 22],
-            // Ойртох тусам дулааны зураг арилж, цэгүүд гарч ирнэ
-            "heatmap-opacity": ["interpolate", ["linear"], ["zoom"], 11.5, 0.9, 13, 0],
+            // 1:20 000 дээр дулааны зураг бүрэн арилж, бодит цэг үлдэнэ
+            "heatmap-opacity": ["interpolate", ["linear"], ["zoom"], zDot - FADE, 0.9, zDot, 0],
             "heatmap-color": [
               "interpolate",
               ["linear"],
@@ -833,25 +899,57 @@ export function WellsMap({
           id: "wells-dot",
           type: "circle",
           source: "wells",
-          minzoom: 11.5,
+          minzoom: zDot - FADE,
+          ...(zDetail == null ? {} : { maxzoom: zDetail + 0.4 }),
           paint: {
             /*
-              Хэмжээ нь ТОГТМОЛ — энгийн цэгэн давхарга.
+              Хэмжээ нь ЖИЖИГ бөгөөд тогтмол.
 
               Урьд нь радиусыг нүд доторх тоогоор томруулж байсан нь
-              бүтсэнгүй: 220м-ийн нүд тогтмол алхамтай тул том дугуйнууд
-              хоорондоо нийлж, суурь зургийг бүрхсэн эгнээ болж хувирсан.
-              Тоо хэмжээг ДУЛААНЫ зураг аль хэдийн хэлж байгаа тул цэг нь
-              зөвхөн "энд бий" гэдгийг харуулна.
+              бүтсэнгүй: том дугуйнууд хоорондоо нийлж, суурь зургийг
+              бүрхсэн эгнээ болж хувирсан. Одоо бичлэг тутам нэг цэг
+              болсон тул бүр ч жижиг байх ёстой — нягт хороололд 20
+              метрийн зайд хэдэн жорлон байх ба 3px-ийн дугуйнууд
+              нийлээд нэг толбо болно. Тоо хэмжээг ДУЛААНЫ зураг аль
+              хэдийн хэлсэн; цэг нь зөвхөн "яг энд бий" гэдгийг хэлнэ.
             */
-            "circle-radius": ["interpolate", ["linear"], ["zoom"], 11.5, 2, 14, 3, 17, 4.5],
+            "circle-radius": ["interpolate", ["linear"], ["zoom"], zDot - FADE, 1.2, 15, 1.8, 18, 2.6],
             "circle-color": FIREFLY.glow,
-            "circle-opacity": ["interpolate", ["linear"], ["zoom"], 11.5, 0, 13, 0.9],
-            "circle-stroke-width": 0.6,
-            "circle-stroke-color": "rgba(0,0,0,.45)",
-            "circle-stroke-opacity": ["interpolate", ["linear"], ["zoom"], 11.5, 0, 13, 1],
+            "circle-opacity": dotFade(0.9),
+            /* Хүрээ нь радиусын хагасаас хэтэрвэл цэг нь дугуй биш
+               толбо болно — 1.2px радиуст 0.35 нь дээд хязгаар */
+            "circle-stroke-width": 0.35,
+            "circle-stroke-color": "rgba(0,0,0,.5)",
+            "circle-stroke-opacity": dotFade(1),
           },
         });
+
+        /*
+          Бодит цэгийн давхарга. Эх сурвалж нь ХООСОН эхэлж, ойртоход
+          `detail.load`-оор дүүрнэ (доорх effect). Нүдтэй зэрэгцэж
+          гарч ирээд түүнийг сольж авна.
+        */
+        if (modeRef.current.detailZoom != null) {
+          const zd = modeRef.current.detailZoom;
+          m.addSource("detail", {
+            type: "geojson",
+            data: { type: "FeatureCollection", features: [] },
+          });
+          m.addLayer({
+            id: "detail-dot",
+            type: "circle",
+            source: "detail",
+            minzoom: zd - 0.4,
+            paint: {
+              "circle-radius": ["interpolate", ["linear"], ["zoom"], 13, 2.2, 16, 4, 18, 6],
+              "circle-color": FIREFLY.core,
+              "circle-opacity": ["interpolate", ["linear"], ["zoom"], zd - 0.4, 0, zd, 0.95],
+              "circle-stroke-width": 0.7,
+              "circle-stroke-color": "rgba(0,0,0,.5)",
+              "circle-stroke-opacity": ["interpolate", ["linear"], ["zoom"], zd - 0.4, 0, zd, 1],
+            },
+          });
+        }
       } else if (modeRef.current.graded) {
         /*
           Зэрэглэсэн тэмдэг. Ангилал ЭРЭМБЭТЭЙ тул хоёр суваг зэрэг
@@ -1126,6 +1224,82 @@ export function WellsMap({
       live.off("moveend", emit);
     };
   }, [live, extent]);
+
+  /* ---------------- Дэлгэрэнгүй цэг татах ----------------
+     Ойртоход эх сурвалжаас харагдацын хүрээгээр бодит бичлэг татна.
+
+     Гурван зүйлээс болгоомжилно:
+       · ХҮРЭЭГ ТЭЛЖ татна (35%) — жижиг гүйлгэлт бүрд шинэ хүсэлт явуулах
+         нь хамгийн үнэтэй алдаа. Татсан хайрцаг доторх хөдөлгөөнийг
+         алгасна.
+       · Хуучин хүсэлтийг ТАСАЛНА (`AbortController`) — хурдан гүйлгэхэд
+         олон хүсэлт зэрэг явж, сүүлд ирсэн нь хамгийн шинэ нь БАЙХГҮЙ
+         байж болно.
+       · Хол очвол эх сурвалжийг ЦЭВЭРЛЭНЭ — эс тэгвээс алс дурдсан
+         цэгүүд дулааны зураг дээр хэвээр үлдэнэ. */
+  React.useEffect(() => {
+    const minZoom = detail?.minZoom;
+    if (!live || minZoom == null) return;
+
+    const source = () => live.getSource("detail") as GeoJSONSource | undefined;
+    /** Аль хайрцгийн дата эх сурвалжид байгаа вэ */
+    let loaded: Extent | null = null;
+    let running: AbortController | null = null;
+    /* Хариу ирэх дараалал баталгаагүй тул хамгийн сүүлийнхийг л хүлээж авна */
+    let turn = 0;
+
+    const inside = (v: Extent, box: Extent) =>
+      v[0] >= box[0] && v[1] >= box[1] && v[2] <= box[2] && v[3] <= box[3];
+
+    const run = () => {
+      const b = live.getBounds();
+      const view: Extent = [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()];
+
+      if (live.getZoom() < minZoom - 0.4) {
+        running?.abort();
+        running = null;
+        if (loaded) {
+          loaded = null;
+          source()?.setData({ type: "FeatureCollection", features: [] });
+        }
+        return;
+      }
+      if (loaded && inside(view, loaded)) return;
+
+      const padX = (view[2] - view[0]) * 0.35;
+      const padY = (view[3] - view[1]) * 0.35;
+      const box: Extent = [
+        view[0] - padX,
+        view[1] - padY,
+        view[2] + padX,
+        view[3] + padY,
+      ];
+
+      running?.abort();
+      const ac = new AbortController();
+      running = ac;
+      const mine = ++turn;
+
+      detailRef.current
+        ?.load(box, ac.signal)
+        .then((fc: GeoJSON.FeatureCollection) => {
+          if (mine !== turn || ac.signal.aborted) return;
+          loaded = box;
+          source()?.setData(fc);
+        })
+        .catch(() => {
+          /* Таслагдсан эсвэл татагдаагүй — дараагийн хөдөлгөөнд дахин оролдоно */
+        });
+    };
+
+    run();
+    live.on("moveend", run);
+    return () => {
+      live.off("moveend", run);
+      running?.abort();
+    };
+    /* `key` нь шүүлтүүрийн хээ: солигдоход кэш хүчингүй болж дахин татна */
+  }, [live, detail?.minZoom, detail?.key]);
 
   /* ---------------- Сонголт руу ойртох (zoom action) ----------------
      ArcGIS Dashboard-ийн "zoom" үйлдэл: диаграмаас сум, аймаг сонгоход

@@ -705,7 +705,7 @@ function Stat({
     <div className="px-3 py-2.5">
       <span className="eyebrow block min-h-[28px] leading-[1.25]">{label}</span>
       <span className="mt-1.5 flex items-center gap-1.5">
-        <Icon size={13} strokeWidth={1.75} className="shrink-0 text-ink-3" />
+        <Icon size={20} strokeWidth={1.6} className="shrink-0 text-ink-3" />
         <span className="num truncate text-[16px] leading-none font-medium text-ink">
           {value}
         </span>

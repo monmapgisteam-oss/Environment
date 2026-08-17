@@ -900,7 +900,7 @@ function Stat({
       {/* Хоёр мөрийн зай нөөцөлсөн хэвээр, зөвхөн мөр хоорондын зай нягтарсан */}
       <span className="eyebrow block min-h-[28px] leading-[1.25]">{label}</span>
       <div className="mt-auto flex items-center gap-1.5">
-        <Icon size={17} strokeWidth={1.6} className="shrink-0 text-ink-3" />
+        <Icon size={20} strokeWidth={1.6} className="shrink-0 text-ink-3" />
         <span className="num truncate text-[16px] leading-none font-medium text-ink">
           {value}
         </span>

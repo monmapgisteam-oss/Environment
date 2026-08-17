@@ -402,124 +402,147 @@ export function RescuesDashboard() {
         {/* ---- ЗҮҮН: тоо → зураг → хүснэгт ---- */}
         <div className="flex min-h-0 flex-col gap-2.5">
           {/*
-            Индикатор. Өргөн баганад орсон тул нүднүүд нь хажуу хажуугаа
-            эгнэнэ — босоо жагсаалт энд хагас хоосон зурвас болно.
+            Нэг МӨР: зүүнд зүйлийн жагсаалт БҮТЭН ӨНДРӨӨР, баруунд
+            индикатор ба газрын зураг. Жагсаалт нь индикаторын ДООР биш
+            ХАЖУУД нь эхэлнэ — 120 мөртэй жагсаалтад өндөр хэрэгтэй
+            бөгөөд индикаторын зурвас түүнээс 60px хулгайлах учиргүй.
+            Зүйл сонгоход зураг тэр зүйлийн цэгүүд рүү шүүгддэг тул
+            хоёулаа зэрэгцэж байх нь ойлгомжтой. xl-ээс доош унавал
+            мөр нь багана болно.
           */}
-          <Card className="shrink-0">
-            <div className="grid grid-cols-2 divide-x divide-y divide-line sm:grid-cols-3 xl:grid-cols-5 xl:divide-y-0">
-              <StatCell icon={ClipboardList} label="Нийт бүртгэл" value={stats.total} />
-              <StatCell icon={PawPrint} label="Амьтны зүйл" value={stats.kinds} />
-              <StatCell icon={ShieldAlert} label="Ховор зүйл" value={stats.rare} />
-              <StatCell icon={Sprout} label="Байгальд тавьсан" value={stats.released} />
-              <StatCell icon={Skull} label="Хорогдсон" value={stats.died} />
-            </div>
-          </Card>
+          <div className="flex min-h-0 flex-1 flex-col gap-2.5 xl:flex-row">
+            <Card className="min-h-[130px] flex-1 xl:w-[300px] xl:flex-none 2xl:w-[340px]">
+              <Head title="Зүйлээр">
+                <span className="num text-[11.5px] text-ink-3">{speciesData.length}</span>
+              </Head>
+              <div className="min-h-0 flex-1 overflow-y-auto p-3">
+                <RowChart data={speciesData} selected={species} onSelect={setSpecies} />
+              </div>
+            </Card>
 
-          <Card className="relative min-h-[240px] flex-1 overflow-hidden">
-            <div className="relative h-full w-full">
+            <div className="flex min-h-0 flex-1 flex-col gap-2.5">
               {/*
-                Бөөгнөрөл ХЭРЭГТЭЙ — 697 цэгийн 99% нь Улаанбаатарт өтгөрсөн.
-                Гэхдээ тоо нь дугуйн дотор БИШ, баруун дээд буланд тэмдэг
-                болж суух тул дугуйн дотор чөлөөтэй үлдэж, доорх суурь зураг
-                харагдана. Худгийн самбарынхаас ингэж ялгарна.
+                Индикатор. Өргөн баганад орсон тул нүднүүд нь хажуу
+                хажуугаа эгнэнэ — босоо жагсаалт энд хагас хоосон
+                зурвас болно.
               */}
-              <PointMap
-                points={points}
-                visible={mapIdx}
-                basemap={basemap}
-                onSelect={setSelected}
-                extent={extentOn}
-                onExtent={setExtent}
-                focus={focus}
-                clusterLabel="badge"
-                marks={markByOid}
-              />
-              <BasemapGallery
-                value={basemap}
-                onChange={setBasemap}
-                extent={extentOn}
-                onExtentChange={setExtentOn}
-                unit="бүртгэл"
-              />
-              {extentOn ? (
-                <div className="pointer-events-none absolute inset-0 z-10 border border-data/45" />
-              ) : null}
-
-              {detail ? (
-                /*
-                  Хэмжээ нь чирэгддэг: булангийн бариулаас барьж томруулна.
-                  Өндөр нь агуулгадаа таарч авто сунах бөгөөд зөвхөн заасан
-                  дээд хэмжээнээс хэтрэхэд л гүйлт асна — богино бичилт дээр
-                  хагас хоосон цонх, урт бичилт дээр таслагдсан бичвэр
-                  хоёуланг нь зайлсхийнэ.
-                */
-                <div
-                  className="absolute right-2.5 bottom-8 z-10 flex flex-col rounded-xs border border-line bg-paper/92 backdrop-blur-md"
-                  style={{ width: card.w, maxHeight: card.h }}
-                >
-                  <ResizeGrip value={card} onChange={setCard} />
-
-                  <div className="flex shrink-0 items-center justify-between border-b border-line px-2.5 py-1.5">
-                    <span className="eyebrow">Бүртгэлийн бичилт</span>
-                    <button
-                      onClick={() => setSelected(null)}
-                      className="text-ink-3 transition-colors hover:text-ink"
-                      aria-label="Хаах"
-                    >
-                      <X size={12} />
-                    </button>
-                  </div>
-                  <div className="min-h-0 flex-1 overflow-y-auto p-2.5">
-                    {/*
-                      Зүйлийн зураг — хэлтсийн жагсаалтаас. Бичлэгийн өөрийн
-                      гэрчилгээ БИШ тул "зүйлийн зураг" гэж тэмдэглэв.
-
-                      ТОМ хувилбарыг дуудна: газрын зургийн 128px тэмдэг энд
-                      сунаж бүдэрнэ. Энэ зураг зөвхөн цонх нээгдэхэд татагдана.
-                    */}
-                    {detail.photo ? (
-                      <figure className="mb-2.5">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                          src={detail.photo}
-                          alt={detail.species}
-                          /* Өргөнөө дагаж өндөр нь 2:3 харьцаагаар өснө */
-                          className="block aspect-[3/2] w-full rounded-xs border border-line object-cover"
-                        />
-                        <figcaption className="mt-1 text-[10px] text-ink-3">
-                          Зүйлийн зураг
-                        </figcaption>
-                      </figure>
-                    ) : null}
-
-                    <dl className="space-y-1.5">
-                      <Field k="Зүйл" v={detail.species} />
-                      {detail.latin ? (
-                        <Field k="Латин" v={<i className="text-ink-2">{detail.latin}</i>} />
-                      ) : null}
-                      <Field k="Ховордол" v={detail.rarity} />
-                      <Field k="Огноо" v={<span className="num">{dayLabel(detail)}</span>} />
-                      <Field k="Байршил" v={`${detail.aimag}, ${detail.soum}`} />
-                      {detail.situation ? (
-                        <Field k="Нөхцөл байдал" v={detail.situation} />
-                      ) : null}
-                      {/*
-                        Бүлэглэсэн ангилал БА эх бичвэр хоёулаа. Ангилал нь
-                        зөвхөн харуулах давхарга — бүртгэсэн үгийг нуухгүй.
-                      */}
-                      <Field k="Шийдвэрлэлт" v={detail.outcome} />
-                      {detail.outcomeRaw && detail.outcomeRaw !== detail.outcome ? (
-                        <Field
-                          k="Бүртгэсэн"
-                          v={<span className="text-ink-2">{detail.outcomeRaw}</span>}
-                        />
-                      ) : null}
-                    </dl>
-                  </div>
+              <Card className="shrink-0">
+                <div className="grid grid-cols-2 divide-x divide-y divide-line sm:grid-cols-3 xl:grid-cols-5 xl:divide-y-0">
+                  <StatCell icon={ClipboardList} label="Нийт бүртгэл" value={stats.total} />
+                  <StatCell icon={PawPrint} label="Амьтны зүйл" value={stats.kinds} />
+                  <StatCell icon={ShieldAlert} label="Ховор зүйл" value={stats.rare} />
+                  <StatCell icon={Sprout} label="Байгальд тавьсан" value={stats.released} />
+                  <StatCell icon={Skull} label="Хорогдсон" value={stats.died} />
                 </div>
-              ) : null}
+              </Card>
+
+              <Card className="relative min-h-[240px] flex-1 overflow-hidden">
+                <div className="relative h-full w-full">
+                  {/*
+                    Бөөгнөрөл ХЭРЭГТЭЙ — 697 цэгийн 99% нь Улаанбаатарт өтгөрсөн.
+                    Гэхдээ тоо нь дугуйн дотор БИШ, баруун дээд буланд тэмдэг
+                    болж суух тул дугуйн дотор чөлөөтэй үлдэж, доорх суурь зураг
+                    харагдана. Худгийн самбарынхаас ингэж ялгарна.
+                  */}
+                  <PointMap
+                    points={points}
+                    visible={mapIdx}
+                    basemap={basemap}
+                    onSelect={setSelected}
+                    extent={extentOn}
+                    onExtent={setExtent}
+                    focus={focus}
+                    clusterLabel="badge"
+                    marks={markByOid}
+                  />
+                  <BasemapGallery
+                    value={basemap}
+                    onChange={setBasemap}
+                    extent={extentOn}
+                    onExtentChange={setExtentOn}
+                    unit="бүртгэл"
+                  />
+                  {extentOn ? (
+                    <div className="pointer-events-none absolute inset-0 z-10 border border-data/45" />
+                  ) : null}
+
+                  {detail ? (
+                    /*
+                      Хэмжээ нь чирэгддэг: булангийн бариулаас барьж томруулна.
+                      Өндөр нь агуулгадаа таарч авто сунах бөгөөд зөвхөн заасан
+                      дээд хэмжээнээс хэтрэхэд л гүйлт асна — богино бичилт дээр
+                      хагас хоосон цонх, урт бичилт дээр таслагдсан бичвэр
+                      хоёуланг нь зайлсхийнэ.
+                    */
+                    <div
+                      className="absolute right-2.5 bottom-8 z-10 flex flex-col rounded-xs border border-line bg-paper/92 backdrop-blur-md"
+                      style={{ width: card.w, maxHeight: card.h }}
+                    >
+                      <ResizeGrip value={card} onChange={setCard} />
+
+                      <div className="flex shrink-0 items-center justify-between border-b border-line px-2.5 py-1.5">
+                        <span className="eyebrow">Бүртгэлийн бичилт</span>
+                        <button
+                          onClick={() => setSelected(null)}
+                          className="text-ink-3 transition-colors hover:text-ink"
+                          aria-label="Хаах"
+                        >
+                          <X size={12} />
+                        </button>
+                      </div>
+                      <div className="min-h-0 flex-1 overflow-y-auto p-2.5">
+                        {/*
+                          Зүйлийн зураг — хэлтсийн жагсаалтаас. Бичлэгийн өөрийн
+                          гэрчилгээ БИШ тул "зүйлийн зураг" гэж тэмдэглэв.
+
+                          ТОМ хувилбарыг дуудна: газрын зургийн 128px тэмдэг энд
+                          сунаж бүдэрнэ. Энэ зураг зөвхөн цонх нээгдэхэд татагдана.
+                        */}
+                        {detail.photo ? (
+                          <figure className="mb-2.5">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={detail.photo}
+                              alt={detail.species}
+                              /* Өргөнөө дагаж өндөр нь 2:3 харьцаагаар өснө */
+                              className="block aspect-[3/2] w-full rounded-xs border border-line object-cover"
+                            />
+                            <figcaption className="mt-1 text-[10px] text-ink-3">
+                              Зүйлийн зураг
+                            </figcaption>
+                          </figure>
+                        ) : null}
+
+                        <dl className="space-y-1.5">
+                          <Field k="Зүйл" v={detail.species} />
+                          {detail.latin ? (
+                            <Field k="Латин" v={<i className="text-ink-2">{detail.latin}</i>} />
+                          ) : null}
+                          <Field k="Ховордол" v={detail.rarity} />
+                          <Field k="Огноо" v={<span className="num">{dayLabel(detail)}</span>} />
+                          <Field k="Байршил" v={`${detail.aimag}, ${detail.soum}`} />
+                          {detail.situation ? (
+                            <Field k="Нөхцөл байдал" v={detail.situation} />
+                          ) : null}
+                          {/*
+                            Бүлэглэсэн ангилал БА эх бичвэр хоёулаа. Ангилал нь
+                            зөвхөн харуулах давхарга — бүртгэсэн үгийг нуухгүй.
+                          */}
+                          <Field k="Шийдвэрлэлт" v={detail.outcome} />
+                          {detail.outcomeRaw && detail.outcomeRaw !== detail.outcome ? (
+                            <Field
+                              k="Бүртгэсэн"
+                              v={<span className="text-ink-2">{detail.outcomeRaw}</span>}
+                            />
+                          ) : null}
+                        </dl>
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+              </Card>
             </div>
-          </Card>
+          </div>
 
           <p className="shrink-0 px-0.5 text-[10.5px] leading-none text-ink-3">
             Суурь зураг: Esri · Дата: ArcGIS FeatureServer
@@ -554,15 +577,6 @@ export function RescuesDashboard() {
             <Head title="Ховордлын зэргээр" />
             <div className="p-3">
               <PieChart data={rarityData} selected={rarity} onSelect={setRarity} />
-            </div>
-          </Card>
-
-          <Card className="min-h-[130px] flex-1">
-            <Head title="Зүйлээр">
-              <span className="num text-[11.5px] text-ink-3">{speciesData.length}</span>
-            </Head>
-            <div className="min-h-0 flex-1 overflow-y-auto p-3">
-              <RowChart data={speciesData} selected={species} onSelect={setSpecies} />
             </div>
           </Card>
 
@@ -695,7 +709,7 @@ function StatCell({
       {/* Хоёр мөрийн зай нөөцөлсөн хэвээр, зөвхөн мөр хоорондын зай нягтарсан */}
       <span className="eyebrow block min-h-[28px] leading-[1.25]">{label}</span>
       <div className="mt-auto flex items-center gap-1.5">
-        <Icon size={17} strokeWidth={1.6} className="shrink-0 text-ink-3" />
+        <Icon size={20} strokeWidth={1.6} className="shrink-0 text-ink-3" />
         <span className="num truncate text-[16px] leading-none font-medium text-ink">
           {num(value)}
         </span>

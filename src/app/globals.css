@@ -449,20 +449,54 @@ body {
   background: color-mix(in oklab, var(--moss) 28%, transparent);
 }
 
+/*
+  Гүйлгэх зурвас.
+
+  Энэ платформ дээр самбар бүр КАРТ ДОТРОО гүйдэг тул нэг дэлгэцэнд хэд
+  хэдэн зурвас зэрэг гарна — хөтчийн анхны хэлбэр (Windows дээр 17px)
+  хэт бүдүүн бөгөөд өтгөн сүлжээний сэтгэгдлийг эвддэг.
+
+  Хоёр зүйлийг зассан:
+   · Firefox-д `scrollbar-width` огт заагаагүй байсан тул системийн
+     бүдүүн зурвас гарч байв.
+   · Бариулын хүрээ `--paper`-ээр БУДАГДСАН байсан. Карт нь өөр
+     дэвсгэртэй (`--paper-2`) тул тэр хүрээ нь гэрэл/бараан жааз мэт
+     харагдаж, зурвасыг байгаагаас бүдүүн болгодог байлаа. Одоо хүрээ
+     нь ТУНГАЛАГ бөгөөд `background-clip`-ээр бариулыг нарийсгана —
+     ямар ч дэвсгэр дээр зөв.
+*/
+/*
+  `scrollbar-width`-ийг ЗӨВХӨН Firefox-д. Chrome/Edge нь стандарт
+  шинжийг давуу гэж үзэх ба өгсөн тохиолдолд `::-webkit-scrollbar`-ын
+  ХЭМЖЭЭГ огт тоохоо больж, өөрийн "thin" зурвасаа (~11px) зурдаг.
+  Өмнө нь энэ мөр нь `:root` дээр байсан учир доорх 4px огт үйлчлэхгүй
+  байлаа. `@supports not selector(::-webkit-scrollbar)` нь яг Firefox-ыг
+  л онилно — тэр pseudo-элементийг дэмждэггүй.
+*/
+@supports not selector(::-webkit-scrollbar) {
+  :root {
+    scrollbar-width: thin;
+    scrollbar-color: var(--line-2) transparent;
+  }
+}
+
 ::-webkit-scrollbar {
-  width: 11px;
-  height: 11px;
+  width: 4px;
+  height: 4px;
 }
 ::-webkit-scrollbar-track {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
   background: var(--line-2);
-  border: 3px solid var(--paper);
   border-radius: 99px;
 }
 ::-webkit-scrollbar-thumb:hover {
   background: var(--ink-3);
+}
+/* Хоёр зурвас уулзах булан — өөрийн дэвсгэртэй бол ул мөр үлдээнэ */
+::-webkit-scrollbar-corner {
+  background: transparent;
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -27,12 +27,14 @@ import {
   type MapOverlay,
 } from "@/components/wells/map";
 import {
+  decodeToiletPoints,
   fetchCityToilets,
   PLI_BUCKETS,
   PLI_MIN,
   PLI_STEP,
   ZONES,
   type CityToilet,
+  type ToiletPoints,
   type ToiletsPayload,
 } from "@/lib/toilets";
 import { asset } from "@/lib/base-path";
@@ -71,6 +73,8 @@ const SOURCES = [
  */
 export function OrchinDashboard() {
   const [data, setData] = React.useState<ToiletsPayload | null>(null);
+  /** Бүх 145 мянган цэгийн байршил — газрын зурагт л хэрэглэнэ */
+  const [raw, setRaw] = React.useState<ToiletPoints | null>(null);
   const [city, setCity] = React.useState<CityToilet[]>([]);
   const [error, setError] = React.useState<string | null>(null);
 
@@ -106,6 +110,16 @@ export function OrchinDashboard() {
       .catch((e: Error) => {
         if (e.name !== "AbortError") setError(e.message);
       });
+
+    /*
+      Бүх цэгийн хоёртын багц (~1.4MB). Нэгтгэсэн мэдээнээс ХОЙШ ирдэг
+      тул зураг эхлээд нүдээр гарч, дараа нь бодит цэг рүү солигдоно.
+      Алдааг нь ЗАЛГИНА: ирээгүй ч самбар нүдээрээ бүрэн ажиллана.
+    */
+    fetch(asset("/api/toilet-points"), { signal: ac.signal })
+      .then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(new Error(`HTTP ${r.status}`))))
+      .then((b) => setRaw(decodeToiletPoints(b)))
+      .catch(() => {});
 
     // Нийтийн жорлон нь 17 бичлэг — шууд ArcGIS-ээс, алдааг нь залгина
     fetchCityToilets(ac.signal)
@@ -146,10 +160,46 @@ export function OrchinDashboard() {
     return { oid, lon, lat, w };
   }, [data, dIdx, zIdx]);
 
+  /*
+    Газрын зурагт орох цэгүүд.
+
+    Бодит багц ирсэн бол ТҮҮГЭЭР: 220м-ийн нүд нь ойртоход хиймэл сүлжээ
+    болж харагдана — жорлон хашаандаа хаана байгааг биш, нүдний төвийг
+    заана. Дулааны зураг нь ч бодит байршил дээр суусан үедээ жинхэнэ
+    тархалтыг өгнө.
+
+    Багц ирээгүй (эсвэл татагдаагүй) бол нүдээрээ ажиллана — 1.4MB
+    хүлээж байхад зураг хоосон байх шалтгаангүй.
+
+    Жин нь бичлэг тутам 1: нэгтгэсэн нүдний жингийн НИЙЛБЭР ижил тул
+    дулааны зургийн нягтрал хоёр тохиолдолд адилхан гарна.
+  */
+  const mapPoints = React.useMemo(() => {
+    if (!raw) return cells;
+    const dAt = district ? raw.districts.indexOf(district) : -1;
+    /* Сонгосон дүүрэг багцад олдохгүй бол ЮУ Ч харуулахгүй — шүүлтгүй
+       мэт бүгдийг гаргавал сонголт үл ажиллах мэт харагдана */
+    if (district && dAt < 0) return { oid: [], lon: [], lat: [], w: [] as number[] };
+    const zAt = zone ? Number(zone) : 0;
+
+    const oid: number[] = [];
+    const lon: number[] = [];
+    const lat: number[] = [];
+    for (let i = 0; i < raw.n; i++) {
+      if (dAt >= 0 && raw.district[i] !== dAt) continue;
+      if (zAt && raw.zone[i] !== zAt) continue;
+      oid.push(i);
+      lon.push(raw.coords[i * 2]);
+      lat.push(raw.coords[i * 2 + 1]);
+    }
+    return { oid, lon, lat, w: new Array<number>(oid.length).fill(1) };
+  }, [raw, cells, district, zone]);
+
   const cellIdx = React.useMemo(
-    () => Uint32Array.from(cells.oid, (_, i) => i),
-    [cells],
+    () => Uint32Array.from(mapPoints.oid, (_, i) => i),
+    [mapPoints],
   );
+
 
   /* ---------------- Нийтийн жорлон ---------------- */
 
@@ -545,9 +595,9 @@ export function OrchinDashboard() {
               {pit ? (
                 <PointMap
                   key="pit"
-                  points={cells}
+                  points={mapPoints}
                   visible={cellIdx}
-                  weights={cells.w}
+                  weights={mapPoints.w}
                   basemap={basemap}
                   onSelect={() => {}}
                   focus={focus}
@@ -685,7 +735,7 @@ function Stat({
     <div className="flex flex-col px-3 py-2">
       <span className="eyebrow block min-h-[28px] leading-[1.25]">{label}</span>
       <div className="mt-auto flex items-center gap-1.5">
-        <Icon size={17} strokeWidth={1.6} className="shrink-0 text-ink-3" />
+        <Icon size={20} strokeWidth={1.6} className="shrink-0 text-ink-3" />
         <span className="num truncate text-[16px] leading-none font-medium text-ink">
           {value}
         </span>

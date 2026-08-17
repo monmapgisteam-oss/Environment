@@ -152,6 +152,10 @@ export function DamagedDashboard() {
     }));
   }, [sites, keep]);
 
+  /* Зурвас тус бүрийн хуваарь — нэгж нь харьцуулшгүй тул тусад нь */
+  const maxCount = Math.max(...bySize.map((d) => d.value), 1);
+  const maxHa = Math.max(...bySize.map((d) => d.ha), 1);
+
   const stats = React.useMemo(() => {
     let ha = 0;
     let biggest = 0;
@@ -363,20 +367,27 @@ export function DamagedDashboard() {
 
         <div className="flex min-h-0 flex-col gap-2.5">
           {/*
-            Хэмжээний тархалт — энэ самбарын гол диаграм. Зурвас нь
-            ТАЛБАЙН ТОО, ард нь тэдгээрийн эзлэх га. Хоёр тоог зэрэгцүүлж
-            байж "олон жижиг" ба "цөөн том" хоёрын ялгаа харагдана.
+            Хэмжээний тархалт — энэ самбарын гол диаграм.
+
+            Мөр бүрд ХОЁР зурвас: эзлэх ГА (тод) ба талбайн ТОО (бүдэг).
+            Хоёр нь ЭСРЭГ дүр зурагтай бөгөөд тэр нь өөрөө энэ датаны
+            гол баримт: 0.1 га-аас бага 1,185 талбай нь тооны зурвасаа
+            бүтнээр дүүргэдэг мөртлөө нийт эвдрэлийн 0.2% нь ч хүрэхгүй;
+            эсрэгээрээ 56 талбай 21 мянган га эзэлнэ. Ганц зурвас
+            (өмнө нь тоо байсан) нь энэ хоёрын аль нэгийг л хэлдэг тул
+            төөрөгдүүлж байв.
+
+            Зурвас тус бүр ӨӨРИЙН дээд утгаараа хэмжигдэнэ — га ба
+            ширхэг харьцуулшгүй нэгж. Тиймээс тоог нь хажууд нь үргэлж
+            бичнэ, зурвас нь зөвхөн эрэмбийг хэлнэ.
           */}
           {/* Таван мөр тогтмол тул уян байх шаардлагагүй — уян бол доор
               нь хоосон зай үлдээнэ */}
           <Card className="shrink-0">
-            <Head title="Хэмжээгээр">
-              <span className="text-[10.5px] text-ink-3">талбайн тоо · га</span>
-            </Head>
+            <Head title="Эвдэрсэн газар талбайн хэмжээгээр" />
             <div className="p-3">
-              <div className="space-y-2.5">
+              <div className="space-y-3">
                 {bySize.map((d) => {
-                  const max = Math.max(...bySize.map((x) => x.value), 1);
                   const on = size == null || size === d.key;
                   return (
                     <button
@@ -384,33 +395,29 @@ export function DamagedDashboard() {
                       onClick={() => setSize(size === d.key ? null : d.key)}
                       className="block w-full text-left"
                     >
-                      <div className="flex items-baseline justify-between gap-2">
-                        <span
-                          className={cn(
-                            "text-[12px] transition-colors",
-                            size === d.key ? "font-medium text-ink" : "text-ink-2",
-                            !on && "opacity-40",
-                          )}
-                        >
-                          {d.label}
-                        </span>
-                        <span className="num shrink-0 text-[11.5px] text-ink-2">
-                          {num(d.value)}
-                        </span>
+                      <div
+                        className={cn(
+                          "text-[12px] transition-colors",
+                          size === d.key ? "font-medium text-ink" : "text-ink-2",
+                          !on && "opacity-40",
+                        )}
+                      >
+                        {d.label}
                       </div>
-                      <div className="mt-[3px] h-[2px] w-full overflow-hidden rounded-[1px] bg-paper-hi">
-                        <div
-                          className="h-full"
-                          style={{
-                            width: `${(d.value / max) * 100}%`,
-                            background: "var(--data)",
-                            opacity: on ? 1 : 0.4,
-                          }}
-                        />
-                      </div>
-                      <div className="num mt-1 text-[10px] text-ink-3">
-                        {d.ha >= 10 ? num(Math.round(d.ha)) : d.ha.toFixed(2)} га
-                      </div>
+                      {/* ГА нь тэргүүлэх хэмжигдэхүүн — зузаан, тод */}
+                      <Measure
+                        label="га"
+                        value={d.ha >= 10 ? num(Math.round(d.ha)) : d.ha.toFixed(2)}
+                        share={d.ha / maxHa}
+                        on={on}
+                        lead
+                      />
+                      <Measure
+                        label="талбай"
+                        value={num(d.value)}
+                        share={d.value / maxCount}
+                        on={on}
+                      />
                     </button>
                   );
                 })}
@@ -420,7 +427,7 @@ export function DamagedDashboard() {
 
           {/* Баганын СҮҮЛД нь уян карт — үлдсэн зайг энэ эзэлнэ */}
           <Card className="min-h-[120px] flex-1">
-            <Head title="Хамгийн том 8" />
+            <Head title="Эвдрэлд хамгийн их өртсөн 8 газар" />
             <div className="min-h-0 flex-1 divide-y divide-line overflow-y-auto">
               {shown
                 .slice(0, 8)
@@ -451,6 +458,58 @@ export function DamagedDashboard() {
 }
 
 /* -------------------------------------------------------------------------- */
+
+/**
+ * Хэмжээний ангилал доторх НЭГ хэмжигдэхүүний мөр: нэр · тоо · зурвас.
+ *
+ * `lead` нь тэргүүлэх хэмжигдэхүүн (га) — зузаан, тод. Нөгөө нь (талбайн
+ * тоо) нимгэн, бүдэг. Хоёрыг ӨНГӨӨР ялгаагүй: дата дүрслэлийн өнгө ганц
+ * бөгөөд хоёр хэмжигдэхүүн нь ангилал биш, шатлал юм.
+ */
+function Measure({
+  label,
+  value,
+  share,
+  on,
+  lead = false,
+}: {
+  label: string;
+  value: string;
+  share: number;
+  on: boolean;
+  lead?: boolean;
+}) {
+  return (
+    <div className={cn("flex items-center gap-2", lead ? "mt-1.5" : "mt-1")}>
+      <span className="w-[38px] shrink-0 text-[10px] text-ink-3">{label}</span>
+      <span
+        className={cn(
+          "num w-[52px] shrink-0 text-right text-[11px]",
+          lead ? "text-ink-2" : "text-ink-3",
+        )}
+      >
+        {value}
+      </span>
+      <span
+        className={cn(
+          "min-w-0 flex-1 overflow-hidden rounded-[1px] bg-paper-hi",
+          lead ? "h-[3px]" : "h-[2px]",
+        )}
+      >
+        <span
+          className="block h-full"
+          style={{
+            /* Тэг биш боловч маш бага утга огт харагдахгүй байвал "энд
+               юу ч алга" гэсэн худал дохио болно */
+            width: `${Math.max(share * 100, share > 0 ? 0.8 : 0)}%`,
+            background: "var(--data)",
+            opacity: on ? (lead ? 1 : 0.45) : 0.2,
+          }}
+        />
+      </span>
+    </div>
+  );
+}
 
 function Card({ className, children }: { className?: string; children: React.ReactNode }) {
   return (
@@ -484,7 +543,7 @@ function Stat({
     <div className="px-3 py-2.5">
       <span className="eyebrow block min-h-[28px] leading-[1.25]">{label}</span>
       <span className="mt-1.5 flex items-center gap-1.5">
-        <Icon size={13} strokeWidth={1.75} className="shrink-0 text-ink-3" />
+        <Icon size={20} strokeWidth={1.6} className="shrink-0 text-ink-3" />
         <span className="num truncate text-[16px] leading-none font-medium text-ink">
           {value}
         </span>
