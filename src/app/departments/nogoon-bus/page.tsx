@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { WellsDashboard } from "@/components/wells/dashboard";
+import { NogoonBusWorkspace } from "@/components/nogoon-bus/workspace";
 import { getDepartment } from "@/lib/departments";
 
 const DEPT = getDepartment("nogoon-bus")!;
@@ -16,7 +16,7 @@ export default function NogoonBusPage() {
       className="h-full xl:h-[calc(100dvh-var(--head-h)-3rem)]"
       style={{ "--tone": `var(${DEPT.tone})` } as React.CSSProperties}
     >
-      <WellsDashboard />
+      <NogoonBusWorkspace />
     </div>
   );
 }

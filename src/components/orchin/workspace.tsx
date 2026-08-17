@@ -65,6 +65,11 @@ const LicensesDashboard = dynamic(
   { ssr: false, loading: spinner },
 );
 
+const MineralsDashboard = dynamic(
+  () => import("@/components/orchin/minerals-dashboard").then((m) => m.MineralsDashboard),
+  { ssr: false, loading: spinner },
+);
+
 const TABS = [
   {
     id: "sanitation",
@@ -106,6 +111,21 @@ const TABS = [
       "тусгай зөвшөөрөл эзэмшигч аж ахуйн нэгжүүдийн жагсаалт",
     icon: Pickaxe,
   },
+  {
+    /*
+      Дээрх "licenses" табаас ӨӨР бүртгэл: тэр нь ТҮГЭЭМЭЛ ТАРХАЦТАЙ
+      (элс, хайрга) ашигт малтмалынх бол энэ нь нүүрс, алт зэрэг
+      үндсэн ашигт малтмалынх. Хоёуланг нь "тусгай зөвшөөрөл" гэж
+      нэрлэдэг тул табны нэрэнд ялгааг нь заавал гаргана.
+    */
+    id: "minerals",
+    label: "Нүүрс, алтны талбай",
+    note: "Тусгай зөвшөөрөлтэй талбайн хүрээ",
+    full:
+      "Нийслэлийн нутаг дэвсгэр дэх ашигт малтмалын тусгай зөвшөөрөлтэй " +
+      "талбайн мэдээлэл (Нүүрс, алт гэх мэт)",
+    icon: Mountain,
+  },
 ] as const;
 
 type TabId = (typeof TABS)[number]["id"];
@@ -132,8 +152,10 @@ export function OrchinWorkspace() {
           <DamagedDashboard />
         ) : tab === "petitions" ? (
           <PetitionsDashboard />
-        ) : (
+        ) : tab === "licenses" ? (
           <LicensesDashboard />
+        ) : (
+          <MineralsDashboard />
         )}
       </div>
     </div>

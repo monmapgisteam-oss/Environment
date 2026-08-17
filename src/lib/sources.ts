@@ -8,11 +8,13 @@
 
 import { DAMAGED_SERVICE } from "@/lib/damaged";
 import { LICENSES_SERVICE } from "@/lib/licenses";
+import { MINERALS_SERVICE } from "@/lib/minerals";
 import { PETITIONS_SERVICE } from "@/lib/petitions";
 import { RECLAMATION_SERVICES } from "@/lib/reclamation";
 import { RESCUES_SERVICE } from "@/lib/rescues";
 import { SOIL_SERVICES } from "@/lib/soil";
 import { CITY_SERVICE, PIT_SERVICE } from "@/lib/toilets";
+import { WATER_SERVICE } from "@/lib/water-contracts";
 import { WELLS_SERVICE } from "@/lib/wells";
 import { WILDLIFE_SERVICE } from "@/lib/wildlife";
 
@@ -31,6 +33,12 @@ export const SOURCES: Source[] = [
     name: "Өрөмдмөл худгийн бүртгэл 2015–2024",
     kind: "ArcGIS FeatureServer",
     url: WELLS_SERVICE,
+  },
+  {
+    slug: "nogoon-bus",
+    name: "Ус ашиглах гэрээ",
+    kind: "ArcGIS FeatureServer",
+    url: WATER_SERVICE,
   },
   {
     slug: "amitan-urgamal",
@@ -97,5 +105,11 @@ export const SOURCES: Source[] = [
     name: "Түгээмэл тархацтай ашигт малтмалын тусгай зөвшөөрөл",
     kind: "ArcGIS FeatureServer",
     url: LICENSES_SERVICE,
+  },
+  {
+    slug: "orchin",
+    name: "Ашигт малтмалын тусгай зөвшөөрөлтэй талбай (нүүрс, алт)",
+    kind: "ArcGIS FeatureServer",
+    url: MINERALS_SERVICE,
   },
 ];

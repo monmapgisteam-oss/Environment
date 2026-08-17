@@ -169,11 +169,15 @@ export function PickList({
   selected,
   onPick,
   searchable,
+  format,
 }: {
   items: { key: string; label: string; value: number }[];
   selected: string | null;
   onPick: (key: string | null) => void;
   searchable?: boolean;
+  /** Хажуугийн тоог хэрхэн бичих — өгөөгүй бол түүхий утга. Тоо нь
+      ширхэг биш нэгжтэй (га гэх мэт) үед л хэрэгтэй */
+  format?: (v: number) => string;
 }) {
   const [q, setQ] = React.useState("");
   const shown = q
@@ -207,7 +211,9 @@ export function PickList({
               )}
             >
               <span className="truncate">{i.label}</span>
-              <span className="num shrink-0 text-[11px] text-ink-3">{i.value}</span>
+              <span className="num shrink-0 text-[11px] text-ink-3">
+                {format ? format(i.value) : i.value}
+              </span>
             </button>
           ))
         )}

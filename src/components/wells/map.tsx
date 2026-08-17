@@ -456,6 +456,7 @@ export function WellsMap({
   grades,
   weights,
   detail,
+  labels,
 }: {
   points: MapPoints;
   /** Шүүлтүүр давсан цэгүүдийн индекс */
@@ -506,7 +507,24 @@ export function WellsMap({
   shapes?: {
     data: GeoJSON.FeatureCollection;
     selected?: number | null;
+    /**
+     * Хүрээг сарнисан гэрлээр тойруулах эсэх (bloom). Талбай ЦӨӨН үед л
+     * асаа — олон зуун олон өнцөгт дээр гэрэл нь хоорондоо нийлж, зураг
+     * бүхэлдээ манантана. ЗӨВХӨН анхны зурагдалтад уншигдана.
+     */
+    glow?: boolean;
   };
+  /**
+   * Цэгийн бичвэр шошго.
+   *
+   * `text` нь `points`-той ИЖИЛ УРТТАЙ — цэг бүрийн шошго. Хоосон мөр
+   * бол тухайн цэг шошгогүй.
+   *
+   * Зөвхөн `minzoom`-оос ойртсон үед гарна: холоос бүх шошго нэг дор
+   * гарвал цэгээ дарж, тархалт уншигдахаа болино. Давхцлыг MapLibre
+   * өөрөө шийднэ — нягт хэсэгт багтсан нь л үлдэнэ.
+   */
+  labels?: { text: string[]; minzoom?: number };
   /**
    * Цэг бүрийн ХЭМЖИГДЭХҮҮН. Өгвөл зураг ЗЭРЭГЛЭСЭН тэмдгийн горимд
    * шилжинэ: цэг бүр утгынхаа дагуу шатлалаас өнгө авч, хэмжээгээрээ
@@ -580,7 +598,10 @@ export function WellsMap({
     graded: grades?.stops,
     gradedHeat: Boolean(grades?.heat),
     shaped: Boolean(shapes),
+    shapeGlow: Boolean(shapes?.glow),
     detailZoom: detail?.minZoom,
+    labeled: Boolean(labels),
+    labelZoom: labels?.minzoom ?? 12,
   });
   const detailRef = React.useRef(detail);
   React.useEffect(() => {
@@ -693,6 +714,66 @@ export function WellsMap({
           data: { type: "FeatureCollection", features: [] },
         });
 
+        /*
+          Сарнисан гэрэл (bloom) — хүрээний ДООР, дүүргэлтийн ч доор.
+
+          Цэгэн давхаргын firefly загвартай нэг хэл: биет өөрөө гэрэл
+          ялгаруулж буй мэт. `line-blur` нь зурааснаас ГАДАГШ ч, ДОТОГШ
+          ч сарнидаг тул нарийн талбай бүхэлдээ гэрэлтэнэ.
+
+          ГУРВАН дамжлага давхарлана — нэг өргөн зураас бүдгэрүүлээд
+          орхивол зүгээр л "бүдэг зузаан хүрээ" болно, гэрлийн мэдрэмж
+          төрөхгүй. Жинхэнэ bloom нь ТӨВДӨӨ хүчтэй, захдаа хурдан
+          суларсан налуутай байдаг: гурван өөр өргөнтэй давхарга
+          нэмэгдэж яг тэр налууг гаргана.
+
+          Өргөнийг зумаас ХАМААРУУЛЖ томруулна — тогтмол пикселийн
+          гэрэл нь холоос талбайгаа бүрэн залгиж, ойртоход алга болно.
+        */
+        if (modeRef.current.shapeGlow) {
+          /** Нэг дамжлага: `k` нь өргөний үржүүлэгч, `o` нь тунгалаг */
+          const pass = (id: string, k: number, o: number) =>
+            m.addLayer({
+              id,
+              type: "line",
+              source: "shapes",
+              layout: { "line-join": "round" },
+              paint: {
+                "line-color": ["coalesce", ["get", "c"], SHAPE_FALLBACK] as unknown as ExpressionSpecification,
+                "line-width": [
+                  "interpolate",
+                  ["linear"],
+                  ["zoom"],
+                  8,
+                  ["case", ["boolean", ["feature-state", "on"], false], 5 * k, 3 * k],
+                  16,
+                  ["case", ["boolean", ["feature-state", "on"], false], 26 * k, 16 * k],
+                ] as unknown as ExpressionSpecification,
+                /* Бүдгэрэлт нь өргөнтэйгээ ойролцоо — үүнээс бага бол
+                   ирмэг нь хатуу, их бол гэрэл нь хэт шингэрнэ */
+                "line-blur": [
+                  "interpolate",
+                  ["linear"],
+                  ["zoom"],
+                  8,
+                  4 * k,
+                  16,
+                  20 * k,
+                ] as unknown as ExpressionSpecification,
+                "line-opacity": [
+                  "case",
+                  ["boolean", ["feature-state", "on"], false],
+                  Math.min(o * 1.7, 0.95),
+                  o,
+                ] as unknown as ExpressionSpecification,
+              },
+            });
+
+          pass("shape-glow-3", 2.6, 0.3); // хамгийн гадна, сарнисан
+          pass("shape-glow-2", 1.3, 0.42); // дунд
+          pass("shape-glow-1", 0.6, 0.6); // хүрээний дэргэдэх тод цөм
+        }
+
         m.addLayer({
           id: "shape-fill",
           type: "fill",
@@ -723,6 +804,32 @@ export function WellsMap({
               ["case", ["boolean", ["feature-state", "on"], false], 2.6, 1.2],
             ] as unknown as ExpressionSpecification,
             "line-opacity": 0.9,
+          },
+        });
+
+        /*
+          Талбайн шошго — `properties.t` бичигдсэн байвал.
+
+          MapLibre полигоны шошгыг талбайн ХАМГИЙН ХОЛ ДОТООД цэгт
+          (pole of inaccessibility) тавьдаг тул нарийн, хонхор хэлбэр
+          дээр ч гадуур гарахгүй. Тиймээс төвлөрсөн цэг тооцох
+          шаардлагагүй.
+        */
+        m.addLayer({
+          id: "shape-label",
+          type: "symbol",
+          source: "shapes",
+          filter: ["has", "t"],
+          layout: {
+            "text-field": ["get", "t"],
+            "text-font": FONT,
+            "text-size": ["interpolate", ["linear"], ["zoom"], 8, 9, 14, 12],
+            "text-padding": 4,
+          },
+          paint: {
+            "text-color": "#ffffff",
+            "text-halo-color": "rgba(8,14,20,.85)",
+            "text-halo-width": 1.2,
           },
         });
       }
@@ -1074,6 +1181,45 @@ export function WellsMap({
       });
       }
 
+      /*
+        Цэгийн бичвэр шошго — бүх цэгийн давхаргын ДЭЭР суух ёстой тул
+        хамгийн сүүлд нэмнэ.
+
+        `minzoom`-оос хол байхад огт зурагдахгүй: холоос шошго нь цэгээ
+        дарж, тархалт уншигдахаа болино. Давхцлыг MapLibre-т өөрт нь
+        шийдүүлнэ (`text-allow-overlap` тавихгүй) — нягт хэсэгт багтсан
+        нь л үлдэж, зураг цэвэр хэвээр байна.
+
+        Шошго нь цэгийн ДООР. Дээр тавьбал firefly гэрэлтэй давхцана.
+        Хар контур нь хиймэл дагуулын цайвар, бараан аль ч хэсэг дээр
+        бичвэрийг уншигдахуйц байлгана.
+      */
+      if (modeRef.current.labeled) {
+        m.addLayer({
+          id: "wells-label",
+          type: "symbol",
+          source: "wells",
+          minzoom: modeRef.current.labelZoom,
+          filter: ["all", ["!", ["has", "point_count"]], ["has", "t"]],
+          layout: {
+            "text-field": ["get", "t"],
+            "text-font": FONT,
+            "text-size": ["interpolate", ["linear"], ["zoom"], 11, 10, 16, 12],
+            "text-anchor": "top",
+            "text-offset": [0, 0.7],
+            "text-padding": 3,
+            /* Урт нэрийг хоёр мөр болгож таслана — нэг мөрөнд сунгавал
+               хөрш цэгийнхээ шошгыг түлхэж хаяна */
+            "text-max-width": 9,
+          },
+          paint: {
+            "text-color": "#eef4f8",
+            "text-halo-color": "rgba(8,14,20,.85)",
+            "text-halo-width": 1.2,
+          },
+        });
+      }
+
       // Бөөгнөрөл дээр товшвол задалж ойртоно
       if (modeRef.current.cluster) m.on("click", "clusters", (e) => {
         const f = e.features?.[0];
@@ -1344,17 +1490,21 @@ export function WellsMap({
 
     const { lon, lat, oid } = points;
 
+    const text = labels?.text;
+
     const features = new Array(visible.length);
     for (let k = 0; k < visible.length; k++) {
       const i = visible[k];
+      const props: Record<string, unknown> = { oid: oid[i] };
+      if (weights) props.w = weights[i];
+      else if (grades) props.g = grades.values[i];
+      /* Хоосон шошгыг ОГТ бичихгүй — давхаргын `has t` шүүлт үүнд
+         тулгуурлаж, шошгогүй цэгийг алгасна */
+      if (text?.[i]) props.t = text[i];
       features[k] = {
         type: "Feature",
         geometry: { type: "Point", coordinates: [lon[i], lat[i]] },
-        properties: weights
-          ? { oid: oid[i], w: weights[i] }
-          : grades
-            ? { oid: oid[i], g: grades.values[i] }
-            : { oid: oid[i] },
+        properties: props,
       };
     }
 
@@ -1391,7 +1541,7 @@ export function WellsMap({
         { padding: 30, duration: 0, maxZoom: 13 },
       );
     }
-  }, [live, points, visible, weights, grades]);
+  }, [live, points, visible, weights, grades, labels]);
 
   /* ---------------- Дата олон өнцөгт ---------------- */
   const shapeData = shapes?.data;
