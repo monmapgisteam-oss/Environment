@@ -513,6 +513,12 @@ export function WellsMap({
      * бүхэлдээ манантана. ЗӨВХӨН анхны зурагдалтад уншигдана.
      */
     glow?: boolean;
+    /**
+     * Олон өнцөгтийн шошго нь энэ zoom-оос ойртсон үед л гарна.
+     * Талбай олонтой самбарт заавал өг — эс тэгвээс алсаас бүх шошго
+     * нэг дор гарч, хүрээ нь өөрөө уншигдахаа болино.
+     */
+    labelZoom?: number;
   };
   /**
    * Цэгийн бичвэр шошго.
@@ -599,6 +605,7 @@ export function WellsMap({
     gradedHeat: Boolean(grades?.heat),
     shaped: Boolean(shapes),
     shapeGlow: Boolean(shapes?.glow),
+    shapeLabelZoom: shapes?.labelZoom ?? 0,
     detailZoom: detail?.minZoom,
     labeled: Boolean(labels),
     labelZoom: labels?.minzoom ?? 12,
@@ -819,6 +826,7 @@ export function WellsMap({
           id: "shape-label",
           type: "symbol",
           source: "shapes",
+          minzoom: modeRef.current.shapeLabelZoom,
           filter: ["has", "t"],
           layout: {
             "text-field": ["get", "t"],

@@ -19,6 +19,7 @@ import {
   type Extent,
   type MapPoints,
 } from "@/components/wells/map";
+import { Bounds } from "@/lib/extent";
 import {
   fetchLicenses,
   termOf,
@@ -93,15 +94,25 @@ export function LicensesDashboard() {
 
   const shown = React.useMemo(() => (rows ?? []).filter((l) => keep(l)), [rows, keep]);
 
+  /*
+    Талбайн хүрээ, дээр нь зөвшөөрлийн ДУГААР шошго болж бичигдэнэ
+    (`properties.t`). Эзэмшигчийн нэр биш дугаарыг сонгосон нь: нэр нь
+    урт, талбай нь жижиг тул хүрээнээсээ давж гарна.
+  */
   const shapes = React.useMemo<GeoJSON.FeatureCollection>(() => {
     if (!data) return { type: "FeatureCollection", features: [] };
-    if (!term && !mineral && !district) return data.shapes;
+    const code = new Map(data.rows.map((l) => [l.oid, l.code]));
     const on = new Set(shown.map((l) => l.oid));
     return {
       type: "FeatureCollection",
-      features: data.shapes.features.filter((f) => on.has(Number(f.id))),
+      features: data.shapes.features
+        .filter((f) => on.has(Number(f.id)))
+        .map((f) => ({
+          ...f,
+          properties: { oid: Number(f.id), t: code.get(Number(f.id)) ?? "" },
+        })),
     };
-  }, [data, shown, term, mineral, district]);
+  }, [data, shown]);
 
   /* ---------------- Задаргаа ---------------- */
   const byTerm = React.useMemo<Datum[]>(() => {
@@ -169,32 +180,19 @@ export function LicensesDashboard() {
     };
   }, [shown, now]);
 
+  /* ---------------- Сонголтын хүрээ (zoom action) ----------------
+     Сонгосон зөвшөөрөл рүү, эс бөгөөс шүүлтүүрт таарсан бүх талбай руу
+     ойртоно. Шүүлтүүр цуцлагдвал `null` — зураг анхны байрлалдаа буцна. */
   const focus = React.useMemo<Extent | null>(() => {
-    if (picked == null || !data) return null;
-    const f = data.shapes.features.find((x) => Number(x.id) === picked);
-    if (!f) return null;
-    let w = 180;
-    let s = 90;
-    let e = -180;
-    let n = -90;
-    const walk = (c: unknown): void => {
-      if (typeof (c as number[])[0] === "number") {
-        const [x, y] = c as [number, number];
-        if (x < w) w = x;
-        if (x > e) e = x;
-        if (y < s) s = y;
-        if (y > n) n = y;
-        return;
-      }
-      for (const part of c as unknown[]) walk(part);
-    };
-    if (f.geometry.type === "Polygon" || f.geometry.type === "MultiPolygon") {
-      walk(f.geometry.coordinates);
+    if (!data) return null;
+    if (picked == null && !term && !mineral && !district) return null;
+    const on = picked != null ? new Set([picked]) : new Set(shown.map((l) => l.oid));
+    const b = new Bounds();
+    for (const f of data.shapes.features) {
+      if (on.has(Number(f.id))) b.addGeometry(f.geometry);
     }
-    if (w > e) return null;
-    const pad = Math.max(0.002, (e - w) * 0.2);
-    return [w - pad, s - pad, e + pad, n + pad];
-  }, [data, picked]);
+    return b.get(0.002);
+  }, [data, shown, picked, term, mineral, district]);
 
   const active = React.useMemo(() => {
     const id = hover ?? picked;
@@ -328,7 +326,7 @@ export function LicensesDashboard() {
               <PointMap
                 points={NO_POINTS}
                 visible={NO_INDEX}
-                shapes={{ data: shapes, selected: picked }}
+                shapes={{ data: shapes, selected: picked, labelZoom: 11 }}
                 basemap={basemap}
                 onSelect={setPicked}
                 onHover={setHover}

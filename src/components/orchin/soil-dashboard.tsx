@@ -34,6 +34,7 @@ import {
   type SoilMetric,
   type SoilYear,
 } from "@/lib/soil";
+import { Bounds } from "@/lib/extent";
 import { cn, num } from "@/lib/utils";
 
 const PointMap = dynamic(
@@ -122,6 +123,18 @@ export function SoilDashboard() {
   const points = data?.points;
 
   /* ---------------- Цэгийн багана (газрын зурагт) ---------------- */
+  /*
+    Цэгийн шошго — мониторингийн цэгийн дугаар ("BHD-1").
+
+    Тайланд цэгийг ЭНЭ дугаараар нь нэрлэдэг тул зураг дээрх цэгийг
+    баримт бичигтэй холбох цорын ганц гүүр нь энэ юм. z12-оос гарна:
+    500 цэг хотын дотор нягт байрладаг.
+  */
+  const labels = React.useMemo(() => {
+    if (!points) return undefined;
+    return { text: points.map((p) => p.code), minzoom: 12 };
+  }, [points]);
+
   const geo = React.useMemo<MapPoints & { pli: Float32Array }>(() => {
     const n = points?.length ?? 0;
     const oid = new Array<number>(n);
@@ -287,24 +300,28 @@ export function SoilDashboard() {
   }, [points, visible]);
 
   /* ---------------- Сонголт руу ойртох (zoom action) ---------------- */
+  /* ---------------- Сонголтын хүрээ (zoom action) ----------------
+     Сонгосон цэг рүү, эс бөгөөс шүүлтүүрт таарсан бүх цэг рүү ойртоно.
+
+     ОНЫГ энд оруулахгүй: он бол шүүлтүүр биш эх сурвалж сольдог зүйл
+     (2024 ба 2023 нь ӨӨР хэмжигдэхүүнтэй хоёр бүртгэл) — он солиход
+     зураг үсрэх нь шинэ дата ирснийг далдална. */
   const focus = React.useMemo<Extent | null>(() => {
-    if (!points || (!district && !grade)) return null;
-    let w = 180;
-    let s = 90;
-    let e = -180;
-    let n = -90;
-    for (let k = 0; k < visible.length; k++) {
-      const p = points[visible[k]];
-      if (p.lon < w) w = p.lon;
-      if (p.lon > e) e = p.lon;
-      if (p.lat < s) s = p.lat;
-      if (p.lat > n) n = p.lat;
+    if (!points) return null;
+    if (picked == null && !district && !grade) return null;
+    const b = new Bounds();
+    if (picked != null) {
+      const p = points.find((x) => x.oid === picked);
+      if (p) b.add(p.lon, p.lat);
+    } else {
+      for (let k = 0; k < visible.length; k++) {
+        const p = points[visible[k]];
+        b.add(p.lon, p.lat);
+      }
     }
-    if (w > e) return null;
     /* Ганц цэг сонгогдвол хүрээ нь цэг болно — багахан талбай нэмнэ */
-    const pad = 0.004;
-    return [w - pad, s - pad, e + pad, n + pad];
-  }, [points, visible, district, grade]);
+    return b.get(0.004);
+  }, [points, visible, picked, district, grade]);
 
   const selected = React.useMemo(
     () => (picked == null ? null : (points?.find((p) => p.oid === picked) ?? null)),
@@ -524,6 +541,7 @@ export function SoilDashboard() {
                 key={year}
                 points={geo}
                 visible={visible}
+                labels={labels}
                 grades={{ values: geo.pli, stops: PLI_RAMP, heat: true }}
                 basemap={basemap}
                 onSelect={setPicked}

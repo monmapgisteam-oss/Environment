@@ -180,6 +180,17 @@ export function WildlifeDashboard() {
     };
   }, [calls]);
 
+  /*
+    Цэгийн шошго — амьтны зүйл.
+
+    Дуудлагын гол утга нь "хаана ЯМАР амьтан" гэсэн хос тул зүйлийн нэр
+    нь шошгонд яг тохирно. z10-аас гарна: цэг цөөн, улс даяар тархсан.
+  */
+  const labels = React.useMemo(() => {
+    if (!calls) return undefined;
+    return { text: calls.map((c) => c.species), minzoom: 10 };
+  }, [calls]);
+
   /** Бүлэглэж тоолох. `of` нь null буцаавал тухайн бичлэг тоологдохгүй. */
   const tally = React.useCallback(
     (of: (c: WildlifeCall) => string | null, skip: Skip): Datum[] => {
@@ -246,7 +257,8 @@ export function WildlifeDashboard() {
 
   /* ---------------- Сонголт руу ойртох ---------------- */
   const focus = React.useMemo<Extent | null>(() => {
-    if (!calls || (!soum && !species && !route)) return null;
+    /* ЯМАР Ч шүүлтүүр тавихад тэр сонголт руугаа ойртоно */
+    if (!calls || (!soum && !species && !route && !officer && !injured)) return null;
     const idx = selectBase();
     if (idx.length === 0) return null;
     let w = 180;
@@ -261,8 +273,7 @@ export function WildlifeDashboard() {
       n = Math.max(n, c.lat);
     }
     return [w, s, e, n];
-    // Зөвхөн газарзүйн болон зүйлийн сонголтоос хамаарна — он, сар үсрэхгүй
-  }, [calls, selectBase, soum, species, route]);
+  }, [calls, selectBase, soum, species, route, officer, injured]);
 
   /** Шүүлтүүр давсан дуудлагын зураг — эрэмбэ нь бүртгэлийн дарааллаар */
   const shownPhotos = React.useMemo(() => {
@@ -540,6 +551,7 @@ export function WildlifeDashboard() {
               */}
               <PointMap
                 points={points}
+                labels={labels}
                 visible={mapIdx}
                 basemap={basemap}
                 onSelect={setSelected}

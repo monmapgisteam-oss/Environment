@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 import { Database } from "lucide-react";
 import { RailClose } from "@/components/shell/rail";
 import { DEPARTMENTS } from "@/lib/departments";
-import { cn } from "@/lib/utils";
+import { cn, isActivePath } from "@/lib/utils";
 
 const SYSTEM = [{ href: "/sources", label: "Дата эх сурвалж", icon: Database }];
 
@@ -26,23 +26,34 @@ export function Sidebar() {
         <div className="border-y border-line">
           {DEPARTMENTS.map((d, i) => {
             const href = `/departments/${d.slug}`;
-            const active = pathname === href;
+            const active = isActivePath(pathname, href);
             return (
               <Link
                 key={d.slug}
                 href={href}
+                aria-current={active ? "page" : undefined}
                 style={{ "--tone": `var(${d.tone})` } as React.CSSProperties}
                 className={cn(
-                  "group relative grid grid-cols-[16px_18px_1fr_auto] items-start gap-x-2 border-b border-line py-[7px] pr-2.5 pl-3 transition-colors last:border-b-0",
-                  active ? "tinted" : "hover:bg-paper-hi",
+                  /* Идэвхтэй мөр 3px-ээр баруун тийш түлхэгдэнэ — зүүн
+                     захын заагчид зай гаргаж, мөр өөрөө бага зэрэг
+                     "гарч ирсэн" мэт болно */
+                  "group relative grid grid-cols-[16px_18px_1fr_auto] items-start gap-x-2 border-b border-line py-[7px] pr-2.5 transition-colors last:border-b-0",
+                  active ? "tinted bg-paper-hi pl-[15px]" : "pl-3 hover:bg-paper-hi",
                 )}
               >
-                {/* Идэвхтэй заагч */}
+                {/*
+                  Идэвхтэй заагч.
+
+                  Гурван дохио ЗЭРЭГ ажиллана: зузаан өнгөт зураас, илүү
+                  цайвар дэвсгэр, хэлтсийн өнгөөр будагдсан дугаар, икон.
+                  Ганц нь ч гэсэн ажиллах ёстой — өнгө ялгахад бэрхшээлтэй
+                  хүнд дэвсгэр, зузаан нь хангалттай.
+                */}
                 <span
                   aria-hidden
                   className={cn(
-                    "absolute top-0 bottom-0 left-0 w-[2px] bg-(--tone) transition-opacity",
-                    active ? "opacity-100" : "opacity-0 group-hover:opacity-40",
+                    "absolute top-0 bottom-0 left-0 bg-(--tone) transition-all",
+                    active ? "w-[3px] opacity-100" : "w-[2px] opacity-0 group-hover:opacity-40",
                   )}
                 />
 
@@ -50,7 +61,9 @@ export function Sidebar() {
                 <span
                   className={cn(
                     "num mt-[2px] text-[10.5px] leading-none transition-colors",
-                    active ? "text-(--tone)" : "text-ink-3 group-hover:text-ink-2",
+                    active
+                      ? "font-medium text-(--tone)"
+                      : "text-ink-3 group-hover:text-ink-2",
                   )}
                 >
                   {String(i + 1).padStart(2, "0")}
@@ -64,7 +77,7 @@ export function Sidebar() {
                   )}
                   style={
                     active
-                      ? { borderColor: "color-mix(in oklab, var(--tone) 35%, transparent)" }
+                      ? { borderColor: "color-mix(in oklab, var(--tone) 55%, transparent)" }
                       : undefined
                   }
                 >
@@ -105,25 +118,31 @@ export function Sidebar() {
         <GroupHead label="Систем" />
         <div className="border-y border-line">
           {SYSTEM.map((it) => {
-            const active = pathname.startsWith(it.href);
+            const active = isActivePath(pathname, it.href, true);
             return (
               <Link
                 key={it.href}
                 href={it.href}
+                aria-current={active ? "page" : undefined}
                 className={cn(
-                  "group relative grid grid-cols-[16px_18px_1fr] items-center gap-x-2 py-[7px] pr-2.5 pl-3 transition-colors",
-                  active ? "bg-paper-hi" : "hover:bg-paper-hi",
+                  "group relative grid grid-cols-[16px_18px_1fr] items-center gap-x-2 py-[7px] pr-2.5 transition-colors",
+                  active ? "bg-paper-hi pl-[15px]" : "pl-3 hover:bg-paper-hi",
                 )}
               >
                 <span
                   aria-hidden
                   className={cn(
-                    "absolute top-0 bottom-0 left-0 w-[2px] bg-moss transition-opacity",
-                    active ? "opacity-100" : "opacity-0 group-hover:opacity-40",
+                    "absolute top-0 bottom-0 left-0 bg-moss transition-all",
+                    active ? "w-[3px] opacity-100" : "w-[2px] opacity-0 group-hover:opacity-40",
                   )}
                 />
                 <span className="num text-[10.5px] leading-none text-ink-3">·</span>
-                <span className="flex size-[18px] items-center justify-center">
+                <span
+                  className={cn(
+                    "flex size-[18px] items-center justify-center",
+                    active && "text-moss",
+                  )}
+                >
                   <it.icon size={12} strokeWidth={1.75} />
                 </span>
                 <span

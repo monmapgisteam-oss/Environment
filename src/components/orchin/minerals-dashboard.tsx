@@ -21,7 +21,8 @@ import {
   type MapOverlay,
   type MapPoints,
 } from "@/components/wells/map";
-import { mineralColor } from "@/lib/mineral-colors";
+import { Bounds } from "@/lib/extent";
+import { rampColor } from "@/lib/tone-ramp";
 import {
   fetchMinerals,
   isExpired,
@@ -119,7 +120,7 @@ export function MineralsDashboard() {
           const id = Number(f.id);
           return {
             ...f,
-            properties: { oid: id, c: mineralColor(id), t: code.get(id) ?? "" },
+            properties: { oid: id, c: rampColor(id - 1), t: code.get(id) ?? "" },
           };
         }),
     };
@@ -189,15 +190,22 @@ export function MineralsDashboard() {
     return { lo, hi, width: Math.max(hi - lo, 1) };
   }, [sites, now]);
 
-  /* Сонгосон зөвшөөрлийн булангийн цэгүүд рүү ойртоно */
+  /* ---------------- Сонголтын хүрээ (zoom action) ----------------
+     Сонгосон талбай руу, эс бөгөөс шүүлтүүрт таарсан бүх талбай руу
+     ойртоно. Шүүлтүүр цуцлагдвал `null` — зураг анхны байрлалдаа буцна. */
   const focus = React.useMemo<Extent | null>(() => {
-    if (picked == null || !data) return null;
-    const b = data.bounds.get(picked);
-    if (!b) return null;
-    const [w, s, e, n] = b;
-    const pad = Math.max(0.004, (e - w) * 0.25);
-    return [w - pad, s - pad, e + pad, n + pad];
-  }, [data, picked]);
+    if (!data) return null;
+    if (picked == null && !mineral && !district) return null;
+    const b = new Bounds();
+    for (const s of picked != null ? shown.filter((x) => x.id === picked) : shown) {
+      const box = data.bounds.get(s.id);
+      if (!box) continue;
+      b.add(box[0], box[1]);
+      b.add(box[2], box[3]);
+    }
+    /* Талбай жижиг байж болно — хамгийн багадаа ~450м хүрээ өгнө */
+    return b.get(0.004);
+  }, [data, shown, picked, mineral, district]);
 
   const active = React.useMemo(() => {
     const id = hover ?? picked;
@@ -335,7 +343,7 @@ export function MineralsDashboard() {
               {/* Мөр товшиход газрын зураг тухайн талбай руу ойртоно */}
               <RowChart
                 data={byLicense}
-                colorOf={(d) => mineralColor(Number(d.key))}
+                colorOf={(d) => rampColor(Number(d.key) - 1)}
                 selected={picked == null ? null : String(picked)}
                 onSelect={(k) => setPicked(k == null ? null : Number(k))}
                 format={(v) => num(v)}
@@ -420,7 +428,7 @@ function Timeline({
       <div className="divide-y divide-line">
         {sites.map((s) => {
           const dead = isExpired(s, now);
-          const tone = mineralColor(s.id);
+          const tone = rampColor(s.id - 1);
           const a = s.granted == null ? null : at(s.granted);
           const b = s.expires == null ? null : at(s.expires);
           return (

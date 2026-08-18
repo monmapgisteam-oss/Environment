@@ -136,6 +136,21 @@ export function WellsDashboard() {
     [selectBase, extent, data],
   );
 
+  /*
+    Цэгийн шошго — худгийн бүртгэлийн дугаар.
+
+    Худгийн НЭР гэж байхгүй (дэлгэрэнгүйг товшсон үед л татдаг) тул
+    бүртгэлийн дугаар нь цорын ганц таних тэмдэг. Сум, дүүргийн нэрийг
+    бичих нь утгагүй — суурь зураг өөрөө бичээд байдаг.
+
+    Хамгийн ойрын түвшинд (z14) л гарна: 12 мянган цэг тул түүнээс
+    холоос шошго нь тархалтыг бүрэн дарна.
+  */
+  const labels = React.useMemo(() => {
+    if (!data) return undefined;
+    return { text: data.oid.map((o) => `#${o}`), minzoom: 14 };
+  }, [data]);
+
   /** Газрын зураг: харагдацын шүүлтгүй. Диаграм, индикатор: шүүлттэй. */
   const mapIdx = React.useMemo(() => selectBase(), [selectBase]);
   const chartIdx = React.useMemo(() => select(), [select]);
@@ -229,21 +244,31 @@ export function WellsDashboard() {
   );
 
   /* ---------------- Сонголтын хүрээ (zoom action) ----------------
-     Зөвхөн газарзүйн сонголтоос хамаарна: он, сар, гүйцэтгэгч сонгоход
-     зураг үсрэх нь утгагүй (тэдгээр нь улс даяар тархсан).
-     Сум сонгогдсон бол түүнийг, эс бөгөөс аймгийг авна. */
+
+     ЯМАР Ч шүүлтүүр тавихад зураг тэр сонголт руугаа ойртоно — газарзүйн
+     сонголт төдийгүй гүйцэтгэгч, он, сар ч мөн адил. Нэг гүйцэтгэгч
+     сонгоход түүний ажилласан бүс өөрөө хариулт болно.
+
+     ГАНЦ үл хамаарах зүйл нь ХАРАГДАЦЫН үйлдэл (`extentOn`): тэр нь
+     зургийн хүрээг шүүлтүүр болгодог тул ойртолт нь хүрээг өөрчилж,
+     хүрээ нь шүүлтийг өөрчилж — эцэс төгсгөлгүй эргэлдэнэ.
+
+     Шүүлтүүр цуцлагдвал `null` буцаана: газрын зураг өөрөө анхны
+     байрлал руугаа буцна. */
+  const yearFiltered = Boolean(
+    data && range && (range[0] !== data.minYear || range[1] !== data.maxYear),
+  );
+  const anyFilter = yearFiltered || Boolean(aimag || soum || contractor || month);
+
   const focus = React.useMemo<Extent | null>(() => {
-    if (!data || (aIdx < 0 && sIdx < 0)) return null;
+    if (!data || !anyFilter || mapIdx.length === 0) return null;
 
     const xs: number[] = [];
     const ys: number[] = [];
-    for (let i = 0; i < data.n; i++) {
-      if (sIdx >= 0 && data.si[i] !== sIdx) continue;
-      if (aIdx >= 0 && data.ai[i] !== aIdx) continue;
-      xs.push(data.lon[i]);
-      ys.push(data.lat[i]);
+    for (let k = 0; k < mapIdx.length; k++) {
+      xs.push(data.lon[mapIdx[k]]);
+      ys.push(data.lat[mapIdx[k]]);
     }
-    if (!xs.length) return null;
 
     xs.sort((a, b) => a - b);
     ys.sort((a, b) => a - b);
@@ -253,7 +278,7 @@ export function WellsDashboard() {
     const lo = trim ? Math.floor(xs.length * 0.01) : 0;
     const hi = trim ? Math.ceil(xs.length * 0.99) - 1 : xs.length - 1;
     return [xs[lo], ys[lo], xs[hi], ys[hi]];
-  }, [data, aIdx, sIdx]);
+  }, [data, mapIdx, anyFilter]);
 
   /* ---------------- Индикатор ---------------- */
   const indicators = React.useMemo(() => {
@@ -290,7 +315,7 @@ export function WellsDashboard() {
   }, []);
 
 
-  const wholeRange = !data || !range || (range[0] === data.minYear && range[1] === data.maxYear);
+  const wholeRange = !yearFiltered;
   /** Муж нь нэг жил дээр хумигдсан бол тэр он — "Он" шүүлтүүрийн утга */
   const singleYear = range && range[0] === range[1] ? String(range[0]) : null;
   const activeCount =
@@ -505,6 +530,7 @@ export function WellsDashboard() {
               <WellsMap
                 points={data}
                 visible={mapIdx}
+                labels={labels}
                 basemap={basemap}
                 onSelect={openWell}
                 extent={extentOn}

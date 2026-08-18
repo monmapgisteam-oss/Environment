@@ -7,6 +7,8 @@
  */
 
 import { DAMAGED_SERVICE } from "@/lib/damaged";
+import { ECO_SERVICE, PARCELS_SERVICE } from "@/lib/eco-corridors";
+import { FLOODPLAIN_SERVICE } from "@/lib/floodplains";
 import { LICENSES_SERVICE } from "@/lib/licenses";
 import { MINERALS_SERVICE } from "@/lib/minerals";
 import { PETITIONS_SERVICE } from "@/lib/petitions";
@@ -41,6 +43,12 @@ export const SOURCES: Source[] = [
     url: WATER_SERVICE,
   },
   {
+    slug: "nogoon-bus",
+    name: "Голын татам",
+    kind: "ArcGIS FeatureServer",
+    url: FLOODPLAIN_SERVICE,
+  },
+  {
     slug: "amitan-urgamal",
     name: "Зэрлэг амьтны дуудлагын бүртгэл",
     kind: "ArcGIS Survey123",
@@ -51,6 +59,18 @@ export const SOURCES: Source[] = [
     name: "Аврагдсан зэрлэг амьтад 2019–2026",
     kind: "ArcGIS FeatureServer",
     url: RESCUES_SERVICE,
+  },
+  {
+    slug: "amitan-urgamal",
+    name: "Экологийн коридор 2024",
+    kind: "ArcGIS FeatureServer",
+    url: ECO_SERVICE,
+  },
+  {
+    slug: "amitan-urgamal",
+    name: "Нэгж талбар — коридортой давхцсаныг нь",
+    kind: "ArcGIS FeatureServer",
+    url: PARCELS_SERVICE,
   },
   {
     slug: "orchin",

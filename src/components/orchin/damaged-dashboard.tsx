@@ -14,6 +14,7 @@ import {
   type MapOverlay,
   type MapPoints,
 } from "@/components/wells/map";
+import { Bounds } from "@/lib/extent";
 import {
   fetchDamaged,
   sizeClass,
@@ -88,16 +89,35 @@ export function DamagedDashboard() {
     return out;
   }, [sites, keep]);
 
-  /* Шүүлтүүр нь газрын зурагт ч үйлчилнэ — таарсан талбай л үлдэнэ */
+  /*
+    Шүүлтүүр нь газрын зурагт ч үйлчилнэ — таарсан талбай л үлдэнэ.
+
+    Шошго (`properties.t`) нь ХЭМЖЭЭ. Газрын нэрийг бичих нь утгагүй:
+    2,742 талбайн 86% нь Багануурт байгаа тул бүгд ижил үг давтана.
+    Харин хэмжээ нь талбай бүрийг ялгаж хэлнэ — энэ самбарын цорын ганц
+    хэмжигдэхүүн ч мөн тэр.
+  */
   const shapes = React.useMemo<GeoJSON.FeatureCollection>(() => {
-    if (!data) return { type: "FeatureCollection", features: [] };
-    if (!place && !size) return data.shapes;
-    const on = new Set(shown.map((i) => sites![i].oid));
+    if (!data || !sites) return { type: "FeatureCollection", features: [] };
+    const ha = new Map(sites.map((s) => [s.oid, s.ha]));
+    const on = new Set(shown.map((i) => sites[i].oid));
     return {
       type: "FeatureCollection",
-      features: data.shapes.features.filter((f) => on.has(Number(f.id))),
+      features: data.shapes.features
+        .filter((f) => on.has(Number(f.id)))
+        .map((f) => {
+          const oid = Number(f.id);
+          const v = ha.get(oid) ?? 0;
+          return {
+            ...f,
+            properties: {
+              oid,
+              t: `${v >= 1 ? v.toFixed(1) : v.toFixed(2)} га`,
+            },
+          };
+        }),
     };
-  }, [data, sites, shown, place, size]);
+  }, [data, sites, shown]);
 
   /* ---------------- Задаргаа ----------------
 
@@ -169,34 +189,24 @@ export function DamagedDashboard() {
     return { n: shown.length, ha, biggest, places: places.size };
   }, [sites, shown]);
 
-  /* Сонгосон талбай руу ойртох — олон өнцөгтийн хүрээг тооцно */
+  /* ---------------- Сонголтын хүрээ (zoom action) ----------------
+     Сонгосон талбай руу, эс бөгөөс шүүлтүүрт таарсан бүх талбай руу
+     ойртоно. Шүүлтүүр цуцлагдвал `null` — зураг анхны байрлалдаа буцна.
+
+     Талбай маш жижиг байж болно — хамгийн багадаа ~70м хүрээ өгнө. */
   const focus = React.useMemo<Extent | null>(() => {
-    if (picked == null || !data) return null;
-    const f = data.shapes.features.find((x) => Number(x.id) === picked);
-    if (!f) return null;
-    let w = 180;
-    let s = 90;
-    let e = -180;
-    let n = -90;
-    const walk = (c: unknown): void => {
-      if (typeof (c as number[])[0] === "number") {
-        const [x, y] = c as [number, number];
-        if (x < w) w = x;
-        if (x > e) e = x;
-        if (y < s) s = y;
-        if (y > n) n = y;
-        return;
-      }
-      for (const part of c as unknown[]) walk(part);
-    };
-    if (f.geometry.type === "Polygon" || f.geometry.type === "MultiPolygon") {
-      walk(f.geometry.coordinates);
+    if (!data) return null;
+    if (picked == null && !place && !size) return null;
+    const b = new Bounds();
+    if (picked != null) {
+      const f = data.shapes.features.find((x) => Number(x.id) === picked);
+      b.addGeometry(f?.geometry);
+    } else {
+      /* `shapes` нь аль хэдийн шүүгдсэн — дахин шүүх шаардлагагүй */
+      for (const f of shapes.features) b.addGeometry(f.geometry);
     }
-    if (w > e) return null;
-    /* Талбай маш жижиг байж болно — хамгийн багадаа ~100м хүрээ өгнө */
-    const pad = Math.max(0.0006, (e - w) * 0.25);
-    return [w - pad, s - pad, e + pad, n + pad];
-  }, [data, picked]);
+    return b.get(0.0006);
+  }, [data, shapes, picked, place, size]);
 
   const active = React.useMemo(() => {
     const id = hover ?? picked;
@@ -332,7 +342,9 @@ export function DamagedDashboard() {
                 <PointMap
                   points={NO_POINTS}
                   visible={NO_INDEX}
-                  shapes={{ data: shapes, selected: picked }}
+                  /* Талбай маш жижиг (дунджаар 37м) тул шошго нь хамгийн
+                     ойрын түвшинд л гарна */
+                  shapes={{ data: shapes, selected: picked, labelZoom: 14 }}
                   basemap={basemap}
                   onSelect={setPicked}
                   onHover={setHover}

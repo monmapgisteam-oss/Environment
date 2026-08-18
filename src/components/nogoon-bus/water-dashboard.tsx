@@ -16,6 +16,7 @@ import { AreaChart, RowChart, type Datum } from "@/components/charts";
 import { BasemapGallery } from "@/components/map/basemap-gallery";
 import { FilterBar, FilterMenu, PickList } from "@/components/wells/filter-bar";
 import { defaultBasemap, type Basemap, type Extent } from "@/components/wells/map";
+import { boundsOf } from "@/lib/extent";
 import {
   fetchWaterContracts,
   unitFee,
@@ -207,22 +208,14 @@ export function WaterDashboard() {
   }, [shown]);
 
   /* ---------------- Сонголтын хүрээ (zoom action) ----------------
-     Зөвхөн ГАЗАРЗҮЙН сонголтоос хамаарна: салбар, чиглэл сонгоход зураг
-     үсрэх нь утгагүй (тэдгээр нь хот даяар тархсан). */
+     ЯМАР Ч шүүлтүүр эсвэл сонголт хийхэд зураг таарсан гэрээнүүд рүүгээ
+     ойртоно. Шүүлтүүр цуцлагдвал `null` — зураг анхны байрлалдаа буцна. */
+  const anyFilter = Boolean(sector || activity || district || holder);
+
   const focus = React.useMemo<Extent | null>(() => {
-    const pts = (picked != null ? shown.filter((c) => c.oid === picked) : district ? shown : [])
-      .filter((c) => !Number.isNaN(c.lon));
-    if (!pts.length) return null;
-    const xs = pts.map((c) => c.lon);
-    const ys = pts.map((c) => c.lat);
-    const pad = 0.004;
-    return [
-      Math.min(...xs) - pad,
-      Math.min(...ys) - pad,
-      Math.max(...xs) + pad,
-      Math.max(...ys) + pad,
-    ];
-  }, [shown, district, picked]);
+    if (picked != null) return boundsOf(shown.filter((c) => c.oid === picked));
+    return anyFilter ? boundsOf(shown) : null;
+  }, [shown, anyFilter, picked]);
 
   const active = React.useMemo(() => {
     const id = hover ?? picked;

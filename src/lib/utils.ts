@@ -30,3 +30,21 @@ export function dateLabel(iso: string) {
     d.getDate(),
   ).padStart(2, "0")}`;
 }
+
+/**
+ * Одоогийн зам заасан хаягтай тохирч байна уу.
+ *
+ * ЭНГИЙН `===` БОЛОХГҮЙ: `next.config.ts` дотор `trailingSlash: true`
+ * тавьсан тул `usePathname()` нь `/departments/orchin/` гэж ТӨГСГӨЛИЙН
+ * ЗУРААСТАЙ буцаана. Хажуугийн зурвасын холбоосууд зураасгүй бичигдсэн
+ * тул тэнцэл хэзээ ч биелэхгүй — улмаас "аль хэлтэс сонгогдсон" нь
+ * хаана ч тэмдэглэгдэхгүй байв.
+ *
+ * `nested` нь дэд хуудсыг ч идэвхтэйд тооцно (жишээ нь `/sources/…`).
+ */
+export function isActivePath(pathname: string, href: string, nested = false) {
+  const strip = (s: string) => (s.length > 1 ? s.replace(/\/+$/, "") : s);
+  const a = strip(pathname);
+  const b = strip(href);
+  return nested ? a === b || a.startsWith(`${b}/`) : a === b;
+}

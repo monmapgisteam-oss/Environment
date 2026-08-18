@@ -166,6 +166,18 @@ export function RescuesDashboard() {
     };
   }, [rows]);
 
+  /*
+    Цэгийн шошго — зүйлийн монгол нэр.
+
+    Цэг нь зурсан тэмдэг эсвэл зурагтай (`marks`, `photos`) боловч
+    тэдгээрээс аль зүйл болохыг таахад хэцүү — нэр нь баталгаа болно.
+    Бөөгнөрөл задарсан үед (z10) гарна.
+  */
+  const labels = React.useMemo(() => {
+    if (!rows) return undefined;
+    return { text: rows.map((r) => r.species), minzoom: 10 };
+  }, [rows]);
+
   const tally = React.useCallback(
     (of: (r: Rescue) => string | null, skip: Skip): Datum[] => {
       if (!rows) return [];
@@ -232,7 +244,8 @@ export function RescuesDashboard() {
   }, [rows, shown]);
 
   const focus = React.useMemo<Extent | null>(() => {
-    if (!rows || (!soum && !species)) return null;
+    /* ЯМАР Ч шүүлтүүр тавихад тэр сонголт руугаа ойртоно */
+    if (!rows || (!soum && !species && !rarity && !outcome && !month)) return null;
     const idx = selectBase();
     if (idx.length === 0) return null;
     let w = 180;
@@ -247,7 +260,7 @@ export function RescuesDashboard() {
       n = Math.max(n, r.lat);
     }
     return [w, s, e, n];
-  }, [rows, selectBase, soum, species]);
+  }, [rows, selectBase, soum, species, rarity, outcome, month]);
 
   const detail = React.useMemo(() => {
     if (selected == null) return null;
@@ -446,6 +459,7 @@ export function RescuesDashboard() {
                   */}
                   <PointMap
                     points={points}
+                    labels={labels}
                     visible={mapIdx}
                     basemap={basemap}
                     onSelect={setSelected}

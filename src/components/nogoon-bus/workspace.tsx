@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { Droplets, Loader2, Waves } from "lucide-react";
+import { Droplets, FileSignature, Loader2, Waves } from "lucide-react";
 import { SourceTabs, useStoredTab } from "@/components/ui/source-tabs";
 
 /*
@@ -26,18 +26,34 @@ const WaterDashboard = dynamic(
   { ssr: false, loading: spinner },
 );
 
+const FloodplainDashboard = dynamic(
+  () =>
+    import("@/components/nogoon-bus/floodplain-dashboard").then(
+      (m) => m.FloodplainDashboard,
+    ),
+  { ssr: false, loading: spinner },
+);
+
 const TABS = [
   {
     id: "wells",
     label: "Худгийн бүртгэл",
     note: "2015–2025 · 12,672 цэг",
-    icon: Waves,
+    icon: Droplets,
   },
   {
+    /* Гэрээний икон — сэдэв нь ус боловч агуулга нь баримт бичиг,
+       төлбөр. Гурван таб бүгд устай тул усны иконоор ялгагдахгүй. */
     id: "water",
     label: "Ус ашиглах гэрээ",
     note: "Аж ахуйн нэгжийн гэрээ, төлбөр",
-    icon: Droplets,
+    icon: FileSignature,
+  },
+  {
+    id: "floodplain",
+    label: "Голын татам",
+    note: "4 сав газар · татмын хүрээ",
+    icon: Waves,
   },
 ] as const;
 
@@ -55,7 +71,13 @@ export function NogoonBusWorkspace() {
       <SourceTabs tabs={TABS} value={tab} onChange={pick} label="Сэдэв" />
 
       <div className="min-h-0 flex-1">
-        {tab === "wells" ? <WellsDashboard /> : <WaterDashboard />}
+        {tab === "wells" ? (
+          <WellsDashboard />
+        ) : tab === "water" ? (
+          <WaterDashboard />
+        ) : (
+          <FloodplainDashboard />
+        )}
       </div>
     </div>
   );

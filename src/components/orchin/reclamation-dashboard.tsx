@@ -10,7 +10,7 @@ import {
   Ruler,
   Sprout,
 } from "lucide-react";
-import { AreaChart, RowChart, type Datum } from "@/components/charts";
+import { AreaChart, PieChart, RowChart, type Datum } from "@/components/charts";
 import { BasemapGallery } from "@/components/map/basemap-gallery";
 import { FilterBar, FilterMenu, PickList } from "@/components/wells/filter-bar";
 import {
@@ -19,6 +19,7 @@ import {
   type Extent,
   type MapPoints,
 } from "@/components/wells/map";
+import { Bounds } from "@/lib/extent";
 import { fetchReclamation, FUNDING, type ReclamationSite } from "@/lib/reclamation";
 import { cn, num } from "@/lib/utils";
 
@@ -98,16 +99,27 @@ export function ReclamationDashboard() {
   );
 
   /* Талбайн хүрээ — булангийн цэгүүдээс олон өнцөгт болгоно */
+  /*
+    Нэг бичлэг ХЭД ХЭДЭН салангид талбайтай байж болох тул
+    `MultiPolygon` — цагираг бүр тусдаа хэсэг. Нэг Feature хэвээр
+    үлдэнэ: сонголт, hover нь бичлэгээр явдаг тул хэсгүүд нь салж
+    болохгүй.
+  */
   const polygons = React.useMemo<GeoJSON.FeatureCollection>(
     () => ({
       type: "FeatureCollection",
       features: shown
-        .filter((s) => s.ring.length >= 4)
+        .filter((s) => s.rings.length > 0)
         .map((s) => ({
           type: "Feature" as const,
           id: s.oid,
-          properties: { oid: s.oid, c: TONE },
-          geometry: { type: "Polygon" as const, coordinates: [s.ring] },
+          /* `t` нь ойртоход хүрээн дээр гарах шошго — талбайн дугаар,
+             он хоёр нь тайлангийн мөрийг таниулах хамгийн богино хос */
+          properties: { oid: s.oid, c: TONE, t: `${s.no} · ${s.year}` },
+          geometry: {
+            type: "MultiPolygon" as const,
+            coordinates: s.rings.map((r) => [r]),
+          },
         })),
     }),
     [shown],
@@ -172,6 +184,14 @@ export function ReclamationDashboard() {
     }));
   }, [sites, keep]);
 
+  /* Бөгжний хувийг тооцох суурь — эх үүсвэрийн шүүлтийг АЛГАСсан нийлбэр.
+     `stats.ha` -г хэрэглэвэл эх үүсвэр сонгомогц сонгосон зүсэм нь
+     үргэлж 100% болж харагдана */
+  const totalHa = React.useMemo(
+    () => byFunding.reduce((s, d) => s + d.value, 0),
+    [byFunding],
+  );
+
   const stats = React.useMemo(() => {
     const ha = shown.reduce((s, x) => s + x.ha, 0);
     const years = new Set(shown.map((s) => s.year));
@@ -188,23 +208,18 @@ export function ReclamationDashboard() {
   }, [shown]);
 
   /* Сонголт руу ойртох */
+  /* ---------------- Сонголтын хүрээ (zoom action) ----------------
+     Сонгосон талбай руу, эс бөгөөс шүүлтүүрт таарсан бүх талбай руу
+     ойртоно. Шүүлтүүр цуцлагдвал `null` — зураг анхны байрлалдаа буцна. */
   const focus = React.useMemo<Extent | null>(() => {
-    const target = picked != null ? shown.filter((s) => s.oid === picked) : shown;
-    if (!target.length || (picked == null && !funding && !year && !district)) return null;
-    let w = 180;
-    let s = 90;
-    let e = -180;
-    let n = -90;
-    for (const site of target) {
-      for (const [x, y] of site.ring.length ? site.ring : [[site.lon, site.lat]]) {
-        if (x < w) w = x;
-        if (x > e) e = x;
-        if (y < s) s = y;
-        if (y > n) n = y;
-      }
+    if (picked == null && !funding && !year && !district) return null;
+    const b = new Bounds();
+    for (const site of picked != null ? shown.filter((s) => s.oid === picked) : shown) {
+      if (site.rings.length) {
+        for (const ring of site.rings) for (const [x, y] of ring) b.add(x, y);
+      } else b.add(site.lon, site.lat);
     }
-    const pad = 0.003;
-    return [w - pad, s - pad, e + pad, n + pad];
+    return b.get(0.003);
   }, [shown, picked, funding, year, district]);
 
   const active = React.useMemo(
@@ -348,7 +363,7 @@ export function ReclamationDashboard() {
               <PointMap
                 points={geo}
                 visible={visible}
-                shapes={{ data: polygons, selected: picked }}
+                shapes={{ data: polygons, selected: picked, labelZoom: 12 }}
                 basemap={basemap}
                 onSelect={setPicked}
                 onHover={setHover}
@@ -395,6 +410,34 @@ export function ReclamationDashboard() {
                   icon={Coins}
                   label="Төсөвт өртөг, мян.₮"
                   value={stats.cost ? num(Math.round(stats.cost)) : "—"}
+                />
+              </div>
+            </Card>
+
+            {/*
+              Санхүүжилтийн эх үүсвэр.
+
+              Ердөө ХОЁР ангилал тул бөгжөөр — мөрөн диаграм нь хоёр
+              зурвасыг зэрэгцүүлээд орхих бөгөөд гол баримт нь
+              "хэдэн га" биш ХАРЬЦАА юм: нөхөн сэргээлтийн 98% нь
+              нийслэлийн төсвөөр хийгдсэн, аж ахуйн нэгжийн хөрөнгө
+              ердөө 3.8 га-д хүрсэн. Бөгж нь тэр харьцааг шууд уншуулна.
+
+              Тоог 1 орны нарийвчлалтай бичнэ — `num()` нь бүхэл
+              болгодог тул 3.8 нь "4" болж, ялгаа нь бүдгэрнэ.
+            */}
+            <Card className="shrink-0">
+              <Head title="Санхүүжилтийн эх үүсвэрээр">
+                <span className="text-[10.5px] text-ink-3">га</span>
+              </Head>
+              <div className="p-3">
+                <PieChart
+                  data={byFunding}
+                  size={84}
+                  selected={funding}
+                  onSelect={setFunding}
+                  format={(v) => v.toFixed(1)}
+                  note={(d) => `${((d.value / totalHa) * 100).toFixed(1)}%`}
                 />
               </div>
             </Card>

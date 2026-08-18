@@ -38,6 +38,7 @@ import {
   type ToiletsPayload,
 } from "@/lib/toilets";
 import { asset } from "@/lib/base-path";
+import { Bounds } from "@/lib/extent";
 import { cn, num } from "@/lib/utils";
 
 const PointMap = dynamic(
@@ -231,6 +232,26 @@ export function OrchinDashboard() {
     [cityRows],
   );
 
+  /*
+    Цэгийн шошго — дүүрэг, хороо.
+
+    Эх сурвалжид нийтийн бие засах газрын НЭР байхгүй, зөвхөн байршил
+    бий. Тиймээс шошго нь хаяг болно. z11-ээс гарна: 17 цэг тул нягтрал
+    багатай, эрт харагдаж болно.
+
+    Нүхэн жорлонгийн горимд шошго БАЙХГҮЙ: тэдгээр цэг нь бодит жорлон
+    биш ~220м-ийн нэгтгэсэн НҮД тул нэрлэх зүйл нь үгүй.
+  */
+  const cityLabels = React.useMemo(
+    () => ({
+      text: cityRows.map((c) =>
+        c.khoroo != null ? `${c.district} ${c.khoroo}-р хороо` : c.district,
+      ),
+      minzoom: 11,
+    }),
+    [cityRows],
+  );
+
   const hovered = React.useMemo(
     () => (hover == null ? null : (city.find((c) => c.oid === hover) ?? null)),
     [city, hover],
@@ -391,30 +412,19 @@ export function OrchinDashboard() {
   /* ---------------- Сонголт руу ойртох (zoom action) ----------------
      Диаграм дээр товшиход газрын зураг тухайн сонголтын хүрээ рүү нисч
      ойртоно. Нүхэн жорлон дээр нүдээр, нийтийн жорлон дээр цэгээр. */
+  /* ---------------- Сонголтын хүрээ (zoom action) ----------------
+     ЯМАР Ч шүүлтүүр тавихад зураг таарсан цэгүүд рүүгээ ойртоно.
+     Шүүлтүүр цуцлагдвал `null` — зураг анхны байрлалдаа буцна. */
   const focus = React.useMemo<Extent | null>(() => {
-    const pts: [number, number][] = [];
-
+    if (!district && !khoroo && !zone) return null;
+    const b = new Bounds();
     if (pit) {
-      if (!district) return null;
-      for (let i = 0; i < cells.lon.length; i++) pts.push([cells.lon[i], cells.lat[i]]);
+      for (let i = 0; i < cells.lon.length; i++) b.add(cells.lon[i], cells.lat[i]);
     } else {
-      if (!district && !khoroo) return null;
-      for (const c of cityRows) pts.push([c.lon, c.lat]);
+      for (const c of cityRows) b.add(c.lon, c.lat);
     }
-    if (!pts.length) return null;
-
-    let w = 180;
-    let s = 90;
-    let e = -180;
-    let n = -90;
-    for (const [x, y] of pts) {
-      w = Math.min(w, x);
-      e = Math.max(e, x);
-      s = Math.min(s, y);
-      n = Math.max(n, y);
-    }
-    return [w, s, e, n];
-  }, [pit, district, khoroo, cells, cityRows]);
+    return b.get(0.004);
+  }, [pit, district, khoroo, zone, cells, cityRows]);
 
   /* ---------------- Индикатор ---------------- */
   const stats = React.useMemo(() => {
@@ -609,6 +619,7 @@ export function OrchinDashboard() {
                   key="city"
                   points={cityPoints}
                   visible={cityIdx}
+                  labels={cityLabels}
                   basemap={basemap}
                   onSelect={() => {}}
                   onHover={setHover}

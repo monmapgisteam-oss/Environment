@@ -7,6 +7,7 @@ import {
   Sprout,
   CloudSun,
   ShieldAlert,
+  Wallet,
 } from "lucide-react";
 
 export type DepartmentStatus = "live" | "partial" | "pending";
@@ -35,6 +36,13 @@ export const DEPARTMENTS: Department[] = [
     name: "Захиргаа удирдлагын хэлтэс",
     icon: Building2,
     tone: "--d-zahirgaa",
+    status: "pending",
+  },
+  {
+    slug: "sanhuu-monitoring",
+    name: "Санхүү аж ахуй, мониторингийн хэлтэс",
+    icon: Wallet,
+    tone: "--d-sanhuu",
     status: "pending",
   },
   {

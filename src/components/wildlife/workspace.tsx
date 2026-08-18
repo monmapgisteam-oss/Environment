@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { Loader2, PhoneCall, Squirrel } from "lucide-react";
+import { Loader2, PhoneCall, Squirrel, Waypoints } from "lucide-react";
 import { SourceTabs, useStoredTab } from "@/components/ui/source-tabs";
 
 /*
@@ -26,6 +26,11 @@ const RescuesDashboard = dynamic(
   { ssr: false, loading: spinner },
 );
 
+const EcoDashboard = dynamic(
+  () => import("@/components/wildlife/eco-dashboard").then((m) => m.EcoDashboard),
+  { ssr: false, loading: spinner },
+);
+
 const TABS = [
   {
     id: "calls",
@@ -38,6 +43,12 @@ const TABS = [
     label: "Аврагдсан амьтад",
     note: "2019–2026 бүртгэл",
     icon: Squirrel,
+  },
+  {
+    id: "eco",
+    label: "Экологийн коридор",
+    note: "2024 · давхцаж буй нэгж талбар",
+    icon: Waypoints,
   },
 ] as const;
 
@@ -56,7 +67,13 @@ export function WildlifeWorkspace() {
       <SourceTabs tabs={TABS} value={tab} onChange={pick} />
 
       <div className="min-h-0 flex-1">
-        {tab === "calls" ? <CallsDashboard /> : <RescuesDashboard />}
+        {tab === "calls" ? (
+          <CallsDashboard />
+        ) : tab === "rescues" ? (
+          <RescuesDashboard />
+        ) : (
+          <EcoDashboard />
+        )}
       </div>
     </div>
   );
