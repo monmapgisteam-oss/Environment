@@ -39,6 +39,16 @@ export type SoilMetric = {
   label: string;
   /** Нэгж — индекс нь нэгжгүй тул хоосон байж болно */
   unit: string;
+  /**
+   * ХЭВИЙН байх дээд хязгаар. Диаграмд босоо заагч болж зурагдана.
+   *
+   * ЗӨВХӨН баримтжсан хэмжигдэхүүнд өгнө. PI = агууламж / дэвсгэр
+   * агууламж тул 1 нь тодорхойлолтоороо дэвсгэр түвшин — таамаг биш.
+   * Igeo-д хязгаар БАЙХГҮЙ (эх сурвалж товчлолыг нь ч тайлаагүй), 2023
+   * оны агууламжид ч байхгүй (элемент бүр өөр нормтой бөгөөд датад
+   * ороогүй). Байхгүй бол заагч ч, өнгө ч гарахгүй.
+   */
+  limit?: number;
   /** Элементийн тэмдэглэгээ — "As", "Pb" … */
   elements: string[];
 };
@@ -79,6 +89,8 @@ const SCHEMA = {
         id: "pi",
         label: "Бохирдлын индекс (PI)",
         unit: "",
+        /* PI = агууламж / дэвсгэр агууламж → 1 нь дэвсгэр түвшин */
+        limit: 1,
         elements: {
           As: "As_PI",
           Cd: "Cd_PI",
@@ -193,6 +205,7 @@ export async function fetchSoil(year: SoilYear): Promise<SoilData> {
     id: m.id,
     label: m.label,
     unit: m.unit,
+    limit: "limit" in m ? m.limit : undefined,
     elements: Object.keys(m.elements),
   }));
   const points: SoilPoint[] = [];

@@ -434,6 +434,7 @@ export function RowChart({
   max: maxOverride,
   base = 0,
   format,
+  guide,
 }: {
   data: Datum[];
   tone?: string;
@@ -450,9 +451,21 @@ export function RowChart({
   base?: number;
   /** Тооны бичиглэл — бутархай дундажид `num()` тохирохгүй */
   format?: (v: number) => string;
+  /**
+   * ХЭВИЙН байх хязгаар. Өгвөл тэр утган дээр босоо заагч зурагдаж,
+   * түүнээс ХЭТЭРСЭН хэсэг нь анивчиж (`alert-pulse`) анхаарал татна.
+   *
+   * ЗӨВХӨН баримтжсан хязгаартай хэмжигдэхүүнд өгнө. Хязгаарыг таамаглаж
+   * зурвал "энэ хэвийн, энэ хэвийн бус" гэсэн худал дүгнэлт болно.
+   */
+  guide?: number;
 }) {
   const max = maxOverride ?? Math.max(...data.map((d) => d.value), 1);
   const span = Math.max(max - base, 1e-9);
+  const at = (v: number) => Math.max(0, Math.min(1, (v - base) / span)) * 100;
+  /* Хязгаар нь диаграмын мужаас гадуур бол заагч зурах утгагүй */
+  const guideAt =
+    guide != null && guide > base && guide < max ? at(guide) : null;
 
   if (data.length === 0) {
     return <div className="py-5 text-center text-[12px] text-ink-3">Утга алга</div>;
@@ -497,15 +510,47 @@ export function RowChart({
                 {format ? format(d.value) : num(d.value)}
               </span>
             </div>
-            <div className="mt-[3px] h-[2px] w-full overflow-hidden rounded-[1px] bg-paper-hi">
-              <div
-                className="h-full transition-[width,opacity]"
-                style={{
-                  width: `${Math.max(0, Math.min(1, (d.value - base) / span)) * 100}%`,
-                  background: color,
-                  opacity: on ? 1 : 0.3,
-                }}
-              />
+            {/*
+              Зурвас ХОЁР хэсэгтэй байж болно: хязгаар хүртэлх нь тогтуун,
+              түүнээс цааших нь анивчина. Ингэснээр "хэр их хэтэрсэн"
+              гэдэг нь өөрөө харагдана — бүтэн зурвасыг анивчуулбал
+              хэтрэлтийн ХЭМЖЭЭ алдагдана.
+
+              Заагчийн зураас нь `overflow-hidden`-ээс ГАДНА байрлана:
+              дотор нь тавибал 2px өндөрт хумигдаж үл үзэгдэнэ. Зурвасаас
+              дээш доош 3px сунгаснаар мөр дамжсан тасархай багана болж
+              харагдана.
+            */}
+            <div className="relative mt-[3px]">
+              <div className="flex h-[2px] w-full overflow-hidden rounded-[1px] bg-paper-hi">
+                <span
+                  className="h-full transition-[width,opacity]"
+                  style={{
+                    width: `${guideAt != null ? Math.min(at(d.value), guideAt) : at(d.value)}%`,
+                    background: color,
+                    opacity: on ? 1 : 0.3,
+                  }}
+                />
+                {guideAt != null && at(d.value) > guideAt ? (
+                  <span
+                    /* Анивчилт нь inline `opacity`-г дардаг тул бүдгэрсэн
+                       (сонголтоос гадуур) мөрөнд огт өгөхгүй */
+                    className={cn("h-full transition-[width,opacity]", on && "alert-pulse")}
+                    style={{
+                      width: `${at(d.value) - guideAt}%`,
+                      background: color,
+                      opacity: on ? 1 : 0.3,
+                    }}
+                  />
+                ) : null}
+              </div>
+              {guideAt != null ? (
+                <span
+                  aria-hidden
+                  className="pointer-events-none absolute -top-[3px] -bottom-[3px] w-px bg-ink-3"
+                  style={{ left: `${guideAt}%` }}
+                />
+              ) : null}
             </div>
           </button>
         );

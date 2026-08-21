@@ -524,7 +524,31 @@ export function SoilDashboard() {
                         </p>
                       </>
                     ) : null}
-                    <RowChart data={rows} format={fmt} />
+                    {/*
+                      Хязгаартай хэмжигдэхүүнд (PI) л өнгө, заагч гарна.
+                      Igeo болон агууламжид хязгаар нь БАРИМТЖААГҮЙ тул
+                      ганц өнгөөрөө үлдэнэ — таамгаар ногоон/улаан
+                      будвал "энэ хэвийн, энэ аюултай" гэсэн худал
+                      дүгнэлт өгнө.
+                    */}
+                    <RowChart
+                      data={rows}
+                      format={fmt}
+                      guide={m.limit}
+                      colorOf={m.limit != null ? (x) => pliColor(x.value) : undefined}
+                    />
+                    {m.limit != null ? (
+                      <p className="mt-3 flex items-start gap-1.5 border-t border-line pt-2 text-[10px] leading-tight text-ink-3">
+                        <span
+                          aria-hidden
+                          className="mt-[2px] inline-block h-[9px] w-px shrink-0 bg-ink-3"
+                        />
+                        <span>
+                          Дэвсгэр түвшин (PI&nbsp;=&nbsp;{m.limit}). Хэтэрсэн хэсэг
+                          анивчина.
+                        </span>
+                      </p>
+                    ) : null}
                   </div>
                 </Card>
               );
