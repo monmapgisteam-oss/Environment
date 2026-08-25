@@ -78,7 +78,7 @@ export const DEPARTMENTS: Department[] = [
     name: "Байгаль орчны үнэлгээ, уур амьсгалын өөрчлөлтийн хэлтэс",
     icon: CloudSun,
     tone: "--d-unelgee",
-    status: "pending",
+    status: "live",
   },
   {
     slug: "hyanalt",

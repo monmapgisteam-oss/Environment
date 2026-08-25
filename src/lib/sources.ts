@@ -6,6 +6,7 @@
  * нэмэгдэнэ.
  */
 
+import { ASSESSMENT_SERVICE } from "@/lib/assessment";
 import { DAMAGED_SERVICE } from "@/lib/damaged";
 import { ECO_SERVICE, PARCELS_SERVICE } from "@/lib/eco-corridors";
 import { FLOODPLAIN_SERVICE } from "@/lib/floodplains";
@@ -131,5 +132,11 @@ export const SOURCES: Source[] = [
     name: "Ашигт малтмалын тусгай зөвшөөрөлтэй талбай (нүүрс, алт)",
     kind: "ArcGIS FeatureServer",
     url: MINERALS_SERVICE,
+  },
+  {
+    slug: "unelgee-uur-amisgal",
+    name: "Байгаль орчны ерөнхий үнэлгээ — нэгж талбар",
+    kind: "ArcGIS FeatureServer",
+    url: ASSESSMENT_SERVICE,
   },
 ];
