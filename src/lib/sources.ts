@@ -10,6 +10,13 @@ import { ASSESSMENT_SERVICE } from "@/lib/assessment";
 import { DAMAGED_SERVICE } from "@/lib/damaged";
 import { ECO_SERVICE, PARCELS_SERVICE } from "@/lib/eco-corridors";
 import { FLOODPLAIN_SERVICE } from "@/lib/floodplains";
+import { FOREST_FUND_SERVICE } from "@/lib/forest-fund";
+import { FOREST_GOODS_SERVICE } from "@/lib/forest-goods";
+import { FOREST_TYPES_SERVICE } from "@/lib/forest-types";
+import {
+  PROTECTED_MAPPING_SERVICE,
+  PROTECTED_OFFICIAL_SERVICE,
+} from "@/lib/protected-areas";
 import { LICENSES_SERVICE } from "@/lib/licenses";
 import { MINERALS_SERVICE } from "@/lib/minerals";
 import { PETITIONS_SERVICE } from "@/lib/petitions";
@@ -143,6 +150,36 @@ export const SOURCES: Source[] = [
     name: "Ашигт малтмалын тусгай зөвшөөрөлтэй талбай (нүүрс, алт)",
     kind: "ArcGIS FeatureServer",
     url: MINERALS_SERVICE,
+  },
+  {
+    slug: "oi",
+    name: "Ойн сангийн талбай",
+    kind: "ArcGIS FeatureServer",
+    url: FOREST_FUND_SERVICE,
+  },
+  {
+    slug: "oi",
+    name: "Ойн төрлийн зураглал",
+    kind: "ArcGIS FeatureServer",
+    url: FOREST_TYPES_SERVICE,
+  },
+  {
+    slug: "oi",
+    name: "Ногоон бүс, ойн дагалт баялгийн тархалт",
+    kind: "ArcGIS FeatureServer",
+    url: FOREST_GOODS_SERVICE,
+  },
+  {
+    slug: "oi",
+    name: "Тусгай хамгаалалттай газар — албан бүртгэл",
+    kind: "ArcGIS FeatureServer",
+    url: `${PROTECTED_OFFICIAL_SERVICE}/2`,
+  },
+  {
+    slug: "oi",
+    name: "Тусгай хамгаалалт — зураглал (талбай, шугам, цэг)",
+    kind: "ArcGIS FeatureServer",
+    url: PROTECTED_MAPPING_SERVICE,
   },
   {
     slug: "unelgee-uur-amisgal",

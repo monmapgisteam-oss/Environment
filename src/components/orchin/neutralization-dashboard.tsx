@@ -261,9 +261,14 @@ export function NeutralizationDashboard() {
 
       {/* ============ ГОЛ ХЭСЭГ ============ */}
       <div className="flex min-h-0 flex-1 flex-col gap-2.5 xl:flex-row">
-        {/* ---- ЗҮҮН: байршил ---- */}
-        <div className="flex min-h-[220px] shrink-0 flex-col gap-2.5 xl:w-[272px] 2xl:w-[308px]">
-          <Card className="relative min-h-[180px] flex-1 overflow-hidden">
+        {/*
+          ---- ЗҮҮН: байршил ----
+          Зураг ТОГТМОЛ өргөнтэй: дөрвөн цэг дээр тархалт гэж байхгүй тул
+          өргөн нь зөвхөн байршлыг таниулахад хүрэлцэхэд л хангалттай.
+          Үлдсэн зайг профайл авна — гол агуулга тэнд байна.
+        */}
+        <div className="flex min-h-[260px] shrink-0 flex-col gap-2.5 xl:w-[700px]">
+          <Card className="relative min-h-[220px] flex-1 overflow-hidden">
             <div className="relative h-full w-full">
               {/*
                 Газрын зураг нь ЖИЖИГ. Дөрвөн цэг дээр тархалт гэж
@@ -341,8 +346,13 @@ export function NeutralizationDashboard() {
           </Card>
         </div>
 
-        {/* ---- БАРУУН: дөрвөн профайл ---- */}
-        <Card className="min-h-0 flex-1 overflow-hidden">
+        {/*
+          ---- БАРУУН: дөрвөн профайл ----
+          Тогтмол өргөнтэй: элементийн мөр бүр тэмдэг, зурвас, тоо гурвыг
+          агуулдаг тул хэт нарийсвал тоо таслагдана. Үлдсэн зайг газрын
+          зураг авна.
+        */}
+        <Card className="min-h-0 min-w-0 flex-1 overflow-hidden">
           <Head title="Цэг бүрийн элементийн профайл">
             <span className="text-[10.5px] text-ink-3">
               {m.label}
@@ -358,7 +368,7 @@ export function NeutralizationDashboard() {
               эхлэл) хэрэггүй зүүн зураас авдаг. Завсрын доор гарч буй
               дэвсгэр нь өөрөө зураасын өнгө болно.
             */}
-            <div className="grid min-w-[380px] grid-cols-2 gap-px bg-line">
+            <div className="grid min-w-[400px] grid-cols-2 gap-px bg-line">
               {POINTS.map((p) => (
                 <Profile
                   key={p.oid}
@@ -414,7 +424,9 @@ function Profile({
   picked: boolean;
   onPick: () => void;
 }) {
-  const exceed = exceedCount(point);
+  /* Хэтэрсэн хэмжилтийн тоо нь индикаторын зурваст (бүх цэгээр) ба
+     газрын зургийн хөвөгч тайлбарт (цэг тус бүрээр) гардаг тул баганын
+     толгойд давхардуулахгүй */
   const measured = measuredCount(point);
 
   return (
@@ -423,20 +435,16 @@ function Profile({
     <div
       className={cn("flex min-w-0 flex-col", picked ? "bg-paper-hi" : "bg-paper-2")}
     >
+      {/*
+        Толгойд БАЙРШИЛ. Цэгийн код (BZD-9) нь газрын зураг дээр шошго
+        болж, хөвөгч тайлбарт бас гардаг тул энд давхардуулах шаардлагагүй —
+        оронд нь "хаана" гэдэг нь хүснэгтийн баганын нэр болно.
+      */}
       <button
         onClick={onPick}
-        className="block border-b border-line px-2.5 py-2 text-left transition-colors hover:bg-paper-hi"
+        className="block border-b border-line px-2.5 py-2.5 text-left transition-colors hover:bg-paper-hi"
       >
-        <span className="flex items-baseline justify-between gap-2">
-          <span className="num truncate text-[12.5px] leading-none font-medium text-ink">
-            {point.code}
-          </span>
-          <span className="num shrink-0 text-[10px] leading-none text-ink-3">
-            {exceed}/{measured}
-          </span>
-        </span>
-        {/* Байршил нь кодын доор: код өөрөө хаана байгааг хэлдэггүй */}
-        <span className="mt-1 block truncate text-[10px] leading-none text-ink-3">
+        <span className="block truncate text-[12.5px] leading-none font-medium text-ink">
           {point.district}, {point.khoroo}-р хороо
         </span>
       </button>
@@ -477,12 +485,19 @@ function Profile({
                     style={{ left: `${logShare(PI_LIMIT, max) * 100}%` }}
                   />
                 ) : null}
+                {/*
+                  Зурвас нь ДҮҮРГЭЛТГҮЙ, зөвхөн хүрээтэй. Дүүргэсэн
+                  зурвас нь өнгөний талбайгаараа нүд булаадаг бол
+                  хүрээ нь уртаа л хэлж, доорх заагч, суурь зураас
+                  дарагдахгүй үлдэнэ.
+                */}
                 {v != null ? (
                   <span
-                    className="absolute inset-y-0 left-0 rounded-r-[1px]"
+                    className="absolute inset-y-0 left-0 rounded-r-[1px] border"
                     style={{
                       width: `${logShare(v, max) * 100}%`,
-                      background: pi != null ? piColor(pi) : "var(--line-2)",
+                      borderColor: pi != null ? piColor(pi) : "var(--line-2)",
+                      background: "transparent",
                     }}
                   />
                 ) : null}

@@ -66,3 +66,38 @@ export function boundsOf(
   for (const p of pts) b.add(p.lon, p.lat);
   return b.get(pad);
 }
+
+/* --------------------------------------------------------------------------
+   ГАЖУУД ГЕОМЕТРИЙН ШҮҮЛТ
+
+   Зарим ArcGIS давхаргад хоосон буюу эвдэрсэн геометр нь дэлхийн булан
+   (-180, -90) болж буцдаг. Ганц ийм бичлэг бүх зургийг сүйтгэнэ:
+   MapLibre түүнийг асар том олон өнцөгт болгож зурах бөгөөд түүнээс
+   тооцсон хүрээ нь дэлхий даяар болж, ойртолт утгагүй болно.
+
+   Тиймээс координат нь Монголын боломжит мужаас гарсан бол ГЕОМЕТРИЙГ
+   нь хаяна. Бичлэг өөрөө жагсаалтад үлдэнэ — талбайн утга нь хүчинтэй
+   байж болно.
+   -------------------------------------------------------------------------- */
+
+const SANE: [number, number, number, number] = [104, 46, 110, 50];
+
+/** Геометрийн бүх координат боломжит мужид байна уу */
+export function saneGeometry(
+  g: GeoJSON.Geometry | null | undefined,
+): g is GeoJSON.Geometry {
+  if (!g || g.type === "GeometryCollection") return false;
+  const [w, s, e, n] = SANE;
+  let ok = true;
+  const walk = (a: unknown): void => {
+    if (!ok || !Array.isArray(a)) return;
+    if (typeof a[0] === "number") {
+      const [x, y] = a as number[];
+      if (x < w || x > e || y < s || y > n) ok = false;
+      return;
+    }
+    for (const v of a) walk(v);
+  };
+  walk((g as { coordinates: unknown }).coordinates);
+  return ok;
+}

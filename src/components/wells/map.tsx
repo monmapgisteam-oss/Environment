@@ -474,6 +474,7 @@ export function WellsMap({
   marks,
   pulse = false,
   onHover,
+  firefly,
   highlight = null,
   overlays,
   shapes,
@@ -520,6 +521,14 @@ export function WellsMap({
    */
   onHover?: (oid: number | null, at?: { x: number; y: number }) => void;
   /**
+   * Цэгийн давхаргын өнгөний гурвал. Өгөөгүй бол платформын цэнхэр
+   * firefly. ЗӨВХӨН анхны зурагдалтад уншигдана.
+   *
+   * Ойн хэлтсийн самбарууд ногоон хувилбар өгдөг — цэнхэр ой нь
+   * газрын зураг дээр ус мэт уншигдана.
+   */
+  firefly?: { glow: string; mid: string; core: string };
+  /**
    * Тодруулах цэгийн байрлал `[lon, lat]`. Өгвөл тэр цэгийг гэрэлтэх
    * цаграгаар тойруулна.
    *
@@ -552,6 +561,11 @@ export function WellsMap({
      * бүхэлдээ манантана. ЗӨВХӨН анхны зурагдалтад уншигдана.
      */
     glow?: boolean;
+    /**
+     * Давхаргын өнгө (hex). Өгөөгүй бол платформын дата өнгө.
+     * ЗӨВХӨН анхны зурагдалтад уншигдана.
+     */
+    color?: string;
     /**
      * Олон өнцөгтийн шошго нь энэ zoom-оос ойртсон үед л гарна.
      * Талбай олонтой самбарт заавал өг — эс тэгвээс алсаас бүх шошго
@@ -644,6 +658,8 @@ export function WellsMap({
     gradedHeat: Boolean(grades?.heat),
     shaped: Boolean(shapes),
     shapeGlow: Boolean(shapes?.glow),
+    shapeColor: shapes?.color,
+    fire: firefly ?? FIREFLY,
     shapeLabelZoom: shapes?.labelZoom ?? 0,
     detailZoom: detail?.minZoom,
     labeled: Boolean(labels),
@@ -785,7 +801,7 @@ export function WellsMap({
               source: "shapes",
               layout: { "line-join": "round" },
               paint: {
-                "line-color": ["coalesce", ["get", "c"], SHAPE_FALLBACK] as unknown as ExpressionSpecification,
+                "line-color": ["coalesce", ["get", "c"], modeRef.current.shapeColor ?? SHAPE_FALLBACK] as unknown as ExpressionSpecification,
                 "line-width": [
                   "interpolate",
                   ["linear"],
@@ -825,7 +841,7 @@ export function WellsMap({
           type: "fill",
           source: "shapes",
           paint: {
-            "fill-color": ["coalesce", ["get", "c"], SHAPE_FALLBACK] as unknown as ExpressionSpecification,
+            "fill-color": ["coalesce", ["get", "c"], modeRef.current.shapeColor ?? SHAPE_FALLBACK] as unknown as ExpressionSpecification,
             "fill-opacity": ["case", SHAPE_LIT, 0.55, 0.28],
           },
         });
@@ -836,7 +852,7 @@ export function WellsMap({
           source: "shapes",
           layout: { "line-join": "round" },
           paint: {
-            "line-color": ["coalesce", ["get", "c"], SHAPE_FALLBACK] as unknown as ExpressionSpecification,
+            "line-color": ["coalesce", ["get", "c"], modeRef.current.shapeColor ?? SHAPE_FALLBACK] as unknown as ExpressionSpecification,
             /* `["zoom"]` нь дээд түвшний `interpolate`-ийн шууд оролт
                байх ёстой — сонголтын шалгалтыг СУУДАЛ бүрийн дотор
                оруулав, эсрэгээр бичвэл давхарга чимээгүйхэн гологдоно */
@@ -910,12 +926,12 @@ export function WellsMap({
           source: "wells",
           filter: ["has", "point_count"],
           paint: {
-            "circle-color": FIREFLY.glow,
+            "circle-color": modeRef.current.fire.glow,
             // Тоо нь дотроо биш бол дугуй нь илүү хоосон, бөгж маягтай
             "circle-opacity": badge ? 0.14 : 0.22,
             "circle-radius": clusterRadius,
             "circle-stroke-width": badge ? 2 : 1.4,
-            "circle-stroke-color": FIREFLY.glow,
+            "circle-stroke-color": modeRef.current.fire.glow,
             "circle-stroke-opacity": 0.95,
           },
         });
@@ -1068,7 +1084,7 @@ export function WellsMap({
               хэдийн хэлсэн; цэг нь зөвхөн "яг энд бий" гэдгийг хэлнэ.
             */
             "circle-radius": ["interpolate", ["linear"], ["zoom"], zDot - FADE, 1.2, 15, 1.8, 18, 2.6],
-            "circle-color": FIREFLY.glow,
+            "circle-color": modeRef.current.fire.glow,
             "circle-opacity": dotFade(0.9),
             /* Хүрээ нь радиусын хагасаас хэтэрвэл цэг нь дугуй биш
                толбо болно — 1.2px радиуст 0.35 нь дээд хязгаар */
@@ -1096,7 +1112,7 @@ export function WellsMap({
             minzoom: zd - 0.4,
             paint: {
               "circle-radius": ["interpolate", ["linear"], ["zoom"], 13, 2.2, 16, 4, 18, 6],
-              "circle-color": FIREFLY.core,
+              "circle-color": modeRef.current.fire.core,
               "circle-opacity": ["interpolate", ["linear"], ["zoom"], zd - 0.4, 0, zd, 0.95],
               "circle-stroke-width": 0.7,
               "circle-stroke-color": "rgba(0,0,0,.5)",
@@ -1192,7 +1208,7 @@ export function WellsMap({
         filter: ["!", ["has", "point_count"]],
         paint: {
           "circle-radius": ["interpolate", ["linear"], ["zoom"], 8, 7, 12, 11, 16, 18],
-          "circle-color": FIREFLY.glow,
+          "circle-color": modeRef.current.fire.glow,
           "circle-blur": 1,
           "circle-opacity": 0.38,
         },
@@ -1205,7 +1221,7 @@ export function WellsMap({
         filter: ["!", ["has", "point_count"]],
         paint: {
           "circle-radius": ["interpolate", ["linear"], ["zoom"], 8, 3.6, 12, 5.6, 16, 9.5],
-          "circle-color": FIREFLY.mid,
+          "circle-color": modeRef.current.fire.mid,
           "circle-blur": 0.6,
           "circle-opacity": 0.6,
         },
@@ -1222,7 +1238,7 @@ export function WellsMap({
         filter: ["!", ["has", "point_count"]],
         paint: {
           "circle-radius": ["interpolate", ["linear"], ["zoom"], 8, 1.5, 12, 2.3, 16, 4],
-          "circle-color": FIREFLY.core,
+          "circle-color": modeRef.current.fire.core,
           "circle-opacity": 0.95,
         },
       });
@@ -1370,6 +1386,29 @@ export function WellsMap({
           setHot(null);
           hoverCb.current?.(null);
         });
+
+        /*
+          ШУГАМАН геометр нь `shape-fill` дээр оногддоггүй (дүүргэлт нь
+          талбайгүй) тул хүрээний давхарга дээр тусад нь барина. Олон
+          өнцөгт дээр хоёулаа ажиллах ч ижил `oid` явуулдаг тул
+          зөрчилдөхгүй.
+        */
+        m.on("click", "shape-line", (e) => {
+          const f = e.features?.[0];
+          if (f) selectCb.current(Number(f.properties?.oid));
+        });
+        m.on("mousemove", "shape-line", (e) => {
+          m.getCanvas().style.cursor = "pointer";
+          const f = e.features?.[0];
+          if (!f) return;
+          setHot(f.id ?? null);
+          hoverCb.current?.(Number(f.properties?.oid), { x: e.point.x, y: e.point.y });
+        });
+        m.on("mouseleave", "shape-line", () => {
+          m.getCanvas().style.cursor = "";
+          setHot(null);
+          hoverCb.current?.(null);
+        });
       }
 
       /*
@@ -1390,7 +1429,7 @@ export function WellsMap({
         source: "hl",
         paint: {
           "circle-radius": ["interpolate", ["linear"], ["zoom"], 8, 11, 12, 15, 16, 22],
-          "circle-color": FIREFLY.glow,
+          "circle-color": modeRef.current.fire.glow,
           "circle-blur": 1,
           "circle-opacity": 0.4,
         },
@@ -1403,7 +1442,7 @@ export function WellsMap({
           "circle-radius": ["interpolate", ["linear"], ["zoom"], 8, 7, 12, 10, 16, 15],
           // Дүүргэлтгүй — доорх цэг өөрөө харагдсаар үлдэнэ
           "circle-color": "rgba(0,0,0,0)",
-          "circle-stroke-color": FIREFLY.core,
+          "circle-stroke-color": modeRef.current.fire.core,
           "circle-stroke-width": 1.3,
           "circle-stroke-opacity": 0.9,
         },
