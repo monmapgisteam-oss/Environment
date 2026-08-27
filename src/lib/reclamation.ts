@@ -33,7 +33,7 @@ export const RECLAMATION_SERVICES = [
 ];
 
 export const FUNDING = [
-  { id: "aan" as const, label: "ААН-ийн хөрөнгөөр", layer: "Nuhun_sergeelt_aan_hurungu" },
+  { id: "aan" as const, label: "Аж ахуйн нэгжийн хөрөнгөөр", layer: "Nuhun_sergeelt_aan_hurungu" },
   { id: "tusuw" as const, label: "Нийслэлийн төсвөөр", layer: "Nuhun_sergeelt_niisleliin_tusuw" },
 ];
 

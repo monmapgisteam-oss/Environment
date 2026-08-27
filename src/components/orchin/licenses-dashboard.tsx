@@ -5,13 +5,17 @@ import dynamic from "next/dynamic";
 import {
   Building2,
   CalendarClock,
+  CalendarRange,
   Loader2,
+  MapPin,
   Mountain,
+  MousePointerClick,
   Pickaxe,
   Ruler,
 } from "lucide-react";
-import { AreaChart, RowChart, type Datum } from "@/components/charts";
+import { AreaChart, RowChart, YearRange, type Datum } from "@/components/charts";
 import { BasemapGallery } from "@/components/map/basemap-gallery";
+import { MapTip, MapTipRow, useMapTip } from "@/components/map/hover-tip";
 import { FilterBar, FilterMenu, PickList } from "@/components/wells/filter-bar";
 import {
   defaultBasemap,
@@ -59,8 +63,16 @@ export function LicensesDashboard() {
   const [term, setTerm] = React.useState<string | null>(null);
   const [mineral, setMineral] = React.useState<string | null>(null);
   const [district, setDistrict] = React.useState<string | null>(null);
+  /*
+    Дуусах хугацааны МУЖ. "Аль нэг он" гэсэн тусдаа шүүлтүүр БАЙХГҮЙ —
+    диаграм дээр он товшиход энэ муж [он, он] болж хумигдана. Хоёр
+    тусдаа хугацааны шүүлтүүр байвал хоорондоо зөрчилдөнө.
+  */
+  const [range, setRange] = React.useState<[number, number] | null>(null);
   const [picked, setPicked] = React.useState<number | null>(null);
   const [hover, setHover] = React.useState<number | null>(null);
+  /** Хулгана дагасан хөвөгч тайлбар — байрлалыг өөрөө удирдана */
+  const tip = useMapTip();
 
   const [basemap, setBasemap] = React.useState<Basemap>(defaultBasemap);
 
@@ -73,7 +85,12 @@ export function LicensesDashboard() {
   React.useEffect(() => {
     let alive = true;
     fetchLicenses()
-      .then((d) => alive && setData(d))
+      .then((d) => {
+        if (!alive) return;
+        setData(d);
+        const ys = d.rows.map((l) => l.expires).filter((y): y is number => y != null);
+        if (ys.length) setRange([Math.min(...ys), Math.max(...ys)]);
+      })
       .catch((e: Error) => alive && setError(e.message));
     return () => {
       alive = false;
@@ -83,16 +100,35 @@ export function LicensesDashboard() {
   const rows = data?.rows;
 
   const keep = React.useCallback(
-    (l: License, skip?: "term" | "mineral" | "district") => {
+    (l: License, skip?: "term" | "mineral" | "district" | "expiry") => {
       if (skip !== "term" && term && termOf(l.expires, now) !== term) return false;
+      /* Дуусах он бөглөгдөөгүй бичлэг нь муж хумигдсан үед хасагдана —
+         "энэ хооронд дуусна" гэдэгт хамаарах эсэх нь тодорхойгүй */
+      if (
+        skip !== "expiry" &&
+        range &&
+        (l.expires == null || l.expires < range[0] || l.expires > range[1])
+      )
+        return false;
       if (skip !== "mineral" && mineral && l.mineral !== mineral) return false;
       if (skip !== "district" && district && l.district !== district) return false;
       return true;
     },
-    [term, mineral, district, now],
+    [term, mineral, district, range, now],
   );
 
   const shown = React.useMemo(() => (rows ?? []).filter((l) => keep(l)), [rows, keep]);
+
+  /** Датаны хамрах хугацаа — шүүлтүүрийн хязгаар, "бүх хугацаа"-ны жишиг */
+  const span = React.useMemo<[number, number] | null>(() => {
+    const ys = (rows ?? []).map((l) => l.expires).filter((y): y is number => y != null);
+    if (!ys.length) return null;
+    return [Math.min(...ys), Math.max(...ys)];
+  }, [rows]);
+
+  /** Муж нь бүх хугацааг хамарч байвал шүүлт хийгээгүйтэй адил */
+  const wholeRange =
+    !span || !range || (range[0] === span[0] && range[1] === span[1]);
 
   /*
     Талбайн хүрээ, дээр нь зөвшөөрлийн ДУГААР шошго болж бичигдэнэ
@@ -156,7 +192,12 @@ export function LicensesDashboard() {
     "2033-аас 2035" хоёрын хооронд завсар байгаа нь харагдахгүй болно.
   */
   const byExpiry = React.useMemo<Datum[]>(() => {
-    const years = shown.map((l) => l.expires).filter((y): y is number => y != null);
+    /* Диаграм ӨӨРИЙНХӨӨ шүүлтийг алгасна — эс тэгвээс нэг он сонгомогц
+       бусад багана алга болж, харьцуулах юм үлдэхгүй */
+    const years = (rows ?? [])
+      .filter((l) => keep(l, "expiry"))
+      .map((l) => l.expires)
+      .filter((y): y is number => y != null);
     if (!years.length) return [];
     const lo = Math.min(...years);
     const hi = Math.max(...years);
@@ -167,7 +208,7 @@ export function LicensesDashboard() {
       out.push({ key: String(y), label: String(y), value: c.get(y) ?? 0 });
     }
     return out;
-  }, [shown]);
+  }, [rows, keep]);
 
   const stats = React.useMemo(() => {
     const ha = shown.reduce((s, l) => s + l.ha, 0);
@@ -194,13 +235,25 @@ export function LicensesDashboard() {
     return b.get(0.002);
   }, [data, shown, picked, term, mineral, district]);
 
+  /** Хулгана дээр очсон зөвшөөрөл — газрын зурагнаас */
+  const hovered = React.useMemo(
+    () => (tip.oid == null ? null : (rows?.find((l) => l.oid === tip.oid) ?? null)),
+    [rows, tip.oid],
+  );
+
+  /* Тогтмол самбар: товшсон, эсвэл ЖАГСААЛТЫН мөр дээр очсон зөвшөөрөл */
   const active = React.useMemo(() => {
     const id = hover ?? picked;
     return id == null ? null : (rows?.find((l) => l.oid === id) ?? null);
   }, [rows, hover, picked]);
 
+  function clearRange() {
+    setRange(span);
+  }
+
   function reset() {
     setTerm(null);
+    setRange(span);
     setMineral(null);
     setDistrict(null);
     setPicked(null);
@@ -211,7 +264,7 @@ export function LicensesDashboard() {
       <div className="flex h-full items-center justify-center rounded-xs border border-line bg-paper-2">
         {error ? (
           <div className="text-center">
-            <p className="text-[14px] font-medium">Эх сурвалж татагдсангүй</p>
+            <p className="text-[14px] font-medium">Эх сурвалжийн мэдээллийг татаж чадсангүй</p>
             <p className="num mt-2 text-[12px] text-ink-3">{error}</p>
           </div>
         ) : (
@@ -224,7 +277,8 @@ export function LicensesDashboard() {
     );
   }
 
-  const activeCount = (term ? 1 : 0) + (mineral ? 1 : 0) + (district ? 1 : 0);
+  const activeCount =
+    (term ? 1 : 0) + (wholeRange ? 0 : 1) + (mineral ? 1 : 0) + (district ? 1 : 0);
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-2.5">
@@ -233,8 +287,29 @@ export function LicensesDashboard() {
         activeCount={activeCount}
         onReset={reset}
       >
+        {/*
+          Хугацаа — хоёр үзүүрт муж, ДУУСАХ оноор. "Дуусах жилээр"
+          диаграм дээр товшихад энэ муж [он, он] болж хумигдана.
+
+          Доорх "Төлөв" нь өөр зүйл: муж нь ХЭЗЭЭ дуусахыг, төлөв нь
+          ӨНӨӨДРИЙН байдлаар дууссан эсэхийг шүүнэ. Урьд нь хоёулаа
+          "Хугацаа" гэж нэрлэгдэх байсан тул төлөвийг нэрлэж тодруулав.
+        */}
         <FilterMenu
           label="Хугацаа"
+          icon={CalendarRange}
+          value={wholeRange || !range ? null : `${range[0]}–${range[1]}`}
+          active={!wholeRange}
+          onClear={clearRange}
+          width={252}
+        >
+          {span && range ? (
+            <YearRange min={span[0]} max={span[1]} value={range} onChange={setRange} />
+          ) : null}
+        </FilterMenu>
+
+        <FilterMenu
+          label="Төлөв"
           icon={CalendarClock}
           value={term ? TERMS.find((t) => t.id === term)?.label : null}
           active={Boolean(term)}
@@ -315,7 +390,7 @@ export function LicensesDashboard() {
               ))}
               {shown.length === 0 ? (
                 <div className="py-5 text-center text-[12px] text-ink-3">
-                  Шүүлтүүрт тохирох зөвшөөрөл алга
+                  Шүүлтүүрт тохирох тусгай зөвшөөрөл байхгүй байна
                 </div>
               ) : null}
             </div>
@@ -329,11 +404,45 @@ export function LicensesDashboard() {
                 shapes={{ data: shapes, selected: picked, labelZoom: 11 }}
                 basemap={basemap}
                 onSelect={setPicked}
-                onHover={setHover}
+                onHover={tip.onHover}
                 focus={focus}
                 cluster={false}
               />
               <BasemapGallery value={basemap} onChange={setBasemap} />
+
+              {/*
+                ХӨВӨГЧ ТАЙЛБАР. Энэ самбарын гол асуулт нь "хаана" биш
+                ХЭЗЭЭ тул хугацаа нь тайлбарын дээд мөрөнд, кодын хажууд
+                гарна.
+              */}
+              {hovered ? (
+                <MapTip state={tip} width={238}>
+                  <div className="flex items-baseline justify-between gap-2 px-2.5 pt-2 pb-1">
+                    <span className="num text-[11px] leading-none font-medium text-data">
+                      {hovered.code}
+                    </span>
+                    <span className="num text-[11px] leading-none text-ink-3">
+                      {hovered.granted ?? "—"} → {hovered.expires ?? "—"}
+                    </span>
+                  </div>
+                  <div className="px-2.5 pb-2 text-[12.5px] leading-snug font-medium text-ink">
+                    {hovered.holder}
+                  </div>
+
+                  <div className="space-y-1.5 border-t border-line px-2.5 py-2">
+                    <MapTipRow icon={Mountain} text={hovered.mineral} />
+                    <MapTipRow icon={Ruler} num text={`${hovered.ha} га`} />
+                    <MapTipRow
+                      icon={MapPin}
+                      text={`${hovered.district} ${hovered.khoroo}`}
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-end border-t border-line px-2.5 py-1.5">
+                    <MousePointerClick size={11} className="shrink-0 text-ink-3" />
+                  </div>
+                </MapTip>
+              ) : null}
 
               {active ? (
                 <div className="pointer-events-none absolute top-2.5 left-2.5 z-10 max-w-[270px] rounded-xs border border-line bg-paper/92 px-2.5 py-2 backdrop-blur-md">
@@ -377,7 +486,24 @@ export function LicensesDashboard() {
               <Head title="Дуусах жилээр" />
               <div className="p-3">
                 {/* Шошгыг таслахгүй: налуу байрлал нь бүтэн онд зай гаргана */}
-                <AreaChart data={byExpiry} height={100} unit="зөвшөөрөл" />
+                <AreaChart
+                  data={byExpiry}
+                  height={100}
+                  unit="зөвшөөрөл"
+                  /* Ганц он сонгогдсон үед л тэр цэг тодорно — өргөн муж
+                     дээр аль нэгийг онцолвол худал дохио болно */
+                  selected={range && range[0] === range[1] ? String(range[0]) : null}
+                  /* Бичлэггүй он (цуваанд тэг утгаар харагддаг) дээр
+                     товшвол сонголт болгохгүй, мужийг сэргээнэ */
+                  onSelect={(k) => {
+                    const y = Number(k);
+                    if (k && byExpiry.some((d) => d.key === k && d.value > 0)) {
+                      setRange([y, y]);
+                    } else {
+                      setRange(span);
+                    }
+                  }}
+                />
               </div>
             </Card>
 

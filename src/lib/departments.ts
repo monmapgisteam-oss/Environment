@@ -96,5 +96,5 @@ export function getDepartment(slug: string) {
 export const STATUS_LABEL: Record<DepartmentStatus, string> = {
   live: "Дата холбогдсон",
   partial: "Хэсэгчлэн",
-  pending: "Мэдээлэл хүлээгдэж буй",
+  pending: "Мэдээлэл хүлээгдэж байна",
 };

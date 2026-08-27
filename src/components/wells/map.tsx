@@ -425,7 +425,17 @@ function baseStyle(b: Basemap): StyleSpecification {
  * буцааж нэмнэ.
  */
 function applyBasemap(m: MapLibreMap, b: Basemap) {
-  const first = m.getStyle().layers.find((l) => l.id !== "base")?.id;
+  /*
+    Устгагдсан зураг дээр дуудагдаж болзошгүй: React StrictMode ба
+    хөгжүүлэлтийн халуун ачаалалт (HMR) үед эхний зураг `remove()`
+    хийгдсэн ч түүнийг барьсан effect дахин ажиллана. Тэр үед
+    `getStyle()` нь `undefined` буцаадаг тул шууд гарна — хийх зүйл
+    байхгүй, харин шалгалтгүй бол бүхэл самбар унана.
+  */
+  const style = m.getStyle();
+  if (!style) return;
+
+  const first = style.layers.find((l) => l.id !== "base")?.id;
   if (m.getLayer("base")) m.removeLayer("base");
   if (m.getSource("base")) m.removeSource("base");
 
@@ -437,6 +447,19 @@ function applyBasemap(m: MapLibreMap, b: Basemap) {
   });
   m.addLayer({ id: "base", type: "raster", source: "base" }, first);
 }
+
+/*
+  Талбай "асаалттай" эсэх: СОНГОГДСОН эсвэл ХУЛГАНА дээр нь байгаа.
+
+  Хоёр төлөвийг нэг харагдацаар илэрхийлж байгаа шалтгаан: hover нь
+  сонголт ямар байхыг урьдчилан харуулдаг. Тусад нь өөр өнгө өгвөл газрын
+  зураг дээр гурван зэрэг үүсч, аль нь чухал болох нь бүдгэрнэ.
+*/
+const SHAPE_LIT = [
+  "any",
+  ["boolean", ["feature-state", "on"], false],
+  ["boolean", ["feature-state", "hot"], false],
+] as unknown as ExpressionSpecification;
 
 export function WellsMap({
   points,
@@ -451,6 +474,7 @@ export function WellsMap({
   marks,
   pulse = false,
   onHover,
+  highlight = null,
   overlays,
   shapes,
   grades,
@@ -487,8 +511,23 @@ export function WellsMap({
    * объектод (жишээ нь нийтийн 17 бие засах газар) зориулав.
    */
   pulse?: boolean;
-  /** Хулгана тэмдэглэгээ дээр очиход — гарахад `null` */
-  onHover?: (oid: number | null) => void;
+  /**
+   * Хулгана тэмдэглэгээ дээр очиход — гарахад `null`.
+   *
+   * `at` нь зургийн ЗУРАГДАХ талбар доторх пикселийн байрлал. Хөвөгч
+   * тайлбар (tooltip) хулганаа дагахад л хэрэгтэй тул сонголтоор өгнө —
+   * зөвхөн `oid` хүлээж авдаг хуучин дуудагчид өөрчлөх шаардлагагүй.
+   */
+  onHover?: (oid: number | null, at?: { x: number; y: number }) => void;
+  /**
+   * Тодруулах цэгийн байрлал `[lon, lat]`. Өгвөл тэр цэгийг гэрэлтэх
+   * цаграгаар тойруулна.
+   *
+   * Хөвөгч тайлбар нь "энэ бол ЯМАР цэг бэ" гэдгийг хэлдэггүй — 12 мянган
+   * цэгийн дунд хулганы үзүүр аль дээр нь байгаа нь тодорхойгүй. Цагираг
+   * нь тайлбарыг цэгтэй нь холбоно.
+   */
+  highlight?: [number, number] | null;
   /**
    * Нэмэлт хил, бүсийн давхаргууд. Дата давхаргын ДООР суух тул цэг,
    * бөөгнөрөл нь тэдгээрээр далдлагдахгүй.
@@ -752,9 +791,9 @@ export function WellsMap({
                   ["linear"],
                   ["zoom"],
                   8,
-                  ["case", ["boolean", ["feature-state", "on"], false], 5 * k, 3 * k],
+                  ["case", SHAPE_LIT, 5 * k, 3 * k],
                   16,
-                  ["case", ["boolean", ["feature-state", "on"], false], 26 * k, 16 * k],
+                  ["case", SHAPE_LIT, 26 * k, 16 * k],
                 ] as unknown as ExpressionSpecification,
                 /* Бүдгэрэлт нь өргөнтэйгээ ойролцоо — үүнээс бага бол
                    ирмэг нь хатуу, их бол гэрэл нь хэт шингэрнэ */
@@ -769,7 +808,7 @@ export function WellsMap({
                 ] as unknown as ExpressionSpecification,
                 "line-opacity": [
                   "case",
-                  ["boolean", ["feature-state", "on"], false],
+                  SHAPE_LIT,
                   Math.min(o * 1.7, 0.95),
                   o,
                 ] as unknown as ExpressionSpecification,
@@ -787,7 +826,7 @@ export function WellsMap({
           source: "shapes",
           paint: {
             "fill-color": ["coalesce", ["get", "c"], SHAPE_FALLBACK] as unknown as ExpressionSpecification,
-            "fill-opacity": ["case", ["boolean", ["feature-state", "on"], false], 0.55, 0.28],
+            "fill-opacity": ["case", SHAPE_LIT, 0.55, 0.28],
           },
         });
 
@@ -806,9 +845,9 @@ export function WellsMap({
               ["linear"],
               ["zoom"],
               8,
-              ["case", ["boolean", ["feature-state", "on"], false], 1.8, 0.5],
+              ["case", SHAPE_LIT, 1.8, 0.5],
               14,
-              ["case", ["boolean", ["feature-state", "on"], false], 2.6, 1.2],
+              ["case", SHAPE_LIT, 2.6, 1.2],
             ] as unknown as ExpressionSpecification,
             "line-opacity": 0.9,
           },
@@ -1290,7 +1329,7 @@ export function WellsMap({
       */
       m.on("mousemove", hitLayer, (e) => {
         const f = e.features?.[0];
-        if (f) hoverCb.current?.(Number(f.properties?.oid));
+        if (f) hoverCb.current?.(Number(f.properties?.oid), { x: e.point.x, y: e.point.y });
       });
       m.on("mouseleave", hitLayer, () => hoverCb.current?.(null));
 
@@ -1300,16 +1339,75 @@ export function WellsMap({
           const f = e.features?.[0];
           if (f) selectCb.current(Number(f.properties?.oid));
         });
+        /* Хулганы доорх талбайг ТУХАЙН ЗУРАГ өөрөө тодруулна — React
+           төлөвөөр буцаалт хийвэл хулгана хөдлөх бүрд самбар дахин
+           зурагдана. `id` нь GeoJSON feature-ийн тоон дугаар. */
+        let hot: number | string | null = null;
+        const setHot = (id: number | string | null) => {
+          if (hot === id) return;
+          const put = (x: number | string | null, on: boolean) => {
+            if (x == null) return;
+            try {
+              m.setFeatureState({ source: "shapes", id: x }, { hot: on });
+            } catch {
+              /* Эх сурвалж хараахан ачаалагдаагүй байж болно */
+            }
+          };
+          put(hot, false);
+          put(id, true);
+          hot = id;
+        };
+
         m.on("mousemove", "shape-fill", (e) => {
           m.getCanvas().style.cursor = "pointer";
           const f = e.features?.[0];
-          if (f) hoverCb.current?.(Number(f.properties?.oid));
+          if (!f) return;
+          setHot(f.id ?? null);
+          hoverCb.current?.(Number(f.properties?.oid), { x: e.point.x, y: e.point.y });
         });
         m.on("mouseleave", "shape-fill", () => {
           m.getCanvas().style.cursor = "";
+          setHot(null);
           hoverCb.current?.(null);
         });
       }
+
+      /*
+        ТОДРУУЛГЫН ЦАГИРАГ. Тусдаа эх сурвалж дээр суусан шалтгаан: үндсэн
+        цэгийн эх сурвалж бөөгнөрдөг тул `feature-state` нь задарсан цэг
+        дээр л ажиллана — бөөгнөрөл дундаас гарч ирсэн цэгийг тодруулж
+        чадахгүй. Ганц цэгтэй жижиг эх сурвалж нь ямар ч горимд ажиллана.
+
+        Бүх дата давхаргын ДЭЭР суух ёстой тул хамгийн сүүлд нэмэгдэнэ.
+      */
+      m.addSource("hl", {
+        type: "geojson",
+        data: { type: "FeatureCollection", features: [] },
+      });
+      m.addLayer({
+        id: "hl-glow",
+        type: "circle",
+        source: "hl",
+        paint: {
+          "circle-radius": ["interpolate", ["linear"], ["zoom"], 8, 11, 12, 15, 16, 22],
+          "circle-color": FIREFLY.glow,
+          "circle-blur": 1,
+          "circle-opacity": 0.4,
+        },
+      });
+      m.addLayer({
+        id: "hl-ring",
+        type: "circle",
+        source: "hl",
+        paint: {
+          "circle-radius": ["interpolate", ["linear"], ["zoom"], 8, 7, 12, 10, 16, 15],
+          // Дүүргэлтгүй — доорх цэг өөрөө харагдсаар үлдэнэ
+          "circle-color": "rgba(0,0,0,0)",
+          "circle-stroke-color": FIREFLY.core,
+          "circle-stroke-width": 1.3,
+          "circle-stroke-opacity": 0.9,
+        },
+      });
 
       m.resize();
 
@@ -1657,6 +1755,25 @@ export function WellsMap({
     }
   }, [live, overlays]);
 
+  /* ---------------- Тодруулгын цагираг ---------------- */
+  React.useEffect(() => {
+    if (!live) return;
+    const src = live.getSource("hl") as GeoJSONSource | undefined;
+    if (!src) return;
+    src.setData({
+      type: "FeatureCollection",
+      features: highlight
+        ? [
+            {
+              type: "Feature",
+              properties: {},
+              geometry: { type: "Point", coordinates: highlight },
+            },
+          ]
+        : [],
+    });
+  }, [live, highlight]);
+
   /* ---------------- Зурган тэмдэглэгээ ----------------
      Бөөгнөрөлтэй ЗЭРЭГЦЭЖ ажиллана: бөөгнөрөл задарч дан цэг болсон
      бичлэг л зургаа харуулна. Аль цэг задарсныг зөвхөн MapLibre мэднэ
@@ -1723,7 +1840,16 @@ export function WellsMap({
         const el = markerEl(
           mark,
           () => selectCb.current(id),
-          hoverCb.current ? (over) => hoverCb.current?.(over ? id : null) : undefined,
+          /*
+            Тэмдэглэгээ нь DOM элемент тул хулганы байрлалыг зургаас
+            биш, ТЭМДЭГЛЭГЭЭНИЙ БАЙРШЛААС тооцно (`project`) — хөвөгч
+            тайлбар тэмдгийнхээ хажууд тогтож, хулганы чичиргээнээс
+            хамаарахгүй.
+          */
+          hoverCb.current
+            ? (over) =>
+                hoverCb.current?.(over ? id : null, over ? live.project(pos) : undefined)
+            : undefined,
         );
         markerRefs.set(id, new Marker({ element: el }).setLngLat(pos).addTo(live));
       }

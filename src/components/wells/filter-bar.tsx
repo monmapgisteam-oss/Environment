@@ -60,7 +60,7 @@ export function FilterBar({
             </button>
           </>
         ) : (
-          <span className="text-[11px] text-ink-3">Шүүлтүүр тавиагүй</span>
+          <span className="text-[11px] text-ink-3">Шүүлтүүр хэрэглээгүй</span>
         )}
       </div>
     </div>
@@ -197,7 +197,7 @@ export function PickList({
 
       <div className="max-h-[220px] overflow-y-auto">
         {shown.length === 0 ? (
-          <p className="py-3 text-center text-[11.5px] text-ink-3">Олдсонгүй</p>
+          <p className="py-3 text-center text-[11.5px] text-ink-3">Илэрц олдсонгүй</p>
         ) : (
           shown.map((i) => (
             <button

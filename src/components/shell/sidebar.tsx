@@ -103,7 +103,7 @@ export function Sidebar() {
 
                 {/* Төлөв */}
                 <span
-                  title={d.status === "live" ? "Дата холбогдсон" : "Мэдээлэл хүлээгдэж буй"}
+                  title={d.status === "live" ? "Дата холбогдсон" : "Мэдээлэл хүлээгдэж байна"}
                   className={cn(
                     "mt-[4px] size-1 shrink-0 rounded-full",
                     d.status === "live" ? "bg-moss" : "border border-line-2",

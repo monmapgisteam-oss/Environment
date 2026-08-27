@@ -8,6 +8,8 @@ import {
   ClipboardList,
   LandPlot,
   Loader2,
+  MapPin,
+  MousePointerClick,
   PawPrint,
   ShieldAlert,
   Skull,
@@ -18,6 +20,7 @@ import {
 } from "lucide-react";
 import { AreaChart, PieChart, RowChart, YearRange, type Datum } from "@/components/charts";
 import { BasemapGallery } from "@/components/map/basemap-gallery";
+import { MapTip, MapTipRow, useMapTip } from "@/components/map/hover-tip";
 import { FilterBar, FilterMenu, PickList } from "@/components/wells/filter-bar";
 import { defaultBasemap, type Basemap, type Extent } from "@/components/wells/map";
 import { fetchRescues, type Rescue } from "@/lib/rescues";
@@ -262,6 +265,27 @@ export function RescuesDashboard() {
     return [w, s, e, n];
   }, [rows, selectBase, soum, species, rarity, outcome, month]);
 
+  /** Хулгана дагасан хөвөгч тайлбар — байрлалыг өөрөө удирдана */
+  const tip = useMapTip();
+
+  /*
+    Хулгана дээр очсон бүртгэл. Зурган тэмдэглэгээ дээр очиход байрлалыг
+    ТЭМДГИЙН БАЙРШЛААС тооцдог тул тайлбар нь тэмдгийнхээ хажууд тогтоно.
+
+    Дэлгэрэнгүй бичилт (баруун доор, товшилтоор) нь зурагтай, чирж
+    томруулдаг цонх — энэ нь зөвхөн таних гурван мөр.
+  */
+  const hovered = React.useMemo(
+    () => (tip.oid == null ? null : (rows?.find((x) => x.oid === tip.oid) ?? null)),
+    [rows, tip.oid],
+  );
+
+  /** Тодруулах цэгийн байрлал — зураг дээрх цагираг */
+  const highlight = React.useMemo<[number, number] | null>(
+    () => (hovered ? [hovered.lon, hovered.lat] : null),
+    [hovered],
+  );
+
   const detail = React.useMemo(() => {
     if (selected == null) return null;
     const r = rows?.find((x) => x.oid === selected);
@@ -304,7 +328,7 @@ export function RescuesDashboard() {
       <div className="flex h-full items-center justify-center rounded-xs border border-line bg-paper-2">
         {error ? (
           <div className="text-center">
-            <p className="text-[14px] font-medium">Эх сурвалж татагдсангүй</p>
+            <p className="text-[14px] font-medium">Эх сурвалжийн мэдээллийг татаж чадсангүй</p>
             <p className="num mt-2 text-[12px] text-ink-3">{error}</p>
           </div>
         ) : (
@@ -463,6 +487,8 @@ export function RescuesDashboard() {
                     visible={mapIdx}
                     basemap={basemap}
                     onSelect={setSelected}
+                    onHover={tip.onHover}
+                    highlight={highlight}
                     extent={extentOn}
                     onExtent={setExtent}
                     focus={focus}
@@ -478,6 +504,44 @@ export function RescuesDashboard() {
                   />
                   {extentOn ? (
                     <div className="pointer-events-none absolute inset-0 z-10 border border-data/45" />
+                  ) : null}
+
+                  {/*
+                    ХӨВӨГЧ ТАЙЛБАР — тэмдэглэгээний хажууд. Ховордлын
+                    зэрэг нь энэ самбарын гол ангилал тул зүйлийн нэрийн
+                    хажууд шууд гарна.
+                  */}
+                  {hovered ? (
+                    <MapTip state={tip} width={230}>
+                      <div className="flex items-baseline justify-between gap-2 px-2.5 pt-2 pb-1.5">
+                        <span className="min-w-0 flex-1 text-[12.5px] leading-snug font-medium text-ink">
+                          {hovered.species}
+                        </span>
+                        <span className="shrink-0 text-[10px] leading-none text-ink-3">
+                          {hovered.rarity}
+                        </span>
+                      </div>
+
+                      <div className="space-y-1.5 border-t border-line px-2.5 py-2">
+                        <MapTipRow
+                          icon={CalendarDays}
+                          num
+                          text={`${hovered.year}.${String(hovered.month).padStart(2, "0")}`}
+                        />
+                        <MapTipRow
+                          icon={MapPin}
+                          text={[hovered.aimag, hovered.soum].filter(Boolean).join(", ")}
+                        />
+                        <MapTipRow icon={Sprout} text={hovered.outcome} />
+                      </div>
+
+                      <div className="flex items-center justify-between gap-2 border-t border-line px-2.5 py-1.5">
+                        <span className="min-w-0 flex-1 truncate text-[10px] leading-none text-ink-3 italic">
+                          {hovered.latin}
+                        </span>
+                        <MousePointerClick size={11} className="shrink-0 text-ink-3" />
+                      </div>
+                    </MapTip>
                   ) : null}
 
                   {detail ? (
@@ -528,11 +592,11 @@ export function RescuesDashboard() {
                         ) : null}
 
                         <dl className="space-y-1.5">
-                          <Field k="Зүйл" v={detail.species} />
+                          <Field k="Амьтны зүйл" v={detail.species} />
                           {detail.latin ? (
-                            <Field k="Латин" v={<i className="text-ink-2">{detail.latin}</i>} />
+                            <Field k="Латин нэр" v={<i className="text-ink-2">{detail.latin}</i>} />
                           ) : null}
-                          <Field k="Ховордол" v={detail.rarity} />
+                          <Field k="Ховордлын зэрэг" v={detail.rarity} />
                           <Field k="Огноо" v={<span className="num">{dayLabel(detail)}</span>} />
                           <Field k="Байршил" v={`${detail.aimag}, ${detail.soum}`} />
                           {detail.situation ? (
@@ -596,7 +660,7 @@ export function RescuesDashboard() {
 
           <Card className="min-h-[130px] flex-1">
             <Head title="Шийдвэрлэлтээр">
-              <span className="text-[11.5px] text-ink-3">бүлэглэсэн</span>
+              <span className="text-[11.5px] text-ink-3">бүлэглэсэн ангилал</span>
             </Head>
             <div className="min-h-0 flex-1 overflow-y-auto p-3">
               <RowChart data={outcomeData} selected={outcome} onSelect={setOutcome} />

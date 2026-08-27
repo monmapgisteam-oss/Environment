@@ -9,6 +9,7 @@ import {
   LandPlot,
   Layers3,
   Loader2,
+  MapPin,
   Toilet,
 } from "lucide-react";
 import {
@@ -18,6 +19,7 @@ import {
   type DatumGroup,
 } from "@/components/charts";
 import { BasemapGallery } from "@/components/map/basemap-gallery";
+import { MapTip, MapTipRow, useMapTip } from "@/components/map/hover-tip";
 import { OverlayControl } from "@/components/map/overlay-control";
 import { FilterBar, FilterMenu, PickList } from "@/components/wells/filter-bar";
 import {
@@ -93,7 +95,8 @@ export function OrchinDashboard() {
   /** Хорооны сонголт — нийтийн жорлон дээр л утгатай (нүд нь хороогоо мэдэхгүй) */
   const [khoroo, setKhoroo] = React.useState<string | null>(null);
   /** Хулгана дээр нь очсон нийтийн жорлон */
-  const [hover, setHover] = React.useState<number | null>(null);
+  /** Хулгана дагасан хөвөгч тайлбар — байрлалыг өөрөө удирдана */
+  const tip = useMapTip();
 
   const [basemap, setBasemap] = React.useState<Basemap>(() => defaultBasemap());
   /*
@@ -253,8 +256,8 @@ export function OrchinDashboard() {
   );
 
   const hovered = React.useMemo(
-    () => (hover == null ? null : (city.find((c) => c.oid === hover) ?? null)),
-    [city, hover],
+    () => (tip.oid == null ? null : (city.find((c) => c.oid === tip.oid) ?? null)),
+    [city, tip.oid],
   );
 
   /* ---------------- Диаграм ---------------- */
@@ -474,7 +477,8 @@ export function OrchinDashboard() {
        буцаж ирэхэд далд шүүлтүүр болно */
     if (id === "city") setZone(null);
     else setKhoroo(null);
-    setHover(null);
+    /* Хөвөгч тайлбар нь өөрөө хулгана салахад цэвэрлэгддэг тул энд
+       тусгайлан унтраах шаардлагагүй */
   }
 
   if (error || !data || !stats) {
@@ -482,7 +486,7 @@ export function OrchinDashboard() {
       <div className="flex h-full items-center justify-center rounded-xs border border-line bg-paper-2">
         {error ? (
           <div className="text-center">
-            <p className="text-[14px] font-medium">Эх сурвалж татагдсангүй</p>
+            <p className="text-[14px] font-medium">Эх сурвалжийн мэдээллийг татаж чадсангүй</p>
             <p className="num mt-2 text-[12px] text-ink-3">{error}</p>
           </div>
         ) : (
@@ -622,7 +626,7 @@ export function OrchinDashboard() {
                   labels={cityLabels}
                   basemap={basemap}
                   onSelect={() => {}}
-                  onHover={setHover}
+                  onHover={tip.onHover}
                   focus={focus}
                   overlays={overlays}
                   cluster={false}
@@ -633,21 +637,34 @@ export function OrchinDashboard() {
               <OverlayControl value={overlays} onChange={setOverlays} />
 
               {/*
-                Hover самбар. Цэг дээр очиход байршил нь шууд харагдана —
-                товшилт шаардахгүй. Хулганы үйлдлийг саатуулахгүйн тулд
-                `pointer-events` унтраасан.
+                ХӨВӨГЧ ТАЙЛБАР. Тэмдэглэгээний хажууд гарна — 17 цэгийн
+                аль нь болохыг заахад тусдаа тодруулга хэрэггүй.
+
+                Нүхэн жорлонгийн горимд тайлбар БАЙХГҮЙ: тэнд харагдаж
+                буй зүйл нь бодит цэг биш, ~220м-ийн нэгтгэсэн НҮД —
+                "энэ цэг" гэж заах юм байхгүй.
               */}
               {hovered ? (
-                <div className="pointer-events-none absolute top-2.5 left-2.5 z-10 max-w-[260px] rounded-xs border border-line bg-paper/92 px-2.5 py-2 backdrop-blur-md">
-                  <div className="eyebrow mb-1.5">Нийтийн ариун цэврийн байгууламж</div>
-                  <div className="text-[12.5px] leading-snug text-ink">
-                    {hovered.district}
-                    {hovered.khoroo != null ? ` · ${hovered.khoroo}-р хороо` : ""}
+                <MapTip state={tip} width={224}>
+                  <div className="px-2.5 pt-2 pb-2 text-[12.5px] leading-snug font-medium text-ink">
+                    Нийтийн ариун цэврийн байгууламж
                   </div>
-                  <div className="num mt-1 text-[10.5px] text-ink-3">
-                    {hovered.lat.toFixed(5)}, {hovered.lon.toFixed(5)}
+
+                  <div className="space-y-1.5 border-t border-line px-2.5 py-2">
+                    <MapTipRow
+                      icon={MapPin}
+                      text={`${hovered.district}${
+                        hovered.khoroo != null ? ` · ${hovered.khoroo}-р хороо` : ""
+                      }`}
+                    />
                   </div>
-                </div>
+
+                  <div className="border-t border-line px-2.5 py-1.5">
+                    <span className="num text-[10px] leading-none text-ink-3">
+                      {hovered.lat.toFixed(5)}° {hovered.lon.toFixed(5)}°
+                    </span>
+                  </div>
+                </MapTip>
               ) : null}
             </div>
           </Card>

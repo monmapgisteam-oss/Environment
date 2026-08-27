@@ -2,9 +2,10 @@
 
 import * as React from "react";
 import dynamic from "next/dynamic";
-import { Layers3, Loader2, Ruler, Waves } from "lucide-react";
+import { Droplets, Layers3, Loader2, MousePointerClick, Ruler, Waves } from "lucide-react";
 import { PieChart, RowChart, type Datum } from "@/components/charts";
 import { BasemapGallery } from "@/components/map/basemap-gallery";
+import { MapTip, MapTipRow, useMapTip } from "@/components/map/hover-tip";
 import { OverlayControl } from "@/components/map/overlay-control";
 import { FilterBar, FilterMenu, PickList } from "@/components/wells/filter-bar";
 import {
@@ -74,7 +75,8 @@ export function FloodplainDashboard() {
   const [basin, setBasin] = React.useState<string | null>(null);
   const [size, setSize] = React.useState<string | null>(null);
   const [picked, setPicked] = React.useState<number | null>(null);
-  const [hover, setHover] = React.useState<number | null>(null);
+  /** Хулгана дагасан хөвөгч тайлбар — байрлалыг өөрөө удирдана */
+  const tip = useMapTip();
 
   const [basemap, setBasemap] = React.useState<Basemap>(defaultBasemap);
   const [overlays, setOverlays] = React.useState<MapOverlay[]>([]);
@@ -194,10 +196,21 @@ export function FloodplainDashboard() {
     return b.get(0.002);
   }, [data, shown, picked, basin, size]);
 
-  const active = React.useMemo(() => {
-    const id = hover ?? picked;
-    return id == null ? null : (rows?.find((r) => r.oid === id) ?? null);
-  }, [rows, hover, picked]);
+  /*
+    Товшсон татам — зүүн дээд буланд ТОГТМОЛ самбар. Хулганы тайлбартай
+    нэгтгэж болохгүй: сонголтоо тогтоосон хойноо хулгана хөдлөх бүрд
+    агуулга нь солигдож, уншиж чадахгүй болно.
+  */
+  const active = React.useMemo(
+    () => (picked == null ? null : (rows?.find((r) => r.oid === picked) ?? null)),
+    [rows, picked],
+  );
+
+  /** Хулгана дээр очсон татам */
+  const hovered = React.useMemo(
+    () => (tip.oid == null ? null : (rows?.find((r) => r.oid === tip.oid) ?? null)),
+    [rows, tip.oid],
+  );
 
   function reset() {
     setBasin(null);
@@ -210,7 +223,7 @@ export function FloodplainDashboard() {
       <div className="flex h-full items-center justify-center rounded-xs border border-line bg-paper-2">
         {error ? (
           <div className="text-center">
-            <p className="text-[14px] font-medium">Эх сурвалж татагдсангүй</p>
+            <p className="text-[14px] font-medium">Эх сурвалжийн мэдээллийг татаж чадсангүй</p>
             <p className="num mt-2 text-[12px] text-ink-3">{error}</p>
           </div>
         ) : (
@@ -306,7 +319,7 @@ export function FloodplainDashboard() {
 
           {/* Баганын СҮҮЛД нь уян карт — үлдсэн зайг энэ эзэлнэ */}
           <Card className="min-h-[110px] flex-1">
-            <Head title="Хэмжээгээр">
+            <Head title="Талбайн хэмжээгээр">
               <span className="text-[10.5px] text-ink-3">га</span>
             </Head>
             <div className="min-h-0 flex-1 overflow-y-auto p-3">
@@ -343,13 +356,48 @@ export function FloodplainDashboard() {
                 shapes={{ data: shapes, selected: picked, glow: true, labelZoom: 9 }}
                 basemap={basemap}
                 onSelect={setPicked}
-                onHover={setHover}
+                onHover={tip.onHover}
                 focus={focus}
                 overlays={overlays}
                 cluster={false}
               />
               <BasemapGallery value={basemap} onChange={setBasemap} />
               <OverlayControl value={overlays} onChange={setOverlays} />
+
+              {/*
+                ХӨВӨГЧ ТАЙЛБАР — хулганы хажууд. Татам бүр нэрлэгдээгүй
+                тул САВ ГАЗАР нь цорын ганц таних тэмдэг; хажууд нь
+                талбай, өнгө нь зурган дээрх хүрээтэй нэг.
+              */}
+              {hovered ? (
+                <MapTip state={tip} width={222}>
+                  <div className="flex items-center gap-1.5 px-2.5 pt-2 pb-1.5">
+                    <span
+                      aria-hidden
+                      className="size-1.5 shrink-0 rounded-full"
+                      style={{ background: basinColor(hovered.basin) }}
+                    />
+                    <span className="min-w-0 flex-1 text-[12.5px] leading-snug font-medium text-ink">
+                      {hovered.basin}
+                    </span>
+                  </div>
+
+                  <div className="space-y-1.5 border-t border-line px-2.5 py-2">
+                    <MapTipRow icon={Waves} num text={`${ha1(hovered.ha)} га татам`} />
+                    {hovered.basinKm2 != null ? (
+                      <MapTipRow
+                        icon={Droplets}
+                        num
+                        text={`${num(Math.round(hovered.basinKm2))} км² сав газар`}
+                      />
+                    ) : null}
+                  </div>
+
+                  <div className="flex items-center justify-end border-t border-line px-2.5 py-1.5">
+                    <MousePointerClick size={11} className="shrink-0 text-ink-3" />
+                  </div>
+                </MapTip>
+              ) : null}
 
               {active ? (
                 <div className="pointer-events-none absolute top-2.5 left-2.5 z-10 max-w-[250px] rounded-xs border border-line bg-paper/92 px-2.5 py-2 backdrop-blur-md">

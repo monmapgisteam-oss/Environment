@@ -2,9 +2,18 @@
 
 import * as React from "react";
 import dynamic from "next/dynamic";
-import { Building2, Layers3, Loader2, Ruler, Shovel } from "lucide-react";
+import {
+  Building2,
+  Layers3,
+  Loader2,
+  MapPin,
+  MousePointerClick,
+  Ruler,
+  Shovel,
+} from "lucide-react";
 import { PieChart, RowChart } from "@/components/charts";
 import { BasemapGallery } from "@/components/map/basemap-gallery";
+import { MapTip, MapTipRow, useMapTip } from "@/components/map/hover-tip";
 import { OverlayControl } from "@/components/map/overlay-control";
 import { FilterBar, FilterMenu, PickList } from "@/components/wells/filter-bar";
 import {
@@ -57,6 +66,8 @@ export function DamagedDashboard() {
   const [size, setSize] = React.useState<string | null>(null);
   const [picked, setPicked] = React.useState<number | null>(null);
   const [hover, setHover] = React.useState<number | null>(null);
+  /** Хулгана дагасан хөвөгч тайлбар — байрлалыг өөрөө удирдана */
+  const tip = useMapTip();
 
   const [basemap, setBasemap] = React.useState<Basemap>(defaultBasemap);
   const [overlays, setOverlays] = React.useState<MapOverlay[]>([]);
@@ -208,6 +219,17 @@ export function DamagedDashboard() {
     return b.get(0.0006);
   }, [data, shapes, picked, place, size]);
 
+  /** Хулгана дээр очсон талбай — газрын зурагнаас */
+  const hovered = React.useMemo(
+    () => (tip.oid == null ? null : (sites?.find((x) => x.oid === tip.oid) ?? null)),
+    [sites, tip.oid],
+  );
+
+  /*
+    Тогтмол самбар: товшсон талбай, эсвэл ЖАГСААЛТЫН мөр дээр очсон нь.
+    Жагсаалтын мөрөнд хулганы байрлал гэж байхгүй тул хөвөгч тайлбар
+    тэнд утгагүй — зөвхөн газрын зураг дээр хөвнө.
+  */
   const active = React.useMemo(() => {
     const id = hover ?? picked;
     return id == null ? null : (sites?.find((s) => s.oid === id) ?? null);
@@ -224,7 +246,7 @@ export function DamagedDashboard() {
       <div className="flex h-full items-center justify-center rounded-xs border border-line bg-paper-2">
         {error ? (
           <div className="text-center">
-            <p className="text-[14px] font-medium">Эх сурвалж татагдсангүй</p>
+            <p className="text-[14px] font-medium">Эх сурвалжийн мэдээллийг татаж чадсангүй</p>
             <p className="num mt-2 text-[12px] text-ink-3">{error}</p>
           </div>
         ) : (
@@ -347,13 +369,41 @@ export function DamagedDashboard() {
                   shapes={{ data: shapes, selected: picked, labelZoom: 14 }}
                   basemap={basemap}
                   onSelect={setPicked}
-                  onHover={setHover}
+                  onHover={tip.onHover}
                   focus={focus}
                   overlays={overlays}
                   cluster={false}
                 />
                 <BasemapGallery value={basemap} onChange={setBasemap} />
                 <OverlayControl value={overlays} onChange={setOverlays} />
+
+                {/*
+                  ХӨВӨГЧ ТАЙЛБАР — хулганы хажууд. Энэ самбарын бүх
+                  үзүүлэлт ГА-гаар хэмжигддэг (тоолол нь хэмжээний хэт
+                  хазайлтаас болж төөрөгдүүлнэ) тул тайлбарын гол тоо
+                  нь ч талбай.
+                */}
+                {hovered ? (
+                  <MapTip state={tip} width={224}>
+                    <div className="flex items-baseline justify-between gap-2 px-2.5 pt-2 pb-1.5">
+                      <span className="num text-[15px] leading-none font-medium text-data">
+                        {hovered.ha >= 1 ? hovered.ha.toFixed(1) : hovered.ha.toFixed(3)}
+                      </span>
+                      <span className="text-[10.5px] leading-none text-ink-3">га</span>
+                    </div>
+
+                    <div className="space-y-1.5 border-t border-line px-2.5 py-2">
+                      <MapTipRow icon={MapPin} text={hovered.place} />
+                      {hovered.aimag !== "Улаанбаатар" ? (
+                        <MapTipRow icon={Building2} text={hovered.aimag} />
+                      ) : null}
+                    </div>
+
+                    <div className="flex items-center justify-end border-t border-line px-2.5 py-1.5">
+                      <MousePointerClick size={11} className="shrink-0 text-ink-3" />
+                    </div>
+                  </MapTip>
+                ) : null}
 
                 {active ? (
                   <div className="pointer-events-none absolute top-2.5 left-2.5 z-10 max-w-[240px] rounded-xs border border-line bg-paper/92 px-2.5 py-2 backdrop-blur-md">
@@ -425,7 +475,7 @@ export function DamagedDashboard() {
                         lead
                       />
                       <Measure
-                        label="талбай"
+                        label="талбайн тоо"
                         value={num(d.value)}
                         share={d.value / maxCount}
                         on={on}

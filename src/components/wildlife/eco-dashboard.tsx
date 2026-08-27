@@ -7,6 +7,8 @@ import {
   Layers3,
   LandPlot,
   Loader2,
+  MapPin,
+  MousePointerClick,
   Ruler,
   Waypoints,
 } from "lucide-react";
@@ -17,6 +19,7 @@ import {
   type DatumGroup,
 } from "@/components/charts";
 import { BasemapGallery } from "@/components/map/basemap-gallery";
+import { MapTip, MapTipRow, useMapTip } from "@/components/map/hover-tip";
 import { OverlayControl } from "@/components/map/overlay-control";
 import { FilterBar, FilterMenu, PickList } from "@/components/wells/filter-bar";
 import { DATA_COLOR } from "@/components/wells/colors";
@@ -81,6 +84,8 @@ export function EcoDashboard() {
   const [landuse, setLanduse] = React.useState<string | null>(null);
   const [picked, setPicked] = React.useState<number | null>(null);
   const [hover, setHover] = React.useState<number | null>(null);
+  /** Хулгана дагасан хөвөгч тайлбар — байрлалыг өөрөө удирдана */
+  const tip = useMapTip();
   /* Нэгж талбарын давхаргыг унтраах боломж: коридорын өөрийн хүрээ,
      хэлбэрийг цэвэрхэн харах шаардлага гардаг */
   const [showParcels, setShowParcels] = React.useState(true);
@@ -301,7 +306,28 @@ export function EcoDashboard() {
     return b.get(0.004);
   }, [data, corridorOn, shownParcels, picked, district, zone, landuse]);
 
-  /* Товшсон/hover хийсэн зүйл нь коридор ч байж болно, нэгж талбар ч */
+  /*
+    Коридор ба нэгж талбар нь НЭГ дугаарын орон зайд шахагдсан
+    (`PARCEL_BASE`-ээс дээш нь талбар) тул хоёуланг нь нэг л газар
+    задална. Хулганы тайлбар ч, тогтмол самбар ч ижил дүрмээр уншина.
+  */
+  const resolve = React.useCallback(
+    (id: number | null) => {
+      if (id == null) return null;
+      if (id >= PARCEL_BASE) {
+        const p = data?.parcels.find((x) => x.oid === id - PARCEL_BASE);
+        return p ? ({ kind: "parcel", p } as const) : null;
+      }
+      const c = rows?.find((r) => r.oid === id);
+      return c ? ({ kind: "corridor", c } as const) : null;
+    },
+    [data, rows],
+  );
+
+  /** Хулгана дээр очсон зүйл — газрын зурагнаас */
+  const hovered = React.useMemo(() => resolve(tip.oid), [resolve, tip.oid]);
+
+  /* Тогтмол самбар: товшсон, эсвэл ЖАГСААЛТЫН мөр дээр очсон зүйл */
   const active = React.useMemo(() => {
     const id = hover ?? picked;
     if (id == null) return null;
@@ -325,7 +351,7 @@ export function EcoDashboard() {
       <div className="flex h-full items-center justify-center rounded-xs border border-line bg-paper-2">
         {error ? (
           <div className="text-center">
-            <p className="text-[14px] font-medium">Эх сурвалж татагдсангүй</p>
+            <p className="text-[14px] font-medium">Эх сурвалжийн мэдээллийг татаж чадсангүй</p>
             <p className="num mt-2 text-[12px] text-ink-3">{error}</p>
           </div>
         ) : (
@@ -470,7 +496,7 @@ export function EcoDashboard() {
               })}
               {shownCorridors.length === 0 ? (
                 <div className="py-5 text-center text-[12px] text-ink-3">
-                  Шүүлтүүрт тохирох коридор алга
+                  Шүүлтүүрт тохирох экологийн коридор байхгүй байна
                 </div>
               ) : null}
             </div>
@@ -490,7 +516,7 @@ export function EcoDashboard() {
                 shapes={{ data: shapes, selected: picked, labelZoom: 9 }}
                 basemap={basemap}
                 onSelect={setPicked}
-                onHover={setHover}
+                onHover={tip.onHover}
                 focus={focus}
                 overlays={overlays}
                 cluster={false}
@@ -536,6 +562,74 @@ export function EcoDashboard() {
                   </span>
                 </button>
               </div>
+
+              {/*
+                ХӨВӨГЧ ТАЙЛБАР. Хоёр өөр төрөл нэг зураг дээр байгаа тул
+                тайлбарын дээд мөр нь ЮУ болохыг эхлээд хэлнэ — эс тэгвээс
+                "12.4 га" гэдэг нь коридорынх уу, талбарынх уу мэдэгдэхгүй.
+              */}
+              {hovered ? (
+                <MapTip state={tip} width={240}>
+                  {hovered.kind === "corridor" ? (
+                    <>
+                      <div className="flex items-center gap-1.5 px-2.5 pt-2 pb-1.5">
+                        <span
+                          aria-hidden
+                          className="size-1.5 shrink-0 rounded-full"
+                          style={{ background: colorOf(hovered.c.oid) }}
+                        />
+                        <span className="min-w-0 flex-1 text-[12.5px] leading-snug font-medium text-ink">
+                          {hovered.c.zone}
+                        </span>
+                      </div>
+                      <div className="space-y-1.5 border-t border-line px-2.5 py-2">
+                        <MapTipRow
+                          icon={Ruler}
+                          num
+                          text={`${num(Math.round(hovered.c.ha))} га`}
+                        />
+                        <MapTipRow icon={Waypoints} text={hovered.c.name} />
+                        <MapTipRow
+                          icon={MapPin}
+                          text={`${hovered.c.district} дүүрэг`}
+                        />
+                      </div>
+                      <div className="flex items-center justify-between gap-2 border-t border-line px-2.5 py-1.5">
+                        <span className="text-[10px] leading-none text-ink-3">
+                          Экологийн коридор
+                        </span>
+                        <MousePointerClick size={11} className="shrink-0 text-ink-3" />
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="px-2.5 pt-2 pb-1.5 text-[12.5px] leading-snug font-medium text-ink">
+                        {hovered.p.landuse}
+                      </div>
+                      <div className="space-y-1.5 border-t border-line px-2.5 py-2">
+                        <MapTipRow
+                          icon={Ruler}
+                          num
+                          text={`${hovered.p.parcelId} · ${hovered.p.ha.toFixed(2)} га`}
+                        />
+                        <MapTipRow icon={LandPlot} text={`Эрх: ${hovered.p.right}`} />
+                        <MapTipRow
+                          icon={MapPin}
+                          text={`${hovered.p.district}${
+                            hovered.p.khoroo ? ` ${hovered.p.khoroo}` : ""
+                          }`}
+                        />
+                      </div>
+                      <div className="flex items-center justify-between gap-2 border-t border-line px-2.5 py-1.5">
+                        <span className="text-[10px] leading-none text-ink-3">
+                          Нэгж талбар
+                        </span>
+                        <MousePointerClick size={11} className="shrink-0 text-ink-3" />
+                      </div>
+                    </>
+                  )}
+                </MapTip>
+              ) : null}
 
               {active ? (
                 <div className="pointer-events-none absolute top-2.5 left-2.5 z-10 max-w-[280px] rounded-xs border border-line bg-paper/92 px-2.5 py-2 backdrop-blur-md">
@@ -595,7 +689,7 @@ export function EcoDashboard() {
           */}
           <Card className="shrink-0">
             <Head title="Эрхийн төрлөөр">
-              <span className="text-[10.5px] text-ink-3">бүсээр · талбар</span>
+              <span className="text-[10.5px] text-ink-3">бүсээр · нэгж талбар</span>
             </Head>
             <div className="p-3">
               {/* Бүс тус бүр задарсан байдлаар — гурван бүлэг тул
@@ -612,7 +706,7 @@ export function EcoDashboard() {
           {/* Мөрийн СҮҮЛД нь уян карт — 18 мөр тул дотроо гүйнэ */}
           <Card className="min-h-[140px] flex-1">
             <Head title="Зориулалтаар">
-              <span className="text-[10.5px] text-ink-3">талбар</span>
+              <span className="text-[10.5px] text-ink-3">нэгж талбар</span>
             </Head>
             <div className="min-h-0 flex-1 overflow-y-auto p-3">
               <RowChart data={byLanduse} selected={landuse} onSelect={setLanduse} />

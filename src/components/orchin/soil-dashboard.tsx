@@ -8,12 +8,14 @@ import {
   Gauge,
   Loader2,
   MapPin,
+  MousePointerClick,
   Trees,
   TriangleAlert,
   X,
 } from "lucide-react";
 import { PieChart, RowChart, type Datum } from "@/components/charts";
 import { BasemapGallery } from "@/components/map/basemap-gallery";
+import { MapTip, MapTipRow, useMapTip } from "@/components/map/hover-tip";
 import { OverlayControl } from "@/components/map/overlay-control";
 import { FilterBar, FilterMenu, PickList } from "@/components/wells/filter-bar";
 import {
@@ -25,6 +27,8 @@ import {
 } from "@/components/wells/map";
 import {
   fetchSoil,
+  igeoColor,
+  piColor,
   pliClass,
   pliColor,
   PLI_CLASSES,
@@ -96,7 +100,8 @@ export function SoilDashboard() {
   const [district, setDistrict] = React.useState<string | null>(null);
   const [grade, setGrade] = React.useState<string | null>(null);
   const [picked, setPicked] = React.useState<number | null>(null);
-  const [hover, setHover] = React.useState<number | null>(null);
+  /** Хулгана дагасан хөвөгч тайлбар — байрлалыг өөрөө удирдана */
+  const tip = useMapTip();
 
   const [basemap, setBasemap] = React.useState<Basemap>(defaultBasemap);
   const [overlays, setOverlays] = React.useState<MapOverlay[]>([]);
@@ -329,8 +334,14 @@ export function SoilDashboard() {
   );
 
   const hovered = React.useMemo(
-    () => (hover == null ? null : (points?.find((p) => p.oid === hover) ?? null)),
-    [points, hover],
+    () => (tip.oid == null ? null : (points?.find((p) => p.oid === tip.oid) ?? null)),
+    [points, tip.oid],
+  );
+
+  /** Тодруулах цэгийн байрлал — зураг дээрх цагираг */
+  const highlight = React.useMemo<[number, number] | null>(
+    () => (hovered ? [hovered.lon, hovered.lat] : null),
+    [hovered],
   );
 
   function reset() {
@@ -350,7 +361,7 @@ export function SoilDashboard() {
       <div className="flex h-full items-center justify-center rounded-xs border border-line bg-paper-2">
         {error ? (
           <div className="text-center">
-            <p className="text-[14px] font-medium">Эх сурвалж татагдсангүй</p>
+            <p className="text-[14px] font-medium">Эх сурвалжийн мэдээллийг татаж чадсангүй</p>
             <p className="num mt-2 text-[12px] text-ink-3">{error}</p>
           </div>
         ) : (
@@ -535,7 +546,19 @@ export function SoilDashboard() {
                       data={rows}
                       format={fmt}
                       guide={m.limit}
-                      colorOf={m.limit != null ? (x) => pliColor(x.value) : undefined}
+                      /*
+                        Өнгө нь ОЛОН УЛСЫН ангиллаас: PI дээр Håkanson
+                        (1980), Igeo дээр Müller (1969). Хоёр индекс өөр
+                        хуваарьтай тул нэг өнгөний функц хэрэглэвэл
+                        худал зэрэгцүүлэлт үүснэ.
+                      */
+                      colorOf={
+                        m.id === "igeo"
+                          ? (x) => igeoColor(x.value)
+                          : m.limit != null
+                            ? (x) => piColor(x.value)
+                            : undefined
+                      }
                     />
                     {m.limit != null ? (
                       <p className="mt-3 flex items-start gap-1.5 border-t border-line pt-2 text-[10px] leading-tight text-ink-3">
@@ -544,8 +567,9 @@ export function SoilDashboard() {
                           className="mt-[2px] inline-block h-[9px] w-px shrink-0 bg-ink-3"
                         />
                         <span>
-                          Дэвсгэр түвшин (PI&nbsp;=&nbsp;{m.limit}). Хэтэрсэн хэсэг
-                          анивчина.
+                          {m.id === "igeo"
+                            ? "Дунд зэргийн бохирдлын хил (Igeo = 1, Müller 1969). Хэтэрсэн хэсэг анивчина."
+                            : "Дэвсгэр түвшин (PI = 1). Өнгө нь Håkanson (1980)-ийн ангиллаар. Хэтэрсэн хэсэг анивчина."}
                         </span>
                       </p>
                     ) : null}
@@ -569,7 +593,8 @@ export function SoilDashboard() {
                 grades={{ values: geo.pli, stops: PLI_RAMP, heat: true }}
                 basemap={basemap}
                 onSelect={setPicked}
-                onHover={setHover}
+                onHover={tip.onHover}
+                highlight={highlight}
                 focus={focus}
                 overlays={overlays}
                 cluster={false}
@@ -578,19 +603,20 @@ export function SoilDashboard() {
               <OverlayControl value={overlays} onChange={setOverlays} />
 
               {/*
-                Hover самбар. Цэг дээр очиход хамгийн чухал гурван зүйл
-                шууд гарна: аль цэг, ямар түвшин, хаана. Товшилт нь
-                бүтэн профайл нээдэг тул энд элемент бүрийг жагсаахгүй —
-                хоёулаа ижил зүйл харуулбал товшилтын утга алдагдана.
-                Хулганы үйлдлийг саатуулахгүйн тулд `pointer-events`
-                унтраасан.
+                ХӨВӨГЧ ТАЙЛБАР — хулганы хажууд. Цэг дээр очиход хамгийн
+                чухал гурван зүйл шууд гарна: аль цэг, ямар түвшин, хаана.
+                Товшилт нь бүтэн профайл нээдэг тул энд элемент бүрийг
+                жагсаахгүй — хоёулаа ижил зүйл харуулбал товшилтын утга
+                алдагдана.
               */}
               {hovered ? (
-                <div className="pointer-events-none absolute top-2.5 left-2.5 z-10 max-w-[240px] rounded-xs border border-line bg-paper/92 px-2.5 py-2 backdrop-blur-md">
-                  <div className="flex items-baseline justify-between gap-2">
+                <MapTip state={tip} width={228}>
+                  <div className="flex items-baseline justify-between gap-2 px-2.5 pt-2 pb-1.5">
                     <span className="num text-[12.5px] leading-none font-medium text-ink">
                       {hovered.code}
                     </span>
+                    {/* PLI-ийн өнгө нь цэгийн өнгөтэй ижил шатлалаас —
+                        тайлбар, зураг хоёр нэг хуваарь уншина */}
                     <span
                       className="num rounded-xs px-1.5 py-0.5 text-[10.5px] leading-none"
                       style={{
@@ -601,13 +627,21 @@ export function SoilDashboard() {
                       PLI {hovered.pli.toFixed(2)}
                     </span>
                   </div>
-                  <div className="mt-1.5 text-[11.5px] leading-snug text-ink-2">
-                    {hovered.district} · {hovered.khoroo}
+
+                  <div className="space-y-1.5 border-t border-line px-2.5 py-2">
+                    <MapTipRow
+                      icon={MapPin}
+                      text={`${hovered.district} · ${hovered.khoroo}`}
+                    />
                   </div>
-                  <div className="num mt-1 text-[10px] text-ink-3">
-                    {hovered.lat.toFixed(5)}, {hovered.lon.toFixed(5)}
+
+                  <div className="flex items-center justify-between gap-2 border-t border-line px-2.5 py-1.5">
+                    <span className="num text-[10px] leading-none text-ink-3">
+                      {hovered.lat.toFixed(5)}° {hovered.lon.toFixed(5)}°
+                    </span>
+                    <MousePointerClick size={11} className="shrink-0 text-ink-3" />
                   </div>
-                </div>
+                </MapTip>
               ) : null}
 
               {/*

@@ -17,6 +17,8 @@ import { RECLAMATION_SERVICES } from "@/lib/reclamation";
 import { RESCUES_SERVICE } from "@/lib/rescues";
 import { SOIL_SERVICES } from "@/lib/soil";
 import { CITY_SERVICE, PIT_SERVICE } from "@/lib/toilets";
+import { BOMT_SERVICE } from "@/lib/bomt";
+import { NEUTRALIZATION_SERVICE } from "@/lib/neutralization";
 import { WATER_SERVICE } from "@/lib/water-contracts";
 import { WELLS_SERVICE } from "@/lib/wells";
 import { WILDLIFE_SERVICE } from "@/lib/wildlife";
@@ -99,7 +101,16 @@ export const SOURCES: Source[] = [
   },
   {
     slug: "orchin",
-    name: "Нөхөн сэргээлт — ААН-ийн хөрөнгөөр",
+    name: "Хөрсний саармагжуулалт — 4 цэг",
+    /* Бусад эх сурвалжаас ялгаатай: хост нь өөрөө гарын үсэг зурсан TLS
+       гэрчилгээтэй тул хөтөч холбогдож чадахгүй. Дата нь `neutralization.ts`
+       дотор хуулбараар хадгалагдаж байгаа. */
+    kind: "ArcGIS FeatureServer · хуулбар",
+    url: NEUTRALIZATION_SERVICE,
+  },
+  {
+    slug: "orchin",
+    name: "Нөхөн сэргээлт — аж ахуйн нэгжийн хөрөнгөөр",
     kind: "ArcGIS FeatureServer",
     url: RECLAMATION_SERVICES[0],
   },
@@ -138,5 +149,14 @@ export const SOURCES: Source[] = [
     name: "Байгаль орчны ерөнхий үнэлгээ — нэгж талбар",
     kind: "ArcGIS FeatureServer",
     url: ASSESSMENT_SERVICE,
+  },
+  {
+    slug: "unelgee-uur-amisgal",
+    name: "Байгаль орчны менежментийн төлөвлөгөө — 2026 оны нэгтгэл",
+    /* Хост нь өөрөө гарын үсэг зурсан TLS гэрчилгээтэй тул хөтөч
+       холбогдож чадахгүй. Дата нь `public/data/bomt-2026.json` дотор
+       хуулбараар хадгалагдаж, бидний өөрийн эх сурвалжаас татагдана. */
+    kind: "ArcGIS FeatureServer · хуулбар",
+    url: BOMT_SERVICE,
   },
 ];

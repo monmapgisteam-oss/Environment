@@ -4,16 +4,20 @@ import * as React from "react";
 import dynamic from "next/dynamic";
 import {
   Building2,
+  CalendarRange,
   Coins,
   Droplets,
   Factory,
   FileSignature,
   Loader2,
+  MapPin,
+  MousePointerClick,
   Wrench,
   type LucideIcon,
 } from "lucide-react";
-import { AreaChart, RowChart, type Datum } from "@/components/charts";
+import { AreaChart, RowChart, YearRange, type Datum } from "@/components/charts";
 import { BasemapGallery } from "@/components/map/basemap-gallery";
+import { MapTip, MapTipRow, useMapTip } from "@/components/map/hover-tip";
 import { FilterBar, FilterMenu, PickList } from "@/components/wells/filter-bar";
 import { defaultBasemap, type Basemap, type Extent } from "@/components/wells/map";
 import { boundsOf } from "@/lib/extent";
@@ -37,7 +41,7 @@ const WaterMap = dynamic(
   },
 );
 
-type Skip = "sector" | "activity" | "district" | "holder";
+type Skip = "sector" | "activity" | "district" | "holder" | "year";
 
 /**
  * Ус ашиглах гэрээний самбар.
@@ -62,7 +66,14 @@ export function WaterDashboard() {
   const [activity, setActivity] = React.useState<string | null>(null);
   const [district, setDistrict] = React.useState<string | null>(null);
   const [holder, setHolder] = React.useState<string | null>(null);
-  const [hover, setHover] = React.useState<number | null>(null);
+  /*
+    Зөвшөөрөл олгосон оны МУЖ. Гэрээ дуусах хугацаа бүгд НЭГ утгатай
+    (2025.12.31) тул хугацааны цорын ганц утга бүхий хэмжигдэхүүн нь
+    зөвшөөрөл олгосон он — муж нь түүн дээр суудаг.
+  */
+  const [range, setRange] = React.useState<[number, number] | null>(null);
+  /** Хулгана дагасан хөвөгч тайлбар — байрлалыг өөрөө удирдана */
+  const tip = useMapTip();
   const [picked, setPicked] = React.useState<number | null>(null);
 
   const [basemap, setBasemap] = React.useState<Basemap>(() => defaultBasemap());
@@ -70,7 +81,14 @@ export function WaterDashboard() {
   React.useEffect(() => {
     let alive = true;
     fetchWaterContracts()
-      .then((d) => alive && setData(d))
+      .then((d) => {
+        if (!alive) return;
+        setData(d);
+        const ys = d.rows
+          .map((c) => c.permitYear)
+          .filter((y): y is number => y != null);
+        if (ys.length) setRange([Math.min(...ys), Math.max(...ys)]);
+      })
       .catch((e: Error) => alive && setError(e.message));
     return () => {
       alive = false;
@@ -78,6 +96,19 @@ export function WaterDashboard() {
   }, []);
 
   const rows = data?.rows;
+
+  /** Датаны хамрах бүтэн хугацаа — шүүлтүүрийн хязгаар, шүүлтээс хамаарахгүй */
+  const limits = React.useMemo<[number, number] | null>(() => {
+    const ys = (rows ?? [])
+      .map((c) => c.permitYear)
+      .filter((y): y is number => y != null);
+    if (!ys.length) return null;
+    return [Math.min(...ys), Math.max(...ys)];
+  }, [rows]);
+
+  /** Муж нь бүх оныг хамарч байвал шүүлт хийгээгүйтэй адил */
+  const wholeRange =
+    !limits || !range || (range[0] === limits[0] && range[1] === limits[1]);
 
   /**
    * Шүүлтүүр давсан гэрээнүүд. `skip`-д заасан хэмжигдэхүүнийг алгасна —
@@ -92,11 +123,19 @@ export function WaterDashboard() {
         if (skip !== "activity" && activity && c.activity !== activity) continue;
         if (skip !== "district" && district && c.district !== district) continue;
         if (skip !== "holder" && holder && c.holder !== holder) continue;
+        /* Он тодорхойгүй гэрээ нь муж тавихад унана — "хэзээ олгосон нь
+           мэдэгдэхгүй" бичлэгийг тухайн муж дотор байсан мэт харуулах
+           боломжгүй. Одоогийн 10 гэрээ бүгд онтой. */
+        if (skip !== "year" && range) {
+          if (c.permitYear == null || c.permitYear < range[0] || c.permitYear > range[1]) {
+            continue;
+          }
+        }
         out.push(c);
       }
       return out;
     },
-    [rows, sector, activity, district, holder],
+    [rows, sector, activity, district, holder, range],
   );
 
   const shown = React.useMemo(() => select(), [select]);
@@ -149,6 +188,22 @@ export function WaterDashboard() {
   }, [data, tally]);
 
   const activityData = React.useMemo(() => tally("activity", "activity"), [tally]);
+
+  /*
+    Дүүрэг — гэрээний ТООГООР. Дээрх м³ диаграмтай зэрэгцэж зогсоно.
+
+    Хоёр нь ӨӨР асуултад хариулна: м³ нь "хаана хамгийн их ус зарцуулж
+    байна", тоо нь "хаана хамгийн олон гэрээ байна". Нэг том хэрэглэгчтэй
+    дүүрэг эхнийхэд тэргүүлж, хоёрдугаарт доогуур байж болно — тэр зөрөө
+    нь өөрөө олдвор.
+  */
+  const districtCount = React.useMemo<Datum[]>(() => {
+    const m = new Map<string, number>();
+    for (const c of select("district")) m.set(c.district, (m.get(c.district) ?? 0) + 1);
+    return [...m]
+      .map(([k, v]) => ({ key: k, label: k, value: v }))
+      .sort((a, b) => b.value - a.value);
+  }, [select]);
   const districtData = React.useMemo(() => tally("district", "district"), [tally]);
   const holderData = React.useMemo(() => tally("holder", "holder"), [tally]);
 
@@ -158,9 +213,13 @@ export function WaterDashboard() {
 
     Гэрээ дуусах хугацаа НЭГ л утгатай (2025.12.31) тул түүгээр цуваа
     хийх утгагүй — зөвшөөрөл олгосон он л хугацааны мэдээлэл өгнө.
+
+    Бусад диаграмтай адил ӨӨРИЙНХӨӨ шүүлтийг алгасна (`skip: "year"`) —
+    нэг он сонгосны дараа ч бусад баганууд харагдсаар үлдэж, буцаж
+    сонгох боломжтой байна.
   */
   const yearData = React.useMemo<Datum[]>(() => {
-    const ys = select("holder")
+    const ys = select("year")
       .map((c) => c.permitYear)
       .filter((y): y is number => y != null);
     if (!ys.length) return [];
@@ -193,36 +252,48 @@ export function WaterDashboard() {
 
   /* ---------------- Индикатор ---------------- */
   const stats = React.useMemo(() => {
-    const m3 = shown.reduce((s, c) => s + c.m3, 0);
-    const fee = shown.reduce((s, c) => s + c.fee, 0);
     return {
       n: shown.length,
       holders: new Set(shown.map((c) => c.holder)).size,
-      m3,
-      fee,
-      /* Нийт төлбөрийг нийт хэмжээнд харьцуулсан ЖИГНЭСЭН дундаж. Гэрээ
-         бүрийн нэгж үнийн энгийн дундажийг авбал хамгийн жижиг гэрээ
-         хамгийн томтойгоо ижил жинтэй болно */
-      unit: m3 > 0 ? fee / m3 : 0,
+      m3: shown.reduce((s, c) => s + c.m3, 0),
+      fee: shown.reduce((s, c) => s + c.fee, 0),
     };
   }, [shown]);
 
   /* ---------------- Сонголтын хүрээ (zoom action) ----------------
      ЯМАР Ч шүүлтүүр эсвэл сонголт хийхэд зураг таарсан гэрээнүүд рүүгээ
      ойртоно. Шүүлтүүр цуцлагдвал `null` — зураг анхны байрлалдаа буцна. */
-  const anyFilter = Boolean(sector || activity || district || holder);
+  const anyFilter = !wholeRange || Boolean(sector || activity || district || holder);
 
   const focus = React.useMemo<Extent | null>(() => {
     if (picked != null) return boundsOf(shown.filter((c) => c.oid === picked));
     return anyFilter ? boundsOf(shown) : null;
   }, [shown, anyFilter, picked]);
 
-  const active = React.useMemo(() => {
-    const id = hover ?? picked;
-    return id == null ? null : (rows?.find((c) => c.oid === id) ?? null);
-  }, [rows, hover, picked]);
+  /*
+    Товшсон гэрээ — зүүн дээд буланд ТОГТМОЛ самбар. Хулганы тайлбартай
+    хольж нэг самбар болгож болохгүй: сонголтоо тогтоосон хойноо
+    хулгана хөдөлгөх бүрд агуулга нь солигдож, уншиж чадахгүй болно.
+  */
+  const active = React.useMemo(
+    () => (picked == null ? null : (rows?.find((c) => c.oid === picked) ?? null)),
+    [rows, picked],
+  );
+
+  /** Хулгана дээр очсон гэрээ — сүлжээгүй, аль хэдийн татсан мөрөөс */
+  const hovered = React.useMemo(
+    () => (tip.oid == null ? null : (rows?.find((c) => c.oid === tip.oid) ?? null)),
+    [rows, tip.oid],
+  );
+
+  /** Тодруулах цэгийн байрлал — зураг дээрх цагираг */
+  const highlight = React.useMemo<[number, number] | null>(
+    () => (hovered ? [hovered.lon, hovered.lat] : null),
+    [hovered],
+  );
 
   function reset() {
+    setRange(limits);
     setSector(null);
     setActivity(null);
     setDistrict(null);
@@ -235,7 +306,7 @@ export function WaterDashboard() {
       <div className="flex h-full items-center justify-center rounded-xs border border-line bg-paper-2">
         {error ? (
           <div className="text-center">
-            <p className="text-[14px] font-medium">Эх сурвалж татагдсангүй</p>
+            <p className="text-[14px] font-medium">Эх сурвалжийн мэдээллийг татаж чадсангүй</p>
             <p className="num mt-2 text-[12px] text-ink-3">{error}</p>
           </div>
         ) : (
@@ -249,12 +320,34 @@ export function WaterDashboard() {
   }
 
   const activeCount =
-    (sector ? 1 : 0) + (activity ? 1 : 0) + (district ? 1 : 0) + (holder ? 1 : 0);
+    (wholeRange ? 0 : 1) +
+    (sector ? 1 : 0) +
+    (activity ? 1 : 0) +
+    (district ? 1 : 0) +
+    (holder ? 1 : 0);
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-2.5">
       {/* ============ ШҮҮЛТҮҮРИЙН МӨР ============ */}
       <FilterBar title="Ус ашиглах гэрээ" activeCount={activeCount} onReset={reset}>
+        {/*
+          Хугацаа — эхэнд. Бусад шүүлтүүр нь "хэн, юу, хаана" гэдгийг
+          заадаг бол энэ нь "хэзээ": өөр эрэмбийн зүйл тул мөрийн эхэнд
+          тусад нь зогсоно.
+        */}
+        <FilterMenu
+          label="Хугацаа"
+          icon={CalendarRange}
+          value={wholeRange || !range ? null : `${range[0]}–${range[1]}`}
+          active={!wholeRange}
+          onClear={() => setRange(limits)}
+          width={252}
+        >
+          {limits && range ? (
+            <YearRange min={limits[0]} max={limits[1]} value={range} onChange={setRange} />
+          ) : null}
+        </FilterMenu>
+
         <FilterMenu
           label="Салбар"
           icon={Factory}
@@ -333,10 +426,18 @@ export function WaterDashboard() {
             selected={district}
             onSelect={setDistrict}
           />
+          <Panel
+            title="Дүүргээр"
+            note="гэрээний тоо"
+            data={districtCount}
+            selected={district}
+            onSelect={setDistrict}
+            format={num}
+          />
           {/* Ус ашиглагч нь хамгийн урт жагсаалт — үлдсэн зайг аваад
               дотроо гүйнэ */}
           <Panel
-            title="Ус ашиглагчаар"
+            title="Ус ашиглаж буй байгууллага"
             note="м³/жил"
             data={holderData}
             selected={holder}
@@ -352,7 +453,7 @@ export function WaterDashboard() {
             хайрцаг бүрийг хүрээлбэл дэлгэц хэсэгчилсэн харагдана.
           */}
           <div className="shrink-0 overflow-hidden rounded-xs border border-line bg-paper-2">
-            <div className="grid grid-cols-3 divide-x divide-y divide-line xl:grid-cols-5 xl:divide-y-0">
+            <div className="grid grid-cols-2 divide-x divide-y divide-line xl:grid-cols-4 xl:divide-y-0">
               <Indicator icon={FileSignature} label="Байгуулсан гэрээ" value={num(stats.n)} />
               <Indicator icon={Building2} label="Ус ашиглагч" value={num(stats.holders)} />
               <Indicator
@@ -362,17 +463,8 @@ export function WaterDashboard() {
               />
               <Indicator
                 icon={Coins}
-                label="Усны нөөцийн төлбөр, төг"
+                label="Усны нөөцийн төлбөр, төгрөг"
                 value={num(Math.round(stats.fee))}
-              />
-              {/*
-                Дундаж нэгж үнэ — салбарын тариф өөр өөр учир энэ тоо нь
-                зөвхөн хэмжээнээс гардаггүй. Хэмжээгээр ЖИГНЭСЭН дундаж.
-              */}
-              <Indicator
-                icon={Coins}
-                label="Дундаж тариф, төг/м³"
-                value={stats.unit.toFixed(1)}
               />
             </div>
           </div>
@@ -386,11 +478,58 @@ export function WaterDashboard() {
                 labels={labels}
                 basemap={basemap}
                 onSelect={(oid) => setPicked(picked === oid ? null : oid)}
-                onHover={setHover}
+                onHover={tip.onHover}
+                highlight={highlight}
                 focus={focus}
                 cluster={false}
               />
               <BasemapGallery value={basemap} onChange={setBasemap} />
+
+              {/*
+                ХӨВӨГЧ ТАЙЛБАР. Худгийнхаас агуулгаараа өөр: тэнд гол нь
+                бүртгэлийн дугаар бол энд ХЭН гэдэг нь — гэрээ бүр нэртэй
+                аж ахуйн нэгжийнх. Хэмжээ, тариф хоёр нь самбарын гол
+                хэмжигдэхүүн тул тайлбар дээр ч зэрэгцэж гарна.
+              */}
+              {hovered ? (
+                <MapTip state={tip} width={240}>
+                  <div className="flex items-baseline justify-between gap-2 px-2.5 pt-2 pb-1">
+                    <span className="num text-[11px] leading-none font-medium text-data">
+                      {hovered.permit}
+                    </span>
+                    <span className="num text-[11px] leading-none text-ink-3">
+                      {hovered.permitYear ?? "—"}
+                    </span>
+                  </div>
+                  <div className="px-2.5 pb-2 text-[12.5px] leading-snug font-medium text-ink">
+                    {hovered.holder}
+                  </div>
+
+                  <div className="space-y-1.5 border-t border-line px-2.5 py-2">
+                    <MapTipRow
+                      icon={Droplets}
+                      num
+                      text={`${num(Math.round(hovered.m3))} м³/жил`}
+                    />
+                    <MapTipRow
+                      icon={Coins}
+                      num
+                      text={`${unitFee(hovered).toFixed(1)} төг/м³`}
+                    />
+                    <MapTipRow
+                      icon={MapPin}
+                      text={`${hovered.district} ${hovered.khoroo}`}
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between gap-2 border-t border-line px-2.5 py-1.5">
+                    <span className="min-w-0 flex-1 truncate text-[10px] leading-none text-ink-3">
+                      {hovered.activity}
+                    </span>
+                    <MousePointerClick size={11} className="shrink-0 text-ink-3" />
+                  </div>
+                </MapTip>
+              ) : null}
 
               {active ? (
                 <div className="pointer-events-none absolute top-2.5 left-2.5 z-10 max-w-[268px] rounded-xs border border-line bg-paper/92 px-2.5 py-2 backdrop-blur-md">
@@ -442,7 +581,18 @@ export function WaterDashboard() {
               </span>
             </Head>
             <div className="p-3">
-              <AreaChart data={yearData} height={82} unit="зөвшөөрөл" />
+              {/*
+                Он дээр товшихад муж нь ТЭР ОН дээр хумигдана — газрын
+                зураг, индикатор, бусад диаграм бүгд дагаж шүүгдэнэ.
+                Сонгосон он дээр дахин товшвол бүтэн хугацаа руу буцна.
+              */}
+              <AreaChart
+                data={yearData}
+                height={82}
+                unit="зөвшөөрөл"
+                selected={range && range[0] === range[1] ? String(range[0]) : null}
+                onSelect={(k) => setRange(k ? [Number(k), Number(k)] : limits)}
+              />
             </div>
           </Box>
 
@@ -475,6 +625,7 @@ function Panel({
   data,
   selected,
   onSelect,
+  format,
   grow,
 }: {
   title: string;
@@ -482,6 +633,8 @@ function Panel({
   data: Datum[];
   selected: string | null;
   onSelect: (k: string | null) => void;
+  /** Утгын бичиглэл — өгөөгүй бол м³ шиг бүхэл тоо */
+  format?: (v: number) => string;
   /** Үлдсэн зайг эзэлж, дотроо гүйх эсэх */
   grow?: boolean;
 }) {
@@ -495,7 +648,7 @@ function Panel({
           data={data}
           selected={selected}
           onSelect={onSelect}
-          format={(v) => num(Math.round(v))}
+          format={format ?? ((v) => num(Math.round(v)))}
         />
       </div>
     </Box>

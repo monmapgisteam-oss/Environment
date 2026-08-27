@@ -3,6 +3,7 @@
 import dynamic from "next/dynamic";
 import {
   FileText,
+  FlaskConical,
   Loader2,
   Mountain,
   Pickaxe,
@@ -60,6 +61,14 @@ const PetitionsDashboard = dynamic(
   { ssr: false, loading: spinner },
 );
 
+const NeutralizationDashboard = dynamic(
+  () =>
+    import("@/components/orchin/neutralization-dashboard").then(
+      (m) => m.NeutralizationDashboard,
+    ),
+  { ssr: false, loading: spinner },
+);
+
 const LicensesDashboard = dynamic(
   () => import("@/components/orchin/licenses-dashboard").then((m) => m.LicensesDashboard),
   { ssr: false, loading: spinner },
@@ -74,7 +83,7 @@ const TABS = [
   {
     id: "sanitation",
     label: "Ариун цэврийн байгууламж",
-    note: "Нүхэн ба нийтийн жорлон",
+    note: "Нүхэн жорлон, нийтийн ариун цэврийн байгууламж",
     icon: Toilet,
   },
   {
@@ -84,9 +93,20 @@ const TABS = [
     icon: Mountain,
   },
   {
+    /*
+      Хөрсний хяналт шинжилгээний ДАРАА: хоёулаа хөрсний хүнд металын
+      хэмжилт бөгөөд ижил элементүүдийг хэмждэг. Ялгаа нь хамрах хүрээ —
+      тэр нь хотын мониторингийн 500 гаруй цэг, энэ нь дөрвөн тусгай цэг.
+    */
+    id: "neutralization",
+    label: "Саармагжуулалт",
+    note: "Дөрвөн цэгийн хүнд металын хэмжилт",
+    icon: FlaskConical,
+  },
+  {
     id: "reclamation",
     label: "Нөхөн сэргээлт",
-    note: "ААН-ийн хөрөнгө ба төсөв",
+    note: "Аж ахуйн нэгж, төсвийн санхүүжилт",
     icon: Sprout,
   },
   {
@@ -105,7 +125,7 @@ const TABS = [
   {
     id: "licenses",
     label: "Ашигт малтмалын зөвшөөрөл",
-    note: "Түгээмэл тархацтай · нийслэлийн нутаг",
+    note: "Түгээмэл тархацтай · нийслэлийн нутаг дэвсгэр",
     full:
       "Нийслэлийн нутаг дэвсгэрт байрлах түгээмэл тархацтай ашигт малтмалын " +
       "тусгай зөвшөөрөл эзэмшигч аж ахуйн нэгжүүдийн жагсаалт",
@@ -146,6 +166,8 @@ export function OrchinWorkspace() {
           <SanitationDashboard />
         ) : tab === "soil" ? (
           <SoilDashboard />
+        ) : tab === "neutralization" ? (
+          <NeutralizationDashboard />
         ) : tab === "reclamation" ? (
           <ReclamationDashboard />
         ) : tab === "damaged" ? (

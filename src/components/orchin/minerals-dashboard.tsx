@@ -5,13 +5,16 @@ import dynamic from "next/dynamic";
 import {
   Building2,
   CalendarClock,
+  CalendarRange,
   Loader2,
   Mountain,
+  MousePointerClick,
   Pickaxe,
   Ruler,
 } from "lucide-react";
-import { RowChart, type Datum } from "@/components/charts";
+import { RowChart, YearRange, type Datum } from "@/components/charts";
 import { BasemapGallery } from "@/components/map/basemap-gallery";
+import { MapTip, MapTipRow, useMapTip } from "@/components/map/hover-tip";
 import { OverlayControl } from "@/components/map/overlay-control";
 import { FilterBar, FilterMenu, PickList } from "@/components/wells/filter-bar";
 import {
@@ -66,8 +69,16 @@ export function MineralsDashboard() {
 
   const [mineral, setMineral] = React.useState<string | null>(null);
   const [district, setDistrict] = React.useState<string | null>(null);
+  /*
+    Хугацааны МУЖ. Зөвшөөрөл бүр олгосон→дуусах гэсэн ХУГАЦААТАЙ тул
+    "аль онд дуусах вэ" гэхээс "энэ хооронд ХҮЧИНТЭЙ байсан уу" гэдэг нь
+    зөв асуулт: муж нь зөвшөөрлийн хугацаатай ОГТЛОЛЦОЖ байвал үлдэнэ.
+  */
+  const [range, setRange] = React.useState<[number, number] | null>(null);
   const [picked, setPicked] = React.useState<number | null>(null);
   const [hover, setHover] = React.useState<number | null>(null);
+  /** Хулгана дагасан хөвөгч тайлбар — байрлалыг өөрөө удирдана */
+  const tip = useMapTip();
 
   const [basemap, setBasemap] = React.useState<Basemap>(defaultBasemap);
   const [overlays, setOverlays] = React.useState<MapOverlay[]>([]);
@@ -79,7 +90,14 @@ export function MineralsDashboard() {
   React.useEffect(() => {
     let alive = true;
     fetchMinerals()
-      .then((d) => alive && setData(d))
+      .then((d) => {
+        if (!alive) return;
+        setData(d);
+        const ys = d.sites
+          .flatMap((x) => [x.granted, x.expires])
+          .filter((y): y is number => y != null);
+        if (ys.length) setRange([Math.min(...ys), Math.max(...ys)]);
+      })
       .catch((e: Error) => alive && setError(e.message));
     return () => {
       alive = false;
@@ -89,15 +107,36 @@ export function MineralsDashboard() {
   const sites = data?.sites;
 
   const keep = React.useCallback(
-    (s: MineralSite, skip?: "mineral" | "district") => {
+    (s: MineralSite, skip?: "mineral" | "district" | "period") => {
+      /* Огтлолцол: зөвшөөрлийн хугацаа сонгосон мужтай давхцаж байна уу.
+         Аль нэг үзүүр нь бөглөгдөөгүй бол хязгааргүй гэж үзнэ — эс
+         тэгвээс он дутуу бичлэг бүр шүүлтээс унана. */
+      if (skip !== "period" && range) {
+        const from = s.granted ?? -Infinity;
+        const to = s.expires ?? Infinity;
+        if (to < range[0] || from > range[1]) return false;
+      }
       if (skip !== "mineral" && mineral && s.mineral !== mineral) return false;
       if (skip !== "district" && district && s.district !== district) return false;
       return true;
     },
-    [mineral, district],
+    [mineral, district, range],
   );
 
   const shown = React.useMemo(() => (sites ?? []).filter((s) => keep(s)), [sites, keep]);
+
+  /** Датаны хамрах бүтэн хугацаа — шүүлтүүрийн хязгаар */
+  const limits = React.useMemo<[number, number] | null>(() => {
+    const ys = (sites ?? [])
+      .flatMap((s) => [s.granted, s.expires])
+      .filter((y): y is number => y != null);
+    if (!ys.length) return null;
+    return [Math.min(...ys), Math.max(...ys)];
+  }, [sites]);
+
+  /** Муж нь бүх хугацааг хамарч байвал шүүлт хийгээгүйтэй адил */
+  const wholeRange =
+    !limits || !range || (range[0] === limits[0] && range[1] === limits[1]);
 
   /** Шүүлтэнд үлдсэн зөвшөөрлүүдийн дугаар — зураг, цэг хоёуланд нь */
   const on = React.useMemo(() => new Set(shown.map((s) => s.id)), [shown]);
@@ -207,13 +246,29 @@ export function MineralsDashboard() {
     return b.get(0.004);
   }, [data, shown, picked, mineral, district]);
 
+  /** Хулгана дээр очсон талбай — газрын зурагнаас */
+  const hovered = React.useMemo(
+    () => (tip.oid == null ? null : (sites?.find((s) => s.id === tip.oid) ?? null)),
+    [sites, tip.oid],
+  );
+
+  /*
+    Тогтмол самбар: товшсон талбай, эсвэл ЖАГСААЛТЫН мөр дээр очсон нь.
+    Жагсаалтын мөрөнд хулганы байрлал гэж байхгүй тул хөвөгч тайлбар
+    тэнд утгагүй — зөвхөн газрын зураг дээр хөвнө.
+  */
   const active = React.useMemo(() => {
     const id = hover ?? picked;
     return id == null ? null : (sites?.find((s) => s.id === id) ?? null);
   }, [sites, hover, picked]);
 
+  function clearRange() {
+    setRange(limits);
+  }
+
   function reset() {
     setMineral(null);
+    setRange(limits);
     setDistrict(null);
     setPicked(null);
   }
@@ -223,7 +278,7 @@ export function MineralsDashboard() {
       <div className="flex h-full items-center justify-center rounded-xs border border-line bg-paper-2">
         {error ? (
           <div className="text-center">
-            <p className="text-[14px] font-medium">Эх сурвалж татагдсангүй</p>
+            <p className="text-[14px] font-medium">Эх сурвалжийн мэдээллийг татаж чадсангүй</p>
             <p className="num mt-2 text-[12px] text-ink-3">{error}</p>
           </div>
         ) : (
@@ -236,7 +291,7 @@ export function MineralsDashboard() {
     );
   }
 
-  const activeCount = (mineral ? 1 : 0) + (district ? 1 : 0);
+  const activeCount = (wholeRange ? 0 : 1) + (mineral ? 1 : 0) + (district ? 1 : 0);
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-2.5">
@@ -245,6 +300,24 @@ export function MineralsDashboard() {
         activeCount={activeCount}
         onReset={reset}
       >
+        {/*
+          Хугацаа — хоёр үзүүрт муж. Зөвшөөрлийн хугацаатай ОГТЛОЛЦСОН
+          эсэхээр шүүнэ: "2030 онд ямар зөвшөөрөл хүчинтэй байх вэ"
+          гэдэг нь энэ датаны гол асуулт.
+        */}
+        <FilterMenu
+          label="Хугацаа"
+          icon={CalendarRange}
+          value={wholeRange || !range ? null : `${range[0]}–${range[1]}`}
+          active={!wholeRange}
+          onClear={clearRange}
+          width={252}
+        >
+          {limits && range ? (
+            <YearRange min={limits[0]} max={limits[1]} value={range} onChange={setRange} />
+          ) : null}
+        </FilterMenu>
+
         <FilterMenu
           label="Ашигт малтмал"
           icon={Mountain}
@@ -293,13 +366,46 @@ export function MineralsDashboard() {
               shapes={{ data: shapes, selected: picked, glow: true }}
               basemap={basemap}
               onSelect={setPicked}
-              onHover={setHover}
+              onHover={tip.onHover}
               focus={focus}
               overlays={overlays}
               cluster={false}
             />
             <BasemapGallery value={basemap} onChange={setBasemap} />
             <OverlayControl value={overlays} onChange={setOverlays} />
+
+            {/*
+              ХӨВӨГЧ ТАЙЛБАР. Хугацаа нь дээд мөрөнд: зөвшөөрөл ХЭЗЭЭ
+              дуусахыг мэдэхгүйгээр талбайн байршил дангаараа утгагүй.
+            */}
+            {hovered ? (
+              <MapTip state={tip} width={248}>
+                <div className="flex items-baseline justify-between gap-2 px-2.5 pt-2 pb-1">
+                  <span className="num text-[11px] leading-none font-medium text-data">
+                    {hovered.code}
+                  </span>
+                  <span className="num text-[11px] leading-none text-ink-3">
+                    {hovered.grantedDate} → {hovered.expiresDate}
+                  </span>
+                </div>
+                <div className="px-2.5 pb-2 text-[12.5px] leading-snug font-medium text-ink">
+                  {hovered.name}
+                </div>
+
+                <div className="space-y-1.5 border-t border-line px-2.5 py-2">
+                  <MapTipRow icon={Mountain} text={hovered.mineral} />
+                  <MapTipRow icon={Ruler} num text={`${num(hovered.ha)} га`} />
+                  <MapTipRow icon={Building2} text={hovered.holder} />
+                </div>
+
+                <div className="flex items-center justify-between gap-2 border-t border-line px-2.5 py-1.5">
+                  <span className="min-w-0 flex-1 truncate text-[10px] leading-none text-ink-3">
+                    {hovered.district}
+                  </span>
+                  <MousePointerClick size={11} className="shrink-0 text-ink-3" />
+                </div>
+              </MapTip>
+            ) : null}
 
             {active ? (
               <div className="pointer-events-none absolute top-2.5 left-2.5 z-10 max-w-[280px] rounded-xs border border-line bg-paper/92 px-2.5 py-2 backdrop-blur-md">
@@ -503,7 +609,7 @@ function Timeline({
         })}
         {sites.length === 0 ? (
           <div className="py-4 text-center text-[12px] text-ink-3">
-            Шүүлтүүрт тохирох зөвшөөрөл алга
+            Шүүлтүүрт тохирох тусгай зөвшөөрөл байхгүй байна
           </div>
         ) : null}
       </div>

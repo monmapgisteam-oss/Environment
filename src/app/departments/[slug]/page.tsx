@@ -59,7 +59,7 @@ export default async function DepartmentPage({
 
       <Panel className="border-dashed">
         <div className="hatch flex items-center justify-center px-6 py-24">
-          <span className="bg-paper-2 px-3 text-[14px] text-ink-3">Мэдээлэл алга</span>
+          <span className="bg-paper-2 px-3 text-[14px] text-ink-3">Мэдээлэл хүлээгдэж байна</span>
         </div>
       </Panel>
     </div>

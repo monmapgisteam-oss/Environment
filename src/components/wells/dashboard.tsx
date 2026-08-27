@@ -11,11 +11,14 @@ import {
   LandPlot,
   Loader2,
   Map as MapIcon,
+  MapPin,
+  MousePointerClick,
   X,
   type LucideIcon,
 } from "lucide-react";
 import { AreaChart, RowChart, YearRange, type Datum } from "@/components/charts";
 import { BasemapGallery } from "@/components/map/basemap-gallery";
+import { MapTip, MapTipRow, useMapTip } from "@/components/map/hover-tip";
 import { FilterBar, FilterMenu, PickList } from "@/components/wells/filter-bar";
 import { defaultBasemap, type Basemap, type Extent } from "@/components/wells/map";
 import { getWell, type WellsPayload, type WellDetail } from "@/lib/wells";
@@ -43,6 +46,8 @@ export function WellsDashboard() {
   const [soum, setSoum] = React.useState<string | null>(null);
   const [contractor, setContractor] = React.useState<string | null>(null);
   const [month, setMonth] = React.useState<string | null>(null);
+  /** Хулгана дагасан хөвөгч тайлбар — байрлалыг өөрөө удирдана */
+  const tip = useMapTip();
   const [detail, setDetail] = React.useState<WellDetail | null>(null);
   const [detailLoading, setDetailLoading] = React.useState(false);
   const [basemap, setBasemap] = React.useState<Basemap>(() => defaultBasemap());
@@ -74,6 +79,16 @@ export function WellsDashboard() {
   const aIdx = data && aimag ? data.aimags.indexOf(aimag) : -1;
   const sIdx = data && soum ? data.soums.indexOf(soum) : -1;
   const cIdx = data && contractor ? data.contractors.indexOf(contractor) : -1;
+  /**
+   * `oid` → массивын индекс. Газрын зураг зөвхөн дугаарыг мэддэг тул
+   * хөвөгч тайлбар дата руу буцаж хүрэхэд хэрэгтэй.
+   */
+  const byOid = React.useMemo(() => {
+    const m = new Map<number, number>();
+    if (data) for (let i = 0; i < data.n; i++) m.set(data.oid[i], i);
+    return m;
+  }, [data]);
+
   /** Улаанбаатарын индекс — дүүрэг, сумыг ялгахад */
   const ubIdx = data ? data.aimags.indexOf("Улаанбаатар") : -1;
 
@@ -305,6 +320,36 @@ export function WellsDashboard() {
     };
   }, [data, chartIdx, ubIdx]);
 
+  /*
+    Хулгана дээр очсон худгийн бичилт.
+
+    Сүлжээ рүү ОГТ хандахгүй — дугаар, он, сар, аймаг, сум, гүйцэтгэгч нь
+    аль хэдийн татсан payload дотор байна. Дэлгэрэнгүй (хүсэлт гаргагч,
+    паспорт, байршил) нь товшсон үед л татагдана: хулгана өнгөрөх бүрд
+    ArcGIS рүү хүсэлт явуулбал зуу зуун дуудлага үүснэ.
+  */
+  const hovered = React.useMemo(() => {
+    if (!data || tip.oid == null) return null;
+    const i = byOid.get(tip.oid);
+    if (i === undefined) return null;
+    return {
+      oid: data.oid[i],
+      year: data.year[i],
+      month: data.month[i],
+      aimag: data.aimags[data.ai[i]],
+      soum: data.soums[data.si[i]],
+      contractor: data.contractors[data.ci[i]],
+      lon: data.lon[i],
+      lat: data.lat[i],
+    };
+  }, [data, byOid, tip.oid]);
+
+  /** Тодруулах цэгийн байрлал — зураг дээрх цагираг */
+  const highlight = React.useMemo<[number, number] | null>(
+    () => (hovered ? [hovered.lon, hovered.lat] : null),
+    [hovered],
+  );
+
   const openWell = React.useCallback((oid: number) => {
     setDetailLoading(true);
     // Статик хостинг тул нэг худгийн дэлгэрэнгүйг шууд ArcGIS-ээс авна
@@ -343,7 +388,7 @@ export function WellsDashboard() {
       <div className="flex h-full items-center justify-center rounded-xs border border-line bg-paper-2">
         {error ? (
           <div className="text-center">
-            <p className="text-[14px] font-medium">Эх сурвалж татагдсангүй</p>
+            <p className="text-[14px] font-medium">Эх сурвалжийн мэдээллийг татаж чадсангүй</p>
             <p className="num mt-2 text-[12px] text-ink-3">{error}</p>
           </div>
         ) : (
@@ -533,6 +578,8 @@ export function WellsDashboard() {
                 labels={labels}
                 basemap={basemap}
                 onSelect={openWell}
+                onHover={tip.onHover}
+                highlight={highlight}
                 extent={extentOn}
                 onExtent={setExtent}
                 focus={focus}
@@ -555,6 +602,46 @@ export function WellsDashboard() {
                 <div className="pointer-events-none absolute inset-0 z-10 border border-data/45" />
               ) : null}
 
+
+              {/*
+                ХӨВӨГЧ ТАЙЛБАР — хулганы хажууд, шууд.
+
+                Дэлгэрэнгүй самбар (баруун доор, товшилтоор) нь ТОГТМОЛ
+                байрандаа үлддэг: уншаад эргэж харах зориулалттай. Энэ нь
+                эсрэгээрээ нүд газрын зурагнаас салахгүйгээр хариулна.
+                Байрлал, агуулга, урт нь бүгд өөр тул давхцахгүй.
+              */}
+              {hovered ? (
+                <MapTip state={tip}>
+                  <div className="flex items-baseline justify-between gap-2 px-2.5 pt-2 pb-1.5">
+                    <span className="num text-[15px] leading-none font-medium text-data">
+                      #{hovered.oid}
+                    </span>
+                    <span className="num text-[11px] leading-none text-ink-3">
+                      {hovered.month
+                        ? `${hovered.year}.${String(hovered.month).padStart(2, "0")}`
+                        : hovered.year}
+                    </span>
+                  </div>
+
+                  <div className="space-y-1.5 border-t border-line px-2.5 py-2">
+                    <MapTipRow icon={MapPin} text={`${hovered.aimag}, ${hovered.soum}`} />
+                    <MapTipRow icon={HardHat} text={hovered.contractor} />
+                  </div>
+
+                  {/*
+                    Хэмжсэн утга — "хээрийн хэрэгсэл"-ийн сэдэл. Товших
+                    урилга нь баруун талд: цэг дээр дарж болохыг эндээс
+                    өөр газар мэдэгдэхгүй.
+                  */}
+                  <div className="flex items-center justify-between gap-2 border-t border-line px-2.5 py-1.5">
+                    <span className="num text-[10px] leading-none text-ink-3">
+                      {hovered.lat.toFixed(4)}° {hovered.lon.toFixed(4)}°
+                    </span>
+                    <MousePointerClick size={11} className="shrink-0 text-ink-3" />
+                  </div>
+                </MapTip>
+              ) : null}
 
               {(detail || detailLoading) && (
                 <div className="absolute right-2.5 bottom-8 z-10 w-[262px] rounded-xs border border-line bg-paper/92 backdrop-blur-md">
@@ -658,7 +745,7 @@ export function WellsDashboard() {
 
           <Box className="min-h-[140px] flex-1">
             <Head title="Гүйцэтгэгчээр">
-              <span className="num text-[11.5px] text-ink-3">эхний 20</span>
+              <span className="num text-[11.5px] text-ink-3">эхний 20 байгууллага</span>
             </Head>
             <div className="min-h-0 flex-1 overflow-y-auto p-3">
               <RowChart

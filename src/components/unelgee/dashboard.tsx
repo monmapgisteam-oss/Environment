@@ -8,13 +8,16 @@ import {
   FileCheck2,
   Layers3,
   Loader2,
+  MapPin,
+  MousePointerClick,
   Ruler,
   ScrollText,
   Users,
   X,
 } from "lucide-react";
-import { BarChart, PieChart, RowChart, type Datum } from "@/components/charts";
+import { AreaChart, PieChart, RowChart, type Datum } from "@/components/charts";
 import { BasemapGallery } from "@/components/map/basemap-gallery";
+import { MapTip, MapTipRow, useMapTip } from "@/components/map/hover-tip";
 import { FilterBar, FilterMenu, PickList } from "@/components/wells/filter-bar";
 import {
   defaultBasemap,
@@ -89,7 +92,8 @@ export function UnelgeeDashboard() {
   const [size, setSize] = React.useState<string | null>(null);
   const [month, setMonth] = React.useState<string | null>(null);
   const [picked, setPicked] = React.useState<number | null>(null);
-  const [hover, setHover] = React.useState<number | null>(null);
+  /** Хулгана дагасан хөвөгч тайлбар — байрлалыг өөрөө удирдана */
+  const tip = useMapTip();
 
   const [basemap, setBasemap] = React.useState<Basemap>(() => defaultBasemap());
 
@@ -243,10 +247,11 @@ export function UnelgeeDashboard() {
     return b.get();
   }, [data, shapes, picked, activity, landuse, district, right, size, month]);
 
-  const active = React.useMemo(() => {
-    const id = hover ?? picked;
-    return id == null ? null : (rows?.find((r) => r.oid === id) ?? null);
-  }, [rows, hover, picked]);
+  /** Хулгана дээр очсон нэгж талбар — газрын зурагнаас */
+  const hovered = React.useMemo(
+    () => (tip.oid == null ? null : (rows?.find((r) => r.oid === tip.oid) ?? null)),
+    [rows, tip.oid],
+  );
 
   const selected = React.useMemo(
     () => (picked == null ? null : (rows?.find((r) => r.oid === picked) ?? null)),
@@ -268,7 +273,7 @@ export function UnelgeeDashboard() {
       <div className="flex h-full items-center justify-center rounded-xs border border-line bg-paper-2">
         {error ? (
           <div className="text-center">
-            <p className="text-[14px] font-medium">Эх сурвалж татагдсангүй</p>
+            <p className="text-[14px] font-medium">Эх сурвалжийн мэдээллийг татаж чадсангүй</p>
             <p className="num mt-2 text-[12px] text-ink-3">{error}</p>
           </div>
         ) : (
@@ -371,7 +376,7 @@ export function UnelgeeDashboard() {
             <Stat icon={FileCheck2} label="Үнэлгээ" value={num(stats.n)} />
             <Stat icon={Ruler} label="Нийт талбай, га" value={stats.ha.toFixed(1)} />
             <Stat icon={Users} label="Хүсэгч" value={num(stats.applicants)} />
-            <Stat icon={CalendarRange} label="Хамрах сар" value={stats.span} />
+            <Stat icon={CalendarRange} label="Хамрах хугацаа" value={stats.span} />
           </div>
         </Card>
 
@@ -380,7 +385,7 @@ export function UnelgeeDashboard() {
           <div className="flex min-h-0 flex-col gap-2.5 xl:w-[248px] xl:shrink-0 2xl:w-[280px]">
             <Card className="min-h-[120px] flex-1">
               <Head title="Чиглэлээр">
-                <span className="text-[10.5px] text-ink-3">бүлэглэсэн</span>
+                <span className="text-[10.5px] text-ink-3">бүлэглэсэн ангилал</span>
               </Head>
               <div className="min-h-0 flex-1 overflow-y-auto p-3">
                 <RowChart data={activityData} selected={activity} onSelect={setActivity} />
@@ -409,18 +414,50 @@ export function UnelgeeDashboard() {
                 shapes={{ data: shapes, selected: picked, glow: true }}
                 basemap={basemap}
                 onSelect={setPicked}
-                onHover={setHover}
+                onHover={tip.onHover}
                 focus={focus}
                 cluster={false}
               />
               <BasemapGallery value={basemap} onChange={setBasemap} />
 
               {/*
-                Зүүн дээд булангийн НЭГ л самбар: сонголт байхгүй үед
-                hover-ийн товч тайлбар, сонгосон үед бүтэн хуудас. Хоёр
-                самбар зэрэг гарвал аль нь юуг хэлж байгаа нь ойлгомжгүй
-                болно.
+                ХӨВӨГЧ ТАЙЛБАР — хулганы хажууд. Зүүн дээд булангийн
+                "Үнэлгээний хуудас"-аас өөр үүрэгтэй: тэр нь сонгосон
+                бичлэгийн БҮХ талбарыг задалж, уншиж суух зориулалттай
+                бол энэ нь хулганы доорх талбар юу болохыг л хэлнэ.
+                Тиймээс зэрэг харагдаж болно.
               */}
+              {hovered ? (
+                <MapTip state={tip} width={244}>
+                  <div className="px-2.5 pt-2 pb-1">
+                    <span className="text-[10px] leading-none tracking-[0.08em] text-data uppercase">
+                      {ACTIVITY_LABEL.get(hovered.activity)}
+                    </span>
+                  </div>
+                  <div className="px-2.5 pb-2 text-[12.5px] leading-snug font-medium text-ink">
+                    {hovered.applicant}
+                  </div>
+
+                  <div className="space-y-1.5 border-t border-line px-2.5 py-2">
+                    <MapTipRow icon={Ruler} num text={areaText(hovered.m2)} />
+                    <MapTipRow icon={Layers3} text={hovered.landuse} />
+                    <MapTipRow
+                      icon={MapPin}
+                      text={`${hovered.district}${
+                        hovered.khoroo ? `, ${hovered.khoroo}-р хороо` : ""
+                      }`}
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between gap-2 border-t border-line px-2.5 py-1.5">
+                    <span className="num min-w-0 flex-1 truncate text-[10px] leading-none text-ink-3">
+                      {hovered.code || hovered.parcel || "—"}
+                    </span>
+                    <MousePointerClick size={11} className="shrink-0 text-ink-3" />
+                  </div>
+                </MapTip>
+              ) : null}
+
               {selected ? (
                 <div className="absolute top-2.5 left-2.5 z-10 flex max-h-[calc(100%-1.25rem)] w-[268px] flex-col rounded-xs border border-line bg-paper/95 backdrop-blur-md">
                   <div className="flex shrink-0 items-center justify-between gap-2 border-b border-line px-2.5 py-1.5">
@@ -481,36 +518,12 @@ export function UnelgeeDashboard() {
                     </dl>
                   </div>
                 </div>
-              ) : active ? (
-                <div className="pointer-events-none absolute top-2.5 left-2.5 z-10 max-w-[258px] rounded-xs border border-line bg-paper/92 px-2.5 py-2 backdrop-blur-md">
-                  <div className="eyebrow mb-1.5">{ACTIVITY_LABEL.get(active.activity)}</div>
-                  <div className="text-[12.5px] leading-snug text-ink">{active.applicant}</div>
-                  <div className="num mt-1 text-[11.5px] text-ink-2">
-                    {areaText(active.m2)} · {active.district}
-                    {active.khoroo ? ` ${active.khoroo}-р хороо` : ""}
-                  </div>
-                </div>
               ) : null}
             </div>
           </Card>
 
-          {/* ---- БАРУУН: ямар зориулалтаар, ямар эрхээр ---- */}
+          {/* ---- БАРУУН: хэзээ, ямар зориулалтаар, ямар эрхээр ---- */}
           <div className="flex min-h-0 flex-col gap-2.5 xl:w-[262px] xl:shrink-0 2xl:w-[300px]">
-            {/*
-              Газрын зориулалт нь ЭХ СУРВАЛЖИЙН өөрийн ангилал (23 утга) —
-              зүүн талын чиглэл бол бидний бүлэглэсэн хувилбар. Албан
-              ангилал нь баримт, бүлэглэлт нь зөвхөн уншихад тус болох
-              давхарга; хоёулаа хэрэгтэй.
-            */}
-            <Card className="min-h-[120px] flex-1">
-              <Head title="Зориулалтаар">
-                <span className="text-[10.5px] text-ink-3">эх сурвалжийн</span>
-              </Head>
-              <div className="min-h-0 flex-1 overflow-y-auto p-3">
-                <RowChart data={landuseData} selected={landuse} onSelect={setLanduse} />
-              </div>
-            </Card>
-
             {/*
               Эрхийн хэлбэр гуравхан ангилалтай тул бөгж: хэсэг бүрийн
               ЭЗЛЭХ ХУВЬ нь энд гол утга (212 эзэмших / 31 өмчлөх / 11
@@ -523,22 +536,43 @@ export function UnelgeeDashboard() {
                 <PieChart data={rightData} selected={right} onSelect={setRight} />
               </div>
             </Card>
+
+            {/*
+              Хугацааны цуваа. Бүх бичлэг 2026 онд шийдвэрлэгдсэн тул
+              жилийн цуваа гэж байхгүй — сар нь энэ датаны цорын ганц
+              хугацааны тэнхлэг.
+            */}
+            <Card className="shrink-0">
+              <Head title="2026 оны урсгал">
+                <span className="text-[10.5px] text-ink-3">сараар</span>
+              </Head>
+              <div className="p-3">
+                <AreaChart
+                  data={monthData}
+                  height={72}
+                  selected={month}
+                  onSelect={setMonth}
+                  unit="үнэлгээ"
+                />
+              </div>
+            </Card>
+
+            {/*
+              Газрын зориулалт нь ЭХ СУРВАЛЖИЙН өөрийн ангилал (23 утга) —
+              зүүн талын чиглэл бол бидний бүлэглэсэн хувилбар. Албан
+              ангилал нь баримт, бүлэглэлт нь зөвхөн уншихад тус болох
+              давхарга; хоёулаа хэрэгтэй.
+            */}
+            <Card className="min-h-[120px] flex-1">
+              <Head title="Зориулалтаар">
+                <span className="text-[10.5px] text-ink-3">эх сурвалжийн ангилал</span>
+              </Head>
+              <div className="min-h-0 flex-1 overflow-y-auto p-3">
+                <RowChart data={landuseData} selected={landuse} onSelect={setLanduse} />
+              </div>
+            </Card>
           </div>
         </div>
-
-        <Card className="shrink-0">
-          <Head title="2026 оны урсгал">
-            <span className="text-[10.5px] text-ink-3">сараар</span>
-          </Head>
-          <div className="px-3 pt-2 pb-2.5">
-            {/*
-              Баганан диаграм: сар бүр нь ТУСДАА нэгж (тухайн сард хэдэн
-              үнэлгээ гарсан бэ), тасралтгүй хэмжигдэхүүн биш. Талбайт
-              диаграм нь хоёр сарын хооронд утга байгаа мэт уншуулна.
-            */}
-            <BarChart data={monthData} height={52} selected={month} onSelect={setMonth} />
-          </div>
-        </Card>
 
         <p className="shrink-0 px-0.5 text-[10.5px] leading-none text-ink-3">
           Суурь зураг: Esri · Дата: ArcGIS · {num(data.rows.length)} нэгж талбар ·

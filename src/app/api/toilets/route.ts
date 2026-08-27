@@ -20,7 +20,7 @@ export async function GET() {
     });
   } catch (e) {
     return NextResponse.json(
-      { error: e instanceof Error ? e.message : "Эх сурвалж татагдсангүй" },
+      { error: e instanceof Error ? e.message : "Эх сурвалжийн мэдээллийг татаж чадсангүй" },
       { status: 502 },
     );
   }

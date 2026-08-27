@@ -8,11 +8,14 @@ import {
   FileText,
   Filter,
   Loader2,
+  MapPin,
+  MousePointerClick,
   Ruler,
   Workflow,
 } from "lucide-react";
 import { RowChart, type Datum } from "@/components/charts";
 import { BasemapGallery } from "@/components/map/basemap-gallery";
+import { MapTip, MapTipRow, useMapTip } from "@/components/map/hover-tip";
 import { FilterBar, FilterMenu, PickList } from "@/components/wells/filter-bar";
 import {
   defaultBasemap,
@@ -64,6 +67,8 @@ export function PetitionsDashboard() {
   const [district, setDistrict] = React.useState<string | null>(null);
   const [picked, setPicked] = React.useState<number | null>(null);
   const [hover, setHover] = React.useState<number | null>(null);
+  /** Хулгана дагасан хөвөгч тайлбар — байрлалыг өөрөө удирдана */
+  const tip = useMapTip();
 
   const [basemap, setBasemap] = React.useState<Basemap>(defaultBasemap);
 
@@ -176,6 +181,13 @@ export function PetitionsDashboard() {
     return b.get(0.002);
   }, [data, shapes, picked, screening, stage, district]);
 
+  /** Хулгана дээр очсон өргөдөл — газрын зурагнаас */
+  const hovered = React.useMemo(
+    () => (tip.oid == null ? null : (rows?.find((r) => r.oid === tip.oid) ?? null)),
+    [rows, tip.oid],
+  );
+
+  /* Тогтмол самбар: товшсон, эсвэл ЖАГСААЛТЫН мөр дээр очсон өргөдөл */
   const active = React.useMemo(() => {
     const id = hover ?? picked;
     return id == null ? null : (rows?.find((p) => p.oid === id) ?? null);
@@ -193,7 +205,7 @@ export function PetitionsDashboard() {
       <div className="flex h-full items-center justify-center rounded-xs border border-line bg-paper-2">
         {error ? (
           <div className="text-center">
-            <p className="text-[14px] font-medium">Эх сурвалж татагдсангүй</p>
+            <p className="text-[14px] font-medium">Эх сурвалжийн мэдээллийг татаж чадсангүй</p>
             <p className="num mt-2 text-[12px] text-ink-3">{error}</p>
           </div>
         ) : (
@@ -299,7 +311,7 @@ export function PetitionsDashboard() {
                   ) : null}
                   <div className="eyebrow mt-3 mb-1.5">Анхан шатны шүүлт</div>
                   <p className="text-[11.5px] leading-relaxed text-ink-2">
-                    {selected.screeningRaw || "Тэмдэглэл алга"}
+                    {selected.screeningRaw || "Тэмдэглэл байхгүй"}
                   </p>
                   <div className="eyebrow mt-3 mb-1.5">Дараагийн алхам</div>
                   <p className="text-[11.5px] leading-relaxed text-ink-2">{selected.stage}</p>
@@ -352,11 +364,45 @@ export function PetitionsDashboard() {
                 shapes={{ data: shapes, selected: picked, labelZoom: 12 }}
                 basemap={basemap}
                 onSelect={setPicked}
-                onHover={setHover}
+                onHover={tip.onHover}
                 focus={focus}
                 cluster={false}
               />
               <BasemapGallery value={basemap} onChange={setBasemap} />
+
+              {/*
+                ХӨВӨГЧ ТАЙЛБАР. Анхан шатны шүүлт нь энэ самбарын гол
+                хэмжигдэхүүн тул тайлбарын доод мөрөнд бүлэглэсэн
+                нэрээрээ гарна — эх бичвэр нь сонгосон өргөдлийн
+                дэлгэрэнгүйд бүтнээрээ үлдэнэ.
+              */}
+              {hovered ? (
+                <MapTip state={tip} width={236}>
+                  <div className="px-2.5 pt-2 pb-1">
+                    <span className="num text-[11px] leading-none font-medium text-data">
+                      {hovered.reg}
+                    </span>
+                  </div>
+                  <div className="px-2.5 pb-2 text-[12.5px] leading-snug font-medium text-ink">
+                    {hovered.company}
+                  </div>
+
+                  <div className="space-y-1.5 border-t border-line px-2.5 py-2">
+                    <MapTipRow icon={Ruler} num text={`${hovered.ha} га`} />
+                    <MapTipRow
+                      icon={MapPin}
+                      text={`${hovered.district} ${hovered.khoroo}`}
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between gap-2 border-t border-line px-2.5 py-1.5">
+                    <span className="min-w-0 flex-1 truncate text-[10px] leading-none text-ink-3">
+                      {SCREENINGS.find((x) => x.id === hovered.screening)?.label}
+                    </span>
+                    <MousePointerClick size={11} className="shrink-0 text-ink-3" />
+                  </div>
+                </MapTip>
+              ) : null}
 
               {active ? (
                 <div className="pointer-events-none absolute top-2.5 left-2.5 z-10 max-w-[270px] rounded-xs border border-line bg-paper/92 px-2.5 py-2 backdrop-blur-md">

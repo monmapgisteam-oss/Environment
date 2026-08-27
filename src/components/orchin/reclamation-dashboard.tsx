@@ -7,11 +7,13 @@ import {
   CalendarRange,
   Coins,
   Loader2,
+  MousePointerClick,
   Ruler,
   Sprout,
 } from "lucide-react";
-import { AreaChart, PieChart, RowChart, type Datum } from "@/components/charts";
+import { AreaChart, PieChart, RowChart, YearRange, type Datum } from "@/components/charts";
 import { BasemapGallery } from "@/components/map/basemap-gallery";
+import { MapTip, MapTipRow, useMapTip } from "@/components/map/hover-tip";
 import { FilterBar, FilterMenu, PickList } from "@/components/wells/filter-bar";
 import {
   defaultBasemap,
@@ -51,17 +53,30 @@ export function ReclamationDashboard() {
   const [error, setError] = React.useState<string | null>(null);
 
   const [funding, setFunding] = React.useState<string | null>(null);
-  const [year, setYear] = React.useState<string | null>(null);
+  /*
+    Хугацаа нь МУЖ хэлбэрээр. "Он" шүүлтүүр нь тусдаа төлөв БИШ — тэр нь
+    мужийг [он, он] болгож хумидаг товчлол. Хоёр тусдаа оны шүүлтүүр
+    байвал хоорондоо зөрчилдөж, аль нь давамгайлахыг хэрэглэгч таахад
+    хүрнэ.
+  */
+  const [range, setRange] = React.useState<[number, number] | null>(null);
   const [district, setDistrict] = React.useState<string | null>(null);
   const [picked, setPicked] = React.useState<number | null>(null);
   const [hover, setHover] = React.useState<number | null>(null);
+  /** Хулгана дагасан хөвөгч тайлбар — байрлалыг өөрөө удирдана */
+  const tip = useMapTip();
 
   const [basemap, setBasemap] = React.useState<Basemap>(defaultBasemap);
 
   React.useEffect(() => {
     let alive = true;
     fetchReclamation()
-      .then((s) => alive && setSites(s))
+      .then((s) => {
+        if (!alive) return;
+        setSites(s);
+        const ys = s.map((x) => x.year).filter(Boolean);
+        if (ys.length) setRange([Math.min(...ys), Math.max(...ys)]);
+      })
       .catch((e: Error) => alive && setError(e.message));
     return () => {
       alive = false;
@@ -71,17 +86,28 @@ export function ReclamationDashboard() {
   const keep = React.useCallback(
     (s: ReclamationSite, skip?: "funding" | "year" | "district") => {
       if (skip !== "funding" && funding && s.funding !== funding) return false;
-      if (skip !== "year" && year && String(s.year) !== year) return false;
+      if (skip !== "year" && range && (s.year < range[0] || s.year > range[1])) return false;
       if (skip !== "district" && district && s.district !== district) return false;
       return true;
     },
-    [funding, year, district],
+    [funding, range, district],
   );
 
   const shown = React.useMemo(
     () => (sites ?? []).filter((s) => keep(s)),
     [sites, keep],
   );
+
+  /** Датаны хамрах хугацаа — шүүлтүүрийн хязгаар, "бүх хугацаа"-ны жишиг */
+  const span = React.useMemo<[number, number] | null>(() => {
+    const ys = (sites ?? []).map((x) => x.year).filter(Boolean);
+    if (!ys.length) return null;
+    return [Math.min(...ys), Math.max(...ys)];
+  }, [sites]);
+
+  /** Муж нь датаны бүх хугацааг хамарч байвал шүүлт хийгээгүйтэй адил */
+  const wholeRange =
+    !span || !range || (range[0] === span[0] && range[1] === span[1]);
 
   /* ---------------- Газрын зураг ---------------- */
   const geo = React.useMemo<MapPoints>(() => {
@@ -212,7 +238,7 @@ export function ReclamationDashboard() {
      Сонгосон талбай руу, эс бөгөөс шүүлтүүрт таарсан бүх талбай руу
      ойртоно. Шүүлтүүр цуцлагдвал `null` — зураг анхны байрлалдаа буцна. */
   const focus = React.useMemo<Extent | null>(() => {
-    if (picked == null && !funding && !year && !district) return null;
+    if (picked == null && !funding && wholeRange && !district) return null;
     const b = new Bounds();
     for (const site of picked != null ? shown.filter((s) => s.oid === picked) : shown) {
       if (site.rings.length) {
@@ -220,16 +246,27 @@ export function ReclamationDashboard() {
       } else b.add(site.lon, site.lat);
     }
     return b.get(0.003);
-  }, [shown, picked, funding, year, district]);
+  }, [shown, picked, funding, wholeRange, district]);
 
+  /** Хулгана дээр очсон талбай — газрын зурагнаас */
+  const hovered = React.useMemo(
+    () => (tip.oid == null ? null : ((sites ?? []).find((s) => s.oid === tip.oid) ?? null)),
+    [sites, tip.oid],
+  );
+
+  /* Тогтмол самбар: товшсон, эсвэл ЖАГСААЛТЫН мөр дээр очсон талбай */
   const active = React.useMemo(
     () => (sites ?? []).find((s) => s.oid === (hover ?? picked)) ?? null,
     [sites, hover, picked],
   );
 
+  function clearRange() {
+    setRange(span);
+  }
+
   function reset() {
     setFunding(null);
-    setYear(null);
+    setRange(span);
     setDistrict(null);
     setPicked(null);
   }
@@ -239,7 +276,7 @@ export function ReclamationDashboard() {
       <div className="flex h-full items-center justify-center rounded-xs border border-line bg-paper-2">
         {error ? (
           <div className="text-center">
-            <p className="text-[14px] font-medium">Эх сурвалж татагдсангүй</p>
+            <p className="text-[14px] font-medium">Эх сурвалжийн мэдээллийг татаж чадсангүй</p>
             <p className="num mt-2 text-[12px] text-ink-3">{error}</p>
           </div>
         ) : (
@@ -253,7 +290,7 @@ export function ReclamationDashboard() {
   }
 
   const activeCount =
-    (funding ? 1 : 0) + (year ? 1 : 0) + (district ? 1 : 0);
+    (funding ? 1 : 0) + (wholeRange ? 0 : 1) + (district ? 1 : 0);
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-2.5">
@@ -269,15 +306,22 @@ export function ReclamationDashboard() {
           <PickList items={byFunding} selected={funding} onPick={setFunding} />
         </FilterMenu>
 
+        {/*
+          Хугацаа — хоёр үзүүрт муж. Оны диаграм дээр товшихад мужийг
+          [он, он] болгож хумина: нэг жил сонгох нь мужийн ТУСГАЙ
+          тохиолдол болохоос тусдаа шүүлтүүр биш.
+        */}
         <FilterMenu
-          label="Он"
+          label="Хугацаа"
           icon={CalendarRange}
-          value={year}
-          active={Boolean(year)}
-          onClear={() => setYear(null)}
-          width={160}
+          value={wholeRange || !range ? null : `${range[0]}–${range[1]}`}
+          active={!wholeRange}
+          onClear={clearRange}
+          width={252}
         >
-          <PickList items={byYear} selected={year} onPick={setYear} />
+          {span && range ? (
+            <YearRange min={span[0]} max={span[1]} value={range} onChange={setRange} />
+          ) : null}
         </FilterMenu>
 
         <FilterMenu
@@ -366,11 +410,44 @@ export function ReclamationDashboard() {
                 shapes={{ data: polygons, selected: picked, labelZoom: 12 }}
                 basemap={basemap}
                 onSelect={setPicked}
-                onHover={setHover}
+                onHover={tip.onHover}
                 focus={focus}
                 cluster={false}
               />
               <BasemapGallery value={basemap} onChange={setBasemap} />
+
+              {/*
+                ХӨВӨГЧ ТАЙЛБАР. Он ба талбай нь энэ самбарын хос гол
+                хэмжигдэхүүн (нэг талбай олон цэгээс бүрддэг тул мөрөөр
+                тоолохгүй, га-гаар л хэмжинэ) тул дээд мөрөнд зэрэгцэнэ.
+              */}
+              {hovered ? (
+                <MapTip state={tip} width={232}>
+                  <div className="flex items-baseline justify-between gap-2 px-2.5 pt-2 pb-1.5">
+                    <span className="num text-[15px] leading-none font-medium text-data">
+                      {hovered.ha}
+                    </span>
+                    <span className="num text-[11px] leading-none text-ink-3">
+                      га · {hovered.year}
+                    </span>
+                  </div>
+
+                  <div className="space-y-1.5 border-t border-line px-2.5 py-2">
+                    <MapTipRow icon={Sprout} text={hovered.place} />
+                    <MapTipRow
+                      icon={Coins}
+                      text={FUNDING.find((f) => f.id === hovered.funding)?.label ?? "—"}
+                    />
+                    {hovered.contractor ? (
+                      <MapTipRow icon={Building2} text={hovered.contractor} />
+                    ) : null}
+                  </div>
+
+                  <div className="flex items-center justify-end border-t border-line px-2.5 py-1.5">
+                    <MousePointerClick size={11} className="shrink-0 text-ink-3" />
+                  </div>
+                </MapTip>
+              ) : null}
 
               {active ? (
                 <div className="pointer-events-none absolute top-2.5 left-2.5 z-10 max-w-[260px] rounded-xs border border-line bg-paper/92 px-2.5 py-2 backdrop-blur-md">
@@ -397,10 +474,10 @@ export function ReclamationDashboard() {
             <Card className="shrink-0">
               <div className="grid grid-cols-2 divide-x divide-y divide-line">
                 <Stat icon={Sprout} label="Талбай" value={num(stats.n)} />
-                <Stat icon={Ruler} label="Нийт га" value={stats.ha.toFixed(1)} />
-                <Stat icon={CalendarRange} label="Хамрах он" value={stats.span} />
+                <Stat icon={Ruler} label="Нөхөн сэргээсэн талбай, га" value={stats.ha.toFixed(1)} />
+                <Stat icon={CalendarRange} label="Хамрах хугацаа" value={stats.span} />
                 {/*
-                  Төсөвт өртөг нь зөвхөн ААН-ийн эх сурвалжид бий.
+                  Төсөвт өртөг нь зөвхөн аж ахуйн нэгжийн хөрөнгөөр хэрэгжсэн ажлын бүртгэлд байна.
                   Нэгжийг нь ХӨРВҮҮЛЭХГҮЙ: талбарын нэр "мян_төг" гэсэн
                   боловч 2.6 га нөхөн сэргээлт 120 мянган төгрөг байх нь
                   эргэлзээтэй. Эх сурвалжийн бичсэнээр нь харуулж,
@@ -408,7 +485,7 @@ export function ReclamationDashboard() {
                 */}
                 <Stat
                   icon={Coins}
-                  label="Төсөвт өртөг, мян.₮"
+                  label="Төсөвт өртөг, мянган төгрөг"
                   value={stats.cost ? num(Math.round(stats.cost)) : "—"}
                 />
               </div>
@@ -451,12 +528,18 @@ export function ReclamationDashboard() {
                 <AreaChart
                   data={yearSeries}
                   height={110}
-                  selected={year}
-                  /* Бичлэггүй жилийг сонгуулахгүй: шүүлтүүр нь хоосон үр
-                     дүн буцаах тул сонголт биш, цэвэрлэлт болгоно */
-                  onSelect={(k) =>
-                    setYear(k && byYear.some((d) => d.key === k) ? k : null)
+                  /* Нэг жил сонгогдсон үед л тэр цэг тодорно — өргөн муж
+                     дээр аль нэг цэгийг онцолж болохгүй */
+                  selected={
+                    range && range[0] === range[1] ? String(range[0]) : null
                   }
+                  /* Бичлэггүй жилийг сонгуулахгүй: шүүлтүүр нь хоосон үр
+                     дүн буцаах тул сонголт биш, мужийг сэргээнэ */
+                  onSelect={(k) => {
+                    const y = Number(k);
+                    if (k && byYear.some((d) => d.key === k)) setRange([y, y]);
+                    else setRange(span);
+                  }}
                   unit="га"
                 />
               </div>

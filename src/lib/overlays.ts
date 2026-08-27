@@ -60,7 +60,7 @@ export const OVERLAYS: OverlayDef[] = [
   },
   {
     id: "zone",
-    label: "Жорлонгийн бүс",
+    label: "Нүхэн жорлонгийн бүс",
     note: "1–4, ерөнхийлсөн",
     layer: 8,
     fields: "gridcode",

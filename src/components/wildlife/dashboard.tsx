@@ -10,6 +10,8 @@ import {
   HardHat,
   LandPlot,
   Loader2,
+  MapPin,
+  MousePointerClick,
   PawPrint,
   PhoneCall,
   Route,
@@ -26,6 +28,7 @@ import {
   type Datum,
 } from "@/components/charts";
 import { BasemapGallery } from "@/components/map/basemap-gallery";
+import { MapTip, MapTipRow, useMapTip } from "@/components/map/hover-tip";
 import { FilterBar, FilterMenu, PickList } from "@/components/wells/filter-bar";
 import { defaultBasemap, type Basemap, type Extent } from "@/components/wells/map";
 import {
@@ -169,6 +172,25 @@ export function WildlifeDashboard() {
 
   const mapIdx = React.useMemo(() => selectBase(), [selectBase]);
   const shown = React.useMemo(() => select(), [select]);
+
+  /** Хулгана дагасан хөвөгч тайлбар — байрлалыг өөрөө удирдана */
+  const tip = useMapTip();
+
+  /*
+    Хулгана дээр очсон дуудлага. Сүлжээ рүү ханддаггүй — бүх талбар аль
+    хэдийн татсан мөрөнд байна. Товшилт нь БҮТЭН бичилтийг баруун доор
+    нээдэг тул энд зөвхөн таних гурван зүйл гарна.
+  */
+  const hovered = React.useMemo(
+    () => (tip.oid == null ? null : (calls?.find((c) => c.oid === tip.oid) ?? null)),
+    [calls, tip.oid],
+  );
+
+  /** Тодруулах цэгийн байрлал — зураг дээрх цагираг */
+  const highlight = React.useMemo<[number, number] | null>(
+    () => (hovered ? [hovered.lon, hovered.lat] : null),
+    [hovered],
+  );
 
   /** Цэгийн массив — газрын зураг багана хэлбэрээр хүлээж авдаг */
   const points = React.useMemo(() => {
@@ -331,7 +353,7 @@ export function WildlifeDashboard() {
       <div className="flex h-full items-center justify-center rounded-xs border border-line bg-paper-2">
         {error ? (
           <div className="text-center">
-            <p className="text-[14px] font-medium">Эх сурвалж татагдсангүй</p>
+            <p className="text-[14px] font-medium">Эх сурвалжийн мэдээллийг татаж чадсангүй</p>
             <p className="num mt-2 text-[12px] text-ink-3">{error}</p>
           </div>
         ) : (
@@ -492,7 +514,7 @@ export function WildlifeDashboard() {
             }
           >
             {shownPhotos.length === 0 ? (
-              <p className="py-4 text-center text-[12px] text-ink-3">Зураг алга</p>
+              <p className="py-4 text-center text-[12px] text-ink-3">Хавсаргасан зураг байхгүй</p>
             ) : (
               <div className="grid grid-cols-3 gap-1.5">
                 {pagePhotos.map((p, i) => (
@@ -555,6 +577,8 @@ export function WildlifeDashboard() {
                 visible={mapIdx}
                 basemap={basemap}
                 onSelect={setSelected}
+                onHover={tip.onHover}
+                highlight={highlight}
                 extent={extentOn}
                 onExtent={setExtent}
                 focus={focus}
@@ -571,6 +595,49 @@ export function WildlifeDashboard() {
 
               {extentOn ? (
                 <div className="pointer-events-none absolute inset-0 z-10 border border-data/45" />
+              ) : null}
+
+              {/*
+                ХӨВӨГЧ ТАЙЛБАР — хулганы хажууд. Дэлгэрэнгүй бичилт
+                (баруун доор, товшилтоор) нь 10 талбарыг задалдаг бол энэ
+                нь "аль дуудлага вэ" гэдэгт л хариулна: зүйл, огноо,
+                байршил.
+              */}
+              {hovered ? (
+                <MapTip state={tip} width={232}>
+                  <div className="flex items-baseline justify-between gap-2 px-2.5 pt-2 pb-1.5">
+                    <span className="min-w-0 flex-1 text-[12.5px] leading-snug font-medium text-ink">
+                      {hovered.species}
+                    </span>
+                    <span className="num shrink-0 text-[10.5px] leading-none text-ink-3">
+                      #{hovered.oid}
+                    </span>
+                  </div>
+
+                  <div className="space-y-1.5 border-t border-line px-2.5 py-2">
+                    <MapTipRow
+                      icon={CalendarDays}
+                      num
+                      text={hovered.date ? dayLabel(hovered.date) : "Огноогүй"}
+                    />
+                    <MapTipRow
+                      icon={MapPin}
+                      text={[hovered.aimag, hovered.soum, hovered.bag]
+                        .filter(Boolean)
+                        .join(", ")}
+                    />
+                    {hovered.injured != null ? (
+                      <MapTipRow
+                        icon={Stethoscope}
+                        text={`Бэртэл гэмтэл: ${injuredLabel(hovered.injured)}`}
+                      />
+                    ) : null}
+                  </div>
+
+                  <div className="flex items-center justify-end border-t border-line px-2.5 py-1.5">
+                    <MousePointerClick size={11} className="shrink-0 text-ink-3" />
+                  </div>
+                </MapTip>
               ) : null}
 
               {detail ? (
@@ -594,19 +661,19 @@ export function WildlifeDashboard() {
                         v={[detail.aimag, detail.soum, detail.bag].filter(Boolean).join(", ")}
                       />
                       <Field k="Амьтны зүйл" v={detail.species} />
-                      <Field k="Бэртэл" v={injuredLabel(detail.injured) ?? "—"} />
+                      <Field k="Бэртэл гэмтэл" v={injuredLabel(detail.injured) ?? "—"} />
                       <Field k="Дуудлагын төрөл" v={detail.callType || "—"} />
                       <Field k="Албан хаагч" v={detail.officer} />
                       <Field k="Маршрут" v={detail.route ?? "—"} />
                       {detail.careDays != null ? (
                         <Field
-                          k="Хоног"
+                          k="Асран хамгаалсан хоног"
                           v={<span className="num">{num(detail.careDays)}</span>}
                         />
                       ) : null}
                       {detail.feedCost != null || detail.fuelCost != null ? (
                         <Field
-                          k="Зардал"
+                          k="Идэш, шатахууны зардал"
                           v={
                             <span className="num">
                               {num((detail.feedCost ?? 0) + (detail.fuelCost ?? 0))}₮
@@ -616,7 +683,7 @@ export function WildlifeDashboard() {
                       ) : null}
                       {detail.staffHours != null ? (
                         <Field
-                          k="Цаг"
+                          k="Зарцуулсан цаг"
                           v={<span className="num">{num(detail.staffHours)}</span>}
                         />
                       ) : null}

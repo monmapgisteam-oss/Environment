@@ -27,7 +27,7 @@ export async function GET() {
       },
     });
   } catch (e) {
-    return new Response(e instanceof Error ? e.message : "Эх сурвалж татагдсангүй", {
+    return new Response(e instanceof Error ? e.message : "Эх сурвалжийн мэдээллийг татаж чадсангүй", {
       status: 502,
     });
   }

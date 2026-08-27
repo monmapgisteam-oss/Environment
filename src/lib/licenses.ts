@@ -64,7 +64,7 @@ function year(raw: string | null | undefined): number | null {
  */
 export const TERMS = [
   { id: "expired", label: "Хугацаа дууссан" },
-  { id: "soon", label: "5 жилд дуусах" },
+  { id: "soon", label: "5 жилийн дотор дуусах" },
   { id: "active", label: "Хүчинтэй" },
   { id: "unknown", label: "Огноогүй" },
 ] as const;

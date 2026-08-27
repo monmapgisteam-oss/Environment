@@ -162,7 +162,7 @@ export function AreaChart({
   const interactive = Boolean(onSelect);
 
   if (data.length < 2) {
-    return <div className="py-6 text-center text-[12px] text-ink-3">Утга алга</div>;
+    return <div className="py-6 text-center text-[12px] text-ink-3">Үзүүлэлт байхгүй</div>;
   }
 
   const W = 100;
@@ -468,7 +468,7 @@ export function RowChart({
     guide != null && guide > base && guide < max ? at(guide) : null;
 
   if (data.length === 0) {
-    return <div className="py-5 text-center text-[12px] text-ink-3">Утга алга</div>;
+    return <div className="py-5 text-center text-[12px] text-ink-3">Үзүүлэлт байхгүй</div>;
   }
 
   return (
@@ -619,7 +619,7 @@ export function PieChart({
   const total = data.reduce((a, d) => a + d.value, 0);
 
   if (data.length === 0 || total === 0) {
-    return <div className="py-5 text-center text-[12px] text-ink-3">Утга алга</div>;
+    return <div className="py-5 text-center text-[12px] text-ink-3">Үзүүлэлт байхгүй</div>;
   }
 
   /*
@@ -894,7 +894,7 @@ export function GroupedRowChart({
   const max = Math.max(...groups.flatMap((g) => g.rows.map((r) => r.value)), 1);
 
   if (groups.length === 0) {
-    return <div className="py-5 text-center text-[12px] text-ink-3">Утга алга</div>;
+    return <div className="py-5 text-center text-[12px] text-ink-3">Үзүүлэлт байхгүй</div>;
   }
 
   return (
