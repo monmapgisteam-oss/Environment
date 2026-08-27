@@ -572,6 +572,24 @@ export function WellsMap({
      * нэг дор гарч, хүрээ нь өөрөө уншигдахаа болино.
      */
     labelZoom?: number;
+    /**
+     * `LineString` дүрс дээр ЧИГЛЭЛИЙН сум нэмэх эсэх.
+     *
+     * Шугам нь хоёр цэгийг холбодог ч аль нь эхлэл, аль нь төгсгөл
+     * болохыг хэлдэггүй. Урсгал (хаанаас хаашаа) илэрхийлдэг датад
+     * заавал асаа — эс тэгвээс чиглэл нь тайлбар уншихгүйгээр
+     * мэдэгдэхгүй.
+     */
+    flow?: boolean;
+    /**
+     * Шошгыг хаана байрлуулах вэ.
+     *
+     * `point` (анхдагч) — дүрс бүрд НЭГ шошго, олон өнцөгтийн хамгийн
+     * хол дотоод цэгт. `line-center` — шугамын дундад, чиглэлийн дагуу
+     * эргэсэн. Сүүлийнх нь шугамын ХЭСГИЙГ (уртыг, зайг) тэмдэглэхэд
+     * зориулагдсан: тухайн хэрчим өөрөө шошгоо үүрнэ.
+     */
+    labelPlacement?: "point" | "line-center";
   };
   /**
    * Цэгийн бичвэр шошго.
@@ -583,7 +601,17 @@ export function WellsMap({
    * гарвал цэгээ дарж, тархалт уншигдахаа болино. Давхцлыг MapLibre
    * өөрөө шийднэ — нягт хэсэгт багтсан нь л үлдэнэ.
    */
-  labels?: { text: string[]; minzoom?: number };
+  labels?: {
+    text: string[];
+    minzoom?: number;
+    /**
+     * Цэгээс доош шилжих зай (em, анхдагч 0.7).
+     *
+     * Тэмдэглэгээт горимд (`marks`) цэг нь 30px дискээр солигдох тул
+     * анхдагч зай хүрэлцэхгүй — шошго дискний доор нуугдана.
+     */
+    offset?: number;
+  };
   /**
    * Цэг бүрийн ХЭМЖИГДЭХҮҮН. Өгвөл зураг ЗЭРЭГЛЭСЭН тэмдгийн горимд
    * шилжинэ: цэг бүр утгынхаа дагуу шатлалаас өнгө авч, хэмжээгээрээ
@@ -661,9 +689,12 @@ export function WellsMap({
     shapeColor: shapes?.color,
     fire: firefly ?? FIREFLY,
     shapeLabelZoom: shapes?.labelZoom ?? 0,
+    shapeFlow: Boolean(shapes?.flow),
+    shapeLabelOnLine: shapes?.labelPlacement === "line-center",
     detailZoom: detail?.minZoom,
     labeled: Boolean(labels),
     labelZoom: labels?.minzoom ?? 12,
+    labelOffset: labels?.offset ?? 0.7,
   });
   const detailRef = React.useRef(detail);
   React.useEffect(() => {
@@ -840,6 +871,21 @@ export function WellsMap({
           id: "shape-fill",
           type: "fill",
           source: "shapes",
+          /*
+            ЗӨВХӨН олон өнцөгт. MapLibre-ийн `fill` давхарга нь
+            `LineString`-ийг ХААЖ дүүргэдэг тул шугам нь эхлэл, төгсгөлөө
+            холбосон дүүрэн гурвалжин болж харагдана — цахилгааны шонгийн
+            шугам дээр яг ингэж гарсан. Геометрийн төрлөөр шүүх нь энэ
+            давхаргын зорилготой ч нийцнэ: дүүргэлт нь ТАЛБАЙН шинж.
+
+            Хоёр нэрийг ЗЭРЭГ бичсэн нь санаатай: зурагдалтын үед
+            `geometry-type` нь Multi* хэлбэрийг ганцаарчилсан нэр рүү
+            хураадаг ("Polygon") ч, асуулгын үр дүн дээр эх нэрээрээ
+            ирдэг. Ганцхан "Polygon" бичвэл нөхөн сэргээлтийн
+            `MultiPolygon` талбайнууд нөхцөл байдлаас шалтгаалж
+            дүүргэлтгүй үлдэх эрсдэлтэй.
+          */
+          filter: ["in", ["geometry-type"], ["literal", ["Polygon", "MultiPolygon"]]],
           paint: {
             "fill-color": ["coalesce", ["get", "c"], modeRef.current.shapeColor ?? SHAPE_FALLBACK] as unknown as ExpressionSpecification,
             "fill-opacity": ["case", SHAPE_LIT, 0.55, 0.28],
@@ -870,6 +916,36 @@ export function WellsMap({
         });
 
         /*
+          Чиглэлийн сум — `LineString` дүрсийн дундад.
+
+          `symbol-placement: "line-center"` нь тэмдгийг шугамын дундад
+          тавиад ЧИГЛЭЛИЙН ДАГУУ эргүүлдэг тул сум өөрөө эхлэлээс
+          төгсгөл рүү заана. Олон өнцөгт дээр ч ажиллана (гадна хүрээг
+          дагана) боловч тэнд утгагүй тул `flow` -г зөвхөн урсгал
+          илэрхийлдэг самбарт л асаана.
+        */
+        if (modeRef.current.shapeFlow) {
+          m.addLayer({
+            id: "shape-flow",
+            type: "symbol",
+            source: "shapes",
+            layout: {
+              "symbol-placement": "line-center",
+              "text-field": "→",
+              "text-font": FONT,
+              "text-size": ["interpolate", ["linear"], ["zoom"], 6, 14, 12, 20],
+              "text-allow-overlap": true,
+              "text-ignore-placement": true,
+            },
+            paint: {
+              "text-color": "#ffffff",
+              "text-halo-color": "rgba(8,14,20,.85)",
+              "text-halo-width": 1.4,
+            },
+          });
+        }
+
+        /*
           Талбайн шошго — `properties.t` бичигдсэн байвал.
 
           MapLibre полигоны шошгыг талбайн ХАМГИЙН ХОЛ ДОТООД цэгт
@@ -888,6 +964,15 @@ export function WellsMap({
             "text-font": FONT,
             "text-size": ["interpolate", ["linear"], ["zoom"], 8, 9, 14, 12],
             "text-padding": 4,
+            ...(modeRef.current.shapeLabelOnLine
+              ? {
+                  "symbol-placement": "line-center" as const,
+                  /* Хэрчим богино байж болно — багтахгүй бол шошго нь
+                     алга болохоос илүү давхарласан нь дээр */
+                  "text-allow-overlap": true,
+                  "text-ignore-placement": true,
+                }
+              : {}),
           },
           paint: {
             "text-color": "#ffffff",
@@ -1269,7 +1354,7 @@ export function WellsMap({
             "text-font": FONT,
             "text-size": ["interpolate", ["linear"], ["zoom"], 11, 10, 16, 12],
             "text-anchor": "top",
-            "text-offset": [0, 0.7],
+            "text-offset": [0, modeRef.current.labelOffset],
             "text-padding": 3,
             /* Урт нэрийг хоёр мөр болгож таслана — нэг мөрөнд сунгавал
                хөрш цэгийнхээ шошгыг түлхэж хаяна */

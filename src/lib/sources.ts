@@ -18,11 +18,15 @@ import {
   PROTECTED_OFFICIAL_SERVICE,
 } from "@/lib/protected-areas";
 import { LICENSES_SERVICE } from "@/lib/licenses";
+import { LICHENS_SERVICE } from "@/lib/lichens";
+import { MARMOT_SERVICES } from "@/lib/marmots";
 import { MINERALS_SERVICE } from "@/lib/minerals";
 import { PETITIONS_SERVICE } from "@/lib/petitions";
+import { POLES_SERVICE } from "@/lib/poles";
 import { RECLAMATION_SERVICES } from "@/lib/reclamation";
 import { RESCUES_SERVICE } from "@/lib/rescues";
 import { SOIL_SERVICES } from "@/lib/soil";
+import { STICKERS_SERVICE } from "@/lib/stickers";
 import { CITY_SERVICE, PIT_SERVICE } from "@/lib/toilets";
 import { BOMT_SERVICE } from "@/lib/bomt";
 import { NEUTRALIZATION_SERVICE } from "@/lib/neutralization";
@@ -81,6 +85,36 @@ export const SOURCES: Source[] = [
     name: "Нэгж талбар — коридортой давхцсаныг нь",
     kind: "ArcGIS FeatureServer",
     url: PARCELS_SERVICE,
+  },
+  {
+    slug: "amitan-urgamal",
+    name: "Цахилгаан дамжуулах 10, 15 кВ-ын шонгууд",
+    kind: "ArcGIS FeatureServer",
+    url: POLES_SERVICE,
+  },
+  {
+    slug: "amitan-urgamal",
+    name: "Стикер байршуулсан барилга",
+    kind: "ArcGIS FeatureServer",
+    url: STICKERS_SERVICE,
+  },
+  {
+    slug: "amitan-urgamal",
+    name: "Шилжүүлэн нутагшуулсан тарвага — барьсан цэг",
+    kind: "ArcGIS FeatureServer",
+    url: MARMOT_SERVICES[0],
+  },
+  {
+    slug: "amitan-urgamal",
+    name: "Шилжүүлэн нутагшуулсан тарвага — тавьсан цэг",
+    kind: "ArcGIS FeatureServer",
+    url: MARMOT_SERVICES[1],
+  },
+  {
+    slug: "amitan-urgamal",
+    name: "Байгалийн ургамлын олон янз байдал — хаг",
+    kind: "ArcGIS FeatureServer",
+    url: LICHENS_SERVICE,
   },
   {
     slug: "orchin",
