@@ -40,25 +40,69 @@ export const FOREST_TYPES_SERVICE = `${HOST}/${LAYER}/FeatureServer/9`;
    хөрвүүлэлт — утга нэмээгүй, зөвхөн кирилл рүү буулгав. Бичгийн алдаа
    ("shatsan oin talbaii", "tuimriin zurwasi") нь эх сурвалжийнх.
 
-   Дараалал нь ТОГТМОЛ: талбайгаар эрэмбэлбэл шүүлт солих бүрд мөрүүд
-   үсэрнэ. Ангилагдаагүйг хамгийн сүүлд тавив — тэр нь төрөл биш.
+   ДАРААЛАЛ нь ойн бүрхэвчийн ШАТЛАЛ: бүрэн ой → шилжилтийн шат →
+   эвдэрсэн, тайрсан → ойн бус. Энэ эрэмбэ нь ЭХ СУРВАЛЖИЙНХ БИШ,
+   уншихад тус болох бидний зохион байгуулалт — тиймээс "зэрэглэл",
+   "чанар" гэж БҮҮ ойлго. Гэвч санамсаргүй ч биш: доорх өнгөний
+   шатлал нь яг үүн дээр суурилдаг тул хоёулаа хамт өөрчлөгдөнө.
+
+   Дараалал нь мөн ТОГТМОЛ: талбайгаар эрэмбэлбэл шүүлт солих бүрд
+   мөрүүд үсэрнэ.
    -------------------------------------------------------------------------- */
 
 export const FOREST_TYPES = [
   { id: "oi", raw: "oi", label: "Ой" },
-  { id: "tarmag", raw: "tarmag mod", label: "Тармаг мод" },
-  { id: "beltgesen", raw: "mod beltgesen talbai", label: "Мод бэлтгэсэн талбай" },
-  { id: "soog", raw: "soog torlog", label: "Сөөг, төрлөг" },
-  { id: "enger", raw: "tsagaan enger", label: "Цагаан энгэр" },
-  { id: "khorton", raw: "Khortond idegdsen oi", label: "Хортонд идэгдсэн ой" },
-  { id: "shatsan", raw: "shatsan oin talbaii", label: "Шатсан ойн талбай" },
+  { id: "tarimal", raw: "tarimal oi", label: "Таримал ой" },
   { id: "oijuulsan", raw: "oijuulsan talbai", label: "Ойжуулсан талбай" },
   { id: "oijih", raw: "oijih talbai", label: "Ойжих талбай" },
-  { id: "tsaram", raw: "tag tsaram", label: "Таг царам" },
+  { id: "tarmag", raw: "tarmag mod", label: "Тармаг мод" },
+  { id: "soog", raw: "soog torlog", label: "Сөөг, төрлөг" },
+  { id: "khorton", raw: "Khortond idegdsen oi", label: "Хортонд идэгдсэн ой" },
+  { id: "shatsan", raw: "shatsan oin talbaii", label: "Шатсан ойн талбай" },
+  { id: "beltgesen", raw: "mod beltgesen talbai", label: "Мод бэлтгэсэн талбай" },
   { id: "zurvas", raw: "tuimriin zurwasi", label: "Түймрийн зурвас" },
-  { id: "tarimal", raw: "tarimal oi", label: "Таримал ой" },
+  { id: "enger", raw: "tsagaan enger", label: "Цагаан энгэр" },
+  { id: "tsaram", raw: "tag tsaram", label: "Таг царам" },
   { id: "none", raw: "", label: "Ангилагдаагүй" },
 ] as const;
+
+/**
+ * Төрлийн ӨНГӨ — ногооны нэг шатлал.
+ *
+ * Платформын "дата дүрслэл ГАНЦ өнгөтэй" дүрэм нь НЭРЛЭСЭН ангиллын
+ * тухай: аймаг, гүйцэтгэгчийг өнгөөр ялгавал утгагүй солонго болно.
+ * Ойн төрөл нь ЭРЭМБЭТЭЙ — дээрх дараалал нь бүрэн ойгоос ойн бус
+ * хүртэл шатлана — тул тасралтгүй шатлал зохимжтой (PLI-ийн улаан
+ * шатлалтай ижил зарчим).
+ *
+ * Ганц ӨНГӨНИЙ ӨНЦӨГ дээр (162° → 148°) зөвхөн гэрэлтэлт, ханалт нь
+ * буурна: тод амьд ногооноос бүдэг саарал-ногоон руу. Өөр өнгө рүү
+ * шилжвэл (ногоон → шар → улаан) тэр нь ЭРСДЭЛИЙН шатлал мэт
+ * уншигдана — энд аюул хэмжигдэхгүй.
+ *
+ * MapLibre `oklch()` уншдаггүй тул hex хэлбэрээр.
+ */
+const TYPE_RAMP = [
+  "#5df0b2", // Ой
+  "#66e7ab", // Таримал ой
+  "#6ddea6", // Ойжуулсан талбай
+  "#73d6a0", // Ойжих талбай
+  "#77cd9c", // Тармаг мод
+  "#7bc497", // Сөөг, төрлөг
+  "#7dbc93", // Хортонд идэгдсэн ой
+  "#7fb38f", // Шатсан ойн талбай
+  "#80ab8b", // Мод бэлтгэсэн талбай
+  "#80a288", // Түймрийн зурвас
+  "#809a85", // Цагаан энгэр
+  "#809282", // Таг царам
+  "#7e8a7f", // Ангилагдаагүй
+];
+
+const TYPE_INDEX = new Map<string, number>(FOREST_TYPES.map((t, i) => [t.id, i]));
+
+export function typeColor(id: string): string {
+  return TYPE_RAMP[TYPE_INDEX.get(id) ?? TYPE_RAMP.length - 1];
+}
 
 export type ForestTypeId = (typeof FOREST_TYPES)[number]["id"];
 
@@ -201,7 +245,8 @@ export async function fetchForestTypes(signal?: AbortSignal): Promise<ForestType
       type: "Feature",
       /* `feature-state`-д тоон `id` ЗААВАЛ — сонгосныг тодруулна */
       id: oid,
-      properties: { oid },
+      /* `c` нь зургийн давхаргын өнгө — төрлийн шатлалаас */
+      properties: { oid, c: typeColor(classifyType(typeRaw)) },
       geometry: f.geometry,
     });
   }

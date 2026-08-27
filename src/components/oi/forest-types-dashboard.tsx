@@ -12,7 +12,6 @@ import {
 } from "lucide-react";
 import { RowChart, type Datum } from "@/components/charts";
 import { BasemapGallery } from "@/components/map/basemap-gallery";
-import { FOREST } from "@/components/wells/colors";
 import { MapTip, MapTipRow, useMapTip } from "@/components/map/hover-tip";
 import { FilterBar, FilterMenu, PickList } from "@/components/wells/filter-bar";
 import {
@@ -29,6 +28,7 @@ import {
   fetchForestTypes,
   isWooded,
   sizeClass,
+  typeColor,
   type ForestParcel,
   type ForestTypesData,
 } from "@/lib/forest-types";
@@ -280,12 +280,18 @@ export function ForestTypesDashboard() {
       {/* ============ ГОЛ СҮЛЖЭЭ ============ */}
       <div className="grid min-h-0 flex-1 gap-2.5 xl:grid-cols-[268px_1fr_252px]">
         {/* ---- ЗҮҮН: төрөл ---- */}
+        {/*
+          Төрөл нь шатлалаараа өнгөтэй — газрын зураг дээрх талбайн
+          өнгөтэй ижил. Тиймээс диаграмын мөр нь зурган дээрх хаана
+          байгааг өөрөө хэлнэ, тусдаа тайлбар хэрэггүй.
+        */}
         <Panel
           title="Төрлөөр"
           note="га"
           data={typeData}
           selected={type}
           onSelect={setType}
+          colorOf={(d) => typeColor(d.key)}
           format={ha}
           grow
         />
@@ -301,7 +307,8 @@ export function ForestTypesDashboard() {
             <PolygonMap
               points={NO_POINTS}
               visible={NO_INDEX}
-              shapes={{ data: shapes, selected: picked, labelZoom: 13, color: FOREST }}
+              /* Өнгө нь feature бүрийн `properties.c`-ээс — төрлийн шатлалаар */
+              shapes={{ data: shapes, selected: picked, labelZoom: 13 }}
               basemap={basemap}
               onSelect={(oid) => setPicked(picked === oid ? null : oid)}
               onHover={tip.onHover}
@@ -312,8 +319,14 @@ export function ForestTypesDashboard() {
 
             {hovered ? (
               <MapTip state={tip} width={236}>
-                <div className="px-2.5 pt-2 pb-1">
-                  <span className="text-[10px] leading-none tracking-[0.08em] text-data uppercase">
+                <div className="flex items-center gap-1.5 px-2.5 pt-2 pb-1">
+                  {/* Төрлийн өнгө — зурган дээрх талбайтай ижил */}
+                  <span
+                    aria-hidden
+                    className="size-1.5 shrink-0 rounded-[1px]"
+                    style={{ background: typeColor(hovered.type) }}
+                  />
+                  <span className="text-[10px] leading-none tracking-[0.08em] text-ink-2 uppercase">
                     {TYPE_LABEL.get(hovered.type)}
                   </span>
                 </div>
@@ -346,7 +359,14 @@ export function ForestTypesDashboard() {
 
             {selected ? (
               <div className="pointer-events-none absolute top-2.5 left-2.5 z-10 max-w-[262px] rounded-xs border border-line bg-paper/92 px-2.5 py-2 backdrop-blur-md">
-                <div className="eyebrow mb-1.5">{TYPE_LABEL.get(selected.type)}</div>
+                <div className="mb-1.5 flex items-center gap-1.5">
+                  <span
+                    aria-hidden
+                    className="size-1.5 shrink-0 rounded-[1px]"
+                    style={{ background: typeColor(selected.type) }}
+                  />
+                  <span className="eyebrow">{TYPE_LABEL.get(selected.type)}</span>
+                </div>
                 <div className="num text-[13px] leading-none font-medium text-ink">
                   {ha(selected.ha)} га
                 </div>
@@ -410,6 +430,7 @@ function Panel({
   selected,
   onSelect,
   format,
+  colorOf,
   grow,
 }: {
   title: string;
@@ -418,6 +439,7 @@ function Panel({
   selected: string | null;
   onSelect: (k: string | null) => void;
   format?: (v: number) => string;
+  colorOf?: (d: Datum) => string;
   grow?: boolean;
 }) {
   return (
@@ -426,7 +448,13 @@ function Panel({
         {note ? <span className="text-[10.5px] text-ink-3">{note}</span> : null}
       </Head>
       <div className="min-h-0 flex-1 overflow-y-auto p-3">
-        <RowChart data={data} selected={selected} onSelect={onSelect} format={format} />
+        <RowChart
+          data={data}
+          selected={selected}
+          onSelect={onSelect}
+          format={format}
+          colorOf={colorOf}
+        />
       </div>
     </Card>
   );
