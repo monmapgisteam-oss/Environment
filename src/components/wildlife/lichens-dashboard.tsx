@@ -22,6 +22,7 @@ import { BasemapGallery } from "@/components/map/basemap-gallery";
 import { DATA_COLOR } from "@/components/wells/colors";
 import { FilterBar, FilterMenu, PickList } from "@/components/wells/filter-bar";
 import { defaultBasemap, type Basemap, type Extent } from "@/components/wells/map";
+import { Columns } from "@/components/ui/resizable-columns";
 import { Bounds } from "@/lib/extent";
 import {
   fetchLichenDetail,
@@ -535,9 +536,9 @@ export function LichensDashboard() {
         </FilterMenu>
       </FilterBar>
 
-      <div className="flex min-h-0 flex-1 flex-col gap-2.5 xl:flex-row">
+      <Columns layout="flex" id="lichens" left={320} right={300} className="min-h-0 flex-1">
         {/* ---- ЗҮҮН: овог → зүйл, нэг шатлалт диаграм ---- */}
-        <Card className="min-h-[180px] flex-1 xl:w-[320px] xl:flex-none 2xl:w-[350px]">
+        <Card className="min-h-[180px] flex-1 xl:w-(--col-l) xl:flex-none">
           <Head title="Овог, зүйл">
             <span className="num text-[11.5px] text-ink-3">
               {num(familyTree.length)} овог · {num(listed.length)} зүйл
@@ -744,7 +745,7 @@ export function LichensDashboard() {
         </div>
 
         {/* ---- БАРУУН: индикатор + ангиллын задаргаа ---- */}
-        <div className="flex min-h-0 flex-col gap-2.5 xl:w-[300px] xl:shrink-0">
+        <div className="flex min-h-0 flex-col gap-2.5 xl:w-(--col-r) xl:shrink-0">
           <Card className="shrink-0">
             <div className="grid grid-cols-2 divide-x divide-y divide-line">
               <Stat icon={Leaf} label="Зүйл" value={num(stats.species)} />
@@ -782,7 +783,7 @@ export function LichensDashboard() {
             </div>
           </Card>
         </div>
-      </div>
+      </Columns>
     </div>
   );
 }

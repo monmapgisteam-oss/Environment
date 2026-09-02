@@ -20,6 +20,7 @@ import { BasemapGallery } from "@/components/map/basemap-gallery";
 import { MapTip, MapTipRow, useMapTip } from "@/components/map/hover-tip";
 import { FilterBar, FilterMenu, PickList } from "@/components/wells/filter-bar";
 import { defaultBasemap, type Basemap, type Extent } from "@/components/wells/map";
+import { Columns } from "@/components/ui/resizable-columns";
 import { boundsOf } from "@/lib/extent";
 import {
   fetchWaterContracts,
@@ -415,7 +416,7 @@ export function WaterDashboard() {
       </FilterBar>
 
       {/* ============ ГОЛ СҮЛЖЭЭ ============ */}
-      <div className="grid min-h-0 flex-1 gap-2.5 xl:grid-cols-[272px_1fr_292px]">
+      <Columns id="water" left={272} right={292} className="min-h-0 flex-1">
         {/* ---- ЗҮҮН: газарзүй ба ус ашиглагч ---- */}
         <div className="flex min-h-0 flex-col gap-2.5">
           {/* Дүүрэг ердөө 4–5 мөр тул өөрийнхөө зайг л эзэлнэ */}
@@ -612,7 +613,7 @@ export function WaterDashboard() {
             </div>
           </Box>
         </div>
-      </div>
+      </Columns>
     </div>
   );
 }

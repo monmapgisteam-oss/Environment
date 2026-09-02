@@ -7,6 +7,7 @@ import { BasemapGallery } from "@/components/map/basemap-gallery";
 import { FilterBar, FilterMenu, PickList } from "@/components/wells/filter-bar";
 import { PieChart } from "@/components/charts";
 import { defaultBasemap, type Basemap, type Extent } from "@/components/wells/map";
+import { Columns } from "@/components/ui/resizable-columns";
 import { Bounds } from "@/lib/extent";
 import { fetchPoles, type PoleData } from "@/lib/poles";
 import { cn, num } from "@/lib/utils";
@@ -210,9 +211,9 @@ export function PolesDashboard() {
         ) : null}
       </FilterBar>
 
-      <div className="flex min-h-0 flex-1 flex-col gap-2.5 xl:flex-row">
+      <Columns layout="flex" id="poles" left={290} className="min-h-0 flex-1">
         {/* ---- ЗҮҮН: индикатор + шугамын дараалал ---- */}
-        <div className="flex min-h-0 flex-col gap-2.5 xl:w-[290px] xl:shrink-0">
+        <div className="flex min-h-0 flex-col gap-2.5 xl:w-(--col-l) xl:shrink-0">
           <Card className="shrink-0">
             <div className="grid grid-cols-2 divide-x divide-y divide-line">
               <Stat icon={Zap} label="Шонгийн тоо" value={num(stats.n)} />
@@ -305,7 +306,7 @@ export function PolesDashboard() {
             координатаас тооцов
           </p>
         </div>
-      </div>
+      </Columns>
     </div>
   );
 }

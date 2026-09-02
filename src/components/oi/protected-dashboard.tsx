@@ -17,6 +17,7 @@ import { BasemapGallery } from "@/components/map/basemap-gallery";
 import { FOREST, FOREST_FIREFLY } from "@/components/wells/colors";
 import { MapTip, MapTipRow, useMapTip } from "@/components/map/hover-tip";
 import { FilterBar, FilterMenu, PickList } from "@/components/wells/filter-bar";
+import { Columns } from "@/components/ui/resizable-columns";
 import {
   defaultBasemap,
   type Basemap,
@@ -299,7 +300,7 @@ export function ProtectedDashboard() {
       </Card>
 
       {/* ============ ГОЛ СҮЛЖЭЭ ============ */}
-      <div className="grid min-h-0 flex-1 gap-2.5 xl:grid-cols-[1fr_268px]">
+      <Columns id="protected" right={268} className="min-h-0 flex-1">
         {/* ---- ЗҮҮН: газрын зураг ---- */}
         <Card className="relative min-h-[300px] overflow-hidden">
           <div className="relative h-full w-full">
@@ -394,7 +395,7 @@ export function ProtectedDashboard() {
             grow
           />
         </div>
-      </div>
+      </Columns>
 
       <p className="shrink-0 px-0.5 text-[10.5px] leading-none text-ink-3">
         Суурь зураг: Esri · Дата: ArcGIS FeatureServer · {num(data.rows.length)} бичлэг ·

@@ -31,6 +31,7 @@ import { BasemapGallery } from "@/components/map/basemap-gallery";
 import { MapTip, MapTipRow, useMapTip } from "@/components/map/hover-tip";
 import { FilterBar, FilterMenu, PickList } from "@/components/wells/filter-bar";
 import { defaultBasemap, type Basemap, type Extent } from "@/components/wells/map";
+import { Columns } from "@/components/ui/resizable-columns";
 import {
   fetchCalls,
   fetchPhotos,
@@ -462,7 +463,7 @@ export function WildlifeDashboard() {
       </FilterBar>
 
       {/* ============ ГОЛ СҮЛЖЭЭ ============ */}
-      <div className="grid min-h-0 flex-1 gap-2.5 xl:grid-cols-[272px_1fr_292px]">
+      <Columns id="wildlife" left={272} right={292} className="min-h-0 flex-1">
         {/* ---- ЗҮҮН: юу, хаана ---- */}
         <div className="flex min-h-0 flex-col gap-2.5">
           <Panel title="Амьтны зүйлээр" count={speciesData.length} grow>
@@ -732,7 +733,7 @@ export function WildlifeDashboard() {
             <RowChart data={officerData} selected={officer} onSelect={setOfficer} />
           </Panel>
         </div>
-      </div>
+      </Columns>
 
       {viewer !== null && shownPhotos[viewer] ? (
         <PhotoViewer

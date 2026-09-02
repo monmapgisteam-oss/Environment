@@ -23,6 +23,7 @@ import { MapTip, MapTipRow, useMapTip } from "@/components/map/hover-tip";
 import { OverlayControl } from "@/components/map/overlay-control";
 import { FilterBar, FilterMenu, PickList } from "@/components/wells/filter-bar";
 import { DATA_COLOR } from "@/components/wells/colors";
+import { Columns } from "@/components/ui/resizable-columns";
 import {
   defaultBasemap,
   type Basemap,
@@ -418,9 +419,9 @@ export function EcoDashboard() {
         </FilterMenu>
       </FilterBar>
 
-      <div className="flex min-h-0 flex-1 flex-col gap-2.5 xl:flex-row">
+      <Columns layout="flex" id="eco" left={290} right={300} className="min-h-0 flex-1">
         {/* ---- ЗҮҮН: индикатор + коридорын карт ---- */}
-        <div className="flex min-h-0 flex-col gap-2.5 xl:w-[290px] xl:shrink-0">
+        <div className="flex min-h-0 flex-col gap-2.5 xl:w-(--col-l) xl:shrink-0">
           <Card className="shrink-0">
             <div className="grid grid-cols-2 divide-x divide-y divide-line">
               <Stat icon={Waypoints} label="Коридор" value={num(stats.n)} />
@@ -680,7 +681,7 @@ export function EcoDashboard() {
         </div>
 
         {/* ---- БАРУУН: нэгж талбарын задаргаа ---- */}
-        <div className="flex min-h-0 flex-col gap-2.5 xl:w-[300px] xl:shrink-0 2xl:w-[330px]">
+        <div className="flex min-h-0 flex-col gap-2.5 xl:w-(--col-r) xl:shrink-0">
           {/*
             Эрхийн төрөл — ердөө хоёр утга тул дээд талд, тогтмол өндөртэй.
             Бараг бүгд "эзэмших" боловч энэ нь ХООСОН тоо биш: эзэмших
@@ -713,7 +714,7 @@ export function EcoDashboard() {
             </div>
           </Card>
         </div>
-      </div>
+      </Columns>
     </div>
   );
 }

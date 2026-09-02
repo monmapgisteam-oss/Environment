@@ -48,9 +48,19 @@ export function BasemapGallery({
   extent = false,
   onExtentChange,
   unit,
+  placement = "top-right",
 }: {
   value: Basemap;
   onChange: (b: Basemap) => void;
+  /**
+   * Зургийн аль буланд суух вэ. Анхдагч нь баруун дээд.
+   *
+   * Самбар бүр өөр өөр буланд өөр зүйл байрлуулдаг (тайлбар, бичилтийн
+   * самбар, тэмдэглэгээний хуулбар) тул товчийг зөөх шаардлага гардаг.
+   * Унждаг цэс нь товчныхоо талд наалдана — эс тэгвээс зургийн ирмэгээс
+   * хальж, тасарна.
+   */
+  placement?: "top-right" | "top-left";
   /** Харагдацын үйлдэл асаалттай эсэх */
   extent?: boolean;
   /**
@@ -75,7 +85,13 @@ export function BasemapGallery({
   }, [open]);
 
   return (
-    <div ref={holder} className="absolute top-2.5 right-2.5 z-20">
+    <div
+      ref={holder}
+      className={cn(
+        "absolute top-2.5 z-20",
+        placement === "top-left" ? "left-2.5" : "right-2.5",
+      )}
+    >
       {/* Зөвхөн икон — газрын зургийг хаах хайрцаг, дэвсгэргүй */}
       <button
         onClick={() => setOpen((o) => !o)}
@@ -95,7 +111,12 @@ export function BasemapGallery({
       </button>
 
       {open ? (
-        <div className="elevated absolute top-[calc(100%+5px)] right-0 w-[236px] rounded-xs border border-line-2 bg-paper-2 p-2">
+        <div
+          className={cn(
+            "elevated absolute top-[calc(100%+5px)] w-[236px] rounded-xs border border-line-2 bg-paper-2 p-2",
+            placement === "top-left" ? "left-0" : "right-0",
+          )}
+        >
           <div className="eyebrow mb-2">Суурь зураг</div>
           <div className="grid grid-cols-2 gap-1.5">
             {BASEMAPS.map((b) => (

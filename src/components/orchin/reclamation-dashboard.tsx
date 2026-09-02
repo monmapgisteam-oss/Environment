@@ -15,6 +15,7 @@ import { AreaChart, PieChart, RowChart, YearRange, type Datum } from "@/componen
 import { BasemapGallery } from "@/components/map/basemap-gallery";
 import { MapTip, MapTipRow, useMapTip } from "@/components/map/hover-tip";
 import { FilterBar, FilterMenu, PickList } from "@/components/wells/filter-bar";
+import { Columns } from "@/components/ui/resizable-columns";
 import {
   defaultBasemap,
   type Basemap,
@@ -349,8 +350,8 @@ export function ReclamationDashboard() {
         үргэлжлэх тул нэгтгэсэн тоо ба задаргаа нэг баганад цуварна.
       */}
       <div className="flex min-h-0 flex-1 flex-col gap-2.5">
-        <div className="flex min-h-0 flex-1 flex-col gap-2.5 xl:flex-row">
-          <div className="flex min-h-0 flex-col gap-2.5 xl:w-[300px] xl:shrink-0 2xl:w-[340px]">
+        <Columns layout="flex" id="reclamation" left={300} right={360} className="min-h-0 flex-1">
+          <div className="flex min-h-0 flex-col gap-2.5 xl:w-(--col-l) xl:shrink-0">
             {/*
               Талбай цөөхөн тул жагсаалт нь диаграмаас илүү мэдээлэл өгнө:
               мөр бүр он, хэмжээ, гүйцэтгэгчээ авч явна.
@@ -469,7 +470,7 @@ export function ReclamationDashboard() {
           </Card>
 
           {/* ---- БАРУУН: индикатор + задаргаа ---- */}
-          <div className="flex min-h-0 flex-col gap-2.5 xl:w-[360px] xl:shrink-0">
+          <div className="flex min-h-0 flex-col gap-2.5 xl:w-(--col-r) xl:shrink-0">
             {/* Дөрвөн индикатор — хоёр багана, хоёр мөр */}
             <Card className="shrink-0">
               <div className="grid grid-cols-2 divide-x divide-y divide-line">
@@ -560,7 +561,7 @@ export function ReclamationDashboard() {
               </div>
             </Card>
           </div>
-        </div>
+        </Columns>
 
         <p className="shrink-0 px-0.5 text-[10.5px] leading-none text-ink-3">
           Суурь зураг: Esri · Дата: ArcGIS · талбайн хүрээг булангийн цэгүүдээс

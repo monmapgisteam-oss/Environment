@@ -19,6 +19,7 @@ import { AreaChart, PieChart, RowChart, type Datum } from "@/components/charts";
 import { BasemapGallery } from "@/components/map/basemap-gallery";
 import { MapTip, MapTipRow, useMapTip } from "@/components/map/hover-tip";
 import { FilterBar, FilterMenu, PickList } from "@/components/wells/filter-bar";
+import { Columns } from "@/components/ui/resizable-columns";
 import {
   defaultBasemap,
   type Basemap,
@@ -380,9 +381,9 @@ export function UnelgeeDashboard() {
           </div>
         </Card>
 
-        <div className="flex min-h-0 flex-1 flex-col gap-2.5 xl:flex-row">
+        <Columns layout="flex" id="assessment" left={248} right={262} className="min-h-0 flex-1">
           {/* ---- ЗҮҮН: юуны төлөө, хаана ---- */}
-          <div className="flex min-h-0 flex-col gap-2.5 xl:w-[248px] xl:shrink-0 2xl:w-[280px]">
+          <div className="flex min-h-0 flex-col gap-2.5 xl:w-(--col-l) xl:shrink-0">
             <Card className="min-h-[120px] flex-1">
               <Head title="Чиглэлээр">
                 <span className="text-[10.5px] text-ink-3">бүлэглэсэн ангилал</span>
@@ -523,7 +524,7 @@ export function UnelgeeDashboard() {
           </Card>
 
           {/* ---- БАРУУН: хэзээ, ямар зориулалтаар, ямар эрхээр ---- */}
-          <div className="flex min-h-0 flex-col gap-2.5 xl:w-[262px] xl:shrink-0 2xl:w-[300px]">
+          <div className="flex min-h-0 flex-col gap-2.5 xl:w-(--col-r) xl:shrink-0">
             {/*
               Эрхийн хэлбэр гуравхан ангилалтай тул бөгж: хэсэг бүрийн
               ЭЗЛЭХ ХУВЬ нь энд гол утга (212 эзэмших / 31 өмчлөх / 11
@@ -572,7 +573,7 @@ export function UnelgeeDashboard() {
               </div>
             </Card>
           </div>
-        </div>
+        </Columns>
 
         <p className="shrink-0 px-0.5 text-[10.5px] leading-none text-ink-3">
           Суурь зураг: Esri · Дата: ArcGIS · {num(data.rows.length)} нэгж талбар ·

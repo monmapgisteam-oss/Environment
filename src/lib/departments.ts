@@ -85,7 +85,7 @@ export const DEPARTMENTS: Department[] = [
     name: "Хяналтын хэлтэс",
     icon: ShieldAlert,
     tone: "--d-hyanalt",
-    status: "pending",
+    status: "live",
   },
 ];
 

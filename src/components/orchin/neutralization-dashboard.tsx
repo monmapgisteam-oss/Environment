@@ -14,6 +14,7 @@ import { BasemapGallery } from "@/components/map/basemap-gallery";
 import { MapTip, MapTipRow, useMapTip } from "@/components/map/hover-tip";
 import { FilterBar } from "@/components/wells/filter-bar";
 import { defaultBasemap, type Basemap, type MapPoints } from "@/components/wells/map";
+import { Columns } from "@/components/ui/resizable-columns";
 import {
   ELEMENTS,
   MEASURES,
@@ -260,14 +261,14 @@ export function NeutralizationDashboard() {
       </div>
 
       {/* ============ ГОЛ ХЭСЭГ ============ */}
-      <div className="flex min-h-0 flex-1 flex-col gap-2.5 xl:flex-row">
+      <Columns layout="flex" id="neutralization" left={700} className="min-h-0 flex-1">
         {/*
           ---- ЗҮҮН: байршил ----
           Зураг ТОГТМОЛ өргөнтэй: дөрвөн цэг дээр тархалт гэж байхгүй тул
           өргөн нь зөвхөн байршлыг таниулахад хүрэлцэхэд л хангалттай.
           Үлдсэн зайг профайл авна — гол агуулга тэнд байна.
         */}
-        <div className="flex min-h-[260px] shrink-0 flex-col gap-2.5 xl:w-[700px]">
+        <div className="flex min-h-[260px] shrink-0 flex-col gap-2.5 xl:w-(--col-l)">
           <Card className="relative min-h-[220px] flex-1 overflow-hidden">
             <div className="relative h-full w-full">
               {/*
@@ -384,7 +385,7 @@ export function NeutralizationDashboard() {
             </div>
           </div>
         </Card>
-      </div>
+      </Columns>
 
       {/*
         Эх сурвалжийн бичиг. Гэрчилгээний асуудлыг ИЛ бичнэ — дата хэзээ

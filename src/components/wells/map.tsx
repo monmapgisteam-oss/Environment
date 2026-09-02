@@ -468,8 +468,10 @@ export function WellsMap({
   onSelect,
   extent = false,
   onExtent,
+  onZoom,
   focus = null,
   cluster = true,
+  clusterMaxZoom = 15,
   clusterLabel = "inside",
   marks,
   pulse = false,
@@ -491,6 +493,14 @@ export function WellsMap({
   /** Харагдацыг шүүлтүүр болгон дамжуулах эсэх (map action) */
   extent?: boolean;
   onExtent?: (e: Extent | null) => void;
+  /**
+   * Ойртолт өөрчлөгдөх бүрд одоогийн түвшинг дамжуулна.
+   *
+   * Дуудагч тал ойртолтоос хамааран өөрийн дүрслэлээ солиход
+   * (жишээ нь тодорхой масштабаас цааш тэмдэглэгээ гаргах) хэрэглэнэ.
+   * `zoomend` дээр л дуудагдана — чирэх явцад биш, зогссоны дараа.
+   */
+  onZoom?: (zoom: number) => void;
   /** Сонголтын хүрээ — өөрчлөгдөх бүрд зураг тийш нь ойртоно (zoom action) */
   focus?: Extent | null;
   /**
@@ -499,6 +509,17 @@ export function WellsMap({
    * зураг үүсгэдэг учир хязгаарлалт биш).
    */
   cluster?: boolean;
+  /**
+   * Бөөгнөрөл ЭНЭ түвшнээс цааш задарна (анхны утга 15).
+   *
+   * Цэг ЦӨӨН, тус бүр нь хаяг заадаг датад (үйлчилгээний цэгийн лавлах)
+   * 15 нь хэт гүн: хот даяар харахад зөвхөн бөөгнөрлийн бөмбөлөг
+   * харагдаж, тэмдэглэгээ бараг гарч ирдэггүй. Тархалт уншуулах датад
+   * (12 мянган худаг) эсрэгээрээ гүн байх нь зөв.
+   *
+   * ЗӨВХӨН анхны зурагдалтад уншигдана — эх сурвалжийн шинж.
+   */
+  clusterMaxZoom?: number;
   /** Тоог дугуйн дотор бичих үү, баруун дээд буланд тэмдэг болгох уу */
   clusterLabel?: "inside" | "badge";
   /**
@@ -628,7 +649,27 @@ export function WellsMap({
    * утгыг мужлан харуулна — тохиромжтой байдлын үнэлгээний зурагтай
    * ижил уншигдана.
    */
-  grades?: { values: ArrayLike<number>; stops: [number, string][]; heat?: boolean };
+  grades?: {
+    values: ArrayLike<number>;
+    stops: [number, string][];
+    heat?: boolean;
+    /**
+     * Цэгийг ГЭРЭЛТЭХ (firefly) загвараар зурах эсэх.
+     *
+     * Зэрэглэсэн горим нь анхдагчаар хоёр давхаргатай, бараан ирмэгтэй
+     * тодорхой тэмдэг зурдаг — өнгө нь ангилал заадаг тул ирмэг нь
+     * хөрш өнгөнүүдийг тусгаарлана. Харин шатлалын хоёр үзүүрт НЭГ өнгө
+     * өгсөн үед (зөвхөн радиус нь хэмжигдэхүүн үүрэх үед) тэр ирмэг
+     * утгагүй болж, цэг нь платформын бусад зурагнаас өөрөөр харагдана.
+     *
+     * Энэ тугийг асаавал бусад зурагтай ижил гурван давхаргын гэрэлтэлт
+     * (сарнисан гэрэл → бие → цөм) хэрэглэгдэнэ. Өнгө нь `firefly`
+     * пропоос ирэх бөгөөд `stops`-ийн ӨНГИЙГ АШИГЛАХГҮЙ — тиймээс
+     * ЗӨВХӨН нэг өнгөт шатлалд тавь. Радиус нь хэвээрээ утгаасаа
+     * хамаарна.
+     */
+    firefly?: boolean;
+  };
   /**
    * Цэг бүрийн ЖИН (`points`-той ижил урттай). Өгвөл зураг НЯГТРАЛЫН
    * горимд шилжинэ: алсаас дулааны зураг, ойртоход жингээрээ томордог
@@ -675,15 +716,18 @@ export function WellsMap({
   const selectCb = React.useRef(onSelect);
   const hoverCb = React.useRef(onHover);
   const extentCb = React.useRef(onExtent);
+  const zoomCb = React.useRef(onZoom);
   /** Анх үүсгэх үеийн суурь зураг — effect-ийг дахин ажиллуулахгүйн тулд ref */
   const basemapRef = React.useRef(basemap);
   /** Эх сурвалж үүсгэх үед л уншигдах тохиргоо */
   const modeRef = React.useRef({
     cluster,
+    clusterMaxZoom,
     clusterLabel,
     weighted: Boolean(weights),
     graded: grades?.stops,
     gradedHeat: Boolean(grades?.heat),
+    gradedFire: Boolean(grades?.firefly),
     shaped: Boolean(shapes),
     shapeGlow: Boolean(shapes?.glow),
     shapeColor: shapes?.color,
@@ -708,6 +752,9 @@ export function WellsMap({
   React.useEffect(() => {
     extentCb.current = onExtent;
   }, [onExtent]);
+  React.useEffect(() => {
+    zoomCb.current = onZoom;
+  }, [onZoom]);
   React.useEffect(() => {
     hoverCb.current = onHover;
   }, [onHover]);
@@ -991,7 +1038,7 @@ export function WellsMap({
         data: { type: "FeatureCollection", features: [] },
         cluster: modeRef.current.cluster,
         clusterRadius: 48,
-        clusterMaxZoom: 15,
+        clusterMaxZoom: modeRef.current.clusterMaxZoom,
       });
 
       /*
@@ -1245,18 +1292,44 @@ export function WellsMap({
           });
         }
 
+        /*
+          Гэрэлтэх хувилбарт өнгө нь шатлалаас БИШ `firefly` гурвалаас
+          ирнэ (нэг өнгөт шатлалд л зөвшөөрөгдөнө — пропын тайлбарыг
+          үзнэ үү). Радиусын үржүүлэгчид нь бөөгнөрөлгүй firefly-ийн
+          харьцааг давтана: сарнисан гэрэл ≈ 4.2, бие ≈ 2.2, цөм ≈ 0.95.
+        */
+        const fire = modeRef.current.gradedFire;
+
         m.addLayer({
           id: "wells-glow",
           type: "circle",
           source: "wells",
           ...(heat ? { minzoom: 11.5 } : {}),
           paint: {
-            "circle-radius": gradedRadius(stops, 2.4),
-            "circle-color": gradeColor(stops),
+            "circle-radius": gradedRadius(stops, fire ? 4.2 : 2.4),
+            "circle-color": fire ? modeRef.current.fire.glow : gradeColor(stops),
             "circle-blur": 1,
-            "circle-opacity": heat ? fade(0.32) : 0.32,
+            "circle-opacity": heat ? fade(fire ? 0.38 : 0.32) : fire ? 0.38 : 0.32,
           },
         });
+
+        /* Дундах бие — ЗӨВХӨН гэрэлтэх хувилбарт. Сарнисан гэрэл ба
+           цөмийн хооронд шилжилт үүсгэнэ; үүнгүй бол цөм нь манан дээр
+           наалдсан мэт харагдана */
+        if (fire) {
+          m.addLayer({
+            id: "wells-halo",
+            type: "circle",
+            source: "wells",
+            ...(heat ? { minzoom: 11.5 } : {}),
+            paint: {
+              "circle-radius": gradedRadius(stops, 2.2),
+              "circle-color": modeRef.current.fire.mid,
+              "circle-blur": 0.6,
+              "circle-opacity": heat ? fade(0.6) : 0.6,
+            },
+          });
+        }
 
         m.addLayer({
           id: "wells-dot",
@@ -1264,12 +1337,18 @@ export function WellsMap({
           source: "wells",
           ...(heat ? { minzoom: 11.5 } : {}),
           paint: {
-            "circle-radius": gradedRadius(stops, 1),
-            "circle-color": gradeColor(stops),
-            "circle-opacity": heat ? fade(0.92) : 0.92,
-            /* Нимгэн бараан ирмэг — цайвар суурь зураг дээр цэг арилахаас
-               хамгаална, гэрэлтэлтийг таслахааргүй сул */
-            "circle-stroke-width": 0.7,
+            "circle-radius": gradedRadius(stops, fire ? 0.95 : 1),
+            "circle-color": fire ? modeRef.current.fire.core : gradeColor(stops),
+            "circle-opacity": heat ? fade(fire ? 0.95 : 0.92) : fire ? 0.95 : 0.92,
+            /*
+              Нимгэн бараан ирмэг — цайвар суурь зураг дээр цэг арилахаас
+              хамгаална, гэрэлтэлтийг таслахааргүй сул.
+
+              Гэрэлтэх хувилбарт ирмэг ТАВИХГҮЙ: гэрэлтэж буй биет
+              ирмэггүй байх ёстой, зураас нь гэрлийг таслаад энгийн цэг
+              болгочихно (бөөгнөрөлгүй firefly-тэй ижил шалтгаан).
+            */
+            "circle-stroke-width": fire ? 0 : 0.7,
             "circle-stroke-color": "rgba(10,18,26,.55)",
             "circle-stroke-opacity": heat ? fade(1) : 1,
           },
@@ -1405,6 +1484,8 @@ export function WellsMap({
         : modeRef.current.graded
           ? "wells-glow"
           : "wells-halo";
+      /* Гэрэлтэх зэрэглэлд `wells-halo` мөн үүсдэг ч оноолт нь гадна
+         давхарга дээрээ үлдэнэ — цөм нь хэдхэн пиксел */
       m.on("click", hitLayer, (e) => {
         const f = e.features?.[0];
         if (f) selectCb.current(Number(f.properties?.oid));
@@ -1532,6 +1613,11 @@ export function WellsMap({
           "circle-stroke-opacity": 0.9,
         },
       });
+
+      /* Ойртолтын мэдэгдэл — эхний утгыг мөн нэг удаа өгнө, эс тэгвээс
+         дуудагч тал анхны түвшнээ мэдэхгүй */
+      zoomCb.current?.(m.getZoom());
+      m.on("zoomend", () => zoomCb.current?.(m.getZoom()));
 
       m.resize();
 

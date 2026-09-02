@@ -8,6 +8,7 @@ import { BasemapGallery } from "@/components/map/basemap-gallery";
 import { FOREST } from "@/components/wells/colors";
 import { MapTip, useMapTip } from "@/components/map/hover-tip";
 import { FilterBar } from "@/components/wells/filter-bar";
+import { Columns } from "@/components/ui/resizable-columns";
 import {
   defaultBasemap,
   type Basemap,
@@ -248,7 +249,7 @@ export function ForestGoodsDashboard() {
       </Card>
 
       {/* ============ ГОЛ СҮЛЖЭЭ ============ */}
-      <div className="grid min-h-0 flex-1 gap-2.5 xl:grid-cols-[282px_1fr]">
+      <Columns id="forest-goods" left={282} className="min-h-0 flex-1">
         {/* ---- ЗҮҮН: сонгогч ---- */}
         <Card className="min-h-[160px]">
           <Head title={kind === "species" ? "Дагалт баялгаар" : "Хэсгээр"}>
@@ -355,7 +356,7 @@ export function ForestGoodsDashboard() {
             ) : null}
           </div>
         </Card>
-      </div>
+      </Columns>
 
       {/*
         Геометрийн давхардлыг ИЛ бичнэ: зарим зүйл ЯГ ижил тархалттай

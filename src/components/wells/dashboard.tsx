@@ -21,6 +21,7 @@ import { BasemapGallery } from "@/components/map/basemap-gallery";
 import { MapTip, MapTipRow, useMapTip } from "@/components/map/hover-tip";
 import { FilterBar, FilterMenu, PickList } from "@/components/wells/filter-bar";
 import { defaultBasemap, type Basemap, type Extent } from "@/components/wells/map";
+import { Columns } from "@/components/ui/resizable-columns";
 import { getWell, type WellsPayload, type WellDetail } from "@/lib/wells";
 import { asset } from "@/lib/base-path";
 import { cn, num } from "@/lib/utils";
@@ -495,7 +496,7 @@ export function WellsDashboard() {
       </FilterBar>
 
       {/* ============ ГОЛ СҮЛЖЭЭ ============ */}
-      <div className="grid min-h-0 flex-1 gap-2.5 xl:grid-cols-[272px_1fr_292px]">
+      <Columns id="wells" left={272} right={292} className="min-h-0 flex-1">
         {/* ---- ЗҮҮН: газарзүйн задаргаа ---- */}
         <div className="flex min-h-0 flex-col gap-2.5">
           {/*
@@ -757,7 +758,7 @@ export function WellsDashboard() {
             </div>
           </Box>
         </div>
-      </div>
+      </Columns>
     </div>
   );
 }

@@ -8,6 +8,7 @@ import { BasemapGallery } from "@/components/map/basemap-gallery";
 import { MapTip, MapTipRow, useMapTip } from "@/components/map/hover-tip";
 import { OverlayControl } from "@/components/map/overlay-control";
 import { FilterBar, FilterMenu, PickList } from "@/components/wells/filter-bar";
+import { Columns } from "@/components/ui/resizable-columns";
 import {
   defaultBasemap,
   type Basemap,
@@ -280,8 +281,8 @@ export function FloodplainDashboard() {
         татам нь голынхоо дагуу сунасан урт зурвас тул зургийн өргөн нь
         шууд уншигдах чадвар болно.
       */}
-      <div className="flex min-h-0 flex-1 flex-col gap-2.5 xl:flex-row">
-        <div className="flex min-h-0 flex-col gap-2.5 xl:w-[300px] xl:shrink-0 2xl:w-[330px]">
+      <Columns layout="flex" id="floodplain" left={300} className="min-h-0 flex-1">
+        <div className="flex min-h-0 flex-col gap-2.5 xl:w-(--col-l) xl:shrink-0">
           <Card className="shrink-0">
             <div className="grid grid-cols-2 divide-x divide-y divide-line">
               <Stat icon={Ruler} label="Нийт талбай, га" value={num(Math.round(stats.ha))} />
@@ -428,7 +429,7 @@ export function FloodplainDashboard() {
             хүрээг ~5м-ээр ерөнхийлсөн
           </p>
         </div>
-      </div>
+      </Columns>
     </div>
   );
 }

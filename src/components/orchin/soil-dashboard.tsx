@@ -18,6 +18,7 @@ import { BasemapGallery } from "@/components/map/basemap-gallery";
 import { MapTip, MapTipRow, useMapTip } from "@/components/map/hover-tip";
 import { OverlayControl } from "@/components/map/overlay-control";
 import { FilterBar, FilterMenu, PickList } from "@/components/wells/filter-bar";
+import { Columns } from "@/components/ui/resizable-columns";
 import {
   defaultBasemap,
   type Basemap,
@@ -465,7 +466,7 @@ export function SoilDashboard() {
           хуваагдана. xl-ээс доош унавал мөр нь багана болно — нарийн
           дэлгэцэнд гурван багана зургийг юу ч үлдээхгүй шахна.
         */}
-        <div className="flex min-h-0 flex-1 flex-col gap-2.5 xl:flex-row">
+        <Columns layout="flex" id="soil" left={300} right={340} className="min-h-0 flex-1">
           {/*
             Хэмжигдэхүүн БҮРД нэг карт, дээрээс доош. 2024 онд ижил 10
             элемент дээр PI ба Igeo хоёр индекс бодогдсон тул хоёр карт
@@ -475,7 +476,7 @@ export function SoilDashboard() {
             зэрэгцүүлж харах нь утгатай: нэг элемент PI-гээр өндөр,
             Igeo-гоор бага байх нь мэдээлэл юм.
           */}
-          <div className="flex min-h-0 flex-col gap-2.5 xl:w-[300px] xl:shrink-0 2xl:w-[340px]">
+          <div className="flex min-h-0 flex-col gap-2.5 xl:w-(--col-l) xl:shrink-0">
             {data.metrics.map((m, mi) => {
               /* Цэг сонгогдвол карт бүр ТЭР ЦЭГИЙН утгыг харуулна —
                  нэгтгэсэн дундажаас тухайн цэг рүү шилжих нь энэ
@@ -673,7 +674,7 @@ export function SoilDashboard() {
           </Card>
 
           {/* ---- БАРУУН: задаргаа ---- */}
-          <div className="flex min-h-0 flex-col gap-2.5 xl:w-[340px] xl:shrink-0">
+          <div className="flex min-h-0 flex-col gap-2.5 xl:w-(--col-r) xl:shrink-0">
             {/*
               Сумын карт нь дүүргийнхээс ӨӨР хэлбэртэй байх нь санаатай:
               гурван мөр нь мөрөн диаграм болоод хагас хоосон карт үлдээх
@@ -731,7 +732,7 @@ export function SoilDashboard() {
               </div>
             </Card>
           </div>
-        </div>
+        </Columns>
 
         <p className="shrink-0 px-0.5 text-[10.5px] leading-none text-ink-3">
           Суурь зураг: Esri · Дата: ArcGIS · {year} оны {num(data.points.length)} цэг ·

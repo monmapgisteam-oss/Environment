@@ -16,6 +16,7 @@ import { BasemapGallery } from "@/components/map/basemap-gallery";
 import { FOREST } from "@/components/wells/colors";
 import { MapTip, MapTipRow, useMapTip } from "@/components/map/hover-tip";
 import { FilterBar, FilterMenu, PickList } from "@/components/wells/filter-bar";
+import { Columns } from "@/components/ui/resizable-columns";
 import {
   defaultBasemap,
   type Basemap,
@@ -291,7 +292,7 @@ export function ForestFundDashboard() {
       </Card>
 
       {/* ============ ГОЛ СҮЛЖЭЭ ============ */}
-      <div className="grid min-h-0 flex-1 gap-2.5 xl:grid-cols-[1fr_268px]">
+      <Columns id="forest-fund" right={268} className="min-h-0 flex-1">
         {/* ---- ЗҮҮН: газрын зураг ---- */}
         <Card className="relative min-h-[300px] overflow-hidden">
           <div className="relative h-full w-full">
@@ -382,7 +383,7 @@ export function ForestFundDashboard() {
             grow
           />
         </div>
-      </div>
+      </Columns>
 
       {/*
         Гурван хүрээний олон өнцөгтийг хассаныг ИЛ бичнэ: эх сурвалжийн

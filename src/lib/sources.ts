@@ -13,6 +13,8 @@ import { FLOODPLAIN_SERVICE } from "@/lib/floodplains";
 import { FOREST_FUND_SERVICE } from "@/lib/forest-fund";
 import { FOREST_GOODS_SERVICE } from "@/lib/forest-goods";
 import { FOREST_TYPES_SERVICE } from "@/lib/forest-types";
+import { chemicalService } from "@/lib/chemicals";
+import { REPAIR_SERVICE } from "@/lib/repair-shops";
 import {
   PROTECTED_MAPPING_SERVICE,
   PROTECTED_OFFICIAL_SERVICE,
@@ -214,6 +216,24 @@ export const SOURCES: Source[] = [
     name: "Тусгай хамгаалалт — зураглал (талбай, шугам, цэг)",
     kind: "ArcGIS FeatureServer",
     url: PROTECTED_MAPPING_SERVICE,
+  },
+  {
+    slug: "hyanalt",
+    name: "Авто засварын үйлчилгээний цэг",
+    kind: "ArcGIS FeatureServer",
+    url: REPAIR_SERVICE,
+  },
+  {
+    slug: "hyanalt",
+    name: "Химийн хорт, аюултай бодисын агуулах 2023",
+    kind: "ArcGIS FeatureServer",
+    url: chemicalService(2023),
+  },
+  {
+    slug: "hyanalt",
+    name: "Химийн хорт, аюултай бодисын агуулах 2024",
+    kind: "ArcGIS FeatureServer",
+    url: chemicalService(2024),
   },
   {
     slug: "unelgee-uur-amisgal",

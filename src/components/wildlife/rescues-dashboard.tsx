@@ -23,6 +23,7 @@ import { BasemapGallery } from "@/components/map/basemap-gallery";
 import { MapTip, MapTipRow, useMapTip } from "@/components/map/hover-tip";
 import { FilterBar, FilterMenu, PickList } from "@/components/wells/filter-bar";
 import { defaultBasemap, type Basemap, type Extent } from "@/components/wells/map";
+import { Columns } from "@/components/ui/resizable-columns";
 import { fetchRescues, type Rescue } from "@/lib/rescues";
 import { speciesIconSvg } from "@/lib/species-icons";
 import { speciesPhoto } from "@/lib/species-photos";
@@ -435,7 +436,7 @@ export function RescuesDashboard() {
       </FilterBar>
 
       {/* ХОЁР багана — дуудлагын самбарын гурваас ялгарна */}
-      <div className="grid min-h-0 flex-1 gap-2.5 xl:grid-cols-[1fr_360px]">
+      <Columns id="rescues" right={360} className="min-h-0 flex-1">
         {/* ---- ЗҮҮН: тоо → зураг → хүснэгт ---- */}
         <div className="flex min-h-0 flex-col gap-2.5">
           {/*
@@ -447,8 +448,8 @@ export function RescuesDashboard() {
             хоёулаа зэрэгцэж байх нь ойлгомжтой. xl-ээс доош унавал
             мөр нь багана болно.
           */}
-          <div className="flex min-h-0 flex-1 flex-col gap-2.5 xl:flex-row">
-            <Card className="min-h-[130px] flex-1 xl:w-[300px] xl:flex-none 2xl:w-[340px]">
+          <Columns layout="flex" id="rescues-list" left={300} className="min-h-0 flex-1">
+            <Card className="min-h-[130px] flex-1 xl:w-(--col-l) xl:flex-none">
               <Head title="Зүйлээр">
                 <span className="num text-[11.5px] text-ink-3">{speciesData.length}</span>
               </Head>
@@ -620,7 +621,7 @@ export function RescuesDashboard() {
                 </div>
               </Card>
             </div>
-          </div>
+          </Columns>
 
           <p className="shrink-0 px-0.5 text-[10.5px] leading-none text-ink-3">
             Суурь зураг: Esri · Дата: ArcGIS FeatureServer
@@ -667,7 +668,7 @@ export function RescuesDashboard() {
             </div>
           </Card>
         </div>
-      </div>
+      </Columns>
     </div>
   );
 }

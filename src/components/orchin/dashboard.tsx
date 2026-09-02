@@ -22,6 +22,7 @@ import { BasemapGallery } from "@/components/map/basemap-gallery";
 import { MapTip, MapTipRow, useMapTip } from "@/components/map/hover-tip";
 import { OverlayControl } from "@/components/map/overlay-control";
 import { FilterBar, FilterMenu, PickList } from "@/components/wells/filter-bar";
+import { Columns } from "@/components/ui/resizable-columns";
 import {
   defaultBasemap,
   type Basemap,
@@ -568,7 +569,7 @@ export function OrchinDashboard() {
         "Сонгинохайрхан дүүрэг" гэх урт нэр тоотойгоо нэг мөрөнд багтах
         өргөн — 320px дээр таслагдаж байв.
       */}
-      <div className="grid min-h-0 flex-1 gap-2.5 xl:grid-cols-[1fr_380px]">
+      <Columns id="toilets" right={380} className="min-h-0 flex-1">
         {/* ---- ЗҮҮН: индикатор + нягтралын зураг ---- */}
         <div className="flex min-h-0 flex-col gap-2.5">
           <Card className="shrink-0">
@@ -724,7 +725,7 @@ export function OrchinDashboard() {
             </div>
           </Card>
         </div>
-      </div>
+      </Columns>
     </div>
   );
 }

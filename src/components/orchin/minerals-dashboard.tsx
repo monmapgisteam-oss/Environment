@@ -17,6 +17,7 @@ import { BasemapGallery } from "@/components/map/basemap-gallery";
 import { MapTip, MapTipRow, useMapTip } from "@/components/map/hover-tip";
 import { OverlayControl } from "@/components/map/overlay-control";
 import { FilterBar, FilterMenu, PickList } from "@/components/wells/filter-bar";
+import { Columns } from "@/components/ui/resizable-columns";
 import {
   defaultBasemap,
   type Basemap,
@@ -352,7 +353,7 @@ export function MineralsDashboard() {
       </FilterBar>
 
       {/* Дээд мөр: газрын зураг (уян) + баруун талын нарийн зурвас */}
-      <div className="flex min-h-0 flex-1 flex-col gap-2.5 xl:flex-row">
+      <Columns layout="flex" id="minerals" right={320} className="min-h-0 flex-1">
         <Card className="relative min-h-[260px] flex-1 overflow-hidden">
           <div className="relative h-full w-full">
             {/*
@@ -427,7 +428,7 @@ export function MineralsDashboard() {
           </div>
         </Card>
 
-        <div className="flex min-h-0 flex-col gap-2.5 xl:w-[320px] xl:shrink-0">
+        <div className="flex min-h-0 flex-col gap-2.5 xl:w-(--col-r) xl:shrink-0">
           <Card className="shrink-0">
             <div className="grid grid-cols-2 divide-x divide-y divide-line">
               <Stat icon={Pickaxe} label="Зөвшөөрөл" value={num(stats.n)} />
@@ -457,7 +458,7 @@ export function MineralsDashboard() {
             </div>
           </Card>
         </div>
-      </div>
+      </Columns>
 
       {/* Доод мөр: хугацааны хуваарь бүтэн өргөнөөр */}
       <Card className="shrink-0">

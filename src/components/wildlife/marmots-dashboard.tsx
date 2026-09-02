@@ -14,6 +14,7 @@ import { RowChart, type Datum } from "@/components/charts";
 import { BasemapGallery } from "@/components/map/basemap-gallery";
 import { FilterBar, FilterMenu, PickList } from "@/components/wells/filter-bar";
 import { defaultBasemap, type Basemap, type Extent } from "@/components/wells/map";
+import { Columns } from "@/components/ui/resizable-columns";
 import { Bounds } from "@/lib/extent";
 import {
   AGE_CLASSES,
@@ -369,7 +370,7 @@ export function MarmotsDashboard() {
       </FilterBar>
 
       {/* ---- ДЭЭД МӨР: газрын зураг + задаргаа ---- */}
-      <div className="flex min-h-0 flex-1 flex-col gap-2.5 xl:flex-row">
+      <Columns layout="flex" id="marmots" right={300} className="min-h-0 flex-1">
         <Card className="relative min-h-[240px] flex-1 overflow-hidden">
           <div className="relative h-full w-full">
             {/*
@@ -452,7 +453,7 @@ export function MarmotsDashboard() {
           </div>
         </Card>
 
-        <div className="flex min-h-0 flex-col gap-2.5 xl:w-[300px] xl:shrink-0">
+        <div className="flex min-h-0 flex-col gap-2.5 xl:w-(--col-r) xl:shrink-0">
           <Card className="shrink-0">
             <div className="grid grid-cols-2 divide-x divide-y divide-line">
               <Stat icon={ArrowRight} label="Шилжүүлэлт" value={num(stats.moves)} />
@@ -534,7 +535,7 @@ export function MarmotsDashboard() {
             </div>
           </Card>
         </div>
-      </div>
+      </Columns>
 
       {/* ---- ДООД МӨР: шилжүүлэлтийн хүснэгт, бүтэн өргөнөөр ---- */}
       <Card className="max-h-[38%] shrink-0 overflow-hidden">

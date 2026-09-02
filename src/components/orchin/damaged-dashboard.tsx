@@ -16,6 +16,7 @@ import { BasemapGallery } from "@/components/map/basemap-gallery";
 import { MapTip, MapTipRow, useMapTip } from "@/components/map/hover-tip";
 import { OverlayControl } from "@/components/map/overlay-control";
 import { FilterBar, FilterMenu, PickList } from "@/components/wells/filter-bar";
+import { Columns } from "@/components/ui/resizable-columns";
 import {
   defaultBasemap,
   type Basemap,
@@ -288,7 +289,7 @@ export function DamagedDashboard() {
         </FilterMenu>
       </FilterBar>
 
-      <div className="grid min-h-0 flex-1 gap-2.5 xl:grid-cols-[1fr_340px]">
+      <Columns id="damaged" right={340} className="min-h-0 flex-1">
         <div className="flex min-h-0 flex-col gap-2.5">
           {/*
             Нэг МӨР: зүүнд индикатор ба байршлын задаргаа, баруунд газрын
@@ -297,8 +298,8 @@ export function DamagedDashboard() {
             яг тэдгээр тооны дэлгэрэнгүй тул нэг баганад цуварна.
             xl-ээс доош унавал мөр нь багана болно.
           */}
-          <div className="flex min-h-0 flex-1 flex-col gap-2.5 xl:flex-row">
-            <div className="flex min-h-0 flex-col gap-2.5 xl:w-[300px] xl:shrink-0 2xl:w-[340px]">
+          <Columns layout="flex" id="damaged-list" left={300} className="min-h-0 flex-1">
+            <div className="flex min-h-0 flex-col gap-2.5 xl:w-(--col-l) xl:shrink-0">
               <Card className="shrink-0">
                 <div className="grid grid-cols-2 divide-x divide-y divide-line">
                   <Stat icon={Ruler} label="Нийт талбай, га" value={num(Math.round(stats.ha))} />
@@ -419,7 +420,7 @@ export function DamagedDashboard() {
                 ) : null}
               </div>
             </Card>
-        </div>
+          </Columns>
 
           <p className="shrink-0 px-0.5 text-[10.5px] leading-none text-ink-3">
             Суурь зураг: Esri · Дата: ArcGIS · {num(data.sites.length)} талбай ·
@@ -514,7 +515,7 @@ export function DamagedDashboard() {
             </div>
           </Card>
         </div>
-      </div>
+      </Columns>
     </div>
   );
 }

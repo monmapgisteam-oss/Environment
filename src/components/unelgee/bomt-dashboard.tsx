@@ -20,6 +20,7 @@ import { RowChart, type Datum } from "@/components/charts";
 import { BasemapGallery } from "@/components/map/basemap-gallery";
 import { MapTip, MapTipRow, useMapTip } from "@/components/map/hover-tip";
 import { FilterBar, FilterMenu, PickList } from "@/components/wells/filter-bar";
+import { Columns } from "@/components/ui/resizable-columns";
 import {
   defaultBasemap,
   type Basemap,
@@ -341,7 +342,7 @@ export function BomtDashboard() {
       </Card>
 
       {/* ============ ГОЛ СҮЛЖЭЭ ============ */}
-      <div className="grid min-h-0 flex-1 gap-2.5 xl:grid-cols-[262px_1fr_282px]">
+      <Columns id="bomt" left={262} right={282} className="min-h-0 flex-1">
         {/* ---- ЗҮҮН: юуны төлөө, хаана ---- */}
         <div className="flex min-h-0 flex-col gap-2.5">
           <Panel
@@ -521,7 +522,7 @@ export function BomtDashboard() {
             grow
           />
         </div>
-      </div>
+      </Columns>
 
       <p className="shrink-0 px-0.5 text-[10.5px] leading-none text-ink-3">
         Суурь зураг: Esri · Дата: нийслэлийн байгаль орчны GIS сервер ·{" "}
