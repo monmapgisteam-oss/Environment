@@ -316,9 +316,12 @@ function markerEl(
   mark: string,
   onClick: () => void,
   onHover?: (over: boolean) => void,
+  /** Тэмдэглэгээний өнгө (`--pin`). Өгөөгүй бол дата өнгө үлдэнэ */
+  tint?: string,
 ) {
   const el = document.createElement("button");
   el.type = "button";
+  if (tint) el.style.setProperty("--pin", tint);
 
   if (mark === "pulse") {
     // Цөм + давтан тэлэх цагираг (globals.css → `.pulse-pin`)
@@ -475,6 +478,7 @@ export function WellsMap({
   clusterLabel = "inside",
   marks,
   pulse = false,
+  pulseColor,
   onHover,
   firefly,
   highlight = null,
@@ -533,6 +537,15 @@ export function WellsMap({
    * объектод (жишээ нь нийтийн 17 бие засах газар) зориулав.
    */
   pulse?: boolean;
+  /**
+   * Дохиоллын тэмдэглэгээний өнгө — `oid` бүрд.
+   *
+   * `pulse` асаалттай үед л уншигдана. Өгөөгүй, эсвэл `undefined`
+   * буцаавал платформын дата өнгө үлдэнэ. Эрэмбэтэй хэмжүүрийг
+   * (эрсдэлийн зэрэг) цохилтоор дамжуулахад зориулав — цэгийн давхарга
+   * ба тэмдэглэгээ хоёр НЭГ өнгө барихад л зураг уншигдана.
+   */
+  pulseColor?: (oid: number) => string | undefined;
   /**
    * Хулгана тэмдэглэгээ дээр очиход — гарахад `null`.
    *
@@ -758,6 +771,12 @@ export function WellsMap({
   React.useEffect(() => {
     hoverCb.current = onHover;
   }, [onHover]);
+  /* Өнгө тодорхойлогчийг ref-д барина — эс тэгвээс дуудагч тал шинэ
+     функц дамжуулах бүрд бүх тэмдэглэгээ дахин үүснэ */
+  const pulseColorRef = React.useRef(pulseColor);
+  React.useEffect(() => {
+    pulseColorRef.current = pulseColor;
+  }, [pulseColor]);
 
   /* ---------------- Газрын зураг үүсгэх ---------------- */
   React.useEffect(() => {
@@ -2008,7 +2027,10 @@ export function WellsMap({
     }
 
     const sync = () => {
-      const want = new Map<number, { mark: string; pos: [number, number] }>();
+      const want = new Map<
+        number,
+        { mark: string; pos: [number, number]; tint?: string }
+      >();
 
       if (pulse) {
         /*
@@ -2018,7 +2040,11 @@ export function WellsMap({
         const { lon, lat, oid } = points;
         for (let k = 0; k < visible.length && want.size < MARKER_CAP; k++) {
           const i = visible[k];
-          want.set(oid[i], { mark: "pulse", pos: [lon[i], lat[i]] });
+          want.set(oid[i], {
+            mark: "pulse",
+            pos: [lon[i], lat[i]],
+            tint: pulseColorRef.current?.(oid[i]),
+          });
         }
       } else if (marks) {
         const bounds = live.getBounds();
@@ -2045,7 +2071,7 @@ export function WellsMap({
           markerRefs.delete(id);
         }
       }
-      for (const [id, { mark, pos }] of want) {
+      for (const [id, { mark, pos, tint }] of want) {
         if (markerRefs.has(id)) continue;
         const el = markerEl(
           mark,
@@ -2060,6 +2086,7 @@ export function WellsMap({
             ? (over) =>
                 hoverCb.current?.(over ? id : null, over ? live.project(pos) : undefined)
             : undefined,
+          tint,
         );
         markerRefs.set(id, new Marker({ element: el }).setLngLat(pos).addTo(live));
       }

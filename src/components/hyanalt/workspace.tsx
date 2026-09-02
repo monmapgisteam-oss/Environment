@@ -1,7 +1,8 @@
 "use client";
 
+import * as React from "react";
 import dynamic from "next/dynamic";
-import { FlaskConical, Loader2, Workflow, Wrench } from "lucide-react";
+import { FlaskConical, Loader2, Trash2, Workflow, Wrench } from "lucide-react";
 import { SourceTabs, useStoredTab } from "@/components/ui/source-tabs";
 
 /*
@@ -36,6 +37,11 @@ const InspectionScheme = dynamic(
   { ssr: false, loading: spinner },
 );
 
+const LandfillDashboard = dynamic(
+  () => import("@/components/hyanalt/landfill-dashboard").then((m) => m.LandfillDashboard),
+  { ssr: false, loading: spinner },
+);
+
 const TABS = [
   {
     /*
@@ -61,28 +67,100 @@ const TABS = [
     note: "2026 оны үйл ажиллагааны журам",
     icon: Workflow,
   },
+  {
+    /*
+      ⚠ САНУУЛГА: энэ табын дата нь ЗАГВАР — бүх мөр зохиомол жишээ.
+      Дэлгэц дээр тусгай анхааруулга ГАРГАХГҮЙ; дэлгэрэнгүйг
+      `@/lib/landfill`-ийн толгойн тайлбараас үзнэ.
+
+      `checkable`: тиймээс энэ таб нь өөрөө нээгдэхгүй — тэмдэглэсэн
+      үед л агуулга нь гарна.
+    */
+    id: "landfill",
+    label: "Устгал, ландфилл",
+    note: "10 байгууламж · 25 хогийн цэг",
+    icon: Trash2,
+    checkable: true,
+  },
 ] as const;
 
 type TabId = (typeof TABS)[number]["id"];
 
 const IDS = TABS.map((t) => t.id);
 
+/*
+  Тэмдэглэх шаардлагатай табууд.
+
+  `TABS` нь `as const` тул гишүүн бүрийн төрөл тусдаа нарийсдаг — зөвхөн
+  нэг гишүүнд байгаа шинжийг шууд уншиж болохгүй, эхлээд байгаа эсэхийг
+  шалгана.
+*/
+const CHECKABLE = new Set(
+  TABS.filter((t) => "checkable" in t && t.checkable).map((t) => t.id),
+);
+
 export function HyanaltWorkspace() {
   /* Сонголт хадгалагдана — хэрэглэгч ажлаа тасалдуулаад буцаж ирэхэд
      хамгийн сүүлд харж байсан самбар нээгдэнэ */
   const [tab, pick] = useStoredTab<TabId>("hyanalt.tab", IDS, "repair");
 
+  /*
+    Тэмдэглэгдсэн табууд. ХАДГАЛАХГҮЙ: загвар өгөгдөл нь дараагийн
+    удаа өөрөө нээгдэх ёсгүй, тухай бүрд зөвшөөрөл шинээр авна.
+  */
+  const [enabled, setEnabled] = React.useState<ReadonlySet<string>>(new Set());
+
+  const toggle = React.useCallback(
+    (id: TabId) => {
+      setEnabled((cur) => {
+        const next = new Set(cur);
+        if (next.delete(id)) {
+          /* Тайлахад тухайн таб нээлттэй байсан бол эхний таб руу буцна */
+          if (tab === id) pick(TABS[0].id);
+        } else {
+          next.add(id);
+          pick(id);
+        }
+        return next;
+      });
+    },
+    [tab, pick],
+  );
+
+  /* Тэмдэглэгдээгүй таб нь хадгалагдсан сонголт байсан ч нээгдэхгүй */
+  const open = CHECKABLE.has(tab) && !enabled.has(tab) ? null : tab;
+
   return (
     <div className="flex h-full min-h-0 flex-col gap-2.5">
-      <SourceTabs tabs={TABS} value={tab} onChange={pick} label="Сэдэв" />
+      <SourceTabs
+        tabs={TABS}
+        value={tab}
+        onChange={pick}
+        label="Сэдэв"
+        enabled={enabled}
+        onToggle={toggle}
+      />
 
       <div className="min-h-0 flex-1">
-        {tab === "repair" ? (
+        {open === "repair" ? (
           <RepairMap />
-        ) : tab === "scheme" ? (
+        ) : open === "landfill" ? (
+          <LandfillDashboard />
+        ) : open === "scheme" ? (
           <InspectionScheme />
-        ) : (
+        ) : open === "chemicals" ? (
           <ChemicalsDashboard />
+        ) : (
+          /*
+            Тэмдэглэгдээгүй таб. ХООСОН ТӨЛӨВ нь дизайны нэг хэсэг:
+            `.hatch` зураастай, тасархай хүрээтэй блок — "хоосон" биш
+            "зөвшөөрөл хүлээж буй".
+          */
+          <div className="hatch flex h-full items-center justify-center rounded-xs border border-dashed border-line-2">
+            <p className="px-6 text-center text-[12.5px] leading-snug text-ink-3">
+              Сэдвийн хайрцгийг тэмдэглэснээр агуулга нь нээгдэнэ
+            </p>
+          </div>
         )}
       </div>
     </div>

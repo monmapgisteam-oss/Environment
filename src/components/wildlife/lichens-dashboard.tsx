@@ -23,6 +23,7 @@ import { DATA_COLOR } from "@/components/wells/colors";
 import { FilterBar, FilterMenu, PickList } from "@/components/wells/filter-bar";
 import { defaultBasemap, type Basemap, type Extent } from "@/components/wells/map";
 import { Columns } from "@/components/ui/resizable-columns";
+import { MapPanel, useMapPanel } from "@/components/map/panel";
 import { Bounds } from "@/lib/extent";
 import {
   fetchLichenDetail,
@@ -70,6 +71,7 @@ export function LichensDashboard() {
   const [indicator, setIndicator] = React.useState<string | null>(null);
   const [district, setDistrict] = React.useState<string | null>(null);
   const [species, setSpecies] = React.useState<string | null>(null);
+  const panel = useMapPanel("left");
   const [query, setQuery] = React.useState("");
   const [hover, setHover] = React.useState<number | null>(null);
   /** Товшсон бүртгэлийн цэгийн код — тухайн цэгийн зүйлийн жагсаалт руу */
@@ -627,17 +629,12 @@ export function LichensDashboard() {
                 тул `.elevated` сүүдэр зөвшөөрөгдөнө.
               */}
               {species ? (
-                <div className="elevated absolute right-2.5 bottom-2.5 z-10 max-h-[70%] w-[300px] overflow-hidden rounded-xs border border-line bg-paper/95 backdrop-blur-md">
-                  <div className="flex items-center justify-between border-b border-line px-2.5 py-1.5">
-                    <span className="eyebrow truncate">Зүйлийн тодорхойлолт</span>
-                    <button
-                      onClick={() => setSpecies(null)}
-                      className="shrink-0 text-ink-3 transition-colors hover:text-ink"
-                      aria-label="Хаах"
-                    >
-                      <X size={12} />
-                    </button>
-                  </div>
+                <MapPanel
+                  state={panel}
+                  title="Зүйлийн тодорхойлолт"
+                  onClose={() => setSpecies(null)}
+                  className="elevated right-2.5 bottom-2.5 max-h-[70%] w-[300px]"
+                >
                   <div className="max-h-[calc(70vh-40px)] overflow-y-auto p-2.5">
                     {detailLoading ? (
                       <div className="flex items-center gap-2 py-2 text-ink-3">
@@ -729,7 +726,7 @@ export function LichensDashboard() {
                       <p className="py-2 text-[12px] text-ink-3">Тодорхойлолт олдсонгүй</p>
                     )}
                   </div>
-                </div>
+                </MapPanel>
               ) : null}
             </div>
           </Card>

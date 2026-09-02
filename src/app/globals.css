@@ -457,6 +457,15 @@ body {
    нь анхаарал татах ЦОРЫН ГАНЦ зорилготой тул удаан, намуухан: 2.4 секунд.
    `prefers-reduced-motion` үед доорх ерөнхий дүрэм үүнийг зогсооно.
    -------------------------------------------------------------------------- */
+/*
+  Цөм ба цагирагийн өнгийг тэмдэглэгээ ӨӨРӨӨ зааж болно (`--pin`).
+  Өгөөгүй бол дата өнгө — өмнөх бүх зураг хэвээр ажиллана.
+
+  Хэрэглээ: эрэмбэтэй хэмжүүрийг (эрсдэлийн зэрэг) цохилтын өнгөөр
+  дамжуулах. Газрын зураг тэмдэглэгээ үүсгэх үед элемент дээр нь
+  утгыг бичнэ — MapLibre нь CSS хувьсагч уншдаггүй ч DOM тэмдэглэгээ
+  бол ердийн элемент тул хувьсагч дамжина.
+*/
 .pulse-pin {
   position: relative;
   width: 8px;
@@ -464,21 +473,31 @@ body {
   border-radius: 999px;
   /* Хүрээгүй: цөм нь суурь зурагнаас гэрэлтэлтээрээ сална, зураасаар биш */
   border: none;
-  background: var(--data);
+  background: var(--pin, var(--data));
   cursor: pointer;
-  box-shadow: 0 0 10px 1px color-mix(in oklab, var(--data) 90%, transparent);
+  box-shadow: 0 0 10px 1px color-mix(in oklab, var(--pin, var(--data)) 90%, transparent);
+}
+/*
+  Цохилтын үргэлжлэх хугацаа. Радарын сэлгэлт мэт УДААН байх ёстой:
+  хурдан анивчилт нь анхаарал татахаас илүү нүд ядраадаг бөгөөд газрын
+  зураг дээр олон цэг зэрэг цохилоход дэлгэц бүхэлдээ чичирдэг.
+
+  Хувьсагчаар өгсөн тул тухайн самбар өөрийн хэмнэлээ тохируулж чадна;
+  хоёр дахь цагирагийн саатал нь үргэлж ХАГАС — тасралтгүй мэдрэгдэнэ.
+*/
+.pulse-pin {
+  --pulse-dur: 4.5s;
 }
 .pulse-pin .ring {
   position: absolute;
   inset: -2px;
   border-radius: 999px;
-  border: 2px solid var(--data);
-  animation: pulse-ring 2.4s cubic-bezier(0.2, 0.6, 0.4, 1) infinite;
+  border: 2px solid var(--pin, var(--data));
+  animation: pulse-ring var(--pulse-dur) cubic-bezier(0.2, 0.6, 0.4, 1) infinite;
   pointer-events: none;
 }
-/* Хоёр дахь цагираг нь хагас хугацааны зөрүүтэй — тасралтгүй мэдрэгдэнэ */
 .pulse-pin .ring.d {
-  animation-delay: 1.2s;
+  animation-delay: calc(var(--pulse-dur) / 2);
 }
 .pulse-pin:hover {
   background: var(--ink);

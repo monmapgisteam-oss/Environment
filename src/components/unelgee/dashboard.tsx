@@ -13,13 +13,13 @@ import {
   Ruler,
   ScrollText,
   Users,
-  X,
 } from "lucide-react";
 import { AreaChart, PieChart, RowChart, type Datum } from "@/components/charts";
 import { BasemapGallery } from "@/components/map/basemap-gallery";
 import { MapTip, MapTipRow, useMapTip } from "@/components/map/hover-tip";
 import { FilterBar, FilterMenu, PickList } from "@/components/wells/filter-bar";
 import { Columns } from "@/components/ui/resizable-columns";
+import { MapPanel, useMapPanel } from "@/components/map/panel";
 import {
   defaultBasemap,
   type Basemap,
@@ -95,6 +95,7 @@ export function UnelgeeDashboard() {
   const [picked, setPicked] = React.useState<number | null>(null);
   /** Хулгана дагасан хөвөгч тайлбар — байрлалыг өөрөө удирдана */
   const tip = useMapTip();
+  const panel = useMapPanel("right");
 
   const [basemap, setBasemap] = React.useState<Basemap>(() => defaultBasemap());
 
@@ -460,17 +461,12 @@ export function UnelgeeDashboard() {
               ) : null}
 
               {selected ? (
-                <div className="absolute top-2.5 left-2.5 z-10 flex max-h-[calc(100%-1.25rem)] w-[268px] flex-col rounded-xs border border-line bg-paper/95 backdrop-blur-md">
-                  <div className="flex shrink-0 items-center justify-between gap-2 border-b border-line px-2.5 py-1.5">
-                    <span className="eyebrow min-w-0 flex-1 truncate">Үнэлгээний хуудас</span>
-                    <button
-                      onClick={() => setPicked(null)}
-                      className="shrink-0 text-ink-3 transition-colors hover:text-ink"
-                      aria-label="Хаах"
-                    >
-                      <X size={13} />
-                    </button>
-                  </div>
+                <MapPanel
+                  state={panel}
+                  title="Үнэлгээний хуудас"
+                  onClose={() => setPicked(null)}
+                  className="top-2.5 left-2.5 max-h-[calc(100%-1.25rem)] w-[268px]"
+                >
                   <div className="min-h-0 flex-1 overflow-y-auto px-2.5 py-2">
                     <div className="text-[12.5px] leading-snug font-medium text-ink">
                       {selected.applicant}
@@ -518,7 +514,7 @@ export function UnelgeeDashboard() {
                       />
                     </dl>
                   </div>
-                </div>
+                </MapPanel>
               ) : null}
             </div>
           </Card>

@@ -13,7 +13,6 @@ import {
   Map as MapIcon,
   MapPin,
   MousePointerClick,
-  X,
   type LucideIcon,
 } from "lucide-react";
 import { AreaChart, RowChart, YearRange, type Datum } from "@/components/charts";
@@ -22,6 +21,7 @@ import { MapTip, MapTipRow, useMapTip } from "@/components/map/hover-tip";
 import { FilterBar, FilterMenu, PickList } from "@/components/wells/filter-bar";
 import { defaultBasemap, type Basemap, type Extent } from "@/components/wells/map";
 import { Columns } from "@/components/ui/resizable-columns";
+import { MapPanel, useMapPanel } from "@/components/map/panel";
 import { getWell, type WellsPayload, type WellDetail } from "@/lib/wells";
 import { asset } from "@/lib/base-path";
 import { cn, num } from "@/lib/utils";
@@ -49,6 +49,7 @@ export function WellsDashboard() {
   const [month, setMonth] = React.useState<string | null>(null);
   /** Хулгана дагасан хөвөгч тайлбар — байрлалыг өөрөө удирдана */
   const tip = useMapTip();
+  const panel = useMapPanel("left");
   const [detail, setDetail] = React.useState<WellDetail | null>(null);
   const [detailLoading, setDetailLoading] = React.useState(false);
   const [basemap, setBasemap] = React.useState<Basemap>(() => defaultBasemap());
@@ -645,17 +646,12 @@ export function WellsDashboard() {
               ) : null}
 
               {(detail || detailLoading) && (
-                <div className="absolute right-2.5 bottom-8 z-10 w-[262px] rounded-xs border border-line bg-paper/92 backdrop-blur-md">
-                  <div className="flex items-center justify-between border-b border-line px-2.5 py-1.5">
-                    <span className="eyebrow">Худгийн бичилт</span>
-                    <button
-                      onClick={() => setDetail(null)}
-                      className="text-ink-3 transition-colors hover:text-ink"
-                      aria-label="Хаах"
-                    >
-                      <X size={12} />
-                    </button>
-                  </div>
+                <MapPanel
+                  state={panel}
+                  title="Худгийн бичилт"
+                  onClose={() => setDetail(null)}
+                  className="right-2.5 bottom-8 w-[262px]"
+                >
                   <div className="p-2.5">
                     {detailLoading ? (
                       <div className="flex items-center gap-2 py-2 text-ink-3">
@@ -689,7 +685,7 @@ export function WellsDashboard() {
                       </dl>
                     ) : null}
                   </div>
-                </div>
+                </MapPanel>
               )}
             </div>
           </Box>

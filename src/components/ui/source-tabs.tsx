@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import type { LucideIcon } from "lucide-react";
+import { Check, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /**
@@ -82,6 +82,14 @@ export type SourceTab = {
   label: string;
   note: string;
   icon: LucideIcon;
+  /**
+   * Таб нь ТЭМДЭГЛЭХ шаардлагатай эсэх.
+   *
+   * Загвар өгөгдөлтэй сэдэв нь өөрөө нээгдэх ёсгүй — хэрэглэгч түүнийг
+   * харахаа зөвшөөрнө. Ийм таб дээр иконы оронд хайрцаг гарч, товшилт
+   * нь сэлгэнэ: тэмдэглэхэд нээгдэж, авахад хаагдана.
+   */
+  checkable?: boolean;
 };
 
 export function SourceTabs<T extends string>({
@@ -89,11 +97,17 @@ export function SourceTabs<T extends string>({
   value,
   onChange,
   label = "Эх сурвалж",
+  enabled,
+  onToggle,
 }: {
   tabs: readonly (SourceTab & { id: T })[];
   value: T;
   onChange: (id: T) => void;
   label?: string;
+  /** Тэмдэглэгдсэн табуудын олонлог. `checkable` таб бүрд шаардлагатай */
+  enabled?: ReadonlySet<string>;
+  /** `checkable` таб дээр товшиход — тэмдэглэгээг сэлгэнэ */
+  onToggle?: (id: T) => void;
 }) {
   return (
     <div
@@ -108,23 +122,41 @@ export function SourceTabs<T extends string>({
       className="flex shrink-0 gap-1.5 overflow-x-auto rounded-xs border border-line bg-paper-2 p-1"
     >
       {tabs.map((t) => {
-        const on = value === t.id;
+        const checkable = Boolean(t.checkable);
+        const ticked = checkable ? Boolean(enabled?.has(t.id)) : true;
+        /* Тэмдэглэгдээгүй таб нь сонгогдсон ч тодролгүй — агуулга нь
+           нээгдээгүй байгааг харагдац өөрөө хэлнэ */
+        const on = value === t.id && ticked;
         return (
           <button
             key={t.id}
-            role="tab"
-            aria-selected={on}
-            onClick={() => onChange(t.id)}
+            role={checkable ? "checkbox" : "tab"}
+            {...(checkable ? { "aria-checked": ticked } : { "aria-selected": on })}
+            onClick={() => (checkable ? onToggle?.(t.id) : onChange(t.id))}
             className={cn(
               "flex min-w-[128px] flex-1 items-center gap-2 rounded-xs border px-2.5 py-1.5 text-left transition-colors",
               on ? "border-data/45 bg-data/10" : "border-transparent hover:bg-paper-hi",
             )}
           >
-            <t.icon
-              size={14}
-              strokeWidth={1.75}
-              className={cn("shrink-0", on ? "text-data" : "text-ink-3")}
-            />
+            {checkable ? (
+              <span
+                aria-hidden
+                className={cn(
+                  "flex size-[14px] shrink-0 items-center justify-center rounded-[2px] border transition-colors",
+                  ticked ? "border-data bg-data" : "border-line-2",
+                )}
+              >
+                {ticked ? (
+                  <Check size={10} strokeWidth={3} className="text-paper" />
+                ) : null}
+              </span>
+            ) : (
+              <t.icon
+                size={14}
+                strokeWidth={1.75}
+                className={cn("shrink-0", on ? "text-data" : "text-ink-3")}
+              />
+            )}
             <span className="min-w-0">
               <span
                 className={cn(

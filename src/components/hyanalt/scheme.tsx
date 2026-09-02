@@ -1,7 +1,8 @@
 "use client";
 
 import * as React from "react";
-import { Archive, ChevronRight, Scale, ShieldCheck } from "lucide-react";
+import { Archive, CalendarClock, FileOutput, Scale, ShieldCheck } from "lucide-react";
+import { Columns } from "@/components/ui/resizable-columns";
 import {
   BRANCHES,
   DECISION,
@@ -14,434 +15,326 @@ import {
   type Activity,
   type InspectionTypeId,
 } from "@/lib/inspection-scheme";
-import { cn } from "@/lib/utils";
+import { cn, num } from "@/lib/utils";
 
 /* --------------------------------------------------------------------------
    Хяналт шалгалтын үйл ажиллагааны схем
 
-   ЭНЭ НЬ САМБАР БИШ. Платформын бусад харагдац бол бүртгэлийг тоолж,
-   зурагт буулгадаг; энэ нь хэлтсийн ажлын урсгалыг тайлбарладаг ЖУРАМ.
-   Тиймээс газрын зураг, диаграм, үзүүлэлт, шүүлтүүрийн мөр байхгүй.
+   ЭНЭ НЬ САМБАР БИШ — бүртгэл тоолохгүй, зурагт буулгахгүй. Хэлтсийн
+   АЖЛЫН УРСГАЛ.
 
-   БҮТЭЦ НЬ ХҮСНЭГТ, ЗУРАГ БИШ. Эх сурвалж нь зурагдсан схем боловч
-   түүнийг хуулбарлавал өнгөт блок, сум, бөмбөлөг бүхий ЗУРАГТ ХУУДАС
-   болно — платформын "хээрийн хэмжих хэрэгсэл" хэлнээс сална. Журам нь
-   мөн чанараараа дараалсан мөрүүд бөгөөд мөр бүр нь ажиллагаа, гарц,
-   хугацаатай: энэ бол хүснэгт. Дараалал нь сумаар биш дугаар ба мөрийн
-   эрэмбээр, ялгаа нь дүүргэлтээр биш 1px зураасаар илэрнэ.
+   Тиймээс урсгал шигээ харагдана: босоо ГОЛ ШУГАМ дээр үе шатууд
+   зангилаа болж суух ба шугам нь дараалал, чиглэлийг өөрөө хэлнэ.
+   Зөрчил илэрсэн эсэхээр шугам ХОЁР САЛАА болж, дараа нь эцсийн үе
+   шатанд нийлнэ.
 
-   ӨНГӨ нь зөвхөн ЗУРААС, ТЭМДЭГ дээр: үе шатын дугаар, мөрийн зүүн
-   ирмэгийн 2px зураас, салаа бүрийн цэг. Дэвсгэр дүүргэлт БАЙХГҮЙ.
+   ГУРВАН ХУВИЛБАР ТУРШСАН, эхний хоёр нь бүтсэнгүй:
 
-   ХОЁР ТҮВШИНД ХУРААНА. Журам бүтнээрээ нэг дэлгэцэнд багтахгүй тул
-   хэрэглэгч хэрэгтэй хэсгээ л нээж ажиллана:
-     · хэсэг (төрөл / үе шат / лавлах),
-     · үе шат тус бүрийн ажиллагааны жагсаалт.
-   Хураасан үе шатны ГАРЦ, ХУГАЦАА нь ХАРАГДСААР үлдэнэ — тэдгээр нь
-   өөрсдөө хураангуй бөгөөд урсгалыг гүйлгэн харах гол мэдээлэл.
+     1. Эх сурвалжийн инфографикийг хуулбарласан — өнгөт блок, сум,
+        бөмбөлөг. Платформын "хээрийн хэмжих хэрэгсэл" хэлнээс салсан
+        зурагт хуудас болов.
+     2. Бүх үе шатыг нэг хүснэгтэд дэлгэсэн — нүд бүрд хоёроос зургаан
+        ажиллагаа, тус бүр баримт бичгийн тайлбартай тул бичвэрийн хана
+        болов. Хураах товч ч түүнийг шийдээгүй.
 
-   ТӨРӨЛ СОНГОХ нь шүүлтүүр биш ХАРАГДАЦ: бэлтгэлийн үе шат төрлөөсөө
-   хамаарч өөр байдаг тул сонгосон төрөлд хамаарахгүй ажиллагаа бүдгэрч,
-   ХЭВЭЭР харагдана. Нуувал урсгал таслагдаж, "энэ алхам байхгүй" гэсэн
-   ойлголт төрнө.
+   Одоо: урсгалын хэлбэр нь ХАДГАЛАГДСАН ч дүрслэл нь платформынх —
+   өнгөт дүүргэлт, сум БАЙХГҮЙ, зөвхөн 1px зураас, зангилааны цэг,
+   дугаар. Гүнийг сүүдрээр биш давхаргаар (`paper` → `paper-2`).
    -------------------------------------------------------------------------- */
 
-const SECTIONS = ["types", "stages", "refs"] as const;
-type SectionId = (typeof SECTIONS)[number];
-
-/** Хураах боломжтой үе шатын мөрүүд — шийдвэрийн цэг ажиллагаагүй тул орохгүй */
-const ROW_IDS = [...STAGES.map((s) => s.no), ...BRANCHES.map((b) => b.answer), FINAL_STAGE.no];
-
 export function InspectionScheme() {
+  /*
+    Хяналт шалгалтын төрөл. Бэлтгэлийн үе шат ГАНЦААРАА төрлөөсөө
+    хамаарч өөр байдаг тул сонголт нь зөвхөн тэнд нөлөөлнө — сонгосон
+    төрөлд хамаарахгүй ажиллагаа бүдгэрч, ХЭВЭЭР харагдана. Нуувал
+    урсгал таслагдаж, "энэ алхам байхгүй" гэсэн ойлголт төрнө.
+  */
   const [type, setType] = React.useState<InspectionTypeId | null>(null);
 
-  /*
-    Нээлттэй байгаа зүйлсийг барина (хаалттайг биш): шинэ үе шат нэмэгдвэл
-    жагсаалтад нь ороогүй байсан ч анхдагчаараа нээлттэй байх ёстой.
-  */
-  const [open, setOpen] = React.useState<Set<string>>(
-    () => new Set<string>([...SECTIONS, ...ROW_IDS]),
-  );
-
-  const toggle = React.useCallback((id: string) => {
-    setOpen((prev) => {
-      const next = new Set(prev);
-      if (!next.delete(id)) next.add(id);
-      return next;
-    });
-  }, []);
-
-  const allOpen = open.size > 0;
-  const toggleAll = React.useCallback(() => {
-    setOpen((prev) =>
-      prev.size > 0 ? new Set<string>() : new Set<string>([...SECTIONS, ...ROW_IDS]),
-    );
-  }, []);
-
-  const shows = (id: string) => open.has(id);
-
   return (
-    <div className="h-full min-h-0 overflow-y-auto rounded-xs border border-line bg-paper-2">
-      {/* ---- Толгой ---- */}
-      <header className="border-b border-line px-4 py-3">
-        <div className="flex items-baseline justify-between gap-4">
-          <div className="min-w-0">
-            <div className="eyebrow">Хяналтын хэлтэс</div>
-            <h1 className="display mt-1 text-[15px] leading-none tracking-[0.04em] uppercase">
-              Хяналт шалгалтын үйл ажиллагааны схем
-            </h1>
+    <Columns id="scheme" right={248} className="h-full min-h-0">
+      {/* ---- ЗҮҮН: урсгал ---- */}
+      <div className="flex min-h-0 min-w-0 flex-col rounded-xs border border-line bg-paper-2">
+        <header className="shrink-0 border-b border-line px-4 py-2.5">
+          <div className="flex items-baseline justify-between gap-4">
+            <div className="min-w-0">
+              <div className="eyebrow">Хяналтын хэлтэс</div>
+              <h1 className="display mt-1 truncate text-[14px] leading-none tracking-[0.04em] uppercase">
+                Хяналт шалгалтын үйл ажиллагааны схем
+              </h1>
+            </div>
+            <span className="num shrink-0 text-[12px] text-ink-3">2026 он</span>
           </div>
-          <div className="flex shrink-0 items-baseline gap-3">
-            <button
-              onClick={toggleAll}
-              className="text-[11px] text-ink-3 transition-colors hover:text-ink"
-            >
-              {allOpen ? "Бүгдийг хураах" : "Бүгдийг дэлгэх"}
-            </button>
-            <span className="num text-[12px] text-ink-3">2026 он</span>
-          </div>
-        </div>
-        <div className="ruler mt-2.5" aria-hidden />
-      </header>
+        </header>
 
-      {/* ---- Хяналт шалгалтын төрөл ---- */}
-      <Section
-        id="types"
-        title="Хяналт шалгалтын төрөл"
-        note={`${INSPECTION_TYPES.length} төрөл`}
-        open={shows("types")}
-        onToggle={toggle}
-      >
-        <div className="grid divide-y divide-line md:grid-cols-3 md:divide-x md:divide-y-0">
-          {INSPECTION_TYPES.map((t) => {
-            const on = type === t.id;
-            return (
-              <button
-                key={t.id}
-                onClick={() => setType(on ? null : t.id)}
-                className={cn(
-                  "relative px-3 py-2.5 text-left transition-colors",
-                  on ? "bg-paper-hi" : "hover:bg-paper-hi",
-                )}
-              >
-                {/* Сонголтыг дүүргэлтээр биш ирмэгийн зураасаар */}
-                {on ? (
-                  <span
-                    aria-hidden
-                    className="absolute inset-y-0 left-0 w-[2px] bg-(--tone)"
-                  />
-                ) : null}
-                <div
-                  className={cn(
-                    "text-[12px] leading-none",
-                    on ? "font-medium text-(--tone)" : "text-ink",
-                  )}
-                >
-                  {t.label}
-                </div>
-                <ul className="mt-1.5 space-y-[3px]">
-                  {t.basis.map((b) => (
-                    <li key={b} className="text-[10.5px] leading-snug text-ink-3">
-                      {b}
-                    </li>
-                  ))}
-                </ul>
-              </button>
-            );
-          })}
-        </div>
-      </Section>
-
-      {/* ---- Үндсэн үе шат ---- */}
-      <Section
-        id="stages"
-        title="Хяналт шалгалтын үндсэн үе шат"
-        note={`${STAGES.length + 1} үе шат`}
-        open={shows("stages")}
-        onToggle={toggle}
-      >
-        {/* Нарийн дэлгэц дээр хүснэгт дотроо хөндлөн гүйнэ */}
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[720px] border-collapse">
-            <thead>
-              <tr className="border-b border-line bg-paper-3">
-                <Th className="w-[188px]">Үе шат</Th>
-                <Th>Гол ажиллагаа</Th>
-                <Th className="w-[204px]">Гарц</Th>
-                <Th className="w-[176px]">Хугацаа</Th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-line">
-              {STAGES.map((s) => (
-                <StageRow
-                  key={s.no}
-                  id={s.no}
-                  open={shows(s.no)}
-                  onToggle={toggle}
-                  lead={
-                    <>
-                      <span className="num text-[13px] leading-none font-medium text-(--tone)">
-                        {s.no}
-                      </span>
-                      <span className="text-[11.5px] leading-snug text-ink">
-                        {s.title}
-                      </span>
-                    </>
-                  }
-                  activities={s.activities}
-                  type={type}
-                  output={s.output}
-                  period={s.period}
-                />
-              ))}
-
-              {/* Шийдвэрийн цэг — тусдаа блок биш, хүснэгтийн нэг мөр */}
-              <tr>
-                <td colSpan={4} className="border-y border-line-2 px-3 py-1.5">
-                  <span className="eyebrow text-(--tone)">{DECISION}</span>
-                </td>
-              </tr>
-
-              {BRANCHES.map((b) => {
-                const risk = b.answer === "Тийм";
+        {/* Төрөл — урсгалын ЭХЛЭЛ. Аль үндэслэлээр шалгалт эхэлж байгаа
+            нь бэлтгэлийн үе шатны агуулгыг тодорхойлно */}
+        <div className="shrink-0 border-b border-line bg-paper-3 px-4 py-2">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+            <span className="eyebrow shrink-0">Хяналт шалгалтын төрөл</span>
+            <div className="flex flex-wrap items-center gap-1">
+              {INSPECTION_TYPES.map((t) => {
+                const on = type === t.id;
                 return (
-                  <StageRow
-                    key={b.answer}
-                    id={b.answer}
-                    open={shows(b.answer)}
-                    onToggle={toggle}
-                    tone={risk ? "var(--clay)" : "var(--moss)"}
-                    lead={
-                      <>
-                        <span
-                          aria-hidden
-                          className="mt-[4px] size-[5px] shrink-0 rounded-full bg-(--branch)"
-                        />
-                        <span className="text-[11.5px] leading-snug text-(--branch)">
-                          {b.answer}
-                        </span>
-                        <span className="text-[11.5px] leading-snug text-ink">
-                          {b.title}
-                        </span>
-                      </>
-                    }
-                    activities={b.steps}
-                    type={null}
-                    output="—"
-                    period={b.period}
-                  />
+                  <button
+                    key={t.id}
+                    onClick={() => setType(on ? null : t.id)}
+                    title={t.basis.join(" · ")}
+                    className={cn(
+                      "rounded-xs border px-2 py-1 text-[11px] leading-none transition-colors",
+                      on
+                        ? "border-(--tone)/45 bg-(--tone)/10 font-medium text-(--tone)"
+                        : "border-line text-ink-2 hover:border-line-2 hover:text-ink",
+                    )}
+                  >
+                    {t.label}
+                  </button>
                 );
               })}
+            </div>
+            {type ? (
+              <span className="text-[10.5px] leading-snug text-ink-3">
+                {INSPECTION_TYPES.find((t) => t.id === type)?.basis.join(" · ")}
+              </span>
+            ) : null}
+          </div>
+        </div>
 
-              <StageRow
-                id={FINAL_STAGE.no}
-                open={shows(FINAL_STAGE.no)}
-                onToggle={toggle}
-                lead={
-                  <>
-                    <span className="num text-[13px] leading-none font-medium text-(--tone)">
-                      {FINAL_STAGE.no}
-                    </span>
-                    <span className="text-[11.5px] leading-snug text-ink">
-                      {FINAL_STAGE.title}
-                    </span>
-                  </>
-                }
+        {/* ---- Урсгал ---- */}
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+          {/*
+            ГОЛ ШУГАМ. Зангилаанууд түүн дээр суух тул зүүн доголыг
+            шугамын зузаанаас тооцно. Сум ЗУРАХГҮЙ — тасралтгүй шугам
+            өөрөө дарааллыг хэлнэ.
+          */}
+          <div className="relative border-l border-line-2 pl-5">
+            {STAGES.map((s) => (
+              <Node key={s.no} mark={s.no}>
+                <StageCard
+                  title={s.title}
+                  output={s.output}
+                  period={s.period}
+                  activities={s.activities}
+                  type={type}
+                />
+              </Node>
+            ))}
+
+            {/* Шийдвэрийн зангилаа — дугаар биш ромб */}
+            <Node diamond>
+              <div className="flex items-center gap-2 py-1">
+                <span className="display text-[12.5px] leading-none tracking-[0.05em] text-(--tone) uppercase">
+                  {DECISION}
+                </span>
+              </div>
+            </Node>
+
+            {/*
+              ХОЁР САЛАА ЗЭРЭГЦЭЖ. Дараалсан жагсаалт болговол нэг нь
+              нөгөөгийнхөө дараа явдаг мэт уншигдана — эдгээр нь эсрэг
+              хоёр зам.
+            */}
+            <div className="relative -ml-5 mb-3 grid gap-2.5 border-t border-line pt-3 pl-5 md:grid-cols-2">
+              {BRANCHES.map((b) => (
+                <BranchCard key={b.answer} branch={b} />
+              ))}
+            </div>
+
+            <Node mark={FINAL_STAGE.no}>
+              <StageCard
+                title={FINAL_STAGE.title}
+                output={FINAL_STAGE.doc}
                 activities={FINAL_STAGE.steps.map((text) => ({ text }))}
                 type={null}
-                output={FINAL_STAGE.doc}
-                period="—"
               />
-            </tbody>
-          </table>
+            </Node>
+          </div>
         </div>
-      </Section>
+      </div>
 
-      {/* ---- Лавлах жагсаалтууд ---- */}
-      <Section
-        id="refs"
-        title="Лавлах"
-        note={`${DOCUMENTS.length + LEGAL_BASIS.length + RECORD_KEEPING.length} бичлэг`}
-        open={shows("refs")}
-        onToggle={toggle}
+      {/* ---- БАРУУН: лавлах ---- */}
+      <div className="flex min-h-0 min-w-0 flex-col gap-2.5 overflow-y-auto">
+        <RefList icon={ShieldCheck} title="Ашиглах баримт бичиг" numbered>
+          {DOCUMENTS}
+        </RefList>
+        <RefList icon={Scale} title="Үндэслэл хууль, журам">
+          {LEGAL_BASIS}
+        </RefList>
+        <RefList icon={Archive} title="Хадгалах, бүртгэл">
+          {RECORD_KEEPING}
+        </RefList>
+      </div>
+    </Columns>
+  );
+}
+
+/* --------------------------------------------------------------------------
+   ЗАНГИЛАА — гол шугам дээрх нэг цэг
+
+   Тэмдэг нь шугамыг ТАСАЛЖ суух ёстой: дэвсгэрийн өнгөтэй цагираг
+   шугамыг халхлаад, дээр нь дугаар эсвэл ромб гарна. Ингэснээр шугам
+   зангилаа хоёр нэг эд болж, сум зурах шаардлагагүй.
+   -------------------------------------------------------------------------- */
+
+function Node({
+  mark,
+  diamond,
+  children,
+}: {
+  mark?: string;
+  diamond?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="relative mb-3 last:mb-0">
+      <span
+        aria-hidden
+        className={cn(
+          "absolute top-[7px] flex items-center justify-center bg-paper-2",
+          diamond
+            ? "-left-[calc(1.25rem+5px)] size-[10px] rotate-45 border border-(--tone)"
+            : "-left-[calc(1.25rem+11px)] size-[22px] rounded-full",
+        )}
       >
-        <div className="grid divide-y divide-line md:grid-cols-3 md:divide-x md:divide-y-0">
-          <RefList icon={ShieldCheck} title="Ашиглах баримт бичиг" numbered>
-            {DOCUMENTS}
-          </RefList>
-          <RefList icon={Scale} title="Үндэслэл хууль, журам">
-            {LEGAL_BASIS}
-          </RefList>
-          <RefList icon={Archive} title="Хадгалах, бүртгэл">
-            {RECORD_KEEPING}
-          </RefList>
-        </div>
-      </Section>
+        {diamond ? null : (
+          <span className="num text-[10.5px] leading-none font-medium text-(--tone)">
+            {mark}
+          </span>
+        )}
+      </span>
+      {children}
     </div>
   );
 }
 
 /* -------------------------------------------------------------------------- */
 
-/**
- * Хураагддаг хэсэг.
- *
- * Толгой нь дүүргэлтгүй, зурвасын өнгөөр л ялгарна. Баруун талд агуулгын
- * хэмжээ — хураасан үед доор нь юу байгааг мэдэх цорын ганц заалт.
- */
-function Section({
-  id,
+function StageCard({
   title,
-  note,
-  open,
-  onToggle,
-  children,
-}: {
-  id: SectionId;
-  title: string;
-  note: string;
-  open: boolean;
-  onToggle: (id: string) => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <section className="border-b border-line">
-      <button
-        onClick={() => onToggle(id)}
-        aria-expanded={open}
-        className="flex w-full items-center gap-1.5 bg-paper-3 px-3 py-1.5 text-left transition-colors hover:bg-paper-hi"
-      >
-        <ChevronRight
-          size={11}
-          className={cn(
-            "shrink-0 text-ink-3 transition-transform",
-            open && "rotate-90",
-          )}
-        />
-        <span className="eyebrow flex-1">{title}</span>
-        <span className="num text-[10px] text-ink-3">{note}</span>
-      </button>
-      {open ? children : null}
-    </section>
-  );
-}
-
-/**
- * Үе шатын мөр.
- *
- * Хураасан үед ГАРЦ, ХУГАЦАА нь харагдсаар үлдэж, зөвхөн ажиллагааны
- * жагсаалт нь ажиллагааны ТООГООР солигдоно — урсгалын хураангуйг
- * алдалгүйгээр өндрийг богиносгоно.
- */
-function StageRow({
-  id,
-  open,
-  onToggle,
-  tone,
-  lead,
-  activities,
-  type,
   output,
   period,
+  activities,
+  type,
 }: {
-  id: string;
-  open: boolean;
-  onToggle: (id: string) => void;
-  /** Салаа бүрийн өнгө. Өгөөгүй бол хэлтсийн өнгө */
-  tone?: string;
-  lead: React.ReactNode;
-  activities: Activity[];
-  type: InspectionTypeId | null;
+  title: string;
   output: string;
-  period: string;
+  period?: string;
+  activities: readonly Activity[];
+  type: InspectionTypeId | null;
 }) {
   return (
-    <tr
-      className="align-top"
-      style={tone ? ({ "--branch": tone } as React.CSSProperties) : undefined}
-    >
-      <Td>
-        <button
-          onClick={() => onToggle(id)}
-          aria-expanded={open}
-          className="group flex w-full items-baseline gap-1.5 text-left"
-        >
-          <ChevronRight
-            size={11}
-            className={cn(
-              "mt-[1px] shrink-0 text-ink-3 transition-transform group-hover:text-ink",
-              open && "rotate-90",
-            )}
-          />
-          {lead}
-        </button>
-      </Td>
-      <Td>
-        {open ? (
-          <ul className="space-y-1.5">
-            {activities.map((a) => (
-              <ActivityRow key={a.text} a={a} type={type} />
-            ))}
-          </ul>
-        ) : (
-          <span className="num text-[10.5px] text-ink-3">
-            {activities.length} ажиллагаа
-          </span>
-        )}
-      </Td>
-      <Td muted>{output}</Td>
-      <Td muted>{period}</Td>
-    </tr>
+    <div className="rounded-xs border border-line bg-paper">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-b border-line px-3 py-2">
+        <h2 className="display text-[12.5px] leading-none">{title}</h2>
+        <span className="num text-[10px] text-ink-3">{activities.length} ажиллагаа</span>
+      </div>
+
+      <ActivityList activities={activities} type={type} />
+
+      {/* Гарц, хугацаа нь үе шатны ТӨГСГӨЛД — ажиллагаанууд дууссаны
+          дараа юу гарч, хэдэн хоног зарцуулсныг хэлнэ */}
+      <div className="grid divide-y divide-line border-t border-line sm:grid-cols-2 sm:divide-x sm:divide-y-0">
+        <Fact icon={FileOutput} label="Гарц" text={output} />
+        {period ? <Fact icon={CalendarClock} label="Хугацаа" text={period} /> : null}
+      </div>
+    </div>
   );
 }
 
-function Th({ children, className }: { children: React.ReactNode; className?: string }) {
+function BranchCard({ branch }: { branch: (typeof BRANCHES)[number] }) {
+  const risk = branch.answer === "Тийм";
   return (
-    <th
-      scope="col"
-      className={cn(
-        "eyebrow px-3 py-1.5 text-left align-bottom font-normal text-ink-3",
-        className,
-      )}
+    <div
+      className="rounded-xs border border-line bg-paper"
+      style={{ "--branch": risk ? "var(--clay)" : "var(--moss)" } as React.CSSProperties}
     >
-      {children}
-    </th>
-  );
-}
+      {/* Салааны өнгө нь дээд ирмэгийн 2px зураас — дүүргэлт биш */}
+      <span aria-hidden className="block h-[2px] w-full bg-(--branch)" />
+      <div className="flex items-baseline gap-2 border-b border-line px-3 py-2">
+        <span className="shrink-0 text-[10.5px] leading-none text-(--branch)">
+          {branch.answer}
+        </span>
+        <h3 className="display min-w-0 flex-1 truncate text-[12px] leading-none">
+          {branch.title}
+        </h3>
+      </div>
 
-function Td({ children, muted }: { children: React.ReactNode; muted?: boolean }) {
-  return (
-    <td className={cn("px-3 py-2.5", muted && "text-[10.5px] leading-snug text-ink-3")}>
-      {children}
-    </td>
+      <ActivityList activities={branch.steps} type={null} tone="var(--branch)" />
+
+      <div className="border-t border-line">
+        <Fact icon={CalendarClock} label="Хугацаа" text={branch.period} />
+      </div>
+    </div>
   );
 }
 
 /**
- * Ажиллагааны мөр.
+ * Ажиллагааны жагсаалт — дугаарласан.
  *
- * Сонгосон төрөлд хамаарахгүй бол БҮДГЭРНЭ, алга болохгүй: урсгалаас
- * алхам хасвал журам өөрөө өөрчлөгдсөн мэт уншигдана.
- *
- * Холбогдох бичиг баримт нь мөрийн доор жижгээр — тусдаа багана
- * гаргавал ажиллагааны бичвэр хэт нарийсна.
+ * Холбогдох баримт бичиг нь мөрийн доор жижгээр. Тусдаа багана
+ * гаргавал хоёулаа нарийсна; бичвэрийн доор бол ажиллагаа бүр өөрийн
+ * баримттайгаа хамт уншигдана.
  */
-function ActivityRow({ a, type }: { a: Activity; type: InspectionTypeId | null }) {
-  const off = type != null && a.only != null && !a.only.includes(type);
+function ActivityList({
+  activities,
+  type,
+  tone = "var(--tone)",
+}: {
+  activities: readonly Activity[];
+  type: InspectionTypeId | null;
+  tone?: string;
+}) {
   return (
-    <li className={cn("flex gap-2 transition-opacity", off && "opacity-35")}>
-      <span aria-hidden className="mt-[7px] h-px w-2 shrink-0 bg-(--tone)" />
-      <span className="min-w-0">
-        <span className="block text-[11.5px] leading-snug text-ink">{a.text}</span>
-        {a.doc ? (
-          <span className="mt-[2px] block text-[10px] leading-snug text-ink-3">
-            {a.doc}
-          </span>
-        ) : null}
-      </span>
-    </li>
+    <ol className="divide-y divide-line">
+      {activities.map((a, i) => {
+        const off = type != null && a.only != null && !a.only.includes(type);
+        return (
+          <li
+            key={a.text}
+            className={cn("flex gap-2.5 px-3 py-1.5 transition-opacity", off && "opacity-35")}
+          >
+            <span
+              className="num w-[15px] shrink-0 pt-[1px] text-[10px]"
+              style={{ color: tone }}
+            >
+              {String(i + 1).padStart(2, "0")}
+            </span>
+            <span className="min-w-0">
+              <span className="block text-[11.5px] leading-snug text-ink">{a.text}</span>
+              {a.doc ? (
+                <span className="mt-[2px] block text-[10px] leading-snug text-ink-3">
+                  {a.doc}
+                </span>
+              ) : null}
+            </span>
+          </li>
+        );
+      })}
+    </ol>
   );
 }
+
+function Fact({
+  icon: Icon,
+  label,
+  text,
+}: {
+  icon: React.ComponentType<{ size?: number; className?: string }>;
+  label: string;
+  text: string;
+}) {
+  return (
+    <div className="flex gap-1.5 px-3 py-1.5">
+      <Icon size={11} className="mt-[2px] shrink-0 text-ink-3" />
+      <span className="min-w-0">
+        <span className="eyebrow block">{label}</span>
+        <span className="mt-[2px] block text-[10.5px] leading-snug text-ink-2">{text}</span>
+      </span>
+    </div>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
 
 function RefList({
   icon: Icon,
@@ -455,14 +348,17 @@ function RefList({
   children: readonly string[];
 }) {
   return (
-    <div>
-      <div className="flex items-center gap-1.5 px-3 pt-2.5 pb-1.5">
+    <div className="shrink-0 rounded-xs border border-line bg-paper-2">
+      <div className="flex items-center gap-1.5 border-b border-line px-3 py-2">
         <Icon size={12} className="shrink-0 text-ink-3" />
-        <span className="eyebrow">{title}</span>
+        <span className="display flex-1 text-[11.5px] leading-none tracking-[0.05em] uppercase">
+          {title}
+        </span>
+        <span className="num text-[10px] text-ink-3">{num(children.length)}</span>
       </div>
-      <ol className="px-3 pb-2.5">
+      <ol className="divide-y divide-line">
         {children.map((d, i) => (
-          <li key={d} className="flex gap-2 py-[3px]">
+          <li key={d} className="flex gap-2 px-3 py-1.5">
             {numbered ? (
               <span className="num shrink-0 text-[10px] text-ink-3">
                 {String(i + 1).padStart(2, "0")}

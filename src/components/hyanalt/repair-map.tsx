@@ -3,10 +3,11 @@
 import * as React from "react";
 import dynamic from "next/dynamic";
 import { Building2, Loader2, MapPin, MousePointerClick, Search, X } from "lucide-react";
-import { RowChart, type Datum } from "@/components/charts";
 import { BasemapGallery } from "@/components/map/basemap-gallery";
 import { MapTip, MapTipRow, useMapTip } from "@/components/map/hover-tip";
-import { Columns } from "@/components/ui/resizable-columns";
+import { type Datum } from "@/components/charts";
+import { FilterMenu, PickList } from "@/components/wells/filter-bar";
+import { MapPanel, useMapPanel } from "@/components/map/panel";
 import {
   BASEMAPS,
   zoomForScale,
@@ -126,6 +127,7 @@ export function RepairMap() {
 
   /** Хулгана дагасан хөвөгч тайлбар — байрлалыг өөрөө удирдана */
   const tip = useMapTip();
+  const panel = useMapPanel("left");
 
   React.useEffect(() => {
     const ac = new AbortController();
@@ -263,195 +265,182 @@ export function RepairMap() {
   }
 
   return (
-    <Columns id="repair" right={252} className="h-full min-h-0">
-      {/* ---- ЗҮҮН: газрын зураг ---- */}
-      <div className="relative min-h-[320px] overflow-hidden rounded-xs border border-line">
+    /*
+      Зураг нь БҮТЭН талбайг эзэлнэ. Дүүргийн задаргаа нь баруун талын
+      диаграм байсныг ТОЛГОЙН ЗУРВАС дахь шүүлтүүр болгов: энэ дэлгэцийн
+      цорын ганц бодит агуулга нь БАЙРШИЛ бөгөөд түүнээс өргөн хулгайлж
+      байсан. Задаргааны тоо нь шүүлтүүрийн цэсэнд мөр бүрийнхээ хажууд
+      гарсаар байна.
+    */
+    <div className="relative h-full min-h-[320px] overflow-hidden rounded-xs border border-line">
       <PointMap
-        points={points}
-        visible={visible}
-        basemap={basemap}
-        onSelect={(oid) => setPicked(picked === oid ? null : oid)}
-        onHover={tip.onHover}
-        highlight={highlight}
-        focus={focus}
-        marks={marks}
-        labels={labels}
-        onZoom={setZoom}
-        clusterMaxZoom={CLUSTER_MAX}
-        clusterLabel="badge"
+      points={points}
+      visible={visible}
+      basemap={basemap}
+      onSelect={(oid) => setPicked(picked === oid ? null : oid)}
+      onHover={tip.onHover}
+      highlight={highlight}
+      focus={focus}
+      marks={marks}
+      labels={labels}
+      onZoom={setZoom}
+      clusterMaxZoom={CLUSTER_MAX}
+      clusterLabel="badge"
       />
 
       <BasemapGallery value={basemap} onChange={setManualBasemap} />
 
       {/*
-        ТОЛГОЙН ЗУРВАС — зургийн дээд ирмэг дээр, бүтэн өргөнөөр.
+      ТОЛГОЙН ЗУРВАС — зургийн дээд ирмэг дээр, бүтэн өргөнөөр.
 
-        Тусдаа толгойн мөр гаргавал зураг тэр өндрийг алдана; хөвөгч
-        карт болговол зургийн зүүн дээд булангийн агуулгыг дардаг. Бүтэн
-        өргөнтэй нимгэн зурвас нь хоёуланг нь шийднэ: доод зураас нь
-        хуудсын толгойтой ижил хэлээр ярьж, доор нь зураг тасралтгүй
-        үргэлжилнэ.
+      Тусдаа толгойн мөр гаргавал зураг тэр өндрийг алдана; хөвөгч
+      карт болговол зургийн зүүн дээд булангийн агуулгыг дардаг. Бүтэн
+      өргөнтэй нимгэн зурвас нь хоёуланг нь шийднэ.
 
-        `pointer-events-none` — зурвасын доорх зургийг чирэх боломж
-        хаагдах ёсгүй.
+      ХЭМНЭЛ нь платформын шүүлтүүрийн мөртэй ЯГ ИЖИЛ: нэг мөр, зүүн
+      талд бүдүүн жижиг гарчиг, баруун тийш шахагдсан хяналтууд. Урьд
+      нь хоёр мөрт гарчиг, 19px өнгөт тоотой байсныг ХАСAB — тэр нь
+      САМБАРЫН ИНДИКАТОРЫН хэв маяг бөгөөд зурвас дотор орохоороо
+      түүнийг хоёр дахин өндөр болгож, дэлгэцийн бусад мөртэй
+      зөрчилдөж байв.
+
+      `pointer-events-none` — зурвасын доорх зургийг чирэх боломж
+      хаагдах ёсгүй.
       */}
       <div className="pointer-events-none absolute inset-x-0 top-0 z-10 border-b border-line bg-paper/92 backdrop-blur-md">
-        {/* Баруун талд суурь зургийн товчны зай — зурвасын агуулга
-            түүний доогуур оръё гэвэл "…бүртгэгдээгүй" тэмдэглэл далдлагдана */}
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 py-2 pr-12 pl-3">
-          <div className="min-w-0">
-            <div className="eyebrow">Хяналтын бүртгэл</div>
-            <h1 className="display mt-0.5 text-[14px] leading-none tracking-[0.05em] uppercase">
-              Авто засварын үйлчилгээ
-            </h1>
-          </div>
+      {/* Баруун талд суурь зургийн товчны зай — зурвасын агуулга
+          түүний доогуур оръё гэвэл хяналтууд далдлагдана */}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 py-1.5 pr-12 pl-3">
+        <span className="shrink-0 text-[12px] font-semibold tracking-[0.12em] text-ink uppercase">
+          Авто засварын үйлчилгээ
+        </span>
 
-          <span className="h-7 w-px shrink-0 bg-line" aria-hidden />
+        <span className="mx-0.5 h-4 w-px shrink-0 bg-line" aria-hidden />
 
-          <div className="flex shrink-0 items-baseline gap-1.5">
-            <span className="num text-[19px] leading-none font-medium text-(--tone)">
-              {num(shown.length)}
-            </span>
-            <span className="text-[11px] text-ink-3">
-              {shown.length === data.shops.length
-                ? "бүртгэгдсэн цэг"
-                : `цэг · нийт ${num(data.shops.length)}`}
-            </span>
-          </div>
+        <span className="num shrink-0 text-[11.5px] text-ink-2">
+          {num(shown.length)}
+          <span className="ml-1 text-ink-3">
+            {shown.length === data.shops.length
+              ? "цэг"
+              : `цэг · нийт ${num(data.shops.length)}`}
+          </span>
+        </span>
 
-          {/*
-            Сонгосон дүүрэг — зурвас дээр. Задаргаа нь баруун талын
-            диаграмд шилжсэн тул энд зөвхөн одоогийн шүүлт харагдана.
-          */}
-          {/*
-            Хайлт — зурвасын баруун талд. `pointer-events-auto`: зурвас
-            өөрөө хулганы үйлдлийг нэвтрүүлдэг тул талбар дээр нь
-            тусгайлан асаана.
-          */}
-          <div className="pointer-events-auto ml-auto flex shrink-0 items-center gap-1.5 rounded-xs border border-line bg-paper-3 px-2 py-1">
-            <Search size={12} className="shrink-0 text-ink-3" />
-            <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Нэр, байршлаар хайх"
-              className="w-[150px] bg-transparent text-[11.5px] text-ink outline-none placeholder:text-ink-3"
+        {/*
+          ДҮҮРГИЙН ШҮҮЛТҮҮР — зурвас дээр, унждаг цэсээр. Тоо нь мөр
+          бүрийнхээ хажууд гарах тул задаргааны диаграм илүүц болов.
+
+          `pointer-events-auto`: зурвас өөрөө хулганы үйлдлийг
+          нэвтрүүлдэг тул харилцах элемент бүр дээр тусгайлан асаана.
+        */}
+        <div className="pointer-events-auto ml-auto shrink-0">
+          <FilterMenu
+            label="Дүүрэг"
+            icon={Building2}
+            active={district != null}
+            value={district != null ? districtName(district) : null}
+            onClear={() => setDistrict(null)}
+          >
+            <PickList
+              items={districtData.map((d) => ({
+                key: d.key,
+                label: d.label,
+                value: d.value,
+              }))}
+              selected={district}
+              onPick={setDistrict}
             />
-            {query ? (
-              <button
-                onClick={() => setQuery("")}
-                className="shrink-0 text-ink-3 transition-colors hover:text-ink"
-                aria-label="Хайлт цэвэрлэх"
-              >
-                <X size={11} />
-              </button>
-            ) : null}
-          </div>
+          </FilterMenu>
+        </div>
 
-          {district !== null ? (
-            <>
-              <span className="h-7 w-px shrink-0 bg-line" aria-hidden />
-              <span className="rounded-xs border border-(--tone)/40 bg-(--tone)/12 px-1.5 py-[3px] text-[11px] text-(--tone)">
-                {districtName(district)}
-              </span>
-            </>
+        {/* Хайлт — зурвасын баруун захад */}
+        <div className="pointer-events-auto flex shrink-0 items-center gap-1.5 rounded-xs border border-line bg-paper-3 px-2 py-1">
+          <Search size={12} className="shrink-0 text-ink-3" />
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Нэр, байршлаар хайх"
+            className="w-[150px] bg-transparent text-[11.5px] text-ink outline-none placeholder:text-ink-3"
+          />
+          {query ? (
+            <button
+              onClick={() => setQuery("")}
+              className="shrink-0 text-ink-3 transition-colors hover:text-ink"
+              aria-label="Хайлт цэвэрлэх"
+            >
+              <X size={11} />
+            </button>
           ) : null}
         </div>
+      </div>
       </div>
 
       {/* ХӨВӨГЧ ТАЙЛБАР — хулганы хажууд */}
       {hovered ? (
-        <MapTip state={tip} width={244}>
-          <div className="px-2.5 pt-2 pb-2 text-[12.5px] leading-snug font-medium text-ink">
-            {hovered.name}
-          </div>
-          <div className="space-y-1.5 border-t border-line px-2.5 py-2">
-            {hovered.place ? <MapTipRow icon={MapPin} text={hovered.place} /> : null}
-            {hovered.district ? (
-              <MapTipRow icon={Building2} text={districtName(hovered.district)} />
-            ) : null}
-          </div>
-          <div className="flex items-center justify-between gap-2 border-t border-line px-2.5 py-1.5">
-            <span className="num text-[10px] leading-none text-ink-3">
-              {hovered.lat.toFixed(5)}° {hovered.lon.toFixed(5)}°
-            </span>
-            <MousePointerClick size={11} className="shrink-0 text-ink-3" />
-          </div>
-        </MapTip>
+      <MapTip state={tip} width={244}>
+        <div className="px-2.5 pt-2 pb-2 text-[12.5px] leading-snug font-medium text-ink">
+          {hovered.name}
+        </div>
+        <div className="space-y-1.5 border-t border-line px-2.5 py-2">
+          {hovered.place ? <MapTipRow icon={MapPin} text={hovered.place} /> : null}
+          {hovered.district ? (
+            <MapTipRow icon={Building2} text={districtName(hovered.district)} />
+          ) : null}
+        </div>
+        <div className="flex items-center justify-between gap-2 border-t border-line px-2.5 py-1.5">
+          <span className="num text-[10px] leading-none text-ink-3">
+            {hovered.lat.toFixed(5)}° {hovered.lon.toFixed(5)}°
+          </span>
+          <MousePointerClick size={11} className="shrink-0 text-ink-3" />
+        </div>
+      </MapTip>
       ) : null}
 
       {/*
-        Товшсон цэгийн бичилт — баруун доор, тогтмол. Хөвөгч тайлбартай
-        зэрэг харагдаж болно: тэр нь хулганы доорхыг, энэ нь тогтоосон
-        сонголтыг хэлнэ.
+      Товшсон цэгийн бичилт — баруун доор, тогтмол. Хөвөгч тайлбартай
+      зэрэг харагдаж болно: тэр нь хулганы доорхыг, энэ нь тогтоосон
+      сонголтыг хэлнэ.
       */}
       {selected ? (
-        <div className="absolute right-2.5 bottom-8 z-10 w-[264px] rounded-xs border border-line bg-paper/95 backdrop-blur-md">
-          <div className="flex items-center justify-between gap-2 border-b border-line px-2.5 py-1.5">
-            <span className="eyebrow min-w-0 flex-1 truncate">Бүртгэлийн бичилт</span>
-            <button
-              onClick={() => setPicked(null)}
-              className="shrink-0 text-ink-3 transition-colors hover:text-ink"
-              aria-label="Хаах"
-            >
-              <X size={13} />
-            </button>
+      <MapPanel
+        state={panel}
+        title="Бүртгэлийн бичилт"
+        onClose={() => setPicked(null)}
+        className="right-2.5 bottom-8 w-[264px]"
+      >
+        <div className="px-2.5 py-2">
+          <div className="text-[12.5px] leading-snug font-medium text-ink">
+            {selected.name}
           </div>
-          <div className="px-2.5 py-2">
-            <div className="text-[12.5px] leading-snug font-medium text-ink">
-              {selected.name}
-            </div>
-            <dl className="mt-2 space-y-1.5">
-              <Field k="Чиглэл" v="Авто засварын үйлчилгээ" />
-              <Field k="Байршил" v={selected.place || "—"} />
-              <Field k="Дүүрэг" v={districtName(selected.district)} />
-              <Field
-                k="Координат"
-                v={
-                  <span className="num">
-                    {selected.lat.toFixed(5)}°, {selected.lon.toFixed(5)}°
-                  </span>
-                }
-              />
-            </dl>
-          </div>
+          <dl className="mt-2 space-y-1.5">
+            <Field k="Чиглэл" v="Авто засварын үйлчилгээ" />
+            <Field k="Байршил" v={selected.place || "—"} />
+            <Field k="Дүүрэг" v={districtName(selected.district)} />
+            <Field
+              k="Координат"
+              v={
+                <span className="num">
+                  {selected.lat.toFixed(5)}°, {selected.lon.toFixed(5)}°
+                </span>
+              }
+            />
+          </dl>
         </div>
+      </MapPanel>
       ) : null}
 
       {/*
-        Эх сурвалжийн бичиг — зургийн доод ирмэгт, дэвсгэргүй. Суурь
-        зургийн товчтой ижил сүүдэр: хиймэл дагуулын цайвар талбай дээр
-        `text-ink-3` дангаараа алга болно.
+      Эх сурвалжийн бичиг — зургийн доод ирмэгт, дэвсгэргүй. Суурь
+      зургийн товчтой ижил сүүдэр: хиймэл дагуулын цайвар талбай дээр
+      `text-ink-3` дангаараа алга болно.
       */}
       <p
-        className="pointer-events-none absolute bottom-1 left-2.5 z-10 text-[10px] leading-none text-ink-3"
-        style={{ filter: "drop-shadow(0 1px 2px rgba(0,0,0,.75))" }}
+      className="pointer-events-none absolute bottom-1 left-2.5 z-10 text-[10px] leading-none text-ink-3"
+      style={{ filter: "drop-shadow(0 1px 2px rgba(0,0,0,.75))" }}
       >
-        Суурь зураг: Esri · Дата: ArcGIS FeatureServer
+      Суурь зураг: Esri · Дата: ArcGIS FeatureServer
       </p>
       </div>
-
-      {/* ---- БАРУУН: дүүргийн задаргаа ---- */}
-      <div className="flex min-h-0 flex-col rounded-xs border border-line bg-paper-2">
-        <div className="flex shrink-0 items-center justify-between gap-2 border-b border-line px-3 py-2">
-          <h2 className="display text-[13.5px] leading-none tracking-[0.06em] uppercase">
-            Дүүргээр
-          </h2>
-          <span className="text-[10.5px] text-ink-3">цэгийн тоо</span>
-        </div>
-        <div className="min-h-0 flex-1 overflow-y-auto p-3">
-          {/*
-            Товчлолыг эх сурвалж задлаагүй тул бид ч задлахгүй.
-            Сонгоход зураг тухайн дүүрэг рүү шүүгдэж, ойртоно.
-          */}
-          <RowChart
-            data={districtData}
-            selected={district}
-            onSelect={setDistrict}
-            format={num}
-          />
-        </div>
-      </div>
-    </Columns>
   );
 }
 
@@ -459,7 +448,7 @@ function Field({ k, v }: { k: string; v: React.ReactNode }) {
   return (
     <div className="flex gap-2">
       <dt className="w-[68px] shrink-0 text-[10px] tracking-[0.08em] text-ink-3 uppercase">
-        {k}
+      {k}
       </dt>
       <dd className="min-w-0 flex-1 text-[11.5px] leading-snug text-ink">{v}</dd>
     </div>

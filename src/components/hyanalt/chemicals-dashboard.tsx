@@ -7,7 +7,6 @@ import {
   CalendarClock,
   ChevronRight,
   FlaskConical,
-  GripHorizontal,
   Loader2,
   MousePointerClick,
   Package,
@@ -15,7 +14,6 @@ import {
   ShieldCheck,
   TriangleAlert,
   Warehouse as WarehouseIcon,
-  X,
 } from "lucide-react";
 import { RowChart, type Datum } from "@/components/charts";
 import { BasemapGallery } from "@/components/map/basemap-gallery";
@@ -23,6 +21,7 @@ import { MapTip, MapTipRow, useMapTip } from "@/components/map/hover-tip";
 import { FilterBar, FilterMenu, PickList } from "@/components/wells/filter-bar";
 import { DATA_COLOR } from "@/components/wells/colors";
 import { Columns } from "@/components/ui/resizable-columns";
+import { MapPanel, useMapPanel } from "@/components/map/panel";
 import {
   defaultBasemap,
   type Basemap,
@@ -124,8 +123,6 @@ export function ChemicalsDashboard() {
   const [basemap, setBasemap] = React.useState<Basemap>(defaultBasemap);
   /** Хулгана дагасан хөвөгч тайлбар — байрлалыг өөрөө удирдана */
   const tip = useMapTip();
-  /** Бичилтийн самбарыг чирж зөөх, хэмжээг нь солих төлөв */
-  const drag = usePanelBox();
 
   /*
     Өнөөдрийг НЭГ УДАА барина. Зурагдалт бүрд `new Date()` дуудвал
@@ -574,34 +571,12 @@ export function ChemicalsDashboard() {
         {/* ---- ТӨВ: индикатор + газрын зураг ---- */}
         <div className="flex min-h-0 min-w-0 flex-col gap-2.5">
           <div className="grid shrink-0 grid-cols-2 divide-x divide-line rounded-xs border border-line bg-paper-2 sm:grid-cols-4">
-            <Cell
-              label="Агуулах"
-              value={num(shown.length)}
-              note={
-                shown.length === (rows?.length ?? 0)
-                  ? "бүртгэгдсэн нийт"
-                  : `нийт ${num(rows?.length ?? 0)}`
-              }
-            />
-            <Cell
-              label="Нийт тоо хэмжээ"
-              value={num(totals.tons)}
-              unit="тонн"
-              note={
-                totals.unmeasured
-                  ? `${num(totals.unmeasured)} бичлэгт хэмжигдээгүй`
-                  : undefined
-              }
-            />
-            <Cell
-              label="Бодисын нэр төрөл"
-              value={num(totals.names)}
-              note="давхардалгүй нэр"
-            />
+            <Cell label="Агуулах" value={num(shown.length)} />
+            <Cell label="Нийт тоо хэмжээ" value={num(totals.tons)} unit="тонн" />
+            <Cell label="Бодисын нэр төрөл" value={num(totals.names)} />
             <Cell
               label="Хугацаа дууссан"
               value={num(totals.expired)}
-              note="гэрчилгээ"
               alert={totals.expired > 0}
             />
           </div>
@@ -716,7 +691,6 @@ export function ChemicalsDashboard() {
               <RecordCard
                 w={selected}
                 state={expiryState(selected, todayKey)}
-                drag={drag}
                 onClose={() => setPicked(null)}
                 onSubstance={setSubstance}
               />
@@ -983,181 +957,15 @@ function NameRow({
 
 /* -------------------------------------------------------------------------- */
 
-/* --------------------------------------------------------------------------
-   ЧИРЖ ЗӨӨХ, ХЭМЖЭЭ СОЛИХ
-
-   Бичилтийн самбар нь зургийн буланд суудаг тул доор нь яг тэр цэг
-   орвол хаагдана. Хэрэглэгч самбараа хааж, ойртож, дахин нээх ёсгүй —
-   зүгээр л хажуу тийш нь чирнэ. Мөн бодисын жагсаалт нь бичлэг бүрд
-   өөр урттай (нэгээс 143 мөр) тул өндөр нь ч тохируулагддаг байх ёстой.
-
-   БАЙРЛАЛ, ХЭМЖЭЭГ REACT ТӨЛӨВӨӨР БҮҮ БАРЬ: хулгана хөдлөх бүрд самбар
-   бүхлээрээ дахин зурагдана (энэ самбар 967 мөрийн товьёогтой хуудсанд
-   сууна). Утгыг ШУУД DOM руу бичиж, төлөвт юу ч барихгүй —
-   {@link ../map/hover-tip}-тэй ижил зарчим.
-
-   Утга нь `useLayoutEffect`-ээр зурагдалт бүрд дахин тавигдана: React
-   өөрийн удирддаггүй inline шинжийг арилгадаггүй ч бичлэг солигдоход
-   самбар шинэчлэгдэх тул баталгаажуулах нь хямд.
-
-   ХЭМЖЭЭ СОЛИХ БАРИУЛ НЬ ЗҮҮН ДООД БУЛАНД. Самбар нь баруун дээд
-   буландаа бэхлэгдсэн (`top` + `right`) тул өргөн нэмэхэд ЗҮҮН тийш,
-   өндөр нэмэхэд ДООШ тэлнэ — бариул нь тэлэх чиглэлийнхээ буланд байх
-   ёстой. Баруун доод буланд тавьбал бариул өөрөө хөдөлгөөнгүй хэвээр
-   үлдэж, самбар нь эсрэг талаараа сунана.
-   -------------------------------------------------------------------------- */
-
-const DRAG_PAD = 6;
-const MIN_W = 236;
-const MIN_H = 148;
-
-type DragState = ReturnType<typeof usePanelBox>;
-
-type Grab = {
-  mode: "move" | "resize";
-  px: number;
-  py: number;
-  ox: number;
-  oy: number;
-  w: number;
-  h: number;
-};
-
-function usePanelBox() {
-  const el = React.useRef<HTMLDivElement | null>(null);
-  const off = React.useRef({ x: 0, y: 0 });
-  /** Хэрэглэгч хэмжээг нь хөндөх хүртэл `null` — CSS-ийн анхдагч үйлчилнэ */
-  const size = React.useRef<{ w: number; h: number } | null>(null);
-  const from = React.useRef<Grab | null>(null);
-
-  /** Хэмжээ, шилжилтийг хүрээндээ багтаагаад DOM руу бичнэ */
-  const apply = React.useCallback(() => {
-    const node = el.current;
-    if (!node) return;
-    const frame = node.offsetParent as HTMLElement | null;
-
-    if (size.current && frame) {
-      /* Хүрээнээс том самбар нь өөрийнхөө агуулгыг ч далдална */
-      const maxW = Math.max(MIN_W, frame.clientWidth - 2 * DRAG_PAD);
-      const maxH = Math.max(MIN_H, frame.clientHeight - 2 * DRAG_PAD);
-      size.current.w = Math.min(Math.max(size.current.w, MIN_W), maxW);
-      size.current.h = Math.min(Math.max(size.current.h, MIN_H), maxH);
-    }
-    if (size.current) {
-      node.style.width = `${Math.round(size.current.w)}px`;
-      /*
-        Өндөр тавьмагц CSS-ийн `bottom` нь хэт тодорхойлолт болж
-        үл тоомсорлогдоно (top + height давамгайлна) — самбар доод
-        ирмэгтээ наалдахаа болино.
-      */
-      node.style.height = `${Math.round(size.current.h)}px`;
-    }
-
-    if (frame) {
-      /*
-        `offsetLeft/Top` нь шилжилтээс ӨМНӨХ байрлал (CSS-ийн top/right).
-        Түүн дээр нэмэхэд самбар хүрээнээсээ хальж болзошгүй тул хоёр
-        тэнхлэгээр нь хязгаарлана — хальсан самбар буцаад олдохгүй.
-      */
-      const maxX = frame.clientWidth - node.offsetLeft - node.offsetWidth - DRAG_PAD;
-      const minX = DRAG_PAD - node.offsetLeft;
-      const maxY = frame.clientHeight - node.offsetTop - node.offsetHeight - DRAG_PAD;
-      const minY = DRAG_PAD - node.offsetTop;
-      off.current.x = Math.max(Math.min(minX, maxX), Math.min(off.current.x, maxX));
-      off.current.y = Math.max(Math.min(minY, maxY), Math.min(off.current.y, maxY));
-    }
-    node.style.transform = `translate3d(${Math.round(off.current.x)}px, ${Math.round(
-      off.current.y,
-    )}px, 0)`;
-  }, []);
-
-  const mount = React.useCallback(
-    (node: HTMLDivElement | null) => {
-      el.current = node;
-      if (node) apply();
-    },
-    [apply],
-  );
-
-  /*
-    Цонх (эсвэл хажуугийн зурвас) томрох, багасахад хүрээ өөрчлөгдөнө.
-    Зурагдалт дагалддаггүй тул самбар хүрээнээсээ гадна үлдэж болзошгүй —
-    хэмжээ өөрчлөгдөх бүрд дахин багтаана.
-  */
-  React.useEffect(() => {
-    const on = () => apply();
-    window.addEventListener("resize", on);
-    return () => window.removeEventListener("resize", on);
-  }, [apply]);
-
-  /**
-   * Бариулын үйл явдлууд. `mode` нь тухайн бариул юу хийхийг заана:
-   * толгой нь зөөнө, булангийн дэгээ нь хэмжээг солино.
-   */
-  const grip = React.useCallback(
-    (mode: "move" | "resize") => ({
-      onPointerDown: (e: React.PointerEvent<HTMLElement>) => {
-        /* Толгой дээрх товч (хаах) чирэлт эхлүүлэх ёсгүй */
-        if (mode === "move" && (e.target as HTMLElement).closest("button")) return;
-        const node = el.current;
-        if (!node) return;
-        e.preventDefault();
-        e.stopPropagation();
-        e.currentTarget.setPointerCapture(e.pointerId);
-        from.current = {
-          mode,
-          px: e.clientX,
-          py: e.clientY,
-          ox: off.current.x,
-          oy: off.current.y,
-          /* Одоогийн бодит хэмжээнээс эхэлнэ — эхний удаад CSS-ийн
-             анхдагчийг (өргөн 292px, өндөр нь top/bottom-оос) уншина */
-          w: node.offsetWidth,
-          h: node.offsetHeight,
-        };
-      },
-      onPointerMove: (e: React.PointerEvent<HTMLElement>) => {
-        const f = from.current;
-        if (!f) return;
-        const dx = e.clientX - f.px;
-        const dy = e.clientY - f.py;
-        if (f.mode === "move") {
-          off.current.x = f.ox + dx;
-          off.current.y = f.oy + dy;
-        } else {
-          /* Зүүн доод булан: зүүн тийш чирэхэд өргөн НЭМЭГДЭНЭ */
-          size.current = { w: f.w - dx, h: f.h + dy };
-        }
-        apply();
-      },
-      onPointerUp: (e: React.PointerEvent<HTMLElement>) => {
-        from.current = null;
-        if (e.currentTarget.hasPointerCapture(e.pointerId))
-          e.currentTarget.releasePointerCapture(e.pointerId);
-      },
-      onPointerCancel: (e: React.PointerEvent<HTMLElement>) => {
-        from.current = null;
-        if (e.currentTarget.hasPointerCapture(e.pointerId))
-          e.currentTarget.releasePointerCapture(e.pointerId);
-      },
-    }),
-    [apply],
-  );
-
-  return { mount, apply, grip };
-}
-
 function Cell({
   label,
   value,
   unit,
-  note,
   alert,
 }: {
   label: string;
   value: string;
   unit?: string;
-  note?: string;
   alert?: boolean;
 }) {
   return (
@@ -1174,11 +982,6 @@ function Cell({
         </span>
         {unit ? <span className="text-[10.5px] text-ink-3">{unit}</span> : null}
       </div>
-      {note ? (
-        <div className="mt-1 truncate text-[10px] text-ink-3" title={note}>
-          {note}
-        </div>
-      ) : null}
     </div>
   );
 }
@@ -1238,52 +1041,24 @@ function StatusChip({ state }: { state: ExpiryState }) {
 function RecordCard({
   w,
   state,
-  drag,
   onClose,
   onSubstance,
 }: {
   w: Warehouse;
   state: ExpiryState;
-  drag: DragState;
   onClose: () => void;
   onSubstance: (name: string) => void;
 }) {
-  const el = React.useRef<HTMLDivElement>(null);
-  /*
-    Чирэгчид өөрийгөө бүртгүүлж, зурагдалт бүрд шилжилтээ дахин тавина.
-    `react-hooks/refs` нь `ref={obj.prop}`-ыг зөвшөөрдөггүй тул самбар
-    өөрөө `ref` эзэмшинэ ({@link ../map/hover-tip}-ийн `MapTip`-тэй ижил).
-  */
-  React.useLayoutEffect(() => {
-    drag.mount(el.current);
-    return () => drag.mount(null);
-  });
-
+  const panel = useMapPanel("left");
   return (
-    <div
-      ref={el}
-      className="absolute top-2 right-2 bottom-8 z-10 flex w-[292px] flex-col rounded-xs border border-line bg-paper/95 backdrop-blur-md will-change-transform"
+    <MapPanel
+      state={panel}
+      title="Бүртгэлийн бичилт"
+      onClose={onClose}
+      className="top-2 right-2 bottom-8 w-[292px]"
     >
-      {/*
-        Толгой нь зөөх бариул. `touch-none` — хуруугаар чирэхэд хөтөч
-        хуудсаа гүйлгэхийг оролдвол самбар мултарна.
-      */}
-      <div
-        {...drag.grip("move")}
-        className="flex shrink-0 touch-none cursor-grab items-center justify-between gap-2 border-b border-line px-2.5 py-1.5 select-none active:cursor-grabbing"
-      >
-        <GripHorizontal size={12} className="shrink-0 text-ink-3" />
-        <span className="eyebrow min-w-0 flex-1 truncate">Бүртгэлийн бичилт</span>
-        <button
-          onClick={onClose}
-          className="shrink-0 text-ink-3 transition-colors hover:text-ink"
-          aria-label="Хаах"
-        >
-          <X size={13} />
-        </button>
-      </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-2.5 pt-2 pb-4">
+      <div className="px-2.5 pt-2">
         <div className="text-[12.5px] leading-snug font-medium text-ink">{w.company}</div>
         <div className="mt-1.5">
           <StatusChip state={state} />
@@ -1376,28 +1151,7 @@ function RecordCard({
         </div>
       </div>
 
-      {/*
-        ХЭМЖЭЭ СОЛИХ бариул — зүүн доод буланд, самбарын тэлэх
-        чиглэлийн буланд. Гүйдэг агуулгын ДЭЭР хөвнө; хамгийн доод
-        мөрийг дарахгүйн тулд агуулгын доод хэсэгт зай үлдээв.
-      */}
-      <button
-        {...drag.grip("resize")}
-        aria-label="Самбарын хэмжээ солих"
-        className="absolute bottom-0 left-0 z-10 flex size-4 touch-none cursor-nesw-resize items-end justify-start p-[3px] text-ink-3 transition-colors hover:text-ink"
-      >
-        <svg viewBox="0 0 10 10" className="size-full" aria-hidden>
-          <path
-            d="M9 1 1 9M5.5 9H1V4.5"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </svg>
-      </button>
-    </div>
+    </MapPanel>
   );
 }
 

@@ -15,7 +15,6 @@ import {
   Skull,
   Sparkles,
   Sprout,
-  X,
   type LucideIcon,
 } from "lucide-react";
 import { AreaChart, PieChart, RowChart, YearRange, type Datum } from "@/components/charts";
@@ -24,6 +23,7 @@ import { MapTip, MapTipRow, useMapTip } from "@/components/map/hover-tip";
 import { FilterBar, FilterMenu, PickList } from "@/components/wells/filter-bar";
 import { defaultBasemap, type Basemap, type Extent } from "@/components/wells/map";
 import { Columns } from "@/components/ui/resizable-columns";
+import { MapPanel, useMapPanel } from "@/components/map/panel";
 import { fetchRescues, type Rescue } from "@/lib/rescues";
 import { speciesIconSvg } from "@/lib/species-icons";
 import { speciesPhoto } from "@/lib/species-photos";
@@ -74,7 +74,6 @@ export function RescuesDashboard() {
   const [extent, setExtent] = React.useState<Extent | null>(null);
   const [selected, setSelected] = React.useState<number | null>(null);
   /** Дэлгэрэнгүй цонхны хэмжээ — хэрэглэгч чирж өөрчилнө */
-  const [card, setCard] = React.useState<CardSize>({ w: 300, h: 360 });
 
   React.useEffect(() => {
     const ac = new AbortController();
@@ -268,6 +267,7 @@ export function RescuesDashboard() {
 
   /** Хулгана дагасан хөвөгч тайлбар — байрлалыг өөрөө удирдана */
   const tip = useMapTip();
+  const panel = useMapPanel("left");
 
   /*
     Хулгана дээр очсон бүртгэл. Зурган тэмдэглэгээ дээр очиход байрлалыг
@@ -553,22 +553,12 @@ export function RescuesDashboard() {
                       хагас хоосон цонх, урт бичилт дээр таслагдсан бичвэр
                       хоёуланг нь зайлсхийнэ.
                     */
-                    <div
-                      className="absolute right-2.5 bottom-8 z-10 flex flex-col rounded-xs border border-line bg-paper/92 backdrop-blur-md"
-                      style={{ width: card.w, maxHeight: card.h }}
+                    <MapPanel
+                      state={panel}
+                      title="Бүртгэлийн бичилт"
+                      onClose={() => setSelected(null)}
+                      className="right-2.5 bottom-8 w-[300px] max-h-[70%]"
                     >
-                      <ResizeGrip value={card} onChange={setCard} />
-
-                      <div className="flex shrink-0 items-center justify-between border-b border-line px-2.5 py-1.5">
-                        <span className="eyebrow">Бүртгэлийн бичилт</span>
-                        <button
-                          onClick={() => setSelected(null)}
-                          className="text-ink-3 transition-colors hover:text-ink"
-                          aria-label="Хаах"
-                        >
-                          <X size={12} />
-                        </button>
-                      </div>
                       <div className="min-h-0 flex-1 overflow-y-auto p-2.5">
                         {/*
                           Зүйлийн зураг — хэлтсийн жагсаалтаас. Бичлэгийн өөрийн
@@ -616,7 +606,7 @@ export function RescuesDashboard() {
                           ) : null}
                         </dl>
                       </div>
-                    </div>
+                    </MapPanel>
                   ) : null}
                 </div>
               </Card>
@@ -683,62 +673,6 @@ export function RescuesDashboard() {
    зургаас гарах байсан.
    -------------------------------------------------------------------------- */
 
-type CardSize = { w: number; h: number };
-
-const CARD_MIN = { w: 240, h: 180 };
-const CARD_MAX = { w: 560, h: 560 };
-
-function ResizeGrip({
-  value,
-  onChange,
-}: {
-  value: CardSize;
-  onChange: (v: CardSize) => void;
-}) {
-  function onPointerDown(e: React.PointerEvent<HTMLDivElement>) {
-    e.preventDefault();
-    const x0 = e.clientX;
-    const y0 = e.clientY;
-    const { w, h } = value;
-
-    const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
-    // Зүүн дээш чирэх нь ӨСГӨНӨ — тиймээс тэмдэг нь эсрэг
-    const move = (ev: PointerEvent) =>
-      onChange({
-        w: clamp(w - (ev.clientX - x0), CARD_MIN.w, CARD_MAX.w),
-        h: clamp(h - (ev.clientY - y0), CARD_MIN.h, CARD_MAX.h),
-      });
-    const up = () => {
-      window.removeEventListener("pointermove", move);
-      window.removeEventListener("pointerup", up);
-      document.body.style.cursor = "";
-      document.body.style.userSelect = "";
-    };
-
-    document.body.style.cursor = "nwse-resize";
-    document.body.style.userSelect = "none";
-    window.addEventListener("pointermove", move);
-    window.addEventListener("pointerup", up);
-  }
-
-  return (
-    <div
-      onPointerDown={onPointerDown}
-      onDoubleClick={() => onChange({ w: 300, h: 360 })}
-      role="separator"
-      aria-label="Цонхны хэмжээ"
-      title="Чирж хэмжээг өөрчилнө · давхар товшилт: анхны хэмжээ"
-      className="group absolute -top-1 -left-1 z-10 size-4 cursor-nwse-resize"
-    >
-      <span
-        aria-hidden
-        className="absolute top-1 left-1 size-2 border-t border-l border-line-2 transition-colors group-hover:border-data"
-      />
-    </div>
-  );
-}
-
-/** Огноо: `Дуудлага өгсөн` талбар хоосон бол он/сар/өдрөөс угсарна */
 function dayLabel(r: Rescue) {
   if (r.date) {
     const d = new Date(r.date);

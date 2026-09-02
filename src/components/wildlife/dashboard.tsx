@@ -32,6 +32,7 @@ import { MapTip, MapTipRow, useMapTip } from "@/components/map/hover-tip";
 import { FilterBar, FilterMenu, PickList } from "@/components/wells/filter-bar";
 import { defaultBasemap, type Basemap, type Extent } from "@/components/wells/map";
 import { Columns } from "@/components/ui/resizable-columns";
+import { MapPanel, useMapPanel } from "@/components/map/panel";
 import {
   fetchCalls,
   fetchPhotos,
@@ -176,6 +177,7 @@ export function WildlifeDashboard() {
 
   /** Хулгана дагасан хөвөгч тайлбар — байрлалыг өөрөө удирдана */
   const tip = useMapTip();
+  const panel = useMapPanel("left");
 
   /*
     Хулгана дээр очсон дуудлага. Сүлжээ рүү ханддаггүй — бүх талбар аль
@@ -642,17 +644,12 @@ export function WildlifeDashboard() {
               ) : null}
 
               {detail ? (
-                <div className="absolute right-2.5 bottom-8 z-10 w-[286px] rounded-xs border border-line bg-paper/92 backdrop-blur-md">
-                  <div className="flex items-center justify-between border-b border-line px-2.5 py-1.5">
-                    <span className="eyebrow">Дуудлагын бичилт</span>
-                    <button
-                      onClick={() => setSelected(null)}
-                      className="text-ink-3 transition-colors hover:text-ink"
-                      aria-label="Хаах"
-                    >
-                      <X size={12} />
-                    </button>
-                  </div>
+                <MapPanel
+                  state={panel}
+                  title="Дуудлагын бичилт"
+                  onClose={() => setSelected(null)}
+                  className="right-2.5 bottom-8 w-[286px]"
+                >
                   <div className="max-h-[260px] overflow-y-auto p-2.5">
                     <dl className="space-y-1.5">
                       <Field k="Дугаар" v={<span className="num">#{detail.oid}</span>} />
@@ -691,7 +688,7 @@ export function WildlifeDashboard() {
                       {detail.note ? <Field k="Тайлбар" v={detail.note} /> : null}
                     </dl>
                   </div>
-                </div>
+                </MapPanel>
               ) : null}
             </div>
           </div>
