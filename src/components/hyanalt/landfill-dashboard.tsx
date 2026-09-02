@@ -639,7 +639,7 @@ export function LandfillDashboard() {
               <Cell label="Хүчин чадал" value={num(totals.capacity)} unit="тн/жил" />
             )}
             <Cell
-              label={isLandfill ? "Дүүргэлт 90%-иас дээш" : "Өндөр эрсдэлтэй"}
+              label={isLandfill ? "Дүүргэлт 90 хувиас дээш" : "Өндөр эрсдэлтэй"}
               value={num(totals.alert)}
               note={isLandfill ? "багтаамж дуусах дөхсөн" : "байгууламж"}
               alert={totals.alert > 0}
@@ -701,7 +701,7 @@ export function LandfillDashboard() {
                       text={
                         hovered.fill == null
                           ? "Дүүргэлт бүртгэгдээгүй"
-                          : `Дүүргэлт ${num(hovered.fill)}%`
+                          : `Дүүргэлт ${num(hovered.fill)} хувь`
                       }
                       num
                     />
@@ -932,7 +932,7 @@ function FillMeter({ value }: { value: number | null }) {
         />
       </span>
       <span className="num shrink-0 text-[10px] leading-none" style={{ color: tone }}>
-        {num(value)}%
+        {num(value)} хувь
       </span>
     </span>
   );
@@ -959,7 +959,7 @@ function Detail({ row, onClose }: { row: AnyRow; onClose: () => void }) {
           <Field k="Байршил" v={row.place} />
           <Field k="Аймаг, сум" v={`${row.aimag} · ${row.soum}`} />
           <Field k="Төлөв" v={row.status} />
-          <Field k="Талбай" v={row.ha == null ? "—" : `${num(row.ha, 1)} га`} />
+          <Field k="Талбайн хэмжээ" v={row.ha == null ? "—" : `${num(row.ha, 1)} га`} />
           {row.kind === "landfill" ? (
             <>
               <Field k="Ангилал" v={row.klass} />
@@ -1011,7 +1011,7 @@ function Detail({ row, onClose }: { row: AnyRow; onClose: () => void }) {
                 k="Хамгаалалтын бүс"
                 v={row.buffer == null ? "—" : `${num(row.buffer)} м`}
               />
-              <Field k="Сүүлд шалгасан" v={row.lastInspection || "—"} />
+              <Field k="Сүүлд шалгасан огноо" v={row.lastInspection || "—"} />
             </>
           )}
           <Field k="Хяналтын цооног" v={row.wells == null ? "—" : num(row.wells)} />

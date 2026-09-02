@@ -5,6 +5,7 @@ import dynamic from "next/dynamic";
 import {
   Building2,
   CalendarClock,
+  CalendarRange,
   ChevronRight,
   FlaskConical,
   Loader2,
@@ -15,7 +16,7 @@ import {
   TriangleAlert,
   Warehouse as WarehouseIcon,
 } from "lucide-react";
-import { RowChart, type Datum } from "@/components/charts";
+import { AreaChart, RowChart, YearRange, type Datum } from "@/components/charts";
 import { BasemapGallery } from "@/components/map/basemap-gallery";
 import { MapTip, MapTipRow, useMapTip } from "@/components/map/hover-tip";
 import { FilterBar, FilterMenu, PickList } from "@/components/wells/filter-bar";
@@ -117,7 +118,15 @@ export function ChemicalsDashboard() {
   const [right, setRight] = React.useState<string | null>(null);
   const [storage, setStorage] = React.useState<string | null>(null);
   const [status, setStatus] = React.useState<ExpiryState | null>(null);
-  const [expiry, setExpiry] = React.useState<string | null>(null);
+  /*
+    ДУУСАХ ХУГАЦААНЫ МУЖ. "Аль нэг он" гэсэн тусдаа шүүлтүүр БАЙХГҮЙ —
+    диаграм дээр он товшиход энэ муж [он, он] болж хумигдана. Хоёр
+    тусдаа хугацааны шүүлтүүр байвал хоорондоо зөрчилдөнө.
+
+    Хугацаа нь эх сурвалжаас ирдэг тул жил солиход мужийг дахин
+    тогтооно ({@link span}).
+  */
+  const [range, setRange] = React.useState<[number, number] | null>(null);
 
   const [picked, setPicked] = React.useState<number | null>(null);
   const [basemap, setBasemap] = React.useState<Basemap>(defaultBasemap);
@@ -144,6 +153,28 @@ export function ChemicalsDashboard() {
     return () => ac.abort();
   }, [year, cache]);
 
+  const rows = data?.rows;
+
+  /** Бүртгэлд байгаа дуусах оны бүтэн муж */
+  const span = React.useMemo<[number, number] | null>(() => {
+    const ys = (rows ?? [])
+      .map((w) => Number(w.validTo?.slice(0, 4)))
+      .filter((y) => Number.isFinite(y));
+    if (!ys.length) return null;
+    return [Math.min(...ys), Math.max(...ys)];
+  }, [rows]);
+
+  /*
+    `null` нь "БҮТЭН МУЖ" гэсэн утгатай — тогтоосон утгыг хадгалдаггүй.
+
+    Дата ирэх, жил солигдох бүрд мужийг effect-ээр тогтоох гэвэл
+    `react-hooks/set-state-in-effect` зөрчигдөж, нэмэлт зурагдалт
+    үүснэ. Хоосон утгыг "хязгаарлаагүй" гэж уншвал муж нь дата солигдох
+    бүрд ӨӨРӨӨ шинэ хүрээндээ тохирно.
+  */
+  const wholeRange =
+    !span || !range || (range[0] === span[0] && range[1] === span[1]);
+
   const reset = React.useCallback(() => {
     setGroup(null);
     setSubstance(null);
@@ -151,7 +182,7 @@ export function ChemicalsDashboard() {
     setRight(null);
     setStorage(null);
     setStatus(null);
-    setExpiry(null);
+    setRange(null);
     setPicked(null);
   }, []);
 
@@ -165,7 +196,6 @@ export function ChemicalsDashboard() {
     [reset],
   );
 
-  const rows = data?.rows;
 
   type Dim =
     | "group"
@@ -191,11 +221,17 @@ export function ChemicalsDashboard() {
       if (!off("right") && right && !w.rights.includes(right)) return false;
       if (!off("storage") && storage && w.storage !== storage) return false;
       if (!off("status") && status && expiryState(w, todayKey) !== status) return false;
-      if (!off("expiry") && expiry && (w.validTo?.slice(0, 4) ?? "") !== expiry)
-        return false;
+      /*
+        Дуусах он бөглөгдөөгүй бичлэг нь муж хумигдсан үед хасагдана —
+        "энэ хооронд дуусна" гэдэгт хамаарах эсэх нь тодорхойгүй.
+      */
+      if (!off("expiry") && !wholeRange && range) {
+        const y = Number(w.validTo?.slice(0, 4));
+        if (!Number.isFinite(y) || y < range[0] || y > range[1]) return false;
+      }
       return true;
     },
-    [group, substance, district, right, storage, status, expiry, todayKey],
+    [group, substance, district, right, storage, status, range, wholeRange, todayKey],
   );
 
   const shown = React.useMemo(() => (rows ?? []).filter((w) => keep(w)), [rows, keep]);
@@ -207,7 +243,7 @@ export function ChemicalsDashboard() {
     (right ? 1 : 0) +
     (storage ? 1 : 0) +
     (status ? 1 : 0) +
-    (expiry ? 1 : 0);
+    (wholeRange ? 0 : 1);
 
   /* ---------------- Индикатор ---------------- */
 
@@ -322,20 +358,33 @@ export function ChemicalsDashboard() {
 
   /* Гэрчилгээ дуусах он. Задраагүй огноог ТУСДАА мөр болгоно — нуувал
      жагсаалтын нийлбэр нийт тоотой таарахгүй нь тайлбаргүй үлдэнэ */
+  /*
+    Дуусах он нь ХУГАЦААНЫ тэнхлэг тул талбайт диаграмаар — платформын
+    бусад оны цуваатай (тусгай зөвшөөрөл, ус ашиглах гэрээ, худаг)
+    ижил. Цуваа нь ТАСРАЛТГҮЙ байх ёстой: бичлэггүй он тэг утгаар
+    орно, эс тэгвээс 2025-аас 2027 руу үсэрч, хоорондох завсар нь
+    "бага" биш "байхгүй" гэдэг нь харагдахгүй.
+
+    Огноо нь задраагүй бичлэг цуваанд ОРОХГҮЙ — хугацааны тэнхлэг дээр
+    байрлуулах газар алга. Тэдгээрийн тоо нь "Хүчинтэй байдал"
+    шүүлтүүрийн "Хугацаа тодорхойгүй" мөрөнд гарна.
+  */
   const byExpiry = React.useMemo<Datum[]>(() => {
-    const m = new Map<string, number>();
+    const m = new Map<number, number>();
     for (const w of rows ?? []) {
       if (!keep(w, "expiry")) continue;
-      const y = w.validTo?.slice(0, 4) ?? "";
+      const y = Number(w.validTo?.slice(0, 4));
+      if (!Number.isFinite(y)) continue;
       m.set(y, (m.get(y) ?? 0) + 1);
     }
-    return [...m]
-      .map(([key, value]) => ({
-        key,
-        label: key ? `${key} он` : "Тодорхойгүй",
-        value,
-      }))
-      .sort((a, b) => a.key.localeCompare(b.key));
+    if (!m.size) return [];
+    const lo = Math.min(...m.keys());
+    const hi = Math.max(...m.keys());
+    const out: Datum[] = [];
+    for (let y = lo; y <= hi; y++) {
+      out.push({ key: String(y), label: String(y), value: m.get(y) ?? 0 });
+    }
+    return out;
   }, [rows, keep]);
 
   /* ---------------- Газрын зураг ---------------- */
@@ -501,6 +550,29 @@ export function ChemicalsDashboard() {
           />
         </FilterMenu>
 
+        {/*
+          ХУГАЦАА — дуусах оны муж. Доорх "Хүчинтэй байдал" нь өөр
+          зүйл: муж нь ХЭЗЭЭ дуусахыг, төлөв нь ӨНӨӨДРИЙН байдлаар
+          дууссан эсэхийг шүүнэ.
+        */}
+        <FilterMenu
+          label="Хугацаа"
+          icon={CalendarRange}
+          value={wholeRange || !range ? null : `${range[0]}–${range[1]}`}
+          active={!wholeRange}
+          onClear={() => setRange(null)}
+          width={252}
+        >
+          {span ? (
+            <YearRange
+              min={span[0]}
+              max={span[1]}
+              value={range ?? span}
+              onChange={setRange}
+            />
+          ) : null}
+        </FilterMenu>
+
         <FilterMenu
           label="Хүчинтэй байдал"
           icon={ShieldCheck}
@@ -635,13 +707,13 @@ export function ChemicalsDashboard() {
                   aria-hidden
                 />
                 <span className="text-[10.5px] text-ink">
-                  Цэгийн хэмжээ — тоо хэмжээ, тонн
+                  Аж ахуйн нэгжийн байршил
                 </span>
               </div>
               <div className="mt-1 flex items-center gap-1.5">
                 <TriangleAlert size={10} className="text-ochre" />
                 <span className="text-[10.5px] text-ink">
-                  Гэрчилгээний хугацаа дууссан
+                  Гэрчилгээний хугацаа дууссан аж ахуйн нэгжийн байршил
                 </span>
               </div>
             </div>
@@ -721,7 +793,22 @@ export function ChemicalsDashboard() {
           </Block>
 
           <Block title="Гэрчилгээ дуусах оноор" note="агуулахын тоо">
-            <RowChart data={byExpiry} selected={expiry} onSelect={setExpiry} format={num} />
+            <AreaChart
+              data={byExpiry}
+              height={96}
+              unit="агуулах"
+              /* Ганц он сонгогдсон үед л тэр цэг тодорно — өргөн муж
+                 дээр аль нэгийг онцолвол худал дохио болно */
+              selected={range && range[0] === range[1] ? String(range[0]) : null}
+              /* Он товшиход муж тэр он дээр хумигдана. Бичлэггүй он
+                 (цуваанд тэг утгаар харагддаг) дээр товшвол мужийг
+                 бүтнээр нь сэргээнэ — хоосон дэлгэц үлдээхгүй */
+              onSelect={(k) => {
+                const hit = byExpiry.find((d) => d.key === k);
+                if (k != null && hit && hit.value > 0) setRange([Number(k), Number(k)]);
+                else setRange(null);
+              }}
+            />
           </Block>
         </div>
       </Columns>

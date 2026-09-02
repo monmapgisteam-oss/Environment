@@ -6,7 +6,7 @@
  * нэмэгдэнэ.
  */
 
-import { ASSESSMENT_SERVICE } from "@/lib/assessment";
+import { ASSESSMENT_SERVICES } from "@/lib/assessment";
 import { DAMAGED_SERVICE } from "@/lib/damaged";
 import { ECO_SERVICE, PARCELS_SERVICE } from "@/lib/eco-corridors";
 import { FLOODPLAIN_SERVICE } from "@/lib/floodplains";
@@ -237,9 +237,15 @@ export const SOURCES: Source[] = [
   },
   {
     slug: "unelgee-uur-amisgal",
-    name: "Байгаль орчны ерөнхий үнэлгээ — нэгж талбар",
+    name: "Байгаль орчны ерөнхий үнэлгээ 2025 — нэгж талбар",
     kind: "ArcGIS FeatureServer",
-    url: ASSESSMENT_SERVICE,
+    url: ASSESSMENT_SERVICES[0].url,
+  },
+  {
+    slug: "unelgee-uur-amisgal",
+    name: "Байгаль орчны ерөнхий үнэлгээ 2026 — нэгж талбар",
+    kind: "ArcGIS FeatureServer",
+    url: ASSESSMENT_SERVICES[1].url,
   },
   {
     slug: "unelgee-uur-amisgal",

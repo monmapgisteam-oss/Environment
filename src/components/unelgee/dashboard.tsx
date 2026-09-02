@@ -28,6 +28,8 @@ import {
 } from "@/components/wells/map";
 import {
   fetchAssessments,
+  ASSESSMENT_YEARS,
+  type AssessmentYear,
   sizeClass,
   ACTIVITIES,
   SIZE_CLASSES,
@@ -53,7 +55,7 @@ const PolygonMap = dynamic(
 const NO_POINTS: MapPoints = { oid: [], lon: [], lat: [] };
 const NO_INDEX = new Uint32Array(0);
 
-type Skip = "activity" | "landuse" | "district" | "right" | "size" | "month";
+type Skip = "activity" | "landuse" | "district" | "right" | "size" | "period";
 
 /* `ACTIVITIES` нь `as const` тул түлхүүр нь литерал нэгдэл болно —
    энгийн `string`-ээр хайхад TypeScript зөвшөөрөхгүй. Тодорхой зарлав. */
@@ -83,6 +85,14 @@ const ACTIVITY_LABEL = new Map<string, string>(
  * диаграм хэрэглэсэн цорын ганц самбар нь энэ — андуурах боломжгүй.
  */
 export function UnelgeeDashboard() {
+  /*
+    Бүртгэлийн ОН. Жил бүр тусдаа давхарга бөгөөд бүртгэл жилийн эцэст
+    хаагддаг тул НЭГТГЭХГҮЙ, сольж харна — хөрсний мониторингтой ижил.
+    Анхдагч нь хамгийн сүүлийн он.
+  */
+  const [year, setYear] = React.useState<AssessmentYear>(
+    ASSESSMENT_YEARS[ASSESSMENT_YEARS.length - 1],
+  );
   const [data, setData] = React.useState<AssessmentData | null>(null);
   const [error, setError] = React.useState<string | null>(null);
 
@@ -91,8 +101,24 @@ export function UnelgeeDashboard() {
   const [district, setDistrict] = React.useState<string | null>(null);
   const [right, setRight] = React.useState<string | null>(null);
   const [size, setSize] = React.useState<string | null>(null);
-  const [month, setMonth] = React.useState<string | null>(null);
+  /* Хугацааны цэг — `"2026-05"`. Он, сар хоёулаа орсон тул хоёр
+     жилийн ижил сар нийлэхгүй */
+  const [period, setPeriod] = React.useState<string | null>(null);
   const [picked, setPicked] = React.useState<number | null>(null);
+
+  /* Он солиход шүүлтүүр цэвэрлэгдэнэ — нэг оны чиглэл, зориулалт
+     нөгөөд нь байхгүй байж болох тул хуучин сонголт хоосон дэлгэц
+     үлдээнэ */
+  const pickYear = React.useCallback((y: AssessmentYear) => {
+    setYear(y);
+    setActivity(null);
+    setLanduse(null);
+    setDistrict(null);
+    setRight(null);
+    setSize(null);
+    setPeriod(null);
+    setPicked(null);
+  }, []);
   /** Хулгана дагасан хөвөгч тайлбар — байрлалыг өөрөө удирдана */
   const tip = useMapTip();
   const panel = useMapPanel("right");
@@ -101,13 +127,15 @@ export function UnelgeeDashboard() {
 
   React.useEffect(() => {
     const ac = new AbortController();
-    fetchAssessments(ac.signal)
+    fetchAssessments(year, ac.signal)
       .then(setData)
       .catch((e: Error) => {
         if (e.name !== "AbortError") setError(e.message);
       });
     return () => ac.abort();
-  }, []);
+    /* Жил солигдвол дахин татна. Ажлын талбар нь самбарыг `key`-ээр
+       дахин үүсгэдэг тул практикт нэг л удаа ажиллана */
+  }, [year]);
 
   const rows = data?.rows;
 
@@ -120,10 +148,10 @@ export function UnelgeeDashboard() {
       if (skip !== "district" && district && r.district !== district) return false;
       if (skip !== "right" && right && r.right !== right) return false;
       if (skip !== "size" && size && String(sizeClass(r.m2)) !== size) return false;
-      if (skip !== "month" && month && String(r.month) !== month) return false;
+      if (skip !== "period" && period && r.period !== period) return false;
       return true;
     },
-    [activity, landuse, district, right, size, month],
+    [activity, landuse, district, right, size, period],
   );
 
   const filtered = React.useMemo(() => (rows ?? []).filter((r) => keep(r)), [rows, keep]);
@@ -194,25 +222,40 @@ export function UnelgeeDashboard() {
   }, [rows, keep]);
 
   /*
-    Сарын зурвас. Бүх бичлэг 2026 онд тул тэнхлэг нь САР. Бичлэггүй
-    сарыг ч гаргана — "тэр сард нэг ч үнэлгээ гараагүй" гэдэг нь өөрөө
-    мэдээлэл бөгөөд алгасвал цуваа тасралтгүй мэт харагдана.
+    Хугацааны зурвас. Хоёр жилийн бүртгэл НЭГ тэнхлэг дээр сууна
+    (2025-01 → 2026-07) тул түлхүүр нь он, сар хоёулаа. Зөвхөн сараар
+    бүлэглэвэл 2025 оны тавдугаар сар 2026 оныхтой нийлнэ.
+
+    Бичлэггүй сарыг ч гаргана — "тэр сард нэг ч үнэлгээ гараагүй"
+    гэдэг нь өөрөө мэдээлэл бөгөөд алгасвал цуваа тасралтгүй мэт
+    харагдана.
   */
   const monthData = React.useMemo<Datum[]>(() => {
-    const c = new Map<number, number>();
-    let hi = 0;
+    const c = new Map<string, number>();
+    let lo = Infinity;
+    let hi = -Infinity;
     for (const r of rows ?? []) {
-      if (!keep(r, "month")) continue;
-      if (!r.month) continue;
-      c.set(r.month, (c.get(r.month) ?? 0) + 1);
-      if (r.month > hi) hi = r.month;
+      if (!keep(r, "period") || !r.period) continue;
+      c.set(r.period, (c.get(r.period) ?? 0) + 1);
+      const t = Number(r.period.slice(0, 4)) * 12 + Number(r.period.slice(5)) - 1;
+      if (t < lo) lo = t;
+      if (t > hi) hi = t;
     }
-    if (!hi) return [];
-    return Array.from({ length: hi }, (_, i) => ({
-      key: String(i + 1),
-      label: `${i + 1}`,
-      value: c.get(i + 1) ?? 0,
-    }));
+    if (!Number.isFinite(lo)) return [];
+    const out: Datum[] = [];
+    for (let t = lo; t <= hi; t++) {
+      const y = Math.floor(t / 12);
+      const mo = (t % 12) + 1;
+      const key = `${y}-${String(mo).padStart(2, "0")}`;
+      out.push({
+        key,
+        /* Шошго нь ХӨВӨГЧ самбарт гарна — тэнд бүтэн огноо хэрэгтэй;
+           тэнхлэг дээрх богино бичиглэлийг `formatTick` өгнө */
+        label: `${y} оны ${mo}-р сар`,
+        value: c.get(key) ?? 0,
+      });
+    }
+    return out;
   }, [rows, keep]);
 
   const stats = React.useMemo(() => {
@@ -222,13 +265,14 @@ export function UnelgeeDashboard() {
       m2 += r.m2;
       applicants.add(r.applicant);
     }
-    const ms = filtered.map((r) => r.month).filter(Boolean) as number[];
+    const ps = filtered.map((r) => r.period).filter(Boolean).sort();
+    const nice = (v: string) => v.replace("-", ".");
     return {
       n: filtered.length,
       ha: m2 / 10000,
       applicants: applicants.size,
-      /* Бүх бичлэг нэг онд тул "он" индикатор утгагүй — сарын муж илүү */
-      span: ms.length ? `${Math.min(...ms)}–${Math.max(...ms)}` : "—",
+      /* Хоёр жилийн бүртгэл тул муж нь он, сар хоёулаараа */
+      span: ps.length ? `${nice(ps[0])} – ${nice(ps[ps.length - 1])}` : "—",
     };
   }, [filtered]);
 
@@ -243,11 +287,11 @@ export function UnelgeeDashboard() {
       return b.get(0.0008);
     }
     /* Шүүлтүүргүй үед гарын байрлалыг бид дарахгүй */
-    if (!activity && !landuse && !district && !right && !size && !month) return null;
+    if (!activity && !landuse && !district && !right && !size && !period) return null;
     const b = new Bounds();
     for (const f of shapes.features) b.addGeometry(f.geometry);
     return b.get();
-  }, [data, shapes, picked, activity, landuse, district, right, size, month]);
+  }, [data, shapes, picked, activity, landuse, district, right, size, period]);
 
   /** Хулгана дээр очсон нэгж талбар — газрын зурагнаас */
   const hovered = React.useMemo(
@@ -266,7 +310,7 @@ export function UnelgeeDashboard() {
     setDistrict(null);
     setRight(null);
     setSize(null);
-    setMonth(null);
+    setPeriod(null);
     setPicked(null);
   }
 
@@ -294,7 +338,7 @@ export function UnelgeeDashboard() {
     (district ? 1 : 0) +
     (right ? 1 : 0) +
     (size ? 1 : 0) +
-    (month ? 1 : 0);
+    (period ? 1 : 0);
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-2.5">
@@ -302,6 +346,30 @@ export function UnelgeeDashboard() {
         title="Байгаль орчны ерөнхий үнэлгээ"
         activeCount={activeCount}
         onReset={reset}
+        leading={
+          /* Он сонгох — хоёр өөр бүртгэл, давхарлахгүй сольж харна.
+             Шүүлтүүр БИШ тул гарчгийн хажууд, шүүлтүүрүүдээс тусад нь */
+          <div className="flex shrink-0 items-center gap-1">
+            {ASSESSMENT_YEARS.map((y) => {
+              const on = year === y;
+              return (
+                <button
+                  key={y}
+                  onClick={() => pickYear(y)}
+                  aria-pressed={on}
+                  className={cn(
+                    "num rounded-xs border px-2.5 py-1 text-[12px] transition-colors",
+                    on
+                      ? "border-data/45 bg-data/10 text-ink"
+                      : "border-line text-ink-2 hover:border-line-2 hover:text-ink",
+                  )}
+                >
+                  {y}
+                </button>
+              );
+            })}
+          </div>
+        }
       >
         <FilterMenu
           label="Чиглэл"
@@ -540,16 +608,25 @@ export function UnelgeeDashboard() {
               хугацааны тэнхлэг.
             */}
             <Card className="shrink-0">
-              <Head title="2026 оны урсгал">
-                <span className="text-[10.5px] text-ink-3">сараар</span>
+              <Head title="Шийдвэрлэлтийн урсгал">
+                <span className="text-[10.5px] text-ink-3">2025–2026 · сараар</span>
               </Head>
               <div className="p-3">
                 <AreaChart
                   data={monthData}
                   height={72}
-                  selected={month}
-                  onSelect={setMonth}
+                  selected={period}
+                  onSelect={setPeriod}
                   unit="үнэлгээ"
+                  /*
+                    Тэнхлэгт зөвхөн САРЫН дугаар, оны эхэнд ОН. Бүтэн
+                    огноо (`2025-01`) бичвэл 19 шошго налж, зурвасын
+                    өндрийг хоёр дахин иднэ; он нь нэгдүгээр сар дээр
+                    нэг л удаа гарахад цуваа хаана эргэсэн нь харагдана.
+                  */
+                  formatTick={(d) =>
+                    d.key.endsWith("-01") ? d.key.slice(0, 4) : String(Number(d.key.slice(5)))
+                  }
                 />
               </div>
             </Card>

@@ -21,7 +21,48 @@
 
 const HOST = "https://services-ap1.arcgis.com/ACqsMOmNLi5wIdIh/arcgis/rest/services";
 
-export const ASSESSMENT_SERVICE = `${HOST}/Parcel_Yrunhii_unelgee/FeatureServer/0`;
+/* --------------------------------------------------------------------------
+   ХОЁР ЖИЛ, ХОЁР ДАВХАРГА
+
+   Хэлтэс жил тутам ТУСДАА давхарга үүсгэдэг. Бүтэц нь бараг ижил:
+   2025-д `Дүүрэг` талбар нэмэгдсэн, 2026-д `rank`, `p_rank`, `code`
+   орсон боловч бид эдгээрийн алийг нь ч уншдаггүй. Уншдаг арван таван
+   талбар хоёуланд нь БАЙГАА тул нэг хүсэлтийн жагсаалт хоёуланд
+   тохирно.
+
+   Жил бүр ТУСДАА ТАБТАЙ: бүртгэл нь жилийн эцэст хаагдаж, дараагийн
+   он шинээр эхэлдэг тул хоёр оныг нэг дэлгэцэнд нийлүүлэх нь
+   хэрэглэгчийн ажлын хэвшилтэй таарахгүй. Самбар нь НЭГ бөгөөд
+   аль жилийг татахыг пропоор хүлээж авна.
+
+   ⚠ `OBJECTID` нь давхарга бүрд 1-ЭЭС ЭХЭЛДЭГ. Тусдаа таб дээр
+   мөргөлдөхгүй ч дугаарыг давхаргын индексээр нэрийн орон зайд оруулав
+   ({@link uid}): газрын зураг сонгосон талбайг `feature-state`-ээр
+   тодруулдаг тул `id` нь давхарга солигдоход тодорхой байх ёстой.
+   -------------------------------------------------------------------------- */
+
+export const ASSESSMENT_SERVICES = [
+  { year: 2025, url: `${HOST}/Parcel_yrunhii_unelgee_2025/FeatureServer/0` },
+  { year: 2026, url: `${HOST}/Parcel_Yrunhii_unelgee/FeatureServer/0` },
+] as const;
+
+export type AssessmentYear = (typeof ASSESSMENT_SERVICES)[number]["year"];
+
+/** Сонгож болох онууд — өсөх дарааллаар */
+export const ASSESSMENT_YEARS = ASSESSMENT_SERVICES.map(
+  (s) => s.year,
+) as readonly AssessmentYear[];
+
+/** Эх сурвалжийн бүртгэлд — хамгийн сүүлийн жилийнх */
+export const ASSESSMENT_SERVICE = ASSESSMENT_SERVICES[1].url;
+
+/**
+ * Давхарга хоорондын мөргөлдөөнгүй дугаар.
+ *
+ * Сая нь давхаргын дугаар, үлдсэн нь эх сурвалжийн `OBJECTID`. Нэг
+ * давхаргад сая гаруй бичлэг байхгүй тул хилийг давахгүй.
+ */
+const uid = (layer: number, oid: number) => layer * 1_000_000 + oid;
 
 export type Assessment = {
   oid: number;
@@ -54,6 +95,14 @@ export type Assessment = {
   parcel: string;
   /** Талбай, м² (`Shape__Area`, UTM тул метр квадрат) */
   m2: number;
+  /**
+   * Хугацааны тэнхлэгийн түлхүүр — `"2026-05"`.
+   *
+   * Он, сар ХОЁУЛАНГ нь агуулна: хоёр жилийн цуваа нэг тэнхлэг дээр
+   * суудаг тул зөвхөн сараар бүлэглэвэл 2025 оны тавдугаар сар 2026
+   * оныхтой нийлнэ. Огноо задраагүй бол хоосон.
+   */
+  period: string;
 };
 
 export type AssessmentData = {
@@ -174,9 +223,21 @@ const int = (v: unknown) => {
   return Number.isFinite(n) && n > 0 ? n : null;
 };
 
-export async function fetchAssessments(signal?: AbortSignal): Promise<AssessmentData> {
+/** Нэг оны бүртгэлийг татна */
+export async function fetchAssessments(
+  year: AssessmentYear,
+  signal?: AbortSignal,
+): Promise<AssessmentData> {
+  const layer = ASSESSMENT_SERVICES.findIndex((svc) => svc.year === year);
+  const svc = ASSESSMENT_SERVICES[layer];
+  if (!svc) throw new Error(`${year} оны ерөнхий үнэлгээний давхарга бүртгэгдээгүй`);
+  const { rows, features } = await fetchLayer(svc.url, layer, signal);
+  return { rows, shapes: { type: "FeatureCollection", features } };
+}
+
+async function fetchLayer(service: string, layer: number, signal?: AbortSignal) {
   const url =
-    `${ASSESSMENT_SERVICE}/query?` +
+    `${service}/query?` +
     new URLSearchParams({
       where: "1=1",
       outFields: [
@@ -213,7 +274,9 @@ export async function fetchAssessments(signal?: AbortSignal): Promise<Assessment
 
   for (const f of json.features ?? []) {
     const p = f.properties;
-    const oid = Number(p.OBJECTID);
+    const oid = uid(layer, Number(p.OBJECTID));
+    const year = int(p["Шийдвэрлэсэн_он"]);
+    const month = int(p["Шийдвэрлэсэн_сар"]);
     const applicant = str(p["ААНБ_нэрс"]);
     const activityRaw = str(p["Үйл_ажиллагааны_чиглэл"]);
 
@@ -225,8 +288,10 @@ export async function fetchAssessments(signal?: AbortSignal): Promise<Assessment
       request: str(p["Хүсэлтийн_дугаар"]),
       code: str(p["Үнэлгээний_дугаар"]),
       decidedRaw: str(p["Шийдвэрлэсэн_он_сар_өдөр"]),
-      year: int(p["Шийдвэрлэсэн_он"]),
-      month: int(p["Шийдвэрлэсэн_сар"]),
+      year,
+      month,
+      period:
+        year && month ? `${year}-${String(month).padStart(2, "0")}` : "",
       activityRaw,
       activity: classifyActivity(activityRaw),
       landuse: str(p.landuse_de) || "Тодорхойгүй",
@@ -249,5 +314,5 @@ export async function fetchAssessments(signal?: AbortSignal): Promise<Assessment
     });
   }
 
-  return { rows, shapes: { type: "FeatureCollection", features: shapes } };
+  return { rows, features: shapes };
 }
