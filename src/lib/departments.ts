@@ -43,7 +43,7 @@ export const DEPARTMENTS: Department[] = [
     name: "Санхүү аж ахуй, мониторингийн хэлтэс",
     icon: Wallet,
     tone: "--d-sanhuu",
-    status: "pending",
+    status: "live",
   },
   {
     slug: "orchin",

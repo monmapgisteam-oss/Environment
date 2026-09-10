@@ -1,11 +1,11 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { FileCheck2, Loader2, TreePine } from "lucide-react";
+import { CloudSun, FileCheck2, Loader2, TreePine } from "lucide-react";
 import { SourceTabs, useStoredTab } from "@/components/ui/source-tabs";
 
 /*
-  Хэлтэс хоёр эх сурвалжтай тул самбар хооронд сольж харна.
+  Хэлтэс гурван эх сурвалжтай тул самбар хооронд сольж харна.
 
   Ерөнхий үнэлгээний ОН нь тусдаа таб БИШ, самбар доторх сонголт:
   таб нь СЭДЭВ ялгадаг, он нь нэг сэдвийн доторх хувилбар. Хөрсний
@@ -15,7 +15,13 @@ import { SourceTabs, useStoredTab } from "@/components/ui/source-tabs";
   Зэрэг ачаалахгүй: сонгосон нь л татагдана. Тус бүр нь газрын зураг,
   MapLibre-тэй тул хоёуланг нь эхнээс нь ачаалах нь дэмий жин.
 
-  Уур амьсгалын өөрчлөлтийн дата хэлтсээс хараахан ирээгүй.
+  Цаг агаарын таб нь бусад хоёроос ЭРС өөр бүтэцтэй: тэдгээр нь нэгж
+  талбарын бүртгэл (баримт бичиг) бол энэ нь мэдрэгчийн сүлжээний
+  тухайн мөчийн заалт. Эх сурвалж түүх өгдөггүй тул диаграм, шүүлтүүрийн
+  мөр байхгүй — хэмжих хэрэгслийн самбар хэлбэртэй.
+
+  Уур амьсгалын өөрчлөлтийн урт хугацааны цуваа хэлтсээс хараахан
+  ирээгүй; одоогоор ажиглалтын сүлжээ л холбогдсон.
 */
 const spinner = () => (
   <div className="flex h-full items-center justify-center rounded-xs border border-line bg-paper-2">
@@ -33,6 +39,11 @@ const BomtDashboard = dynamic(
   { ssr: false, loading: spinner },
 );
 
+const WeatherDashboard = dynamic(
+  () => import("@/components/unelgee/weather-dashboard").then((m) => m.WeatherDashboard),
+  { ssr: false, loading: spinner },
+);
+
 const TABS = [
   {
     id: "unelgee",
@@ -46,6 +57,13 @@ const TABS = [
     note: "2026 оны нэгтгэл · мод тарих үүрэг",
     full: "Байгаль орчны менежментийн төлөвлөгөөний 2026 оны нэгтгэл",
     icon: TreePine,
+  },
+  {
+    id: "weather",
+    label: "Цаг агаар",
+    note: "Ажиглалтын сүлжээ · таван хоногийн урьдчилсан мэдээ",
+    full: "Ус цаг уур, орчны шинжилгээний газрын ажиглалтын сүлжээ",
+    icon: CloudSun,
   },
 ] as const;
 
@@ -63,7 +81,9 @@ export function UnelgeeWorkspace() {
       <SourceTabs tabs={TABS} value={tab} onChange={pick} label="Сэдэв" />
 
       <div className="min-h-0 flex-1">
-        {tab === "unelgee" ? <UnelgeeDashboard /> : <BomtDashboard />}
+        {tab === "unelgee" ? <UnelgeeDashboard /> : null}
+        {tab === "bomt" ? <BomtDashboard /> : null}
+        {tab === "weather" ? <WeatherDashboard /> : null}
       </div>
     </div>
   );
