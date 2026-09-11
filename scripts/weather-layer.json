@@ -1,0 +1,68 @@
+{
+  "_тайлбар": [
+    "Цаг агаарын архивын давхаргын тодорхойлолт (ArcGIS Feature Service).",
+    "`scripts/log-weather.mjs` энэ бүтцэд бичдэг — талбарын нэр зөрвөл бичилт унана.",
+    "",
+    "Үүсгэх: ArcGIS Online → Content → New item → Feature layer →",
+    "Define your own layer. Эсвэл админ токентой бол:",
+    "  POST <adminFeatureServer>/addToDefinition  f=json&token=…&addToDefinition={\"layers\":[ЭНЭ]}",
+    "",
+    "obs_date дээр индекс ЗААВАЛ: давхардлын шалгалт станц бүрийн хамгийн",
+    "сүүлийн огноог асуудаг тул архив өсөх тусам индексгүй бол удаашрана."
+  ],
+  "name": "Tsag_agaar_arhiv",
+  "type": "Feature Layer",
+  "geometryType": "esriGeometryPoint",
+  "description": "Ус цаг уур, орчны шинжилгээний газрын ажиглалтын цаг тутмын архив. Эх сурвалжийн API нь зөвхөн сүүлийн заалтыг буцаадаг тул цуваа энд хуримтлагдана.",
+  "extent": {
+    "xmin": 106.5,
+    "ymin": 47.6,
+    "xmax": 108.5,
+    "ymax": 48.3,
+    "spatialReference": { "wkid": 4326 }
+  },
+  "objectIdField": "OBJECTID",
+  "hasAttachments": false,
+  "supportsAdvancedQueries": true,
+  "fields": [
+    { "name": "OBJECTID", "type": "esriFieldTypeOID", "alias": "OBJECTID", "nullable": false },
+
+    { "name": "sid", "type": "esriFieldTypeInteger", "alias": "Станцын дугаар", "nullable": false },
+    { "name": "name", "type": "esriFieldTypeString", "alias": "Станцын нэр", "length": 120 },
+    { "name": "place", "type": "esriFieldTypeString", "alias": "Сум, дүүрэг", "length": 120 },
+    { "name": "aimag", "type": "esriFieldTypeString", "alias": "Аймаг", "length": 60 },
+    { "name": "elev", "type": "esriFieldTypeInteger", "alias": "Далайн түвшнээс дээш, м" },
+    { "name": "lat", "type": "esriFieldTypeDouble", "alias": "Өргөрөг" },
+    { "name": "lon", "type": "esriFieldTypeDouble", "alias": "Уртраг" },
+
+    { "name": "obs_date", "type": "esriFieldTypeDate", "alias": "Ажиглалтын хугацаа", "nullable": false },
+    { "name": "logged_at", "type": "esriFieldTypeDate", "alias": "Архивт бичсэн хугацаа" },
+
+    { "name": "ttt", "type": "esriFieldTypeDouble", "alias": "Агаарын температур, °C" },
+    { "name": "ttt_feels", "type": "esriFieldTypeDouble", "alias": "Мэдрэгдэх температур, °C" },
+    { "name": "ff", "type": "esriFieldTypeInteger", "alias": "Агаарын харьцангуй чийг, %" },
+    { "name": "pst", "type": "esriFieldTypeDouble", "alias": "Станцын түвшний даралт, гПа" },
+    { "name": "nh", "type": "esriFieldTypeInteger", "alias": "Нийт үүлшил, балл" },
+    { "name": "wind_speed", "type": "esriFieldTypeDouble", "alias": "Салхины хурд, м/с" },
+    { "name": "wind_dir", "type": "esriFieldTypeInteger", "alias": "Салхины зүг, градус" },
+    { "name": "precip", "type": "esriFieldTypeDouble", "alias": "Хур тунадас, мм" },
+
+    { "name": "snow_depth", "type": "esriFieldTypeDouble", "alias": "Цасны зузаан, см" },
+    { "name": "tmin", "type": "esriFieldTypeDouble", "alias": "Хамгийн бага температур, °C" },
+    { "name": "tmax", "type": "esriFieldTypeDouble", "alias": "Хамгийн их температур, °C" }
+  ],
+  "indexes": [
+    {
+      "name": "idx_obs_date",
+      "fields": "obs_date",
+      "isUnique": false,
+      "description": "Давхардлын шалгалт — станц бүрийн хамгийн сүүлийн ажиглалт"
+    },
+    {
+      "name": "idx_sid",
+      "fields": "sid",
+      "isUnique": false,
+      "description": "Станцаар бүлэглэх"
+    }
+  ]
+}

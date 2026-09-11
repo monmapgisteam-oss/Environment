@@ -1,0 +1,45 @@
+# Цаг агаарын ажиглалтыг ArcGIS Feature Service рүү хуримтлуулна.
+#
+# `weather.gov.mn`-ий API нь зөвхөн хамгийн сүүлийн заалтыг буцаадаг тул
+# хандлага харах ганц арга бол заалтыг тухай бүрд нь өөрсдөө хадгалах.
+# Энэ ажиллагаа сайт бүтээхтэй ХАМААРАЛГҮЙ — тусдаа хуваарьтай.
+name: Цаг агаарын архив
+
+on:
+  schedule:
+    # Цаг тутам, 07 минутад. Яг бүтэн цагт биш: GitHub-ийн хуваарь тэр
+    # үед хамгийн ачаалалтай байдаг тул хойшлох магадлал өндөр.
+    - cron: "7 * * * *"
+  # Гараар турших боломж
+  workflow_dispatch:
+
+# Нэг л ажиллагаа явна: давхарлан ажиллавал ижил заалт хоёр удаа
+# бичигдэж болзошгүй (давхардлын шалгалт нь бичихээс ӨМНӨ уншдаг).
+concurrency:
+  group: weather-log
+  cancel-in-progress: false
+
+jobs:
+  log:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Заалтыг архивлах
+        env:
+          WEATHER_LAYER_URL: ${{ secrets.WEATHER_LAYER_URL }}
+          # Аппын токен (OAuth). Хэрэглэгчийн бүртгэлээр орох бол оронд нь
+          # ARCGIS_USER / ARCGIS_PASSWORD тавьж болно — скрипт хоёуланг дэмжинэ.
+          ARCGIS_CLIENT_ID: ${{ secrets.ARCGIS_CLIENT_ID }}
+          ARCGIS_CLIENT_SECRET: ${{ secrets.ARCGIS_CLIENT_SECRET }}
+          ARCGIS_USER: ${{ secrets.ARCGIS_USER }}
+          ARCGIS_PASSWORD: ${{ secrets.ARCGIS_PASSWORD }}
+          # `capital` (анхдагч, 7 станц) эсвэл `all` (317 станц)
+          WEATHER_SCOPE: capital
+          # Давхарга нь өөрөө гарын үсэг зурсан TLS гэрчилгээтэй хост дээр
+          # (environment.ub.gov.mn). Шалгалтыг унтраахын оронд серверийн
+          # гэрчилгээг итгэмжлэгдсэн CA болгож бэхэлнэ.
+          NODE_EXTRA_CA_CERTS: scripts/environment-ub-gov-mn.pem
+        run: node scripts/log-weather.mjs

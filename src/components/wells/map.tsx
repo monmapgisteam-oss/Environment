@@ -7,6 +7,7 @@ import {
   prewarm,
   setWorkerUrl,
   type ExpressionSpecification,
+  type FilterSpecification,
   type GeoJSONSource,
   type IControl,
   type StyleSpecification,
@@ -1319,10 +1320,20 @@ export function WellsMap({
         */
         const fire = modeRef.current.gradedFire;
 
+        /*
+          ⚠ БӨӨГНӨРЛИЙГ ШҮҮНЭ. Зэрэглэсэн цэг нь бөөгнөрсөн обьект дээр
+          ч зурагддаг байсан тул бөөгнөрлийн дугуйн ТӨВД суугаад
+          доторх тоог халхалдаг байв (`cluster` асаалттай, зэрэглэсэн
+          горимд — химийн бүртгэлийн самбар энэ хослолыг анх хэрэглэв).
+          Бөөгнөрөлгүй firefly салбарт энэ шүүлт анхнаасаа байсан.
+        */
+        const single: FilterSpecification = ["!", ["has", "point_count"]];
+
         m.addLayer({
           id: "wells-glow",
           type: "circle",
           source: "wells",
+          filter: single,
           ...(heat ? { minzoom: 11.5 } : {}),
           paint: {
             "circle-radius": gradedRadius(stops, fire ? 4.2 : 2.4),
@@ -1340,6 +1351,7 @@ export function WellsMap({
             id: "wells-halo",
             type: "circle",
             source: "wells",
+            filter: single,
             ...(heat ? { minzoom: 11.5 } : {}),
             paint: {
               "circle-radius": gradedRadius(stops, 2.2),
@@ -1354,6 +1366,7 @@ export function WellsMap({
           id: "wells-dot",
           type: "circle",
           source: "wells",
+          filter: single,
           ...(heat ? { minzoom: 11.5 } : {}),
           paint: {
             "circle-radius": gradedRadius(stops, fire ? 0.95 : 1),

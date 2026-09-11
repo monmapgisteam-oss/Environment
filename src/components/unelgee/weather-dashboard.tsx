@@ -3,6 +3,7 @@
 import * as React from "react";
 import dynamic from "next/dynamic";
 import {
+  Check,
   Clock,
   Loader2,
   MapPin,
@@ -23,7 +24,6 @@ import {
 import {
   CAPITAL,
   FRESH_HOURS,
-  MEASURES,
   ageHours,
   ageText,
   colorOf,
@@ -84,20 +84,38 @@ const PointMap = dynamic(
 /** Хотын төв станц (`obs/data/aws/292`) жагсаалтын толгойд суана */
 const MAIN_SID = 292;
 
+/*
+  Хэмжигдэхүүний ХОЁР БҮЛЭГ, зураг тус бүрд нэг.
+
+  Хуваалт нь агуулгаараа: зүүн талд АГААРЫН ТӨЛӨВ (температур, чийг,
+  даралт) — эдгээр нь мэдрэгчийн шууд заалт бөгөөд хоорондоо
+  физикээр холбоотой; баруун талд ТЭНГЭР, САЛХИ (үүлшил, салхины
+  хурд) — ажиглалтын өөр төрлийн хэмжүүр.
+*/
+const GROUP_A: MeasureId[] = ["temp", "humidity", "pressure"];
+const GROUP_B: MeasureId[] = ["cloud", "wind"];
+
 export function WeatherDashboard() {
   const [data, setData] = React.useState<WeatherData | null>(null);
   const [error, setError] = React.useState<string | null>(null);
 
   /* Хэрэглэгчийн өгсөн зам нь 292 — Улаанбаатар. Тэр нь анхны станц */
   const [sid, setSid] = React.useState(292);
-  const [measure, setMeasure] = React.useState<MeasureId>("temp");
+  /*
+    ХОЁР ЗУРАГ, тус бүр өөрийн хэмжигдэхүүнтэй. Таван хэмжигдэхүүнийг
+    нэг зураг дээр сэлгэж байсныг хуваав: агаарын төлөв (температур,
+    чийг, даралт) нэг талд, тэнгэрийн байдал (үүлшил, салхи) нөгөө
+    талд. Ингэснээр хоёр өөр төрлийн заалтыг ЗЭРЭГ харна — сэлгэж
+    үзэхэд санах ойд хадгалах шаардлагатай байв.
+  */
+  const [measureA, setMeasureA] = React.useState<MeasureId>("temp");
+  const [measureB, setMeasureB] = React.useState<MeasureId>("cloud");
   const [query, setQuery] = React.useState("");
   /* Хуучирсан заалт анхнаасаа нуугдана — "одоогийн байдал" гэдэг нь
      долоо хоногийн өмнөх тоог агуулах ёсгүй */
   const [freshOnly, setFreshOnly] = React.useState(true);
 
   const [basemap, setBasemap] = React.useState<Basemap>(defaultBasemap);
-  const tip = useMapTip();
   /*
     Жагсаалтын hover нь ТУСДАА төлөв. `tip.onHover`-ыг дуудвал болохгүй:
     тэр нь хулганы байрлалыг зургийн пикселээс авдаг бөгөөд жагсаалт
@@ -116,6 +134,8 @@ export function WeatherDashboard() {
     setTouched(true);
   }, []);
 
+  const mA = measureOf(measureA);
+
   React.useEffect(() => {
     const ac = new AbortController();
     fetchWeather(ac.signal)
@@ -123,8 +143,6 @@ export function WeatherDashboard() {
       .catch((e: Error) => e.name !== "AbortError" && setError(e.message));
     return () => ac.abort();
   }, []);
-
-  const m = measureOf(measure);
 
   /**
    * Ажиглалттай станцууд, заалтын настай нь хамт.
@@ -149,46 +167,22 @@ export function WeatherDashboard() {
     );
   }, [data]);
 
-  /** Газрын зураг, жагсаалт хоёрын хамрах хүрээ */
+  /*
+    Жагсаалтын хамрах хүрээ. ХЭМЖИГДЭХҮҮНЭЭС ХАМААРАХГҮЙ: хоёр зураг
+    өөр өөр хэмжигдэхүүнтэй болсон тул жагсаалтыг аль нэгнийх нь
+    дагуу хумивал нөгөө зураг дээр харагдаж буй станц жагсаалтад
+    байхгүй болно. Хэмжигдэхүүнгүй станцыг зураг бүр ӨӨРӨӨ хасна.
+  */
   const shown = React.useMemo(() => {
     const q = query.trim().toLowerCase();
     return rows.filter((r) => {
       if (freshOnly && (r.age == null || r.age > FRESH_HOURS)) return false;
-      if (m.of(r.obs) == null) return false;
       if (!q) return true;
       return (
         r.st.name.toLowerCase().includes(q) || r.st.place.toLowerCase().includes(q)
       );
     });
-  }, [rows, query, freshOnly, m]);
-
-  /* Цэгийн багана нь ХАРАГДАЖ БУЙ станцуудаас шууд угсарна: хэмжигдэхүүн
-     солигдоход утга нь ч, багана нь ч хамт солигдоно */
-  const points = React.useMemo<MapPoints>(
-    () => ({
-      oid: shown.map((r) => r.st.sid),
-      lon: shown.map((r) => r.st.lon),
-      lat: shown.map((r) => r.st.lat),
-    }),
-    [shown],
-  );
-
-  const visible = React.useMemo(
-    () => Uint32Array.from(shown.map((_, i) => i)),
-    [shown],
-  );
-
-  const values = React.useMemo(
-    () => shown.map((r) => m.of(r.obs) ?? 0),
-    [shown, m],
-  );
-
-  /* Цэг долоохон тул нэрийг нь шууд зурган дээр бичнэ — хулгана
-     хүргэлгүйгээр аль станц болох нь харагдана */
-  const labels = React.useMemo(
-    () => ({ text: shown.map((r) => r.st.name), minzoom: 8 }),
-    [shown],
-  );
+  }, [rows, query, freshOnly]);
 
   const current = React.useMemo(
     () => rows.find((r) => r.st.sid === sid) ?? null,
@@ -197,17 +191,6 @@ export function WeatherDashboard() {
 
   const forecast = data?.forecast.get(sid) ?? [];
 
-  /** Тайлбарын агуулга — ЗӨВХӨН газрын зургийн hover */
-  const hovered = React.useMemo(
-    () => (tip.oid == null ? null : (rows.find((r) => r.st.sid === tip.oid) ?? null)),
-    [rows, tip.oid],
-  );
-
-  /** Тодруулгын цагираг — зураг, жагсаалт хоёрын аль нэгнээс */
-  const spot = React.useMemo(() => {
-    const id = tip.oid ?? listHover;
-    return id == null ? null : (rows.find((r) => r.st.sid === id) ?? null);
-  }, [rows, tip.oid, listHover]);
 
   /* Станц сонгоход зураг тийш нь ойртоно */
   const focus = React.useMemo<Extent | null>(() => {
@@ -415,9 +398,34 @@ export function WeatherDashboard() {
             </span>
           </div>
 
+          {/* Шинэлгийн шүүлт нь ЖАГСААЛТЫНХ: хоёр зураг хоёулаа үүнд
+              захирагддаг тул аль нэг зургийн толгойд тавьбал нөгөөд нь
+              ч нөлөөлж байгаа нь ойлгомжгүй болно */}
+          <button
+            onClick={() => setFreshOnly((v) => !v)}
+            aria-pressed={freshOnly}
+            className={cn(
+              "flex shrink-0 items-center gap-1.5 border-b border-line px-2.5 py-1.5 text-left text-[11px] leading-none transition-colors",
+              freshOnly ? "text-(--tone)" : "text-ink-2 hover:text-ink",
+            )}
+          >
+            <span
+              aria-hidden
+              className={cn(
+                "flex size-3 shrink-0 items-center justify-center rounded-[2px] border transition-colors",
+                freshOnly ? "border-(--tone) bg-(--tone)" : "border-line-2",
+              )}
+            >
+              {freshOnly ? <Check size={8} strokeWidth={3} className="text-paper" /> : null}
+            </span>
+            Сүүлийн {FRESH_HOURS} цагийн заалт
+          </button>
+
           <ul className="min-h-0 flex-1 divide-y divide-line overflow-y-auto">
             {shown.map((r) => {
-              const v = m.of(r.obs);
+              /* Жагсаалтад ЗҮҮН зургийн хэмжигдэхүүн гарна — хоёуланг
+                 нь бичвэл мөр хэт нягт болно */
+              const v = mA.of(r.obs);
               const on = r.st.sid === sid;
               return (
                 <li key={r.st.sid}>
@@ -447,9 +455,9 @@ export function WeatherDashboard() {
                       </span>
                       <span
                         className="num shrink-0 text-[11.5px] leading-none"
-                        style={{ color: colorOf(m, v) }}
+                        style={{ color: colorOf(mA, v) }}
                       >
-                        {v == null ? "—" : num(v, m.digits)}
+                        {v == null ? "—" : num(v, mA.digits)}
                       </span>
                     </div>
                     <div className="mt-0.5 truncate text-[10px] leading-snug text-ink-3">
@@ -470,85 +478,34 @@ export function WeatherDashboard() {
           </ul>
         </div>
 
-        {/* Газрын зураг */}
-        <div className="flex min-h-0 flex-col overflow-hidden rounded-xs border border-line bg-paper-2">
-          {/*
-            Хэмжигдэхүүн сонгох зурвас — зураг ба жагсаалт ХОЁУЛАА үүнд
-            захирагдана. Тусад нь тавьбал баганын тоо, цэгийн өнгө хоёр
-            өөр зүйл заана.
-          */}
-          <div className="flex flex-wrap items-center gap-x-1 gap-y-1 border-b border-line px-2 py-1.5">
-            {MEASURES.map((x) => (
-              <button
-                key={x.id}
-                onClick={() => setMeasure(x.id)}
-                aria-pressed={x.id === measure}
-                className={cn(
-                  "rounded-xs border px-2 py-1 text-[11px] leading-none transition-colors",
-                  x.id === measure
-                    ? "border-(--tone)/45 bg-(--tone)/10 text-(--tone)"
-                    : "border-line text-ink-2 hover:border-line-2 hover:text-ink",
-                )}
-              >
-                {x.label}
-              </button>
-            ))}
-
-            <button
-              onClick={() => setFreshOnly((v) => !v)}
-              aria-pressed={freshOnly}
-              className={cn(
-                "ml-auto rounded-xs border px-2 py-1 text-[11px] leading-none transition-colors",
-                freshOnly
-                  ? "border-(--tone)/45 bg-(--tone)/10 text-(--tone)"
-                  : "border-line text-ink-2 hover:border-line-2 hover:text-ink",
-              )}
-            >
-              Сүүлийн {FRESH_HOURS} цагийн заалт
-            </button>
-          </div>
-
-          <div className="relative min-h-[560px] flex-1">
-            <PointMap
-              key={measure}
-              points={points}
-              visible={visible}
-              labels={labels}
-              basemap={basemap}
-              onSelect={pickStation}
-              onHover={tip.onHover}
-              focus={focus}
-              cluster={false}
-              highlight={spot ? [spot.st.lon, spot.st.lat] : null}
-              grades={{ values, stops: m.stops }}
-            />
-            <BasemapGallery value={basemap} onChange={setBasemap} placement="top-left" />
-
-            <Legend measure={m} />
-
-            {hovered ? (
-              <MapTip state={tip}>
-                <div className="space-y-1 px-2.5 py-2">
-                  <MapTipRow icon={MapPin} text={hovered.st.name} />
-                  <MapTipRow
-                    icon={Thermometer}
-                    text={`${m.label}: ${
-                      m.of(hovered.obs) == null
-                        ? "Хэмжигдээгүй"
-                        : `${num(m.of(hovered.obs)!, m.digits)} ${m.unit}`
-                    }`}
-                    num
-                  />
-                  <MapTipRow icon={Mountain} text={`${num(hovered.st.elev)} м`} num />
-                  <MapTipRow
-                    icon={Clock}
-                    text={ageText(hovered.obs.at, data.fetched)}
-                    num
-                  />
-                </div>
-              </MapTip>
-            ) : null}
-          </div>
+        {/* Хоёр газрын зураг — өргөн дэлгэцэнд зэрэгцэж, нарийн дээр
+            дээр доор нь эвхэгдэнэ */}
+        <div className="grid min-h-0 gap-2.5 xl:grid-cols-2">
+          <StationMap
+            rows={shown}
+            choices={GROUP_A}
+            measure={measureA}
+            onMeasure={setMeasureA}
+            onPick={pickStation}
+            spotSid={listHover}
+            focus={focus}
+            basemap={basemap}
+            onBasemap={setBasemap}
+            gallery
+            fetched={data.fetched}
+          />
+          <StationMap
+            rows={shown}
+            choices={GROUP_B}
+            measure={measureB}
+            onMeasure={setMeasureB}
+            onPick={pickStation}
+            spotSid={listHover}
+            focus={focus}
+            basemap={basemap}
+            onBasemap={setBasemap}
+            fetched={data.fetched}
+          />
         </div>
       </Columns>
 
@@ -556,6 +513,160 @@ export function WeatherDashboard() {
         Эх сурвалж: Ус цаг уур, орчны шинжилгээний газар · Нийслэлийн{" "}
         {num(rows.length)} станц · Суурь зураг: Esri
       </p>
+    </div>
+  );
+}
+
+/* --------------------------------------------------------------------------
+   СТАНЦЫН ЗУРАГ
+
+   Хоёр зураг ИЖИЛ бүрэлдэхүүнээр зурагдана — зөвхөн хэмжигдэхүүний
+   бүлэг нь өөр. Хуулбарлаж хоёр удаа бичвэл цэгийн хэмжээ, тайлбар,
+   хөвөгч тайлбар гурав эрт орой хэзээ нэгэн цагт зөрнө.
+
+   Тайлбар (`useMapTip`) нь зураг БҮРД тусдаа: байрлалыг өөрийн
+   хүрээнийхээ пикселээр тооцдог тул хуваалцвал нөгөө зураг дээрээ
+   гарна.
+
+   Станц сонголт (`sid`), ойртолт (`focus`), суурь зураг нь ХУВААЛЦСАН:
+   аль ч зураг дээр товшиход дээд талын заалт, урьдчилсан мэдээ хоёр
+   хамт солигдоно.
+   -------------------------------------------------------------------------- */
+
+function StationMap({
+  rows,
+  choices,
+  measure,
+  onMeasure,
+  onPick,
+  spotSid,
+  focus,
+  basemap,
+  onBasemap,
+  gallery,
+  fetched,
+}: {
+  rows: { st: Station; obs: Obs; age: number | null }[];
+  choices: MeasureId[];
+  measure: MeasureId;
+  onMeasure: (id: MeasureId) => void;
+  onPick: (id: number) => void;
+  /** Жагсаалтаас чиглэсэн тодруулга */
+  spotSid: number | null;
+  focus: Extent | null;
+  basemap: Basemap;
+  onBasemap: (b: Basemap) => void;
+  /** Суурь зургийн сонголтыг харуулах эсэх — зөвхөн эхний зурагт */
+  gallery?: boolean;
+  fetched: number;
+}) {
+  const tip = useMapTip();
+  const m = measureOf(measure);
+
+  /* Энэ хэмжигдэхүүнийг мэдээлээгүй станцыг ЭНЭ зураг хасна. Жагсаалт
+     нь бүтнээрээ үлдэх тул нөгөө зурагт харагдсаар байна */
+  const shown = React.useMemo(
+    () => rows.filter((r) => m.of(r.obs) != null),
+    [rows, m],
+  );
+
+  const points = React.useMemo<MapPoints>(
+    () => ({
+      oid: shown.map((r) => r.st.sid),
+      lon: shown.map((r) => r.st.lon),
+      lat: shown.map((r) => r.st.lat),
+    }),
+    [shown],
+  );
+
+  const visible = React.useMemo(
+    () => Uint32Array.from(shown.map((_, i) => i)),
+    [shown],
+  );
+
+  const grades = React.useMemo(
+    () => ({ values: shown.map((r) => m.of(r.obs) ?? 0), stops: m.stops }),
+    [shown, m],
+  );
+
+  /* Цэг долоохон тул нэрийг нь шууд зурган дээр бичнэ */
+  const labels = React.useMemo(
+    () => ({ text: shown.map((r) => r.st.name), minzoom: 8 }),
+    [shown],
+  );
+
+  const hovered = React.useMemo(
+    () => (tip.oid == null ? null : (rows.find((r) => r.st.sid === tip.oid) ?? null)),
+    [rows, tip.oid],
+  );
+
+  const spot = React.useMemo(() => {
+    const id = tip.oid ?? spotSid;
+    return id == null ? null : (shown.find((r) => r.st.sid === id) ?? null);
+  }, [shown, tip.oid, spotSid]);
+
+  return (
+    <div className="flex min-h-0 flex-col overflow-hidden rounded-xs border border-line bg-paper-2">
+      <div className="flex flex-wrap items-center gap-1 border-b border-line px-2 py-1.5">
+        {choices.map((id) => {
+          const x = measureOf(id);
+          return (
+            <button
+              key={id}
+              onClick={() => onMeasure(id)}
+              aria-pressed={id === measure}
+              className={cn(
+                "rounded-xs border px-2 py-1 text-[11px] leading-none transition-colors",
+                id === measure
+                  ? "border-(--tone)/45 bg-(--tone)/10 text-(--tone)"
+                  : "border-line text-ink-2 hover:border-line-2 hover:text-ink",
+              )}
+            >
+              {x.label}
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="relative min-h-[340px] flex-1">
+        <PointMap
+          key={measure}
+          points={points}
+          visible={visible}
+          labels={labels}
+          basemap={basemap}
+          onSelect={onPick}
+          onHover={tip.onHover}
+          focus={focus}
+          cluster={false}
+          highlight={spot ? [spot.st.lon, spot.st.lat] : null}
+          grades={grades}
+        />
+        {gallery ? (
+          <BasemapGallery value={basemap} onChange={onBasemap} placement="top-left" />
+        ) : null}
+
+        <Legend measure={m} />
+
+        {hovered ? (
+          <MapTip state={tip}>
+            <div className="space-y-1 px-2.5 py-2">
+              <MapTipRow icon={MapPin} text={hovered.st.name} />
+              <MapTipRow
+                icon={Thermometer}
+                text={`${m.label}: ${
+                  m.of(hovered.obs) == null
+                    ? "Хэмжигдээгүй"
+                    : `${num(m.of(hovered.obs)!, m.digits)} ${m.unit}`
+                }`}
+                num
+              />
+              <MapTipRow icon={Mountain} text={`${num(hovered.st.elev)} м`} num />
+              <MapTipRow icon={Clock} text={ageText(hovered.obs.at, fetched)} num />
+            </div>
+          </MapTip>
+        ) : null}
+      </div>
     </div>
   );
 }
