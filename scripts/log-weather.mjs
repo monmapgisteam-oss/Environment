@@ -63,10 +63,41 @@ const PASSWORD = process.env.ARCGIS_PASSWORD ?? "";
 const SCOPE = process.env.WEATHER_SCOPE === "all" ? "all" : "capital";
 const CAPITAL = "Нийслэл";
 
+/**
+ * Хүсэлт — алдааг НЭРЛЭЖ буцаана.
+ *
+ * Node-ийн `fetch` нь сүлжээний бүх доголдлыг ердөө "fetch failed" гэж
+ * шиднэ: аль хост, ямар шалтгаанаар унасан нь `e.cause.code`-д нуугдана.
+ * Хоёр өөр систем рүү (цаг агаарын API ба ArcGIS) ханддаг тул алийг нь
+ * ч ялгахгүй мессеж оношлох боломжгүй.
+ *
+ * Хаягийн асуулгын хэсгийг ХАСНА — тэнд токен явж болзошгүй.
+ */
 async function getJson(url, init) {
-  const res = await fetch(url, init);
-  if (!res.ok) throw new Error(`${url} → ${res.status}`);
-  return res.json();
+  const where = String(url).split("?")[0];
+  let res;
+  try {
+    res = await fetch(url, init);
+  } catch (e) {
+    const code = e?.cause?.code ?? e?.code ?? "";
+    throw new Error(
+      `${where} руу холбогдсонгүй${code ? ` [${code}]` : ""}: ${e?.cause?.message ?? e.message}`,
+    );
+  }
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`${where} → HTTP ${res.status} ${text.slice(0, 200)}`);
+  }
+  const d = await res.json();
+  /* ArcGIS алдааг HTTP 200-аар буцаадаг тул биеийг нь шалгана */
+  if (d?.error) {
+    throw new Error(
+      `${where} → ArcGIS ${d.error.code ?? ""} ${d.error.message ?? ""} ${(
+        d.error.details ?? []
+      ).join(" ")}`.trim(),
+    );
+  }
+  return d;
 }
 
 /* --------------------------------------------------------------------------
@@ -184,10 +215,14 @@ async function main() {
     return;
   }
 
+  /* Алхам бүрийг нэрлэж бичнэ — унасан үед аль үе шатанд гэдэг нь
+     логоос шууд харагдана */
+  console.log("log-weather: цаг агаарын API-аас татаж байна…");
   const [reg, cur] = await Promise.all([
     getJson(`${API}/obs/aimags`, { headers: { "User-Agent": UA } }),
     getJson(`${API}/obs/data/aws`, { headers: { "User-Agent": UA } }),
   ]);
+  console.log(`log-weather: ${(cur.stationAWS ?? []).length} станцын заалт ирлээ`);
 
   const stations = new Map();
   for (const s of reg.aimag_sum ?? []) {
@@ -196,7 +231,9 @@ async function main() {
     stations.set(s.sid, s);
   }
 
+  console.log(`log-weather: ArcGIS токен авч байна (${stations.size} станц хянана)…`);
   const tk = await token();
+  console.log("log-weather: токен авлаа, архивын сүүлийн байдлыг асууж байна…");
   const last = await latestPerStation(tk);
 
   const adds = [];
