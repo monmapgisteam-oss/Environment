@@ -28,6 +28,11 @@ jobs:
         env:
           # Сайт https://<user>.github.io/Environment/ дор байрлана
           NEXT_PUBLIC_BASE_PATH: /Environment
+          # HazTrack-ийн түлхүүр. ЗӨВХӨН бүтээх үед, хөтөч рүү явахгүй —
+          # `scripts/fetch-chemsystem.mjs` үүгээр татаж
+          # `public/data/chemsystem.json` бичнэ. Secret хоосон бол
+          # скрипт чимээгүй алгасаж, өмнөх хувилбар хэвээр үлдэнэ.
+          CHEMSYSTEM_KEY: ${{ secrets.CHEMSYSTEM_KEY }}
         run: npm run build
       - name: Disable Jekyll
         run: touch out/.nojekyll

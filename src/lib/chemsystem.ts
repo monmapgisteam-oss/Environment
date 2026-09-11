@@ -1,0 +1,355 @@
+/**
+ * Химийн бодисын үндэсний бүртгэл — HazTrack (`chemsystem.mn`).
+ *
+ * Хяналтын хэлтсийн ХОЁР ДАХЬ химийн эх сурвалж. Одоо байгаа
+ * [lib/chemicals.ts](src/lib/chemicals.ts) нь 2023, 2024 онд олгосон
+ * гэрчилгээний ArcGIS хуулбар (204 бичлэг, хөлдсөн); энэ нь бодит
+ * системийн АМЬД бүртгэл. Хоёуланг НЭГТГЭХГҮЙ — өөр мөчийн, өөр
+ * бүтэцтэй хоёр бүртгэл.
+ *
+ * ⚠⚠ ДАТА НЬ ХОРМЫН ХУВИЛБАРААР ИРНЭ, API-аас ШУУД БИШ.
+ * `scripts/fetch-chemsystem.mjs` нь бүтээх үед татаж
+ * `public/data/chemsystem.json`-д бичдэг. Шалтгаан нь аюулгүй байдал:
+ * API нь `Authorization: Bearer` түлхүүр шаарддаг бөгөөд сайт
+ * статикаар экспортлогддог тул хөтөч рүү өгсөн түлхүүр нь хэн бүхэнд
+ * ил болно. Тэр түлхүүр нь ердийн уншигч биш — тодорхойлолтод
+ * `DELETE /chemicals/{id}`, `DELETE /users/{id}` зэрэг бичих зам бий.
+ * Хөтчөөс шууд татах гэж БҮҮ оролд.
+ */
+
+import { asset } from "@/lib/base-path";
+
+const SNAPSHOT = "/data/chemsystem.json";
+
+export type Chemical = {
+  id: number;
+  name: string;
+  /** Албан ангилал. Одоогоор бараг бөглөгдөөгүй тул ихэвчлэн байхгүй */
+  types?: string[];
+};
+
+export type Org = {
+  id: number;
+  name: string;
+  /** Улсын бүртгэлийн дугаар */
+  reg: string;
+  address: string;
+  types?: string[];
+};
+
+export type Loc = {
+  id: number;
+  /** Харьяалах аж ахуйн нэгж */
+  org: number;
+  name: string;
+  address: string;
+  lat: number;
+  lon: number;
+  types?: string[];
+};
+
+/** Эзэмшил — багана тус бүр ижил урттай */
+export type Holdings = {
+  org: number[];
+  loc: number[];
+  chem: number[];
+  /** Хэмжээ, ГРАММААР нэгжчилсэн */
+  grams: number[];
+  /** Сийрэг: [индекс, миллилитр] */
+  ml: [number, number][];
+  /** Сийрэг: эзэлхүүнээр хэмжигдсэн мөрийн индекс */
+  byVolume: number[];
+};
+
+export type Disposal = {
+  id: number;
+  at: string;
+  org: number | null;
+  /** "recycle" гэх мэт */
+  type: string;
+  record: string;
+  organicMl: number | null;
+  acidMl: number | null;
+  oilMl: number | null;
+  oilG: number | null;
+  dryG: number | null;
+  batteryG: number | null;
+  packages: number | null;
+  disposedAt: string;
+  recycledAt: string;
+};
+
+export type ChemSystem = {
+  source: { system: string; api: string; fetched: string };
+  selections: Record<string, string[]>;
+  chemicals: Chemical[];
+  organizations: Org[];
+  locations: Loc[];
+  holdings: Holdings;
+  disposals: Disposal[];
+};
+
+export async function fetchChemSystem(signal?: AbortSignal): Promise<ChemSystem> {
+  const res = await fetch(asset(SNAPSHOT), signal ? { signal } : undefined);
+  if (!res.ok) throw new Error(`Химийн бүртгэл татагдсангүй (${res.status})`);
+  return (await res.json()) as ChemSystem;
+}
+
+/* --------------------------------------------------------------------------
+   ТОО ХЭМЖЭЭ
+
+   ⚠⚠ НИЙТ ТОО ХЭМЖЭЭГ ХАРУУЛАХГҮЙ. Бүртгэлийн нийлбэр нь 21,242,457
+   тонн гарах бөгөөд үүний 15,000,000 тонн буюу 71% нь ГАНЦ мөрөөс
+   ирдэг (Ачит ихт ХХК-ийн хүхрийн хүчил). Энэ нь бичилтийн алдаа
+   болох нь илэрхий: дараагийн хамгийн том нь 341,000 тонн, медиан нь
+   ердөө 2 тонн. Нийлбэр бичвэл самбар бүхэлдээ тэр нэг мөрийг
+   харуулна.
+
+   Тиймээс энэ самбар бодисыг ЗӨВХӨН БАЙГАА ЭСЭХЭЭР хэмжинэ — аль
+   агуулахад хэдэн нэр төрлийн бодис бүртгэгдсэн бэ. Тоо хэмжээ нь
+   зөвхөн ТУХАЙН бичлэгийн дэлгэрэнгүйд, нэгжийнхээ хамт гарна.
+   `chemicals.ts`-ийн ArcGIS бүртгэлд ч яг ижил зарчим үйлчилдэг
+   (тэнд нэгж нь тодорхойгүйгээс болсон бол энд хэт том утгаас).
+
+   Тархалт (22,099 жингийн бичлэг): 25% нь 0.5 тонн, медиан 2 тонн,
+   75% нь 32 тонн, 90% нь 200 тонн, 99% нь 2,000 тонн.
+   -------------------------------------------------------------------------- */
+
+/** Эргэлзээ төрүүлэх дээд хязгаар, тонн. Үүнээс дээш 68 бичлэг байна */
+export const HUGE_TONNES = 10_000;
+
+/**
+ * Граммыг уншихад тохиромжтой нэгж рүү буулгана.
+ *
+ * Хэмжээ нь 2 граммаас 15 сая тонн хүртэл найман эрэмбээр тархсан тул
+ * ганц нэгжээр бичих боломжгүй: тонноор бичвэл жижиг нь "0.0 тонн"
+ * болж алга болно, граммаар бичвэл том нь уншигдахгүй.
+ */
+export function massText(grams: number): string {
+  if (!Number.isFinite(grams) || grams <= 0) return "—";
+  if (grams < 1000) return `${round(grams)} г`;
+  if (grams < 1_000_000) return `${round(grams / 1000)} кг`;
+  return `${round(grams / 1_000_000)} тонн`;
+}
+
+/** Миллилитрийг уншихад тохиромжтой нэгж рүү */
+export function volumeText(ml: number): string {
+  if (!Number.isFinite(ml) || ml <= 0) return "—";
+  if (ml < 1000) return `${round(ml)} мл`;
+  return `${round(ml / 1000)} л`;
+}
+
+function round(v: number): string {
+  const d = v >= 100 ? 0 : v >= 10 ? 1 : 2;
+  return v.toLocaleString("mn-MN", { maximumFractionDigits: d });
+}
+
+/* --------------------------------------------------------------------------
+   ХАЯГ ↔ КООРДИНАТ
+
+   ⚠⚠ КООРДИНАТ НЬ ХАЯГТАЙГАА ЗӨРДӨГ. 520 агуулахын 93 нь өөр аймгийн
+   хаягтай (Дорнод, Сэлэнгэ, Говь-Алтай, Хэнтий, Дархан-Уул …) атлаа
+   бүгдийн координат Улаанбаатарын төвийн орчимд бөөгнөрсөн байна.
+   Өөрөөр хэлбэл тэдгээрийн координат нь БОДИТ байршил биш, системийн
+   анхдагч утга.
+
+   Тиймээс байршлын талаар ХАЯГ нь эрх мэдэлтэй эх сурвалж, координат
+   нь биш. Орон нутгийн хаягтай бичлэгийг газрын зурагт БУУЛГАХГҮЙ —
+   буулгавал Улаанбаатарт байхгүй агуулах хотод байгаа мэт харагдана.
+   Тэдгээр нь жагсаалтад хэвээр үлдэнэ.
+
+   Хаягийн бичиглэл жигд бус тул товчлол, зөв бичгийн хувилбаруудыг
+   хамт таана: "СБД" / "СБ дүүрэг" / "Сүхбаатар дүүрэг", мөн
+   "Хан-Уул" / "Хануул" / "Хан уул". 520-оос 422 нь Улаанбаатар,
+   93 нь орон нутаг, 5 нь тодорхойгүй.
+   -------------------------------------------------------------------------- */
+
+/** Нийслэлийн есөн дүүрэг ба хаягт тохиолддог бичиглэлүүд */
+const DISTRICTS: [string, string[]][] = [
+  ["Багануур", ["багануур", "бнд"]],
+  ["Багахангай", ["багахангай", "бхд"]],
+  ["Баянгол", ["баянгол", "бгд", "бг дүүрэг"]],
+  ["Баянзүрх", ["баянзүрх", "баянзурх", "бзд", "бз дүүрэг"]],
+  ["Налайх", ["налайх", "нд"]],
+  ["Сонгинохайрхан", ["сонгинохайрхан", "сонгино хайрхан", "схд", "сх дүүрэг", "сх"]],
+  ["Сүхбаатар", ["сүхбаатар дүүрэг", "сүхбаатар д", "сбд", "сб дүүрэг"]],
+  ["Хан-Уул", ["хан-уул", "хануул", "хан уул", "худ", "ху дүүрэг"]],
+  ["Чингэлтэй", ["чингэлтэй", "чингэлтэи", "чд"]],
+];
+
+/**
+ * Орон нутгийн хаягийг таних түлхүүрүүд.
+ *
+ * `Сүхбаатар` нь дүүрэг ч, аймаг ч байдаг тул аймгийнхыг зөвхөн төвийн
+ * нэрээр нь ялгана ("Баруун-Урт") — эс тэгвээс Сүхбаатар дүүргийн 57
+ * бичлэг орон нутаг руу шилжинэ.
+ */
+const RURAL = [
+  "архангай",
+  "баян-өлгий",
+  "баянхонгор",
+  "булган",
+  "говь-алтай",
+  "говьсүмбэр",
+  "дархан-уул",
+  "дархан уул",
+  "дорноговь",
+  "дорнод",
+  "дундговь",
+  "завхан",
+  "орхон",
+  "өвөрхангай",
+  "өмнөговь",
+  "сэлэнгэ",
+  "төв",
+  "увс",
+  "ховд",
+  "хөвсгөл",
+  "хэнтий",
+  "баруун-урт",
+  "баруун урт",
+];
+
+export type Place = {
+  /** Нийслэлд байгаа эсэх. Тодорхойгүй бол `null` */
+  inCity: boolean | null;
+  /** Нийслэлийн дүүрэг. Таниагүй бол хоосон */
+  district: string;
+};
+
+export function placeOf(address: string): Place {
+  const raw = (address ?? "").toLowerCase().replace(/ё/g, "е");
+
+  /*
+    REGEX ХЭРЭГЛЭХГҮЙ. Товчлолууд маш богино ("сх", "чд", "нд") тул
+    энгийн `includes` нь "бизнес" доторх "сх"-г ч таана. Тиймээс
+    цэг, таслалыг зайгаар сольж, бүтэн мөрийг зайгаар хүрээлээд
+    " сх " гэж ЗАЙТАЙГААР нь хайна — үгийн хил өөрөө шалгагдана.
+    (Кирилл дээр regex-ийн `` ажилладаггүй бөгөөд загварыг мөрөөр
+    угсарвал escape нь амархан эвдэрдэг.)
+  */
+  const t = ` ${raw.replace(/[,.;:]/g, " ").replace(/\s+/g, " ").trim()} `;
+
+  /* Аймгийн нэр нь хаягийн ЭХЭНД бичигддэг. Мөр дундуур хайвал
+     "Скай плаза бизнес төв" нь Төв аймаг болно */
+  const head = (raw.split(",")[0] ?? "").trim();
+  for (const r of RURAL) if (head.startsWith(r)) return { inCity: false, district: "" };
+
+  for (const [name, keys] of DISTRICTS) {
+    for (const k of keys) if (t.includes(` ${k} `)) return { inCity: true, district: name };
+  }
+
+  if (head.startsWith("уб") || head.startsWith("улаанбаатар")) {
+    return { inCity: true, district: "" };
+  }
+  return { inCity: null, district: "" };
+}
+
+/* --------------------------------------------------------------------------
+   ИНДЕКС
+
+   Хормын хувилбар нь 948KB бөгөөд 22 мянган эзэмшилтэй. Самбар бүрд
+   давтан гүйлгэхгүйн тулд нэг удаа индекслэнэ.
+   -------------------------------------------------------------------------- */
+
+export type LocStat = {
+  loc: Loc;
+  org: Org | undefined;
+  /** Энэ агуулахад бүртгэгдсэн эзэмшлийн мөрийн индексүүд */
+  rows: number[];
+  /** Давхардалгүй бодисын нэрийн тоо */
+  chemicals: number;
+  /** Нийт жин, грамм. ⚠ Дүгнэлтэд БҮҮ хэрэглэ — дээрх тайлбарыг үз */
+  grams: number;
+  /** Хэт том бичилт агуулсан эсэх */
+  huge: boolean;
+  /** Хаягаас задалсан байршил — координат биш ЭНЭ нь эрх мэдэлтэй */
+  place: Place;
+};
+
+export type Index = {
+  chem: Map<number, Chemical>;
+  org: Map<number, Org>;
+  loc: Map<number, Loc>;
+  /** Агуулах бүрийн нэгтгэл, бодисын тоо буурахаар эрэмбэлсэн */
+  stats: LocStat[];
+  /** Бодис бүр хэдэн агуулахад бүртгэгдсэн бэ */
+  chemLocations: Map<number, number>;
+  /** Эзэлхүүнээр хэмжигдсэн мөрийн индексийн олонлог */
+  volumeRows: Set<number>;
+  /** Мөр бүрийн миллилитр */
+  mlOf: Map<number, number>;
+  /**
+   * Бүртгэлд БАЙХГҮЙ агуулах руу заасан эзэмшлийн мөрүүд.
+   *
+   * 22,101-ээс 8 мөр нь №522 гэсэн агуулах, ААН руу заадаг ч
+   * `/organizations`, `/locations` хоёулаа 520-оор дуусдаг. Устгалын
+   * бүртгэл мөн №524 руу заана. Эдгээрийг чимээгүй хаяхгүй, тоолж
+   * үлдээнэ — эх сурвалж бүх нэгжээ буцаадаггүй гэдгийн шинж.
+   */
+  orphans: number[];
+};
+
+export function buildIndex(d: ChemSystem): Index {
+  const chem = new Map(d.chemicals.map((c) => [c.id, c]));
+  const org = new Map(d.organizations.map((o) => [o.id, o]));
+  const loc = new Map(d.locations.map((l) => [l.id, l]));
+
+  const h = d.holdings;
+  const n = h.loc.length;
+
+  const rowsOf = new Map<number, number[]>();
+  const namesOf = new Map<number, Set<number>>();
+  const gramsOf = new Map<number, number>();
+  const hugeOf = new Set<number>();
+  const chemLocations = new Map<number, Set<number>>();
+  const orphans: number[] = [];
+
+  for (let i = 0; i < n; i++) {
+    const l = h.loc[i];
+    const c = h.chem[i];
+    const g = h.grams[i];
+
+    let rows = rowsOf.get(l);
+    if (!rows) rowsOf.set(l, (rows = []));
+    rows.push(i);
+
+    let names = namesOf.get(l);
+    if (!names) namesOf.set(l, (names = new Set()));
+    names.add(c);
+
+    gramsOf.set(l, (gramsOf.get(l) ?? 0) + g);
+    if (g / 1_000_000 >= HUGE_TONNES) hugeOf.add(l);
+
+    let where = chemLocations.get(c);
+    if (!where) chemLocations.set(c, (where = new Set()));
+    where.add(l);
+
+    /* Агуулах нь бүртгэлд байхгүй бол тэр мөр хаана ч зурагдахгүй —
+       чимээгүй алга болгохгүй, тоолж үлдээнэ */
+    if (!loc.has(l)) orphans.push(i);
+  }
+
+  const stats: LocStat[] = d.locations
+    .map((l) => ({
+      loc: l,
+      org: org.get(l.org),
+      rows: rowsOf.get(l.id) ?? [],
+      chemicals: namesOf.get(l.id)?.size ?? 0,
+      grams: gramsOf.get(l.id) ?? 0,
+      huge: hugeOf.has(l.id),
+      place: placeOf(l.address),
+    }))
+    .sort((a, b) => b.chemicals - a.chemicals || a.loc.name.localeCompare(b.loc.name, "mn"));
+
+  return {
+    chem,
+    org,
+    loc,
+    stats,
+    chemLocations: new Map([...chemLocations].map(([k, v]) => [k, v.size])),
+    volumeRows: new Set(h.byVolume),
+    mlOf: new Map(h.ml),
+    orphans,
+  };
+}

@@ -2,11 +2,11 @@
 
 import * as React from "react";
 import dynamic from "next/dynamic";
-import { FlaskConical, Loader2, Trash2, Workflow, Wrench } from "lucide-react";
+import { Boxes, FlaskConical, Loader2, Trash2, Workflow, Wrench } from "lucide-react";
 import { SourceTabs, useStoredTab } from "@/components/ui/source-tabs";
 
 /*
-  Хэлтэс ГУРВАН табтай. Зэрэг ачаалахгүй: сонгосон нь л татагдана.
+  Хэлтэс ТАВАН табтай. Зэрэг ачаалахгүй: сонгосон нь л татагдана.
   Эхний хоёр нь MapLibre-тэй бөгөөд химийн бүртгэл нь бодисын урт
   бичвэртэй тул эхнээс нь бүгдийг татах нь илүүц.
 
@@ -42,6 +42,14 @@ const LandfillDashboard = dynamic(
   { ssr: false, loading: spinner },
 );
 
+const ChemSystemDashboard = dynamic(
+  () =>
+    import("@/components/hyanalt/chemsystem-dashboard").then(
+      (m) => m.ChemSystemDashboard,
+    ),
+  { ssr: false, loading: spinner },
+);
+
 const TABS = [
   {
     /*
@@ -54,6 +62,19 @@ const TABS = [
     label: "Химийн бодисын агуулах",
     note: "2023 онд 184 · 2024 онд 20 агуулах",
     icon: FlaskConical,
+  },
+  {
+    /*
+      ХОЁР ДАХЬ химийн эх сурвалж — дээрхтэй НЭГТГЭХГҮЙ. Дээрх нь 2023,
+      2024 онд олгосон гэрчилгээний ArcGIS хуулбар (хөлдсөн), энэ нь
+      үндэсний системийн амьд бүртгэл. Бүтэц нь ч өөр: тэр нь бодисын
+      товьёогоор, энэ нь агуулах ↔ бодисын хоёр талт сүлжээгээр.
+    */
+    id: "chemsystem",
+    label: "Химийн бодисын үндэсний бүртгэл",
+    note: "520 агуулах · 22,101 бичилт",
+    full: "Химийн бодисын үндэсний бүртгэл (HazTrack)",
+    icon: Boxes,
   },
   {
     id: "repair",
@@ -142,7 +163,9 @@ export function HyanaltWorkspace() {
       />
 
       <div className="min-h-0 flex-1">
-        {open === "repair" ? (
+        {open === "chemsystem" ? (
+          <ChemSystemDashboard />
+        ) : open === "repair" ? (
           <RepairMap />
         ) : open === "landfill" ? (
           <LandfillDashboard />

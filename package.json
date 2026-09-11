@@ -8,8 +8,9 @@
     "start": "next start",
     "lint": "eslint",
     "copy:maplibre": "node scripts/copy-maplibre-worker.mjs",
+    "fetch:chemsystem": "node scripts/fetch-chemsystem.mjs",
     "predev": "npm run copy:maplibre",
-    "prebuild": "npm run copy:maplibre"
+    "prebuild": "npm run copy:maplibre && npm run fetch:chemsystem"
   },
   "dependencies": {
     "clsx": "^2.1.1",
