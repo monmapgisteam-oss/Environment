@@ -14,14 +14,23 @@
 `https://environment.ub.gov.mn/gis/home` дээр **админ эрхээр** нэвтэрнэ.
 
 1. **Content** → **New item** → **Application**
-2. Төрөл: **Application** (Web Mapping БИШ, Desktop ч БИШ)
-3. Нэр: `Байгаль орчны нэгдсэн платформ`
-4. **Save**
+2. **Application type: `Web mapping`**
+
+   `Desktop`, `Mobile` хоёр нь буцах хаягийн оронд
+   `urn:ietf:wg:oauth:2.0:oob` гэсэн өөр загвар хэрэглэдэг тул хөтчийн
+   шилжилтэнд тохирохгүй.
+
+3. **URL**: `https://monmapgisteam-oss.github.io/Environment/`
+
+   ⚠ Энэ талбар нь **буцах хаяг БИШ** — зөвхөн аппын нүүр хуудсыг заана.
+   Буцах хаягийг дараагийн алхамд тусад нь бүртгэнэ.
+
+4. Нэр: `Байгаль орчны нэгдсэн платформ` → **Save**
 
 ## 2. Буцах хаягуудыг бүртгэх
 
-Үүссэн item-ийн хуудсан дээр **Settings** → доош гүйж **App Registration**
-→ **Registered Info** → **Update**.
+Үүссэн item-ийн хуудсан дээр **Settings** → доош гүйж
+**Web mapping application** → **Credentials** → **Register application**.
 
 **App type: `Browser`.** Энэ төрөл нь буцах хаягийн жагсаалттай бөгөөд
 App Secret шаарддаггүй — яг PKCE урсгалд зориулагдсан. `Server` нь Secret
@@ -43,27 +52,23 @@ http://localhost:4000/auth/callback/
 тааруулж болзошгүй. Хоёуланг нь бүртгэх нь хор хөнөөлгүй бөгөөд аль ч
 зан төлөвт ажиллана.
 
-**Referrer URLs — ХООСОН.** Энэ нь API түлхүүрийн хязгаарлалтад
-зориулагдсан. OAuth-д хамгаалалтыг буцах хаягийн таарал хангана; энд
-буруу утга бичвэл татацууд гэнэт унах ба шалтгааныг олоход хэцүү.
-
 ⚠ **Төгсгөлийн зураас ЗААВАЛ.** Сайт `trailingSlash`-тай экспортлогддог
 тул жинхэнэ хаяг нь зураастай. Зураасгүй бүртгэвэл портал
 `redirect_uri` таарахгүй гэж татгалзана.
 
-⚠ **Хөгжүүлэлтийн хоёр хаягийг ч нэмнэ.** Эс тэгвээс дотоод туршилтад
+⚠ **Хөгжүүлэлтийн хаягуудыг ч нэмнэ.** Эс тэгвээс дотоод туршилтад
 нэвтрэх боломжгүй болно. Эдгээр нь `localhost` тул гаднаас ашиглагдахгүй.
 
-Сайтыг өөр домэйнд (жишээ нь `bайгальорчин.ub.gov.mn`) шилжүүлбэл
-тэр хаягийг мөн энд нэмнэ — эс тэгвээс нэвтрэлт тэр дор ажиллахгүй.
+**Referrer URLs — ХООСОН.** Энэ нь API түлхүүрийн хязгаарлалтад
+зориулагдсан. OAuth-д хамгаалалтыг буцах хаягийн таарал хангана; энд
+буруу утга бичвэл татацууд гэнэт унах ба шалтгааныг олоход хэцүү.
+
+Сайтыг өөр домэйнд шилжүүлбэл тэр хаягийг мөн энд нэмнэ — эс тэгвээс
+нэвтрэлт тэр дор ажиллахгүй.
 
 ## 3. App ID-г хуулах
 
-Мөн тэр хуудсан дээр **App ID** гэсэн мөр байна. Хуулж авна:
-
-```
-App ID: xxxxxxxxxxxxxxxx
-```
+Бүртгэсний дараа мөн тэр хуудсан дээр **App ID** гарч ирнэ.
 
 **App Secret-ийг ХЭРЭГЛЭХГҮЙ.** Платформ нь PKCE урсгал ашигладаг тул
 нууц үг шаардахгүй. Хөтчийн багцад нууц үг хадгалах боломжгүй — тэнд
@@ -76,11 +81,14 @@ App ID: xxxxxxxxxxxxxxxx
 Төслийн язгуурт `.env.local` файл үүсгэж:
 
 ```
-NEXT_PUBLIC_ARCGIS_APP_ID=xxxxxxxxxxxxxxxx
+NEXT_PUBLIC_ARCGIS_APP_ID=<APP ID>
 ```
 
 `.env.local` нь `.gitignore`-т орсон. App ID нь нууц биш ч тохиргоо нь
 орчин бүрд өөр байж болох тул кодод шууд бичихгүй.
+
+⚠ `next dev` нь орчны файлыг ЭХЛЭХДЭЭ л уншина — файл үүсгэсний дараа
+серверийг дахин асаана.
 
 ### Нийтлэгдэх сайт (GitHub Actions)
 
@@ -89,26 +97,37 @@ NEXT_PUBLIC_ARCGIS_APP_ID=xxxxxxxxxxxxxxxx
 
 ```
 Name:  NEXT_PUBLIC_ARCGIS_APP_ID
-Value: xxxxxxxxxxxxxxxx
+Value: <APP ID>
 ```
 
-Ажиллагааны файл (`.github/workflows/*.yml`) нь энэ хувьсагчийг бүтээх
-алхамдаа дамжуулна.
+`.github/workflows/deploy.yml` нь энэ хувьсагчийг бүтээх алхамдаа
+дамжуулна.
 
 ---
 
 ## Тохиргоо зөв эсэхийг шалгах
 
 Порталын `authorize` төгсгөлийг шууд дуудаж батална. Бүртгэсэн хаяг нь
-нэвтрэх хуудас (200), бүртгээгүй нь татгалзал (400) буцаах ёстой:
+нэвтрэх хуудас (200), бүртгээгүй нь татгалзал (400) буцаах ёстой.
+
+Бүртгэсэн хаяг — **200** хүлээгдэнэ:
 
 ```bash
-# Бүртгэсэн хаяг → 200, нэвтрэх хуудас
-curl -s -o /dev/null -w "%{http_code}
-" -G   "https://environment.ub.gov.mn/gis/sharing/rest/oauth2/authorize"   --data-urlencode "client_id=<APP ID>"   --data-urlencode "response_type=code"   --data-urlencode "redirect_uri=http://localhost:4000/auth/callback/"
+curl -s -o /dev/null -w "%{http_code}\n" -G \
+  "https://environment.ub.gov.mn/gis/sharing/rest/oauth2/authorize" \
+  --data-urlencode "client_id=<APP ID>" \
+  --data-urlencode "response_type=code" \
+  --data-urlencode "redirect_uri=http://localhost:4000/auth/callback/"
+```
 
-# Бүртгээгүй хаяг → 400 "Invalid redirect_uri"
-curl -s -G "https://environment.ub.gov.mn/gis/sharing/rest/oauth2/authorize"   --data-urlencode "client_id=<APP ID>"   --data-urlencode "response_type=code"   --data-urlencode "redirect_uri=https://example.com/"
+Бүртгээгүй хаяг — **400 `Invalid redirect_uri`** хүлээгдэнэ:
+
+```bash
+curl -s -G \
+  "https://environment.ub.gov.mn/gis/sharing/rest/oauth2/authorize" \
+  --data-urlencode "client_id=<APP ID>" \
+  --data-urlencode "response_type=code" \
+  --data-urlencode "redirect_uri=https://example.com/"
 ```
 
 Хоёр дахь нь ч 200 буцаавал бүртгэл СУЛ — өөр сайт App ID-г хуулж
@@ -158,7 +177,7 @@ curl -s -G "https://environment.ub.gov.mn/gis/sharing/rest/oauth2/authorize"   -
 | Шинж тэмдэг | Шалтгаан |
 |---|---|
 | `redirect_uri` таарахгүй гэж портал татгалзана | Хаяг үсэг үсгээрээ таараагүй — ихэвчлэн төгсгөлийн зураас дутсан |
-| "Нэвтрэлтийн тохиргоо дуусаагүй байна" | `NEXT_PUBLIC_ARCGIS_APP_ID` тавигдаагүй |
+| "Нэвтрэлтийн тохиргоо дуусаагүй байна" | `NEXT_PUBLIC_ARCGIS_APP_ID` тавигдаагүй, эсвэл dev сервер дахин асаагаагүй |
 | Нэвтэрсэн ч самбар хоосон | Давхарга нь `organization`-д хуваалцагдаагүй, эсвэл хэрэглэгч тухайн бүлэгт ороогүй |
 | "нэвтрэлтийн хугацаа дууссан байна" | Токен 498/499 — сунгалт бүтэлгүйтсэн, дахин нэвтэрнэ |
 | "энэ өгөгдөлд хандах эрх байхгүй байна" | 403 — хэрэглэгчид тухайн давхаргын эрх олгогдоогүй |
