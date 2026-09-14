@@ -22,6 +22,8 @@
  * `Hectares` (бутархайтай) нь тэднийг зөв хадгална.
  */
 
+import { arcgisJson } from "@/lib/arcgis";
+
 const HOST = "https://services-ap1.arcgis.com/ACqsMOmNLi5wIdIh/arcgis/rest/services";
 const PAGE = 2000;
 /** ~10 метрийн ерөнхийлөлт (градусаар) */
@@ -109,9 +111,9 @@ async function page(offset: number, signal?: AbortSignal): Promise<Feature[]> {
       orderByFields: "OBJECTID",
       f: "geojson",
     });
-  const res = await fetch(url, { signal });
-  if (!res.ok) throw new Error(`Ойн сан татагдсангүй (${res.status})`);
-  const json = (await res.json()) as { features?: Feature[] };
+  const json = await arcgisJson<{ features?: Feature[] }>(url, "Ойн сан", {
+    signal,
+  });
   return json.features ?? [];
 }
 

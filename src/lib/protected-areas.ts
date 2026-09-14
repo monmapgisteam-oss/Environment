@@ -22,6 +22,8 @@
  * газарзүйн задаргаанд тэднийг л хэрэглэнэ.
  */
 
+import { arcgisJson } from "@/lib/arcgis";
+
 const HOST = "https://services-ap1.arcgis.com/ACqsMOmNLi5wIdIh/arcgis/rest/services";
 
 export const PROTECTED_MAPPING_SERVICE = `${HOST}/Tusgai_hamgaalalt/FeatureServer`;
@@ -87,9 +89,11 @@ export async function fetchLayer(
       orderByFields: "OBJECTID",
       f: "geojson",
     });
-  const res = await fetch(url, { signal });
-  if (!res.ok) throw new Error(`Хамгаалалтын давхарга татагдсангүй (${res.status})`);
-  const json = (await res.json()) as { features?: Feature[] };
+  const json = await arcgisJson<{ features?: Feature[] }>(
+    url,
+    "Хамгаалалтын давхарга",
+    { signal },
+  );
 
   const rows: Shape[] = [];
   const shapes: GeoJSON.Feature[] = [];
