@@ -23,13 +23,29 @@
 Үүссэн item-ийн хуудсан дээр **Settings** → доош гүйж **App Registration**
 → **Registered Info** → **Update**.
 
-**Redirect URI** хэсэгт дараах ГУРВАН хаягийг тус тусад нь нэмнэ:
+**App type: `Browser`.** Энэ төрөл нь буцах хаягийн жагсаалттай бөгөөд
+App Secret шаарддаггүй — яг PKCE урсгалд зориулагдсан. `Server` нь Secret
+үүсгэх тул статик сайтад тохирохгүй, `Native` нь гар утасны өөр загвартай.
+
+**Redirect URLs** хэсэгт хаягуудыг тус тусад нь нэмнэ:
 
 ```
+https://monmapgisteam-oss.github.io
 https://monmapgisteam-oss.github.io/Environment/auth/callback/
+http://localhost:3000
 http://localhost:3000/auth/callback/
+http://localhost:4000
 http://localhost:4000/auth/callback/
 ```
+
+⚠ **ГАРАЛ БА БҮТЭН ЗАМ ХОЁУЛАА.** Энэ хувилбарын порталын талбар нь
+`https://<server>[:port]` гэсэн загвар санал болгодог тул гарлаар нь
+тааруулж болзошгүй. Хоёуланг нь бүртгэх нь хор хөнөөлгүй бөгөөд аль ч
+зан төлөвт ажиллана.
+
+**Referrer URLs — ХООСОН.** Энэ нь API түлхүүрийн хязгаарлалтад
+зориулагдсан. OAuth-д хамгаалалтыг буцах хаягийн таарал хангана; энд
+буруу утга бичвэл татацууд гэнэт унах ба шалтгааныг олоход хэцүү.
 
 ⚠ **Төгсгөлийн зураас ЗААВАЛ.** Сайт `trailingSlash`-тай экспортлогддог
 тул жинхэнэ хаяг нь зураастай. Зураасгүй бүртгэвэл портал
@@ -80,6 +96,26 @@ Value: xxxxxxxxxxxxxxxx
 алхамдаа дамжуулна.
 
 ---
+
+## Тохиргоо зөв эсэхийг шалгах
+
+Порталын `authorize` төгсгөлийг шууд дуудаж батална. Бүртгэсэн хаяг нь
+нэвтрэх хуудас (200), бүртгээгүй нь татгалзал (400) буцаах ёстой:
+
+```bash
+# Бүртгэсэн хаяг → 200, нэвтрэх хуудас
+curl -s -o /dev/null -w "%{http_code}
+" -G   "https://environment.ub.gov.mn/gis/sharing/rest/oauth2/authorize"   --data-urlencode "client_id=<APP ID>"   --data-urlencode "response_type=code"   --data-urlencode "redirect_uri=http://localhost:4000/auth/callback/"
+
+# Бүртгээгүй хаяг → 400 "Invalid redirect_uri"
+curl -s -G "https://environment.ub.gov.mn/gis/sharing/rest/oauth2/authorize"   --data-urlencode "client_id=<APP ID>"   --data-urlencode "response_type=code"   --data-urlencode "redirect_uri=https://example.com/"
+```
+
+Хоёр дахь нь ч 200 буцаавал бүртгэл СУЛ — өөр сайт App ID-г хуулж
+хэрэглэх боломжтой гэсэн үг тул буцах хаягийн жагсаалтыг шалгана.
+
+Шалгасан: 2026-09-14 — бүртгэсэн хоёр хаяг 200, `evil.example.com`
+болон буруу App ID хоёулаа 400.
 
 ## Яаж ажилладаг вэ
 
