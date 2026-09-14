@@ -33,12 +33,20 @@ jobs:
           # `public/data/chemsystem.json` бичнэ. Secret хоосон бол
           # скрипт чимээгүй алгасаж, өмнөх хувилбар хэвээр үлдэнэ.
           CHEMSYSTEM_KEY: ${{ secrets.CHEMSYSTEM_KEY }}
-          # ArcGIS порталд бүртгэсэн аппын ID. НУУЦ БИШ тул `vars`-д
-          # сууна (`secrets` биш) — хөтчийн багцад ил орох нь хэвийн.
-          # Хамгаалалтыг PKCE ба порталд бүртгэгдсэн буцах хаягийн яг
-          # таарал хангана. Тохируулаагүй бол сайт бүтээгдэх боловч
-          # нэвтрэх товч гарахгүй (`docs/arcgis-app.md`).
-          NEXT_PUBLIC_ARCGIS_APP_ID: ${{ vars.NEXT_PUBLIC_ARCGIS_APP_ID }}
+          # ArcGIS порталд бүртгэсэн аппын ID. Хөтчийн багцад ил орох нь
+          # хэвийн — хамгаалалтыг PKCE ба порталд бүртгэгдсэн буцах
+          # хаягийн яг таарал хангадаг (бүртгээгүй хаяг руу портал
+          # 400 Invalid redirect_uri буцаана).
+          #
+          # ⚠ ХОЁР ЭХ СУРВАЛЖИЙГ ХОЁУЛАНГ НЬ ХҮЛЭЭЖ АВНА. Утга нь нууц
+          # биш тул `vars`-т байх нь ЗӨВ (бүтээлтийн log-д харагдаж,
+          # эвдэрсэн эсэхийг шууд оношилно). Гэхдээ `secrets`-т тавих нь
+          # ойлгомжтой андуурал бөгөөд тэр тохиолдолд нийтлэлт чимээгүй
+          # эвдрэх ёсгүй — App ID хоосон ирвэл сайт бүтээгдэх боловч
+          # нэвтрэх товчгүй гарна. `vars` эхэлж, байхгүй бол `secrets`.
+          #
+          # Заавар: `docs/arcgis-app.md`
+          NEXT_PUBLIC_ARCGIS_APP_ID: ${{ vars.NEXT_PUBLIC_ARCGIS_APP_ID || secrets.NEXT_PUBLIC_ARCGIS_APP_ID }}
         run: npm run build
       - name: Disable Jekyll
         run: touch out/.nojekyll

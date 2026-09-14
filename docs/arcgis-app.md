@@ -92,16 +92,18 @@ NEXT_PUBLIC_ARCGIS_APP_ID=<APP ID>
 
 ### Нийтлэгдэх сайт (GitHub Actions)
 
-Репогийн **Settings → Secrets and variables → Actions → Variables**
-хэсэгт (Secrets БИШ — энэ нь нууц утга биш):
+Репогийн **Settings → Secrets and variables → Actions** хэсэгт:
 
 ```
 Name:  NEXT_PUBLIC_ARCGIS_APP_ID
 Value: <APP ID>
 ```
 
-`.github/workflows/deploy.yml` нь энэ хувьсагчийг бүтээх алхамдаа
-дамжуулна.
+**Variables** таб дээр тавих нь ЗӨВ — утга нь нууц биш бөгөөд бүтээлтийн
+log-д харагдвал эвдэрсэн эсэхийг шууд оношилно. **Secrets** таб дээр
+тавьсан ч ажиллана: `deploy.yml` нь `vars` эхэлж, байхгүй бол `secrets`-
+ээс уншина. Хоёр таб хоёулаа хоосон бол сайт бүтээгдэх боловч нэвтрэх
+товч гарахгүй.
 
 ---
 
