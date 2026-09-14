@@ -21,6 +21,9 @@
  * самбар өөрийн алдааны дэлгэцийг харуулна.
  */
 
+import { getToken } from "@/lib/auth";
+import { needsToken } from "@/lib/portal";
+
 /** ArcGIS-ийн алдааны бие — `error` талбар нь бүх төгсгөлд ижил хэлбэртэй */
 type ArcGisError = {
   error?: { code?: number; message?: string; details?: string[] };
@@ -38,9 +41,11 @@ export async function arcgisJson<T>(
   label: string,
   init?: RequestInit,
 ): Promise<T> {
+  const ready = await withToken(url);
+
   let res: Response;
   try {
-    res = await fetch(url, init);
+    res = await fetch(ready, init);
   } catch (e) {
     /* Таслагдсан хүсэлтийг ЗААВАЛ дамжуулна — энэ нь алдаа биш,
        бүрэлдэхүүн салсны шинж. Ялгаж дамжуулахгүй бол хэрэглэгч
@@ -63,12 +68,45 @@ export async function arcgisJson<T>(
     const m = json.error.message?.trim();
     /* "Invalid URL" гэдэг нь ихэвчлэн давхарга устгагдсан буюу нэр нь
        солигдсон гэсэн үг — түүнийг ойлгомжтой болгож хэлнэ */
+    const code = json.error.code;
+    /* 498 — токен хүчингүй, 499 — токен огт ирээгүй, 403 — эрх хүрэхгүй.
+       Эдгээр нь давхаргын биш НЭВТРЭЛТИЙН асуудал тул тусад нь нэрлэнэ:
+       "давхарга олдсонгүй" гэвэл админ буруу зүйл хайна */
     const why =
-      m === "Invalid URL"
-        ? "давхарга олдсонгүй (устгагдсан эсвэл нэр нь солигдсон)"
-        : (m ?? `код ${json.error.code ?? "?"}`);
+      code === 498 || code === 499
+        ? "нэвтрэлтийн хугацаа дууссан байна"
+        : code === 403
+          ? "энэ өгөгдөлд хандах эрх байхгүй байна"
+          : m === "Invalid URL"
+            ? "давхарга олдсонгүй (устгагдсан эсвэл нэр нь солигдсон)"
+            : (m ?? `код ${code ?? "?"}`);
     throw new Error(`${label}: ${why}`);
   }
 
   return json;
+}
+
+/**
+ * Хамгаалагдсан хостын хаягт токен хавсаргана.
+ *
+ * ⚠ **БҮХ ArcGIS-Д БИШ.** Esri-ийн нээлттэй суурь зураг
+ * (`services.arcgisonline.com`) токен хүлээж авдаггүй бөгөөд хавсаргавал
+ * хүсэлт унана. Аль хост хамгаалагдсаныг `lib/portal.ts` эзэмшинэ.
+ *
+ * Токен байхгүй бол хаягийг ХЭВЭЭР нь буцаана: хамгаалагдсан давхарга
+ * бол портал өөрөө 499-ээр татгалзах ба дээрх алдааны боловсруулалт
+ * "нэвтрэлтийн хугацаа дууссан" гэж ойлгомжтой хэлнэ. Энд чимээгүй
+ * шидвэл нээлттэй давхаргууд ч татагдахаа болино.
+ */
+async function withToken(url: string): Promise<string> {
+  if (!needsToken(url)) return url;
+
+  const token = await getToken();
+  if (!token) return url;
+
+  /* Хаягт аль хэдийн токен байвал дарж бичихгүй — дуудагч тал зориудаар
+     өөр токен өгсөн байж болно */
+  const u = new URL(url);
+  if (!u.searchParams.has("token")) u.searchParams.set("token", token);
+  return u.toString();
 }

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Moon, Sun } from "lucide-react";
 import { RailOpen } from "@/components/shell/rail";
 import { asset } from "@/lib/base-path";
+import { UserChip } from "@/components/auth/user-chip";
 
 /** Бүтэн өргөнийг эзлэх толгой: тэмдэг + горимын товч */
 export function Header() {
@@ -30,6 +31,7 @@ export function Header() {
 
       <div className="ml-auto flex shrink-0 items-center gap-2">
         <ThemeToggle />
+        <UserChip />
       </div>
     </header>
   );

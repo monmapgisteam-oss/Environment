@@ -4,6 +4,7 @@ import "./globals.css";
 import { Header } from "@/components/shell/header";
 import { Sidebar } from "@/components/shell/sidebar";
 import { MobileNav } from "@/components/shell/mobile-nav";
+import { AuthProvider } from "@/components/auth/provider";
 
 /**
  * Систем даяар ГАНЦ үсгийн фонт. Гарчиг, бие, тоо бүгд Inter.
@@ -57,14 +58,19 @@ export default function RootLayout({
         <script dangerouslySetInnerHTML={{ __html: bootScript }} />
       </head>
       <body className={`${inter.variable} antialiased`}>
-        <Header />
-        <Sidebar />
-        <div className="lg:pl-(--rail-w)">
-          <MobileNav />
-          <main className="min-h-[calc(100dvh-var(--head-h))] px-4 py-5 lg:px-6 lg:py-6">
-            {children}
-          </main>
-        </div>
+        {/* Нэвтрэлтийн хаалга нь ТОЛГОЙ, ЗУРВАСЫГ ХАМРУУЛНА: нэвтрээгүй
+            хэрэглэгчид очих газар байхгүй тул цэс харуулаад товшилт
+            бүрийг нь хаах нь утгагүй */}
+        <AuthProvider>
+          <Header />
+          <Sidebar />
+          <div className="lg:pl-(--rail-w)">
+            <MobileNav />
+            <main className="min-h-[calc(100dvh-var(--head-h))] px-4 py-5 lg:px-6 lg:py-6">
+              {children}
+            </main>
+          </div>
+        </AuthProvider>
       </body>
     </html>
   );
