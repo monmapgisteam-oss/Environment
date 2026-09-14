@@ -34,6 +34,8 @@
  * нийлбэрлэнэ.
  */
 
+import { arcgisJson } from "@/lib/arcgis";
+
 const HOST = "https://services-ap1.arcgis.com/ACqsMOmNLi5wIdIh/arcgis/rest/services";
 const LAYER = encodeURIComponent("Богд_уулын_ойн_дагалт_баялгийн_тархалт");
 const PAGE = 2000;
@@ -103,11 +105,9 @@ export async function fetchGoodsIndex(signal?: AbortSignal): Promise<GoodsEntry[
       orderByFields: "a DESC",
       f: "json",
     });
-  const res = await fetch(url, { signal });
-  if (!res.ok) throw new Error(`Дагалт баялгийн жагсаалт татагдсангүй (${res.status})`);
-  const json = (await res.json()) as {
+  const json = await arcgisJson<{
     features?: { attributes: { Name: string; n: number; a: number } }[];
-  };
+  }>(url, "Дагалт баялгийн жагсаалт", { signal });
 
   return (json.features ?? []).map((f) => {
     const name = (f.attributes.Name ?? "").trim();
@@ -150,9 +150,9 @@ async function page(name: string, offset: number, signal?: AbortSignal) {
       orderByFields: "OBJECTID",
       f: "geojson",
     });
-  const res = await fetch(url, { signal });
-  if (!res.ok) throw new Error(`Тархалт татагдсангүй (${res.status})`);
-  const json = (await res.json()) as { features?: Feature[] };
+  const json = await arcgisJson<{ features?: Feature[] }>(url, "Тархалт", {
+    signal,
+  });
   return json.features ?? [];
 }
 
@@ -221,11 +221,14 @@ export async function fetchGoodsDetail(
       returnGeometry: "false",
       f: "json",
     });
-  const res = await fetch(url, { signal });
-  if (!res.ok) return null;
-  const json = (await res.json()) as {
-    features?: { attributes: { PopupInfo?: string | null } }[];
-  };
+  /* Дэлгэрэнгүй нь `null` буцаадаг — нэг бичлэгийн тайлбар татагдаагүй
+     нь самбарыг бүхэлд нь унагаах шалтгаан биш */
+  let json: { features?: { attributes: { PopupInfo?: string | null } }[] };
+  try {
+    json = await arcgisJson(url, "Дагалт баялгийн тайлбар", { signal });
+  } catch {
+    return null;
+  }
   const html = json.features?.[0]?.attributes?.PopupInfo;
   return html ? parsePopup(html) : null;
 }
