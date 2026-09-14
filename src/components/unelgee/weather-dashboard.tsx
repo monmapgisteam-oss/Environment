@@ -69,6 +69,13 @@ const PointMap = dynamic(
    Дээд хоёр давхарга нь НЭГ станцынх, доод давхарга нь бүх сүлжээнийх.
    Станц сонгох нь жагсаалтаас ч, зургаас ч болно.
 
+   ⚠ ХУУДАС ГҮЙХГҮЙ — платформын бусад самбартай ижил, нэг дэлгэцэнд
+   багтана. Дээд хоёр давхарга нь өөрийн агуулгын өндөртэй (`shrink-0`),
+   сүлжээний давхарга үлдсэн бүх зайг эзэлнэ. Тиймээс газрын зурагт
+   доод хязгаар ТАВИХГҮЙ: `min-h` тавибал намхан дэлгэц дээр хуудас
+   хальж, гүйлгүүр эргэж гарна. (Урьд нь `overflow-y-auto` +
+   `min-h-[640px]` байсныг хассан.)
+
    ЗААЛТЫН НАС ХАМТ ГАРНА. Сүлжээ нэгэн жигд биш: ихэнх станц 10 минут
    тутам мэдээлдэг ч хэдэн арав нь долоо хоногоор чимээгүй байдаг.
    Хуучирсан тоог одоогийнх мэт харуулбал самбар өөрөө худал хэлнэ.
@@ -219,7 +226,7 @@ export function WeatherDashboard() {
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-2.5 overflow-y-auto">
+    <div className="flex h-full min-h-0 flex-col gap-2">
       {/* ---------------- 1. Сонгосон станцын заалт ---------------- */}
       <section className="shrink-0 overflow-hidden rounded-xs border border-line bg-paper-2">
         <header className="flex flex-wrap items-baseline gap-x-3 gap-y-1 border-b border-line px-3 py-1.5">
@@ -324,7 +331,7 @@ export function WeatherDashboard() {
 
       {/* ---------------- 2. Урьдчилсан мэдээ ---------------- */}
       <section className="shrink-0 overflow-hidden rounded-xs border border-line bg-paper-2">
-        <header className="flex items-baseline gap-3 border-b border-line px-3.5 py-2">
+        <header className="flex items-baseline gap-3 border-b border-line px-3.5 py-1.5">
           <span className="eyebrow shrink-0">Таван хоногийн урьдчилсан мэдээ</span>
           <span className="min-w-0 flex-1 truncate text-[10.5px] text-ink-3">
             {current?.st.name ?? ""}
@@ -339,14 +346,14 @@ export function WeatherDashboard() {
             {forecast.map((d) => {
               const l = dayLabel(d.date);
               return (
-                <div key={d.date} className="bg-paper-2 px-3 py-2.5">
+                <div key={d.date} className="bg-paper-2 px-3 py-2">
                   <div className="flex items-baseline gap-1.5">
                     <span className="num text-[11.5px] text-ink">{l.day}</span>
                     <span className="text-[10px] text-ink-3">{l.weekday}</span>
                   </div>
 
                   {/* Өдөр, шөнийн температур — хоёр мөр, нэг хуваарь */}
-                  <div className="mt-2 space-y-1">
+                  <div className="mt-1.5 space-y-1">
                     <TempRow
                       label="Өдөр"
                       value={d.dayTemp}
@@ -361,7 +368,7 @@ export function WeatherDashboard() {
                     />
                   </div>
 
-                  <div className="num mt-2 flex items-baseline gap-2.5 border-t border-line pt-1.5 text-[10px] text-ink-3">
+                  <div className="num mt-1.5 flex items-baseline gap-2.5 border-t border-line pt-1 text-[10px] text-ink-3">
                     <span>
                       Тунадас {d.dayPrecip == null ? "—" : `${num(d.dayPrecip)}%`}
                     </span>
@@ -382,9 +389,9 @@ export function WeatherDashboard() {
       {/* Газрын зураг нь хуудасны гол эзэлхүүн — индикатор, урьдчилсан
           мэдээ хоёр нь дээрээ нимгэн зурвас болж суух ба сүлжээний
           зураг доор нь бүтэн өндрөөр дэлгэгдэнэ */}
-      <Columns id="weather" left={272} className="min-h-[640px] flex-1">
+      <Columns id="weather" left={272} className="min-h-0 flex-1">
         {/* Станцын жагсаалт */}
-        <div className="flex min-h-0 flex-col overflow-hidden rounded-xs border border-line bg-paper-2">
+        <div className="flex min-h-0 flex-col overflow-hidden rounded-xs border border-line bg-paper-2 max-xl:min-h-[280px]">
           <div className="flex items-center gap-2 border-b border-line px-2.5 py-1.5">
             <Search size={12} className="shrink-0 text-ink-3" />
             <input
@@ -480,7 +487,7 @@ export function WeatherDashboard() {
 
         {/* Хоёр газрын зураг — өргөн дэлгэцэнд зэрэгцэж, нарийн дээр
             дээр доор нь эвхэгдэнэ */}
-        <div className="grid min-h-0 gap-2.5 xl:grid-cols-2">
+        <div className="grid min-h-0 grid-rows-2 gap-2 max-xl:min-h-[560px] xl:grid-cols-2 xl:grid-rows-1">
           <StationMap
             rows={shown}
             choices={GROUP_A}
@@ -628,7 +635,7 @@ function StationMap({
         })}
       </div>
 
-      <div className="relative min-h-[340px] flex-1">
+      <div className="relative min-h-0 flex-1">
         <PointMap
           key={measure}
           points={points}
