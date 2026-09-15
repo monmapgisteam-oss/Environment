@@ -31,8 +31,8 @@ import { asset } from "@/lib/base-path";
    ⚠ **БИЧВЭРИЙН ХӨВӨӨ НЬ ХҮРЭЭНИЙ ЗАЙНААС ТОМ БАЙНА.** Хоёулаа
    дэлгэцийн ирмэгээс хэмжигддэг тул хэрэв `px-*` нь `inset-*`-аас бага
    бол бичвэр зураг дээр биш, түүний гадуурх бүдгэрсэн зурвас дээр
-   гарна. Одоогийн хос: хүрээ 16 / 28 / 48px, бичвэр 32 / 48 / 80px —
-   тэгэхээр бичвэр хүрээний дотор 16 / 20 / 32px-д сууна. Аль нэгийг нь
+   гарна. Одоогийн хос: хүрээ 24 / 40 / 80px, бичвэр 40 / 64 / 128px —
+   тэгэхээр бичвэр хүрээний дотор 16 / 24 / 48px-д сууна. Аль нэгийг нь
    өөрчлөх бол НӨГӨӨГ НЬ дагаж шалга.
 
    ⚠ **ДОТООД ХҮРЭЭ НЬ `bg-cover` — `bg-contain` ТУРШААД БУЦААСАН.**
@@ -108,7 +108,7 @@ export function SignIn({
       */}
       <div
         aria-hidden
-        className="absolute inset-4 rounded-xs border border-line bg-cover bg-center sm:inset-7 lg:inset-12"
+        className="absolute inset-6 rounded-xs border border-line bg-cover bg-center sm:inset-10 lg:inset-20"
         style={{ backgroundImage: `url("${BACKGROUND}")` }}
       />
 
@@ -123,7 +123,7 @@ export function SignIn({
           тохиолдож болох тул нэмэлт жигд хөшиг */}
       <div aria-hidden className="absolute inset-0 bg-paper/35 lg:bg-transparent" />
 
-      <div className="relative flex min-h-dvh items-center px-8 py-12 sm:px-12 lg:px-20">
+      <div className="relative flex min-h-dvh items-center px-10 py-14 sm:px-16 lg:px-32">
         <div className="w-full max-w-[380px]">
           <h1 className="display text-[26px] leading-[1.2] text-ink">
             Байгаль орчны хяналтын
