@@ -83,6 +83,29 @@ export function SignIn({
           хэсэг тохиолдож болох тул нэмэлт жигд хөшиг */}
       <div aria-hidden className="absolute inset-0 bg-paper/35 lg:bg-transparent" />
 
+      {/*
+        ЛОГО — зүүн дээд буланд.
+
+        Хөвөө нь доорх агуулгынхтай ИЖИЛ (`px-5` / `lg:px-12`) тул лого ба
+        гарчиг нэг босоо шугам дээр эгнэнэ. Тусад нь тоо бичвэл дэлгэц
+        солигдоход эгнээ алдагдана.
+
+        Толгойн тэмдэгтэй ижил: чимэглэл тул `aria-hidden` — гарчиг нь
+        системийн нэрийг аль хэдийн хэлдэг бөгөөд дэлгэц уншигч хоёр
+        удаа давтах шаардлагагүй.
+      */}
+      <div className="absolute top-8 left-5 z-10 lg:top-10 lg:left-12">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={asset("/logo.svg")}
+          alt=""
+          aria-hidden
+          width={56}
+          height={56}
+          className="size-12 lg:size-14"
+        />
+      </div>
+
       <div className="relative flex min-h-dvh items-center px-5 py-10 lg:px-12">
         <div className="w-full max-w-[400px] lg:max-w-[520px]">
           {/*
