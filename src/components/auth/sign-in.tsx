@@ -143,7 +143,7 @@ export function SignIn({
       */}
       <div className="relative flex min-h-dvh items-center px-5 py-24 lg:px-12">
         <div className="w-full max-w-[880px]">
-          <h1 className="brandmark text-[30px] leading-[1.05] text-ink uppercase sm:text-[44px] lg:text-[60px]">
+          <h1 className="brandmark text-[30px] leading-[1.05] text-ink uppercase sm:text-[44px] lg:text-[70px]">
             Байгаль орчны
           </h1>
           <p className="mt-3 text-[13px] leading-snug tracking-[0.18em] text-ink-2 uppercase sm:mt-4 sm:text-[17px] lg:text-[21px]">
