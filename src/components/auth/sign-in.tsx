@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { LogIn } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import { asset } from "@/lib/base-path";
 
 /* --------------------------------------------------------------------------
@@ -13,10 +13,20 @@ import { asset } from "@/lib/base-path";
    нээлттэй мэт харуулж, дараа нь татгалзахтай адил.
 
    ⚠ **БИЧВЭР ЦӨӨН** (хэрэглэгчийн залруулга, 2026-09-15). Систем нэрээ
-   хэлээд нэвтрэх боломжийг өгнө — өөр юу ч биш. Урьд нь байгууллагын нэр,
-   хэрэглээний тайлбар, нууц үг хаана шалгагдах тухай тэмдэглэл гэсэн
-   гурван нэмэлт блок байсныг хасав: нэвтрэхээс өөр сонголт байхгүй дэлгэц
-   дээр тайлбар уншигддаггүй. Дахин бүү нэм.
+   хэлээд нэвтрэх боломжийг өгнө — өөр юу ч биш. Хэрэглээний тайлбар,
+   нууц үг хаана шалгагдах тухай тэмдэглэл хоёрыг хасав: нэвтрэхээс өөр
+   сонголт байхгүй дэлгэц дээр тайлбар уншигддаггүй. Дахин бүү нэм.
+
+   ⚠ **ДӨРВӨН БУЛАНГИЙН БҮТЭЦ** (хэрэглэгчийн лавлагаа, 2026-09-15):
+     зүүн дээд — лого · баруун дээд — нэвтрэх товч ·
+     дунд зүүн — нэр · зүүн доод — байгууллагын нэр.
+   Товч нь агуулгын дундаас булан руу гарснаар гарчиг ганцаараа үлдэж,
+   дэлгэцийн гол тэнхлэг нь СИСТЕМИЙН НЭР болно. Байгууллагын нэр
+   гарчгийн дэргэдээс хөл рүү шилжсэн — эзэмшигч нь тодорхой үлдэх ч
+   нэртэй өрсөлдөхгүй.
+   ⚠ Дөрвүүлэнгийн хөвөө ИЖИЛ (`px-5` / `lg:px-12`) тул лого, гарчиг,
+   хөл гурав нэг босоо шугам дээр эгнэнэ. Тусад нь тоо бичвэл дэлгэц
+   солигдоход эгнээ алдагдана.
 
    ⚠ **ДЭВСГЭР ЗУРАГ НЬ БАЙХГҮЙ Ч АЖИЛЛАНА.** Зураг нь
    `public/auth/background.webp` дээр сууна. Татагдаагүй тохиолдолд доор нь
@@ -84,54 +94,66 @@ export function SignIn({
       <div aria-hidden className="absolute inset-0 bg-paper/35 lg:bg-transparent" />
 
       {/*
-        ЛОГО — зүүн дээд буланд.
+        ДЭЭД МӨР — лого зүүн, нэвтрэх товч баруун.
 
-        Хөвөө нь доорх агуулгынхтай ИЖИЛ (`px-5` / `lg:px-12`) тул лого ба
-        гарчиг нэг босоо шугам дээр эгнэнэ. Тусад нь тоо бичвэл дэлгэц
-        солигдоход эгнээ алдагдана.
+        ⚠ Товч нь агуулгын дундаас ДЭЭД БУЛАН руу гарсан (хэрэглэгчийн
+        лавлагаа, 2026-09-15). Ингэснээр гарчиг ганцаараа үлдэж, дэлгэцийн
+        гол тэнхлэг нь нэр болно; нэвтрэх үйлдэл нь дадсан байрандаа
+        (баруун дээд) сууна.
 
-        Толгойн тэмдэгтэй ижил: чимэглэл тул `aria-hidden` — гарчиг нь
-        системийн нэрийг аль хэдийн хэлдэг бөгөөд дэлгэц уншигч хоёр
-        удаа давтах шаардлагагүй.
+        Хөвөө нь доорх агуулгынхтай ИЖИЛ (`px-5` / `lg:px-12`) тул лого,
+        гарчиг, хөлийн бичвэр гурвуулаа нэг босоо шугам дээр эгнэнэ.
+        Тусад нь тоо бичвэл дэлгэц солигдоход эгнээ алдагдана.
       */}
-      <div className="absolute top-8 left-5 z-10 lg:top-10 lg:left-12">
+      <header className="absolute inset-x-0 top-0 z-10 flex items-center justify-between px-5 py-6 lg:px-12 lg:py-8">
+        {/* Чимэглэл тул `aria-hidden` — гарчиг нь системийн нэрийг аль
+            хэдийн хэлдэг бөгөөд дэлгэц уншигч давтах шаардлагагүй */}
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={asset("/logo.svg")}
           alt=""
           aria-hidden
-          width={56}
-          height={56}
-          className="size-12 lg:size-14"
+          width={48}
+          height={48}
+          className="size-10 shrink-0 lg:size-12"
         />
-      </div>
 
-      <div className="relative flex min-h-dvh items-center px-5 py-10 lg:px-12">
-        <div className="w-full max-w-[400px] lg:max-w-[520px]">
-          {/*
-            ⚠ Гарын `<br />` ХАСАГДСАН. Хэмжээ дэлгэцээр өөрчлөгддөг тул
-            гараар тавьсан таслалт нэг өргөнд таарч нөгөөд нь эвдэрдэг.
-            `text-balance` нь мөрүүдийг ойролцоо уртаар өөрөө хуваана.
-          */}
-          <h1 className="brandmark text-[30px] leading-[1.12] text-balance text-ink sm:text-[38px] lg:text-[46px]">
-            Байгаль орчны хяналтын нэгдсэн систем
+        {configured ? (
+          <button
+            onClick={enter}
+            disabled={busy}
+            className="flex shrink-0 items-center gap-2 rounded-xs border border-line bg-paper-2/70 px-4 py-2.5 text-[12.5px] font-medium text-ink backdrop-blur-md transition-colors hover:border-(--moss)/50 hover:text-(--moss) disabled:opacity-60"
+          >
+            {busy ? "Шилжиж байна…" : "Нэвтрэх"}
+            <ArrowRight size={13} />
+          </button>
+        ) : null}
+      </header>
+
+      {/*
+        ГОЛ БЛОК — нэр хоёр шатлалтай.
+
+        Эхний мөр нь ТОМ, хоёр дахь нь жижиг, өргөн зайтай том үсгээр.
+        Хоёуланг нь дараалуулж уншихад албан ёсны бүтэн нэр гарна:
+        "Байгаль орчны · хяналтын нэгдсэн систем". Тиймээс нэрийг
+        өөрчлөөгүй, зөвхөн эрэмбэлсэн.
+
+        ⚠ Гарын `<br />` ХЭРЭГЛЭХГҮЙ: хэмжээ дэлгэцээр өөрчлөгддөг тул
+        гараар тавьсан таслалт нэг өргөнд таарч нөгөөд нь эвдэрдэг.
+      */}
+      <div className="relative flex min-h-dvh items-center px-5 py-24 lg:px-12">
+        <div className="w-full max-w-[880px]">
+          <h1 className="brandmark text-[40px] leading-[1.02] text-ink uppercase sm:text-[62px] lg:text-[84px]">
+            Байгаль орчны
           </h1>
+          <p className="mt-3 text-[13px] leading-snug tracking-[0.18em] text-ink-2 uppercase sm:mt-4 sm:text-[17px] lg:text-[21px]">
+            Хяналтын нэгдсэн систем
+          </p>
 
-          <div className="ruler mt-5" />
-
-          {configured ? (
-            <button
-              onClick={enter}
-              disabled={busy}
-              className="glow mt-7 flex w-full max-w-[400px] items-center justify-center gap-2 rounded-xs border border-(--moss)/45 bg-(--moss)/10 px-4 py-3.5 text-[13.5px] font-medium text-(--moss) transition-colors hover:bg-(--moss)/15 disabled:opacity-60"
-            >
-              <LogIn size={14} />
-              {busy ? "Шилжиж байна…" : "Нэвтрэх"}
-            </button>
-          ) : (
-            /* Тохиргоо дутуу үед товч харуулах нь утгагүй — дарвал алдаа
-               л гарна. Хийх ёстой зүйлийг нь шууд хэлнэ */
-            <div className="hatch mt-6 rounded-xs border border-dashed border-line-2 px-4 py-4">
+          {configured ? null : (
+            /* Тохиргоо дутуу үед дээд булангийн товч гарахгүй тул
+               шалтгааныг ЭНД хэлнэ — хэрэглэгч хоосон дэлгэц харах ёсгүй */
+            <div className="hatch mt-8 max-w-[420px] rounded-xs border border-dashed border-line-2 px-4 py-4">
               <p className="text-[12px] leading-relaxed text-ink-2">
                 Нэвтрэлтийн тохиргоо дуусаагүй байна. Системийн админтай
                 холбогдоно уу.
@@ -140,6 +162,14 @@ export function SignIn({
           )}
         </div>
       </div>
+
+      {/* ХӨЛ — байгууллагын нэр. Гол блокоос гарч доод буланд суусан тул
+          гарчигтай өрсөлдөхгүй, гэхдээ эзэмшигч нь тодорхой үлдэнэ */}
+      <footer className="absolute inset-x-0 bottom-0 z-10 px-5 py-6 lg:px-12 lg:py-8">
+        <p className="text-[11px] tracking-[0.08em] text-ink-3">
+          Нийслэлийн Байгаль орчны газар
+        </p>
+      </footer>
     </div>
   );
 }
