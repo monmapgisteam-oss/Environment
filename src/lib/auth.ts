@@ -24,6 +24,7 @@
  */
 
 import { APP_ID, SHARING, redirectUri } from "@/lib/portal";
+import { BASE_PATH } from "@/lib/base-path";
 
 /* --------------------------------------------------------------------------
    СЕССИЙН ХЭЛБЭР
@@ -149,7 +150,7 @@ export async function signIn(back?: string): Promise<void> {
   const flow: Flow = {
     verifier,
     state,
-    back: back ?? window.location.pathname + window.location.search,
+    back: back ?? currentPath(),
   };
   sessionStorage.setItem(FLOW, JSON.stringify(flow));
 
@@ -177,6 +178,20 @@ export async function signIn(back?: string): Promise<void> {
  * `/auth/callback/` хуудас дуудна. Буцаах утга нь хэрэглэгчийг хаашаа
  * аваачихыг заана.
  */
+/**
+ * Одоогийн замыг ДЭД ЗАМГҮЙГЭЭР буцаана.
+ *
+ * ⚠ `router.replace()` нь дэд замыг ӨӨРӨӨ нэмдэг тул `window.location
+ * .pathname`-ийг тэр чигээр нь хадгалж болохгүй: нийтлэгдэх сайт дээр
+ * `/Environment/Environment/…` болж, хуудас олдохгүй. Хөгжүүлэлтэд
+ * `BASE_PATH` хоосон тул энэ алдаа ЗӨВХӨН нийтлэгдсэн сайтад мэдрэгдэнэ.
+ */
+function currentPath(): string {
+  const p = window.location.pathname;
+  const bare = BASE_PATH && p.startsWith(BASE_PATH) ? p.slice(BASE_PATH.length) : p;
+  return (bare || "/") + window.location.search;
+}
+
 export async function completeSignIn(search: string): Promise<string> {
   const q = new URLSearchParams(search);
 

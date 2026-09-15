@@ -42,7 +42,33 @@ type Auth = {
   enter: () => void;
   /** Гарах — локал сессийг устгана */
   leave: () => void;
+  /**
+   * Хадгалалтаас сессийг ДАХИН уншина.
+   *
+   * ⚠ `/auth/callback/` нь нэвтрэлтээ дуусгасны ДАРАА үүнийг ЗААВАЛ
+   * дуудна. Хаалга нь сессийг ачаалагдахдаа НЭГ УДАА уншдаг бөгөөд
+   * callback нь чөлөөт зам тул тэр мөчид сесси хараахан байхгүй —
+   * `state` нь `out` болж тогтоно. Дараа нь `router.replace` нь
+   * КЛИЕНТ талын шилжилт хийдэг учир хаалга дахин ачаалагддаггүй:
+   * токен амжилттай бичигдсэн хэрнээ хэрэглэгч нэвтрэх дэлгэц рүү
+   * буцаж, хязгааргүй мөчлөгт орно. `storage` үйл явдал ч аварахгүй —
+   * тэр нь зөвхөн ӨӨР табд дуугардаг.
+   */
+  sync: () => void;
 };
+
+/**
+ * Хадгалалтаас хүчинтэй сессийг уншина — төлөв ХӨНДӨХГҮЙ.
+ *
+ * `getToken()` нь хүчинтэй сессийг шууд буцааж, хугацаа нь дуусаж
+ * эхэлсэн бол чимээгүй сунгадаг тул энд `isLive`-ийг дахин шалгахгүй.
+ * Бүрэлдэхүүнээс гадна суух нь санаатай: цэвэр функц тул нөлөө ба
+ * `sync` хоёулаа ижил замаар дуудна.
+ */
+async function readLive(): Promise<Session | null> {
+  const token = await getToken();
+  return token ? readSession() : null;
+}
 
 const Ctx = React.createContext<Auth | null>(null);
 
@@ -60,32 +86,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = React.useState<State>("checking");
   const [session, setSession] = React.useState<Session | null>(null);
 
+  /** Уншсан сессийг төлөвт буулгах цорын ганц цэг */
+  const settle = React.useCallback((fresh: Session | null) => {
+    setSession(fresh);
+    setState(fresh ? "in" : "out");
+  }, []);
+
   /* Хадгалсан сессийг сэргээх. Хугацаа нь дуусаж эхэлсэн бол чимээгүй
-     сунгана — хэрэглэгч ажлынхаа дундуур нэвтрэх дэлгэц рүү унах ёсгүй */
+     сунгана — хэрэглэгч ажлынхаа дундуур нэвтрэх дэлгэц рүү унах ёсгүй.
+     `alive` нь салсан бүрэлдэхүүн рүү бичихээс сэргийлнэ */
   React.useEffect(() => {
     let alive = true;
-
-    (async () => {
-      const s = readSession();
-      if (isLive(s)) {
-        if (alive) {
-          setSession(s);
-          setState("in");
-        }
-        return;
-      }
-
-      const token = await getToken();
-      if (!alive) return;
-      const fresh = token ? readSession() : null;
-      setSession(fresh);
-      setState(fresh ? "in" : "out");
-    })();
-
+    /* Төлөвийг АМЛАЛТЫН буцаа дуудлагад тавина. Нөлөөний биед шууд
+       `setState` дуудвал зурагдалтын гинжин урвал үүсдэг тул
+       `react-hooks/set-state-in-effect` хориглодог — уншилт нь цэвэр
+       функц (`readLive`), төлөв тавих нь буцаа дуудлага байх нь мөн
+       зөв хуваарилалт */
+    void readLive().then((fresh) => {
+      if (alive) settle(fresh);
+    });
     return () => {
       alive = false;
     };
-  }, []);
+  }, [settle]);
 
   /*
     Токен хүчингүй болсныг өөр таб мэдэгдэнэ. Нэг табд гарахад нөгөө нь
@@ -114,8 +137,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setSession(null);
         setState("out");
       },
+      sync: () => {
+        void readLive().then(settle);
+      },
     }),
-    [state, session],
+    [state, session, settle],
   );
 
   const open = OPEN_PATHS.some((p) => path === p || path === `${p}/`);

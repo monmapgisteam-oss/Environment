@@ -4,6 +4,7 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { AlertTriangle, Loader2 } from "lucide-react";
 import { completeSignIn } from "@/lib/auth";
+import { useAuth } from "@/components/auth/provider";
 
 /* --------------------------------------------------------------------------
    ПОРТАЛААС БУЦАЖ ИРЭХ ЦЭГ
@@ -26,6 +27,7 @@ import { completeSignIn } from "@/lib/auth";
 
 export default function CallbackPage() {
   const router = useRouter();
+  const { sync } = useAuth();
   const [error, setError] = React.useState<string | null>(null);
   const done = React.useRef(false);
 
@@ -35,6 +37,14 @@ export default function CallbackPage() {
 
     completeSignIn(window.location.search)
       .then((back) => {
+        /* ⚠ ХААЛГАНД ШИНЭ СЕССИЙГ ЗААВАЛ МЭДЭГДЭНЭ. Хаалга нь сессийг
+           ачаалагдахдаа НЭГ УДАА уншдаг ба энэ хуудас ачаалагдах мөчид
+           сесси байхгүй байсан тул түүний төлөв `out` хэвээр хөлдсөн
+           байна. Доорх `replace` нь КЛИЕНТ талын шилжилт учир хаалга
+           дахин ачаалагдахгүй — мэдэгдэхгүй бол токен амжилттай
+           бичигдсэн хэрнээ хэрэглэгч нэвтрэх дэлгэц рүү буцна. */
+        sync();
+
         /* `replace` — буцах товчоор энэ хуудас руу эргэж орвол код нь
            аль хэдийн хэрэглэгдсэн тул алдаа гарна */
         router.replace(back || "/");
@@ -42,7 +52,7 @@ export default function CallbackPage() {
       .catch((e: unknown) => {
         setError(e instanceof Error ? e.message : "Нэвтрэлт амжилтгүй боллоо");
       });
-  }, [router]);
+  }, [router, sync]);
 
   return (
     <div className="flex min-h-[calc(100dvh-var(--head-h))] items-center justify-center px-5">
