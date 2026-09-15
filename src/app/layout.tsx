@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { Inter, Manrope } from "next/font/google";
 import "./globals.css";
 import { Header } from "@/components/shell/header";
 import { Sidebar } from "@/components/shell/sidebar";
@@ -13,6 +13,24 @@ import { AuthProvider } from "@/components/auth/provider";
  */
 const inter = Inter({
   variable: "--font-inter",
+  subsets: ["latin", "cyrillic"],
+  display: "swap",
+});
+
+/**
+ * ⚠ **ПЛАТФОРМЫН "ГАНЦ ФОНТ" ДҮРМИЙН ЦОРЫН ГАНЦ ҮЛ ХАМААРАХ ЗҮЙЛ**
+ * (хэрэглэгчийн шийдвэр, 2026-09-15).
+ *
+ * Manrope нь ЗӨВХӨН нэвтрэх дэлгэцийн гарчигт хэрэглэгдэнэ
+ * (`.brandmark`, `components/auth/sign-in.tsx`). Тэр бол системийн
+ * цорын ганц бүтэн дэлгэцийн харагдац бөгөөд нэг л мөр бичвэртэй —
+ * тиймээс нэмэлт фонтын жин зөвхөн тэнд л төлөгдөнө.
+ *
+ * ⚠ Самбар, толгой, хүснэгтэд БҮҮ ХЭРЭГЛЭ. Дата харуулах бүх
+ * харагдацад Inter хэвээр: эрэмбийг хэмжээ, жин, нягтралаар гаргана.
+ */
+const manrope = Manrope({
+  variable: "--font-manrope",
   subsets: ["latin", "cyrillic"],
   display: "swap",
 });
@@ -57,7 +75,7 @@ export default function RootLayout({
       <head>
         <script dangerouslySetInnerHTML={{ __html: bootScript }} />
       </head>
-      <body className={`${inter.variable} antialiased`}>
+      <body className={`${inter.variable} ${manrope.variable} antialiased`}>
         {/* Нэвтрэлтийн хаалга нь ТОЛГОЙ, ЗУРВАСЫГ ХАМРУУЛНА: нэвтрээгүй
             хэрэглэгчид очих газар байхгүй тул цэс харуулаад товшилт
             бүрийг нь хаах нь утгагүй */}

@@ -84,20 +84,23 @@ export function SignIn({
       <div aria-hidden className="absolute inset-0 bg-paper/35 lg:bg-transparent" />
 
       <div className="relative flex min-h-dvh items-center px-5 py-10 lg:px-12">
-        <div className="w-full max-w-[380px]">
-          <h1 className="display text-[26px] leading-[1.2] text-ink">
-            Байгаль орчны хяналтын
-            <br />
-            нэгдсэн систем
+        <div className="w-full max-w-[400px] lg:max-w-[520px]">
+          {/*
+            ⚠ Гарын `<br />` ХАСАГДСАН. Хэмжээ дэлгэцээр өөрчлөгддөг тул
+            гараар тавьсан таслалт нэг өргөнд таарч нөгөөд нь эвдэрдэг.
+            `text-balance` нь мөрүүдийг ойролцоо уртаар өөрөө хуваана.
+          */}
+          <h1 className="brandmark text-[30px] leading-[1.12] text-balance text-ink sm:text-[38px] lg:text-[46px]">
+            Байгаль орчны хяналтын нэгдсэн систем
           </h1>
 
-          <div className="ruler mt-4" />
+          <div className="ruler mt-5" />
 
           {configured ? (
             <button
               onClick={enter}
               disabled={busy}
-              className="glow mt-6 flex w-full items-center justify-center gap-2 rounded-xs border border-(--moss)/45 bg-(--moss)/10 px-4 py-3 text-[13px] font-medium text-(--moss) transition-colors hover:bg-(--moss)/15 disabled:opacity-60"
+              className="glow mt-7 flex w-full max-w-[400px] items-center justify-center gap-2 rounded-xs border border-(--moss)/45 bg-(--moss)/10 px-4 py-3.5 text-[13.5px] font-medium text-(--moss) transition-colors hover:bg-(--moss)/15 disabled:opacity-60"
             >
               <LogIn size={14} />
               {busy ? "Шилжиж байна…" : "Нэвтрэх"}
