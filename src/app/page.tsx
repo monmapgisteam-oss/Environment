@@ -8,7 +8,7 @@ export default function Home() {
   return (
     <div className="mx-auto max-w-[1400px] space-y-7">
       <header>
-        <div className="eyebrow mb-2.5">Байгаль орчны нэгдсэн платформ</div>
+        <div className="eyebrow mb-2.5">Байгаль орчны хяналтын нэгдсэн систем</div>
         <h1 className="display text-[31px] leading-none">Ерөнхий самбар</h1>
         <div className="ruler mt-5 opacity-70" aria-hidden />
       </header>

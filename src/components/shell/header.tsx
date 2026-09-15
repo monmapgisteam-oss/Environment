@@ -24,7 +24,7 @@ export function Header() {
             Нийслэлийн байгаль орчны газар
           </span>
           <span className="mt-1.5 block text-[9px] tracking-[0.18em] text-ink-3 uppercase">
-            Нэгдсэн платформ
+            Хяналтын нэгдсэн систем
           </span>
         </span>
       </Link>
