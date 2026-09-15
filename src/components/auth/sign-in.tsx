@@ -13,17 +13,22 @@ import { asset } from "@/lib/base-path";
    нээлттэй мэт харуулж, дараа нь татгалзахтай адил.
 
    ⚠ **ДЭВСГЭР ЗУРАГ НЬ БАЙХГҮЙ Ч АЖИЛЛАНА.** Зураг нь
-   `public/auth/background.jpg` дээр сууна. Татагдаагүй тохиолдолд доор нь
+   `public/auth/background.webp` дээр сууна. Татагдаагүй тохиолдолд доор нь
    давхарлагдсан градиент харагдах тул дэлгэц хэзээ ч хоосон цагаан
    болохгүй. Зураг солих нь ганц файл солих ажил — код хөндөхгүй.
 
-   ⚠ **БИЧВЭР ЗУРАГ ДЭЭР УНШИГДАХ ЁСТОЙ.** Ямар зураг тавихыг урьдчилан
-   мэдэх боломжгүй (цайвар тэнгэр ч, бараан ой ч байж болно) тул бичвэрийг
-   зурган дээр ШУУД тавихгүй: хагас тунгалаг хөшиг (`scrim`) ба бүдгэрүүлэг
-   дээр сууна. Ингэснээр аль ч зурагтай ажиллана.
+   ⚠ **БИЧВЭР БАРУУН ТАЛД СУУНА — ЗУРГААС БОЛЖ.** Одоогийн зураг нь
+   нийслэлийн зураглал, зангилаануудыг ЗҮҮН талдаа агуулж, баруун тал нь
+   бүдгэрсэн уулархаг дэвсгэр. Бичвэрийг зүүн талд тавьбал хөшиг нь яг
+   гол агуулгыг дардаг. Зураг солигдож, агуулга нь нөгөө тал руу шилжвэл
+   бичвэрийн тал ба хөшгийн чиглэл ХОЁУЛАА дагаж эргэнэ.
+
+   ⚠ **БИЧВЭР ЗУРАГ ДЭЭР УНШИГДАХ ЁСТОЙ.** Бичвэрийг зурган дээр ШУУД
+   тавихгүй: хагас тунгалаг хөшиг (`scrim`) дээр сууна. Ингэснээр зураг
+   цайвар ч, бараан ч байсан уншигдац тогтвортой.
    -------------------------------------------------------------------------- */
 
-const BACKGROUND = asset("/auth/background.jpg");
+const BACKGROUND = asset("/auth/background.webp");
 
 export function SignIn({
   onEnter,
@@ -50,14 +55,17 @@ export function SignIn({
         style={{ backgroundImage: `url("${BACKGROUND}")` }}
       />
 
-      {/* Хөшиг — бичвэрийн уншигдацыг зурагнаас ҮЛ ХАМААРУУЛНА */}
+      {/* Хөшиг нь БАРУУН тийш өтгөрнө: бичвэр тэнд сууж, зүүн талын
+          зураглал нээлттэй үлдэнэ */}
       <div
         aria-hidden
-        className="absolute inset-0 bg-gradient-to-r from-paper via-paper/85 to-paper/35 lg:to-transparent"
+        className="absolute inset-0 bg-gradient-to-l from-paper via-paper/80 to-paper/25 lg:via-paper/70 lg:to-transparent"
       />
-      <div aria-hidden className="absolute inset-0 bg-paper/25 lg:bg-transparent" />
+      {/* Нарийн дэлгэцэнд зураг ихээр хайчигдаж бичвэрийн ард ямар ч
+          хэсэг тохиолдож болох тул нэмэлт жигд хөшиг */}
+      <div aria-hidden className="absolute inset-0 bg-paper/35 lg:bg-transparent" />
 
-      <div className="relative flex min-h-dvh items-center px-5 py-10 lg:px-12">
+      <div className="relative flex min-h-dvh items-center justify-end px-5 py-10 lg:px-12">
         <div className="w-full max-w-[420px]">
           {/* Тэмдэг, нэр */}
           <div className="eyebrow text-(--moss)">Нийслэлийн Байгаль орчны газар</div>
