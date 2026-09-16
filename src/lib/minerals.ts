@@ -21,6 +21,8 @@
  * онуудад тархсан 3–50 жилийн хугацаатай зөвшөөрлүүд.
  */
 
+import { arcgisJson } from "@/lib/arcgis";
+
 const HOST = "https://services-ap1.arcgis.com/ACqsMOmNLi5wIdIh/arcgis/rest/services";
 const LAYER = "Ashigt_maltmal";
 
@@ -127,11 +129,9 @@ export async function fetchMinerals(): Promise<MineralData> {
       f: "geojson",
     });
 
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`Ашигт малтмалын талбай татагдсангүй (${res.status})`);
-  const json = (await res.json()) as {
+  const json = await arcgisJson<{
     features?: { properties: Props; geometry: GeoJSON.Geometry | null }[];
-  };
+  }>(url, "Ашигт малтмалын талбай");
 
   /* Тусгай дугаараар нь бүлэглэнэ — дугаар нь ганц зөвшөөрлийг заана */
   const groups = new Map<string, { p: Props; pts: [number, number][] }>();

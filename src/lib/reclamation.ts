@@ -22,6 +22,8 @@
  * хэмжээ нь баримт.
  */
 
+import { arcgisJson } from "@/lib/arcgis";
+
 const HOST = "https://services-ap1.arcgis.com/ACqsMOmNLi5wIdIh/arcgis/rest/services";
 
 export type FundingId = "aan" | "tusuw";
@@ -99,13 +101,9 @@ async function fetchOne(f: (typeof FUNDING)[number], base: number): Promise<Recl
       f: "json",
     });
 
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`${f.label}: татагдсангүй (${res.status})`);
-  const json = (await res.json()) as {
-    error?: { message: string };
+  const json = await arcgisJson<{
     features?: { attributes: Row; geometry?: { x: number; y: number } }[];
-  };
-  if (json.error) throw new Error(json.error.message);
+  }>(url, f.label);
 
   const groups = new Map<string, { row: Row; pts: [number, number][] }>();
   for (const feat of json.features ?? []) {

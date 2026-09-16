@@ -11,6 +11,8 @@
  * эх бичвэрийг `screeningRaw`-д бүтнээр нь үлдээнэ.
  */
 
+import { arcgisJson } from "@/lib/arcgis";
+
 const HOST = "https://services-ap1.arcgis.com/ACqsMOmNLi5wIdIh/arcgis/rest/services";
 const LAYER = "Urgudliin_talbai";
 
@@ -100,11 +102,9 @@ export async function fetchPetitions(): Promise<PetitionData> {
       f: "geojson",
     });
 
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`Өргөдлийн талбай татагдсангүй (${res.status})`);
-  const json = (await res.json()) as {
+  const json = await arcgisJson<{
     features?: { properties: Props; geometry: GeoJSON.Geometry | null }[];
-  };
+  }>(url, "Өргөдлийн талбай");
 
   const rows: Petition[] = [];
   const shapes: GeoJSON.Feature[] = [];

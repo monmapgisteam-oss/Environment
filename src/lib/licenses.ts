@@ -7,6 +7,8 @@
  * аль нь удахгүй дуусах вэ, аль нь аль хэдийн дууссан вэ.
  */
 
+import { arcgisJson } from "@/lib/arcgis";
+
 const HOST = "https://services-ap1.arcgis.com/ACqsMOmNLi5wIdIh/arcgis/rest/services";
 const LAYER = "TTAMTZ_ashiglalt";
 
@@ -111,11 +113,9 @@ export async function fetchLicenses(): Promise<LicenseData> {
       f: "geojson",
     });
 
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`Тусгай зөвшөөрөл татагдсангүй (${res.status})`);
-  const json = (await res.json()) as {
+  const json = await arcgisJson<{
     features?: { properties: Props; geometry: GeoJSON.Geometry | null }[];
-  };
+  }>(url, "Тусгай зөвшөөрөл");
 
   const rows: License[] = [];
   const shapes: GeoJSON.Feature[] = [];

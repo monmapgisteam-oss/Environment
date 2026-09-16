@@ -15,6 +15,8 @@
  * эх сурвалж 500 орчим бичлэгтэй тул шахах ч шаардлагагүй.
  */
 
+import { arcgisJson } from "@/lib/arcgis";
+
 const HOST = "https://services-ap1.arcgis.com/ACqsMOmNLi5wIdIh/arcgis/rest/services";
 
 /** Эх сурвалжийн хуудсанд бүртгэхэд */
@@ -199,13 +201,9 @@ export async function fetchSoil(year: SoilYear): Promise<SoilData> {
       f: "json",
     });
 
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`${year} оны хөрсний мэдээ татагдсангүй (${res.status})`);
-  const json = (await res.json()) as {
-    error?: { message: string };
+  const json = await arcgisJson<{
     features?: { attributes: Row; geometry?: { x: number; y: number } }[];
-  };
-  if (json.error) throw new Error(json.error.message);
+  }>(url, `${year} оны хөрсний мэдээ`);
 
   const metrics: SoilMetric[] = s.metrics.map((m) => ({
     id: m.id,

@@ -12,6 +12,8 @@
  * задарч эхэлнэ.
  */
 
+import { arcgisJson } from "@/lib/arcgis";
+
 const HOST = "https://services-ap1.arcgis.com/ACqsMOmNLi5wIdIh/arcgis/rest/services";
 const LAYER = "Ewdersen_gazar";
 const PAGE = 2000;
@@ -75,9 +77,7 @@ async function page(offset: number): Promise<Feature[]> {
       orderByFields: "OBJECTID",
       f: "geojson",
     });
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`Эвдэрсэн газар татагдсангүй (${res.status})`);
-  const json = (await res.json()) as { features?: Feature[] };
+  const json = await arcgisJson<{ features?: Feature[] }>(url, "Эвдэрсэн газар");
   return json.features ?? [];
 }
 
