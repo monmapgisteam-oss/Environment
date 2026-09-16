@@ -10,7 +10,16 @@ import { ASSESSMENT_SERVICES } from "@/lib/assessment";
 import { DAMAGED_SERVICE } from "@/lib/damaged";
 import { ECO_SERVICE, PARCELS_SERVICE } from "@/lib/eco-corridors";
 import { FLOODPLAIN_SERVICE } from "@/lib/floodplains";
-import { FOREST_LAYERS, layerName, layerService } from "@/lib/forest-layers";
+import {
+  ECO_LAYERS,
+  FLOOD_LAYERS,
+  FOREST_LAYERS,
+  GAS_LAYERS,
+  GREEN_LAYERS,
+  WASTE_LAYERS,
+  layerName,
+  layerService,
+} from "@/lib/layers";
 import { chemicalService } from "@/lib/chemicals";
 import { REPAIR_SERVICE } from "@/lib/repair-shops";
 import { LICENSES_SERVICE } from "@/lib/licenses";
@@ -189,6 +198,16 @@ export const SOURCES: Source[] = [
     kind: "ArcGIS Enterprise FeatureServer",
     url: layerService(id),
   })),
+  /* Байгаль орчны үнэлгээний таван бүлгийн давхаргууд — мөн бүртгэлээс
+     гарна тул давхарга нэмэхэд энэ жагсаалт өөрөө уртасна */
+  ...[...FLOOD_LAYERS, ...GREEN_LAYERS, ...ECO_LAYERS, ...WASTE_LAYERS, ...GAS_LAYERS].map(
+    (id) => ({
+      slug: "unelgee-uur-amisgal",
+      name: layerName(id),
+      kind: "ArcGIS Enterprise FeatureServer",
+      url: layerService(id),
+    }),
+  ),
   {
     slug: "hyanalt",
     name: "Авто засварын үйлчилгээний цэг",

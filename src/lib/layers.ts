@@ -53,7 +53,58 @@ export const FOREST_LAYERS = [
   "O03_dagalt_baylag",
 ] as const;
 
-export type LayerId = (typeof FOREST_LAYERS)[number];
+/* --------------------------------------------------------------------------
+   БАЙГАЛЬ ОРЧНЫ ҮНЭЛГЭЭ, УУР АМЬСГАЛЫН ХЭЛТСИЙН БҮЛГҮҮД
+
+   ⚠ БҮЛЭГ НЬ ҮЙЛЧИЛГЭЭНИЙ УГТВАРААР тодорхойлогдоно (хэрэглэгчийн
+   дүрэм, 2026-09-16): `B06_*` бүгд нэг утга агуулгатай тул НЭГ самбарт
+   орно. Шинэ давхарга ирэхэд зөвхөн доорх жагсаалтад нэмнэ — самбар нь
+   талбарын бүтцийг ArcGIS-ээс өөрөө уншдаг тул код бичих шаардлагагүй.
+
+   ⚠ Давхаргад ашиглахуйц талбар байхгүй байх нь ХЭВИЙН — тэр
+   тохиолдолд газрын зураг дээр л харагдана, диаграм гарахгүй.
+   -------------------------------------------------------------------------- */
+
+export const FLOOD_LAYERS = [
+  "B06_uyr_ersdelt_talbai",
+  "B06_uyr_ersdelt_tseg",
+  "B06_uyrt_urtseun_negj_talbai",
+  "B06_us_halisan_talbai_2024",
+  "B06_khoroo_ersdel",
+  "B06_barilga_ih_ersdel",
+  "B06_ail_urh_ersdel",
+] as const;
+
+export const GAS_LAYERS = ["B07_gas_tuhuurumj"] as const;
+
+export const GREEN_LAYERS = [
+  "B11_nogoon_baiguulamj",
+  "B11_tsetserlegt_hureelen",
+] as const;
+
+export const WASTE_LAYERS = [
+  "B12_hogiin_tseg_polygon",
+  "B12_hogiin_tseg_point",
+] as const;
+
+export const ECO_LAYERS = [
+  "B13_2024_он_bichilgarden",
+  "B13_2023_он_bichilgarden",
+  "B13_Duguin_Zam_line",
+  "B13_Yavgan_Zam_line",
+  "B13_Orshuulga_polygon",
+  "B13_Orshuulga_point",
+  "B13_Tsergiin_angi_polygon",
+  "B13_Tsergiin_angi_point",
+] as const;
+
+export type LayerId =
+  | (typeof FOREST_LAYERS)[number]
+  | (typeof FLOOD_LAYERS)[number]
+  | (typeof GAS_LAYERS)[number]
+  | (typeof GREEN_LAYERS)[number]
+  | (typeof WASTE_LAYERS)[number]
+  | (typeof ECO_LAYERS)[number];
 
 /**
  * ХАРАГДАХ НЭР.
@@ -79,6 +130,31 @@ export const LAYER_NAMES: Record<LayerId, string> = {
   O03_oi_heseglel: "Ойн хэсэглэл",
   O03_nogoon_bus_heseg: "Ногоон бүсийн хэсэг",
   O03_dagalt_baylag: "Ойн дагалт баялаг",
+
+  B06_uyr_ersdelt_talbai: "Үерийн эрсдэлт талбай",
+  B06_uyr_ersdelt_tseg: "Үерийн эрсдэлт цэг",
+  B06_uyrt_urtseun_negj_talbai: "Үерт өртсөн нэгж талбар",
+  B06_us_halisan_talbai_2024: "Ус халисан талбай, 2024",
+  B06_khoroo_ersdel: "Хорооны эрсдэл",
+  B06_barilga_ih_ersdel: "Их эрсдэлт барилга",
+  B06_ail_urh_ersdel: "Эрсдэлт айл өрх",
+
+  B07_gas_tuhuurumj: "Хийн төхөөрөмж",
+
+  B11_nogoon_baiguulamj: "Ногоон байгууламж",
+  B11_tsetserlegt_hureelen: "Цэцэрлэгт хүрээлэн",
+
+  B12_hogiin_tseg_polygon: "Хогийн цэгийн талбай",
+  B12_hogiin_tseg_point: "Хогийн цэг",
+
+  "B13_2024_он_bichilgarden": "Бичил цэцэрлэг, 2024",
+  "B13_2023_он_bichilgarden": "Бичил цэцэрлэг, 2023",
+  B13_Duguin_Zam_line: "Дугуйн зам",
+  B13_Yavgan_Zam_line: "Явган зам",
+  B13_Orshuulga_polygon: "Оршуулгын газрын талбай",
+  B13_Orshuulga_point: "Оршуулгын газар",
+  B13_Tsergiin_angi_polygon: "Цэргийн ангийн талбай",
+  B13_Tsergiin_angi_point: "Цэргийн анги",
 };
 
 /** Давхаргын харагдах нэр — бүртгэлд байхгүй бол үйлчилгээнийхээр */
@@ -87,7 +163,9 @@ export function layerName(id: string, fallback?: string): string {
 }
 
 export function layerService(id: string): string {
-  return `${HOSTING}/Hosted/${id}/FeatureServer`;
+  /* ⚠ Зарим үйлчилгээний нэр КИРИЛЛ үсэгтэй ("B13_2023_он_bichilgarden")
+     тул хаягт кодчилол ЗААВАЛ — эс тэгвээс зарим орчинд хүсэлт унана */
+  return `${HOSTING}/Hosted/${encodeURIComponent(id)}/FeatureServer`;
 }
 
 /** Эх сурвалжийн талбарын тодорхойлолт */

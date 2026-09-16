@@ -1,8 +1,25 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { CloudSun, FileCheck2, Loader2, TreePine } from "lucide-react";
+import {
+  CloudSun,
+  FileCheck2,
+  Flame,
+  Leaf,
+  Loader2,
+  Trash2,
+  TreePine,
+  Waves,
+  Route,
+} from "lucide-react";
 import { SourceTabs, useStoredTab } from "@/components/ui/source-tabs";
+import {
+  ECO_LAYERS,
+  FLOOD_LAYERS,
+  GAS_LAYERS,
+  GREEN_LAYERS,
+  WASTE_LAYERS,
+} from "@/lib/layers";
 
 /*
   Хэлтэс гурван эх сурвалжтай тул самбар хооронд сольж харна.
@@ -44,6 +61,30 @@ const WeatherDashboard = dynamic(
   { ssr: false, loading: spinner },
 );
 
+/**
+ * Давхаргын бүлгийн самбар — таван сэдэв НЭГ бүрэлдэхүүнээр зурагдана.
+ *
+ * ⚠ Бүлэг бүрд тусдаа самбар БИЧИХГҮЙ. Үзүүлэгч нь талбарын бүтцийг
+ * ArcGIS-ээс өөрөө уншиж диаграмыг гаргадаг тул сэдвээс хамаарахгүй;
+ * шинэ давхарга ирэхэд `lib/layers.ts`-ийн жагсаалтад нэмэхэд л
+ * хангалттай.
+ */
+function group(layers: readonly string[]) {
+  const D = dynamic(
+    () => import("@/components/layers/dashboard").then((m) => m.LayersDashboard),
+    { ssr: false, loading: spinner },
+  );
+  const G = () => <D layers={layers} />;
+  G.displayName = "LayerGroup";
+  return G;
+}
+
+const FloodDashboard = group(FLOOD_LAYERS);
+const GasDashboard = group(GAS_LAYERS);
+const GreenDashboard = group(GREEN_LAYERS);
+const WasteDashboard = group(WASTE_LAYERS);
+const EcoDashboard = group(ECO_LAYERS);
+
 const TABS = [
   {
     id: "unelgee",
@@ -57,6 +98,36 @@ const TABS = [
     note: "2026 оны нэгтгэл · мод тарих үүрэг",
     full: "Байгаль орчны менежментийн төлөвлөгөөний 2026 оны нэгтгэл",
     icon: TreePine,
+  },
+  {
+    id: "flood",
+    label: "Үерийн эрсдэл",
+    note: "Долоон давхарга · эрсдэлт талбай, барилга, айл өрх",
+    icon: Waves,
+  },
+  {
+    id: "green",
+    label: "Ногоон байгууламж",
+    note: "4,972 байгууламж · 41 цэцэрлэгт хүрээлэн",
+    icon: Leaf,
+  },
+  {
+    id: "eco",
+    label: "Эко-инфраструктур",
+    note: "Найман давхарга · бичил цэцэрлэг, зам, оршуулга",
+    icon: Route,
+  },
+  {
+    id: "waste",
+    label: "Хогийн цэг",
+    note: "Талбай ба цэгээр",
+    icon: Trash2,
+  },
+  {
+    id: "gas",
+    label: "Хийн төхөөрөмж",
+    note: "2,895 төхөөрөмж",
+    icon: Flame,
   },
   {
     id: "weather",
@@ -83,6 +154,11 @@ export function UnelgeeWorkspace() {
       <div className="min-h-0 flex-1">
         {tab === "unelgee" ? <UnelgeeDashboard /> : null}
         {tab === "bomt" ? <BomtDashboard /> : null}
+        {tab === "flood" ? <FloodDashboard /> : null}
+        {tab === "green" ? <GreenDashboard /> : null}
+        {tab === "eco" ? <EcoDashboard /> : null}
+        {tab === "waste" ? <WasteDashboard /> : null}
+        {tab === "gas" ? <GasDashboard /> : null}
         {tab === "weather" ? <WeatherDashboard /> : null}
       </div>
     </div>

@@ -36,14 +36,13 @@ import {
   labelParts,
   fetchLayerFeatures,
   fetchLayerInfo,
-  FOREST_LAYERS,
   type Breakdown,
   type ChartKind,
   type LayerLabels,
   type LayerFeatures,
   type Row,
   type LayerInfo,
-} from "@/lib/forest-layers";
+} from "@/lib/layers";
 import { cn, num } from "@/lib/utils";
 
 const LayerMap = dynamic(
@@ -234,7 +233,16 @@ function labelFor(hit: Loaded, oid: number): string {
  * мегабайт дэмий явна. Нэг удаа татсаныг санах ойд үлдээнэ — дахин
  * асаахад шууд гарна.
  */
-export function ForestLayersDashboard() {
+/**
+ * Давхаргын үзүүлэгч — НЭГ зураг, олон давхарга.
+ *
+ * ⚠ Давхаргын жагсаалт нь ПРОПООР ирнэ, кодод шууд бичигдэхгүй. Анх ойн
+ * хэлтэст зориулж бичигдсэн боловч бүтэц нь сэдвээс хамаарахгүй: талбарын
+ * тодорхойлолтыг ArcGIS-ээс өөрөө уншиж диаграмыг гаргадаг тул ямар ч
+ * бүлэгт тохирно. Байгаль орчны үнэлгээний таван бүлэг мөн үүнийг
+ * хэрэглэдэг (`lib/layers.ts` доторх бүртгэлүүд).
+ */
+export function LayersDashboard({ layers }: { layers: readonly string[] }) {
   /** Давхарга бүрийн тодорхойлолт — эхэнд бүгдийг НЭГ удаа уншина */
   const [infos, setInfos] = React.useState<Record<string, LayerInfo>>({});
   const [failed, setFailed] = React.useState<Record<string, string>>({});
@@ -314,7 +322,7 @@ export function ForestLayersDashboard() {
     let alive = true;
 
     Promise.all(
-      FOREST_LAYERS.map((id) =>
+      layers.map((id) =>
         fetchLayerInfo(id, ac.signal).then(
           (info) => ({ id, info }),
           (e: Error) => ({ id, error: e.message }),
@@ -337,7 +345,7 @@ export function ForestLayersDashboard() {
       alive = false;
       ac.abort();
     };
-  }, []);
+  }, [layers]);
 
   /* Асаалттай боловч татагдаагүй давхаргыг татна */
   React.useEffect(() => {
@@ -529,17 +537,17 @@ export function ForestLayersDashboard() {
 
   const toneOf = React.useCallback(
     (id: string) =>
-      LAYER_TONE[FOREST_LAYERS.indexOf(id as never) % LAYER_TONE.length],
-    [],
+      LAYER_TONE[layers.indexOf(id) % LAYER_TONE.length],
+    [layers],
   );
   const uidBase = React.useCallback(
-    (id: string) => FOREST_LAYERS.indexOf(id as never) * STRIDE,
-    [],
+    (id: string) => layers.indexOf(id) * STRIDE,
+    [layers],
   );
   const hueOf = React.useCallback(
     (id: string) =>
-      LAYER_HUE[FOREST_LAYERS.indexOf(id as never) % LAYER_HUE.length],
-    [],
+      LAYER_HUE[layers.indexOf(id) % LAYER_HUE.length],
+    [layers],
   );
 
   /*
@@ -675,13 +683,13 @@ export function ForestLayersDashboard() {
     (uid: number | null) => {
       if (uid == null) return null;
       const index = Math.floor(uid / STRIDE);
-      const id = FOREST_LAYERS[index];
+      const id = layers[index];
       const hit = id ? loaded[id] : undefined;
       if (!id || !hit) return null;
       const row = hit.data.rows[uid - index * STRIDE];
       return row ? { id, hit, info: hit.info, row } : null;
     },
-    [loaded],
+    [loaded, layers],
   );
 
   const hovered = React.useMemo(() => lookup(tip.oid), [lookup, tip.oid]);
@@ -851,7 +859,7 @@ export function ForestLayersDashboard() {
       </FilterBar>
 
       <Columns
-        id="forest-layers"
+        id={`layers-${layers[0] ?? "x"}`}
         left={286}
         /* Бүлэглэсэн багана энд сууна — 300px дээр гурван оны
          харьцуулалт зураас болно. Хэрэглэгч чирж өөрчилнө */
@@ -883,11 +891,11 @@ export function ForestLayersDashboard() {
           <Card className="min-h-[140px] flex-1">
             <Head title="Давхарга">
               <span className="num text-[11.5px] text-ink-3">
-                {num(on.length)} / {num(FOREST_LAYERS.length)}
+                {num(on.length)} / {num(layers.length)}
               </span>
             </Head>
             <div className="min-h-0 flex-1 divide-y divide-line overflow-y-auto">
-              {FOREST_LAYERS.map((id) => {
+              {layers.map((id) => {
                 const info = infos[id];
                 const error = failed[id];
                 const isOn = on.includes(id);
