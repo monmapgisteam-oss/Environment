@@ -23,20 +23,22 @@
  */
 
 import { arcgisJson } from "@/lib/arcgis";
+import { HOSTING } from "@/lib/portal";
 
-const HOST = "https://services-ap1.arcgis.com/ACqsMOmNLi5wIdIh/arcgis/rest/services";
 
 export type FundingId = "aan" | "tusuw";
 
 /** Эх сурвалжийн хуудсанд бүртгэхэд */
 export const RECLAMATION_SERVICES = [
-  `${HOST}/Nuhun_sergeelt_aan_hurungu/FeatureServer/0`,
-  `${HOST}/Nuhun_sergeelt_niisleliin_tusuw/FeatureServer/0`,
+  `${HOSTING}/Hosted/X07_Nuhun_sergeelt_aan_hurungu/FeatureServer/6`,
+  `${HOSTING}/Hosted/X07_Nuhun_sergeelt_niisleliin_tusuw/FeatureServer/5`,
 ];
 
 export const FUNDING = [
-  { id: "aan" as const, label: "Аж ахуйн нэгжийн хөрөнгөөр", layer: "Nuhun_sergeelt_aan_hurungu" },
-  { id: "tusuw" as const, label: "Нийслэлийн төсвөөр", layer: "Nuhun_sergeelt_niisleliin_tusuw" },
+  /* ⚠ `index` нь 0 БИШ: шинэ портал дээр бүх үйлчилгээ нэг дараалалтай
+     нийтлэгдсэн тул давхарга бүр өөрийн дугаартай */
+  { id: "aan" as const, label: "Аж ахуйн нэгжийн хөрөнгөөр", layer: "X07_Nuhun_sergeelt_aan_hurungu", index: 6 },
+  { id: "tusuw" as const, label: "Нийслэлийн төсвөөр", layer: "X07_Nuhun_sergeelt_niisleliin_tusuw", index: 5 },
 ];
 
 /** Нэг нөхөн сэргээлтийн талбай */
@@ -66,12 +68,12 @@ export type ReclamationSite = {
 };
 
 type Row = {
-  F_?: string;
-  Он?: number;
-  Дүүрэг_хороо?: string;
-  Талбайн_хэмжээ_га?: number;
-  Төсөвт_өртөг_мян_төг?: number;
-  Гүйцэтгэсэн_ААН?: string;
+  f_?: string;
+  он?: number;
+  дүүрэг_хороо?: string;
+  талбайн_хэмжээ_га?: number;
+  төсөвт_өртөг_мян_төг?: number;
+  гүйцэтгэсэн_аан?: string;
 };
 
 /**
@@ -88,7 +90,7 @@ function splitPlace(raw: string) {
 
 async function fetchOne(f: (typeof FUNDING)[number], base: number): Promise<ReclamationSite[]> {
   const url =
-    `${HOST}/${f.layer}/FeatureServer/0/query?` +
+    `${HOSTING}/Hosted/${f.layer}/FeatureServer/${f.index}/query?` +
     new URLSearchParams({
       where: "1=1",
       outFields: "*",
@@ -96,7 +98,7 @@ async function fetchOne(f: (typeof FUNDING)[number], base: number): Promise<Recl
       outSR: "4326",
       /* Булангийн цэгийн ДАРААЛАЛ нь хүрээг тодорхойлдог тул эрэмбийг
          сервертээ тогтооно — эс тэгвээс хүрээ орооцолдоно */
-      orderByFields: "OBJECTID",
+      orderByFields: "objectid",
       resultRecordCount: "2000",
       f: "json",
     });
@@ -110,7 +112,7 @@ async function fetchOne(f: (typeof FUNDING)[number], base: number): Promise<Recl
     const g = feat.geometry;
     if (!g || !Number.isFinite(g.x) || !Number.isFinite(g.y)) continue;
     const a = feat.attributes;
-    const key = [a.F_, a.Он, a.Дүүрэг_хороо, a.Талбайн_хэмжээ_га].join("|");
+    const key = [a.f_, a.он, a.дүүрэг_хороо, a.талбайн_хэмжээ_га].join("|");
     const hit = groups.get(key) ?? { row: a, pts: [] };
     hit.pts.push([g.x, g.y]);
     groups.set(key, hit);
@@ -119,19 +121,19 @@ async function fetchOne(f: (typeof FUNDING)[number], base: number): Promise<Recl
   const out: ReclamationSite[] = [];
   let i = 0;
   for (const { row, pts } of groups.values()) {
-    const place = row.Дүүрэг_хороо ?? "Тодорхойгүй";
+    const place = row.дүүрэг_хороо ?? "Тодорхойгүй";
     const { district, khoroo } = splitPlace(place);
     out.push({
       oid: base + i++,
       funding: f.id,
-      no: String(row.F_ ?? ""),
-      year: Number(row.Он) || 0,
+      no: String(row.f_ ?? ""),
+      year: Number(row.он) || 0,
       place,
       district,
       khoroo,
-      ha: Number(row.Талбайн_хэмжээ_га) || 0,
-      contractor: row.Гүйцэтгэсэн_ААН?.replace(/["“”]/g, "").trim() || null,
-      cost: typeof row.Төсөвт_өртөг_мян_төг === "number" ? row.Төсөвт_өртөг_мян_төг : null,
+      ha: Number(row.талбайн_хэмжээ_га) || 0,
+      contractor: row.гүйцэтгэсэн_аан?.replace(/["“”]/g, "").trim() || null,
+      cost: typeof row.төсөвт_өртөг_мян_төг === "number" ? row.төсөвт_өртөг_мян_төг : null,
       lon: pts.reduce((s, p) => s + p[0], 0) / pts.length,
       lat: pts.reduce((s, p) => s + p[1], 0) / pts.length,
       rings: buildRings(pts),

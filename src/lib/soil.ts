@@ -16,13 +16,13 @@
  */
 
 import { arcgisJson } from "@/lib/arcgis";
+import { HOSTING } from "@/lib/portal";
 
-const HOST = "https://services-ap1.arcgis.com/ACqsMOmNLi5wIdIh/arcgis/rest/services";
 
 /** Эх сурвалжийн хуудсанд бүртгэхэд */
 export const SOIL_SERVICES = [
-  `${HOST}/Soil_monitoring_2024_500/FeatureServer/0`,
-  `${HOST}/Soil_monitoring_2023_500/FeatureServer/0`,
+  `${HOSTING}/Hosted/X08_Soil_monitoring_2024_500/FeatureServer/3`,
+  `${HOSTING}/Hosted/X08_Soil_monitoring_2023_500/FeatureServer/4`,
 ];
 
 export const SOIL_YEARS = [2024, 2023] as const;
@@ -83,9 +83,12 @@ export type SoilData = {
 */
 const SCHEMA = {
   2024: {
-    layer: "Soil_monitoring_2024_500",
-    code: "Dugaar",
-    district: "DUUREG",
+    layer: "X08_Soil_monitoring_2024_500",
+    /* ⚠ Давхаргын дугаар 0 БИШ — шинэ портал дээр бүх үйлчилгээ нэг
+       дараалалтай нийтлэгдсэн */
+    index: 3,
+    code: "dugaar",
+    district: "duureg",
     metrics: [
       {
         id: "pi",
@@ -94,16 +97,16 @@ const SCHEMA = {
         /* PI = агууламж / дэвсгэр агууламж → 1 нь дэвсгэр түвшин */
         limit: 1,
         elements: {
-          As: "As_PI",
-          Cd: "Cd_PI",
-          Co: "Co_PI",
-          Cr: "Cr_PI",
-          Cu: "Cu_PI",
-          Mo: "Mo_PI",
-          Ni: "Ni_PI",
-          Pb: "Pb_PI",
-          Sr: "Sr_PI",
-          Zn: "Zn_PI",
+          As: "as_pi",
+          Cd: "cd_pi",
+          Co: "co_pi",
+          Cr: "cr_pi",
+          Cu: "cu_pi",
+          Mo: "mo_pi",
+          Ni: "ni_pi",
+          Pb: "pb_pi",
+          Sr: "sr_pi",
+          Zn: "zn_pi",
         },
       },
       {
@@ -124,42 +127,43 @@ const SCHEMA = {
         unit: "",
         limit: 1,
         elements: {
-          As: "As_Igeo",
-          Cd: "Cd_Igeo",
-          Co: "Co_Igeo",
-          Cr: "Cr_Igeo",
-          Cu: "Cu_Igeo",
-          Mo: "Mo_Igeo",
-          Ni: "Ni_Igeo",
-          Pb: "Pb_Igeo",
-          Sr: "Sr_Igeo",
-          Zn: "Zn_Igeo",
+          As: "as_igeo",
+          Cd: "cd_igeo",
+          Co: "co_igeo",
+          Cr: "cr_igeo",
+          Cu: "cu_igeo",
+          Mo: "mo_igeo",
+          Ni: "ni_igeo",
+          Pb: "pb_igeo",
+          Sr: "sr_igeo",
+          Zn: "zn_igeo",
         },
       },
     ],
   },
   2023: {
-    layer: "Soil_monitoring_2023_500",
-    code: "Tseg_num",
-    district: "DUUREG_1",
+    layer: "X08_Soil_monitoring_2023_500",
+    index: 4,
+    code: "tseg_num",
+    district: "duureg_1",
     metrics: [
       {
         id: "conc",
         label: "Агууламж",
         unit: "мг/кг",
         elements: {
-          As: "As_",
-          B: "B",
-          Cd: "Cd",
-          Co: "Co",
-          Cr: "Cr",
-          Cu: "Cu",
-          Hg: "Hg",
-          Mo: "Mo",
-          Ni: "Ni",
-          Pb: "Pb",
-          Sr: "Sr",
-          Zn: "Zn",
+          As: "as_",
+          B: "b",
+          Cd: "cd",
+          Co: "co",
+          Cr: "cr",
+          Cu: "cu",
+          Hg: "hg",
+          Mo: "mo",
+          Ni: "ni",
+          Pb: "pb",
+          Sr: "sr",
+          Zn: "zn",
         },
       },
     ],
@@ -187,10 +191,10 @@ export async function fetchSoil(year: SoilYear): Promise<SoilData> {
   const s = SCHEMA[year];
   /* Хэмжигдэхүүн бүрийн баганыг нэг хүсэлтээр татна — 2024 онд 20 багана */
   const cols = s.metrics.map((m) => Object.values(m.elements) as string[]);
-  const fields = ["OBJECTID", s.code, s.district, "KH_MON", "PLI", ...cols.flat()];
+  const fields = ["objectid", s.code, s.district, "kh_mon", "pli", ...cols.flat()];
 
   const url =
-    `${HOST}/${s.layer}/FeatureServer/0/query?` +
+    `${HOSTING}/Hosted/${s.layer}/FeatureServer/${s.index}/query?` +
     new URLSearchParams({
       where: "1=1",
       outFields: fields.join(","),
@@ -219,16 +223,16 @@ export async function fetchSoil(year: SoilYear): Promise<SoilData> {
     /* Координатгүй бичлэг газрын зурагт ч, тархалтад ч орох ёсгүй */
     if (!g || !Number.isFinite(g.x) || !Number.isFinite(g.y)) continue;
     const a = f.attributes;
-    const pli = Number(a.PLI);
+    const pli = Number(a.pli);
     if (!Number.isFinite(pli)) continue;
 
     points.push({
-      oid: Number(a.OBJECTID),
-      code: String(a[s.code] ?? a.OBJECTID),
+      oid: Number(a.objectid),
+      code: String(a[s.code] ?? a.objectid),
       lon: g.x,
       lat: g.y,
       district: String(a[s.district] ?? "Тодорхойгүй"),
-      khoroo: khorooLabel(a.KH_MON as string | null),
+      khoroo: khorooLabel(a.kh_mon as string | null),
       pli,
       values: cols.map((mc) =>
         mc.map((c) => {
