@@ -16,9 +16,11 @@
  * тэмдэглэнэ — "тодорхойгүй" нь дүүрэг биш.
  */
 
-const HOST = "https://services-ap1.arcgis.com/ACqsMOmNLi5wIdIh/arcgis/rest/services";
+import { arcgisJson } from "@/lib/arcgis";
+import { HOSTING } from "@/lib/portal";
 
-export const REPAIR_SERVICE = `${HOST}/Auto_zaswar/FeatureServer/0`;
+/* ⚠ Давхаргын дугаар 2 — 0 БИШ */
+export const REPAIR_SERVICE = `${HOSTING}/Hosted/Auto_zaswar/FeatureServer/2`;
 
 /*
   Дүүргийн товчлолыг бүтэн нэр рүү.
@@ -87,14 +89,16 @@ export async function fetchRepairShops(signal?: AbortSignal): Promise<RepairData
     `${REPAIR_SERVICE}/query?` +
     new URLSearchParams({
       where: "1=1",
-      outFields: "OBJECTID,Компани__иргэний_нэр,Байршил,Дүүрэг",
+      outFields: "objectid,компани__иргэний_нэр,байршил,дүүрэг",
       outSR: "4326",
-      orderByFields: "OBJECTID",
+      orderByFields: "objectid",
       f: "geojson",
     });
-  const res = await fetch(url, { signal });
-  if (!res.ok) throw new Error(`Авто засварын цэг татагдсангүй (${res.status})`);
-  const json = (await res.json()) as { features?: Feature[] };
+  const json = await arcgisJson<{ features?: Feature[] }>(
+    url,
+    "Авто засварын цэг",
+    signal ? { signal } : undefined,
+  );
 
   const shops: RepairShop[] = [];
   const points = { oid: [] as number[], lon: [] as number[], lat: [] as number[] };
@@ -108,13 +112,13 @@ export async function fetchRepairShops(signal?: AbortSignal): Promise<RepairData
     if (!Number.isFinite(lon) || !Number.isFinite(lat)) continue;
 
     const p = f.properties;
-    const oid = Number(p["OBJECTID"]);
-    const district = str(p["Дүүрэг"]);
+    const oid = Number(p["objectid"]);
+    const district = str(p["дүүрэг"]);
 
     shops.push({
       oid,
-      name: str(p["Компани__иргэний_нэр"]) || "Нэр бүртгэгдээгүй",
-      place: str(p["Байршил"]),
+      name: str(p["компани__иргэний_нэр"]) || "Нэр бүртгэгдээгүй",
+      place: str(p["байршил"]),
       district,
       lon,
       lat,

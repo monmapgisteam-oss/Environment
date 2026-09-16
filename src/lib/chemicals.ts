@@ -15,18 +15,23 @@
  * ХОРТ, АЮУЛТАЙ БОДИСЫН АГУУЛАХ") тул хэмжигдэхүүн болохгүй.
  */
 
-const HOST = "https://services-ap1.arcgis.com/ACqsMOmNLi5wIdIh/arcgis/rest/services";
+import { arcgisJson } from "@/lib/arcgis";
+import { HOSTING } from "@/lib/portal";
 
 export const CHEMICAL_YEARS = [2023, 2024] as const;
 export type ChemicalYear = (typeof CHEMICAL_YEARS)[number];
 
-const LAYER: Record<ChemicalYear, string> = {
-  2023: encodeURIComponent("Химийн_184_агуулах_2023"),
-  2024: encodeURIComponent("Химийн_20_агуулах_2024"),
+/* ⚠ Давхаргын дугаар 0 БИШ: 2023 нь 0, 2024 нь 1. Шинэ портал дээр
+   үйлчилгээ бүр нэг дараалалтай нийтлэгдсэн. Нэр нь кирилл тул хаягт
+   кодчилол ЗААВАЛ. */
+const LAYER: Record<ChemicalYear, { name: string; index: number }> = {
+  2023: { name: "Химийн_184_агуулах_2023", index: 0 },
+  2024: { name: "Химийн_20_агуулах_2024", index: 1 },
 };
 
 export function chemicalService(year: ChemicalYear) {
-  return `${HOST}/${LAYER[year]}/FeatureServer/0`;
+  const l = LAYER[year];
+  return `${HOSTING}/Hosted/${encodeURIComponent(l.name)}/FeatureServer/${l.index}`;
 }
 
 /* --------------------------------------------------------------------------
@@ -429,12 +434,14 @@ export async function fetchChemicals(
       where: "1=1",
       outFields: "*",
       outSR: "4326",
-      orderByFields: "OBJECTID",
+      orderByFields: "objectid",
       f: "geojson",
     });
-  const res = await fetch(url, { signal });
-  if (!res.ok) throw new Error(`Химийн агуулахын бүртгэл татагдсангүй (${res.status})`);
-  const json = (await res.json()) as { features?: Feature[] };
+  const json = await arcgisJson<{ features?: Feature[] }>(
+    url,
+    "Химийн агуулахын бүртгэл",
+    signal ? { signal } : undefined,
+  );
 
   const rows: Warehouse[] = [];
   const points = { oid: [] as number[], lon: [] as number[], lat: [] as number[] };
@@ -447,15 +454,15 @@ export async function fetchChemicals(
     if (!Number.isFinite(lon) || !Number.isFinite(lat)) continue;
 
     const p = f.properties;
-    const oid = Number(p["OBJECTID"]);
-    const rightsRaw = str(p["Зөвшөөрлийн_төрөл"]);
-    const validityRaw = str(p["Хүчинтэй_хугацаа"]);
+    const oid = Number(p["objectid"]);
+    const rightsRaw = str(p["зөвшөөрлийн_төрөл"]);
+    const validityRaw = str(p["хүчинтэй_хугацаа"]);
     const { from, to } = parseDates(validityRaw);
-    const substances = splitNames(str(p["Бодисын_нэрс"]));
+    const substances = splitNames(str(p["бодисын_нэрс"]));
     const groups = [...new Set(substances.map(classifySubstance))];
 
-    const substancesRaw = str(p["Бодисын_нэрс__тоо_хэмжээ"]);
-    const tonsRaw = p["Нийт_тоо_хэмжээ__тн_"];
+    const substancesRaw = str(p["бодисын_нэрс__тоо_хэмжээ"]);
+    const tonsRaw = p["нийт_тоо_хэмжээ__тн_"];
     const tons =
       typeof tonsRaw === "number" && Number.isFinite(tonsRaw) ? tonsRaw : null;
     /* Тоо хэмжээний бичвэр хоосон бол нэрсийн жагсаалтад буцаж түшинэ —
@@ -470,12 +477,12 @@ export async function fetchChemicals(
 
     rows.push({
       oid,
-      company: str(p["Аж_ахуйн_нэгжийн_нэр"]) || "Нэр бүртгэгдээгүй",
-      place: str(p["Байршил"]),
-      district: str(p["Дүүрэг"]),
+      company: str(p["аж_ахуйн_нэгжийн_нэр"]) || "Нэр бүртгэгдээгүй",
+      place: str(p["байршил"]),
+      district: str(p["дүүрэг"]),
       rights: splitRights(rightsRaw),
       rightsRaw,
-      storage: normalStorage(str(p["Хадгалах_газрын_зориулалт"])),
+      storage: normalStorage(str(p["хадгалах_газрын_зориулалт"])),
       tons,
       substances,
       groups,
@@ -483,12 +490,12 @@ export async function fetchChemicals(
       items,
       qtyUnit: qtyUnitOf(items, tons),
       certificate:
-        typeof p["Гэрчилгээний_дугаар"] === "number" ? p["Гэрчилгээний_дугаар"] : null,
+        typeof p["гэрчилгээний_дугаар"] === "number" ? p["гэрчилгээний_дугаар"] : null,
       validityRaw,
       validFrom: from,
       validTo: to,
-      registry: str(p["Регистр_гэрчилгээ"]),
-      phone: str(p["Холбоо_барих_утас"]),
+      registry: str(p["регистр_гэрчилгээ"]),
+      phone: str(p["холбоо_барих_утас"]),
       lon,
       lat,
     });
