@@ -19,7 +19,9 @@
  * хөлдөөх нь буруу.
  */
 
-const HOST = "https://services-ap1.arcgis.com/ACqsMOmNLi5wIdIh/arcgis/rest/services";
+import { arcgisJson } from "@/lib/arcgis";
+import { HOSTING } from "@/lib/portal";
+
 
 /* --------------------------------------------------------------------------
    ХОЁР ЖИЛ, ХОЁР ДАВХАРГА
@@ -41,9 +43,11 @@ const HOST = "https://services-ap1.arcgis.com/ACqsMOmNLi5wIdIh/arcgis/rest/servi
    тодруулдаг тул `id` нь давхарга солигдоход тодорхой байх ёстой.
    -------------------------------------------------------------------------- */
 
+/* ⚠ Давхаргын дугаар 0 БИШ: шинэ портал дээр бүх үйлчилгээ нэг
+   дараалалтай нийтлэгдсэн (2025 нь 22, 2026 нь 21) */
 export const ASSESSMENT_SERVICES = [
-  { year: 2025, url: `${HOST}/Parcel_yrunhii_unelgee_2025/FeatureServer/0` },
-  { year: 2026, url: `${HOST}/Parcel_Yrunhii_unelgee/FeatureServer/0` },
+  { year: 2025, url: `${HOSTING}/Hosted/B01_Parcel_yrunhii_unelgee_2025/FeatureServer/22` },
+  { year: 2026, url: `${HOSTING}/Hosted/B01_Parcel_yrunhii_unelgee_2026/FeatureServer/21` },
 ] as const;
 
 export type AssessmentYear = (typeof ASSESSMENT_SERVICES)[number]["year"];
@@ -241,53 +245,51 @@ async function fetchLayer(service: string, layer: number, signal?: AbortSignal) 
     new URLSearchParams({
       where: "1=1",
       outFields: [
-        "OBJECTID",
-        "ААНБ_нэрс",
-        "Хүсэлтийн_дугаар",
-        "Үнэлгээний_дугаар",
-        "Шийдвэрлэсэн_он_сар_өдөр",
-        "Шийдвэрлэсэн_он",
-        "Шийдвэрлэсэн_сар",
-        "Үйл_ажиллагааны_чиглэл",
+        "objectid",
+        "аанб_нэрс",
+        "хүсэлтийн_дугаар",
+        "үнэлгээний_дугаар",
+        "шийдвэрлэсэн_он_сар_өдөр",
+        "шийдвэрлэсэн_он",
+        "шийдвэрлэсэн_сар",
+        "үйл_ажиллагааны_чиглэл",
         "landuse_de",
         "rigth_type",
         "soum",
         "address_kh",
         "address_ne",
         "parcel_id",
-        "Shape__Area",
+        "SHAPE__Area",
       ].join(","),
       outSR: "4326",
-      orderByFields: "OBJECTID",
+      orderByFields: "objectid",
       resultRecordCount: "2000",
       f: "geojson",
     });
 
-  const res = await fetch(url, signal ? { signal } : undefined);
-  if (!res.ok) throw new Error(`Ерөнхий үнэлгээ татагдсангүй (${res.status})`);
-  const json = (await res.json()) as {
+  const json = await arcgisJson<{
     features?: { properties: Props; geometry: GeoJSON.Geometry | null }[];
-  };
+  }>(url, "Ерөнхий үнэлгээ", signal ? { signal } : undefined);
 
   const rows: Assessment[] = [];
   const shapes: GeoJSON.Feature[] = [];
 
   for (const f of json.features ?? []) {
     const p = f.properties;
-    const oid = uid(layer, Number(p.OBJECTID));
-    const year = int(p["Шийдвэрлэсэн_он"]);
-    const month = int(p["Шийдвэрлэсэн_сар"]);
-    const applicant = str(p["ААНБ_нэрс"]);
-    const activityRaw = str(p["Үйл_ажиллагааны_чиглэл"]);
+    const oid = uid(layer, Number(p.objectid));
+    const year = int(p["шийдвэрлэсэн_он"]);
+    const month = int(p["шийдвэрлэсэн_сар"]);
+    const applicant = str(p["аанб_нэрс"]);
+    const activityRaw = str(p["үйл_ажиллагааны_чиглэл"]);
 
     rows.push({
       oid,
       applicant: applicant || "Тодорхойгүй",
       /* Эх сурвалж иргэнийг "Иргэн Ц.Энхтүвшин" гэж бүртгэдэг */
       citizen: /^иргэн/i.test(applicant),
-      request: str(p["Хүсэлтийн_дугаар"]),
-      code: str(p["Үнэлгээний_дугаар"]),
-      decidedRaw: str(p["Шийдвэрлэсэн_он_сар_өдөр"]),
+      request: str(p["хүсэлтийн_дугаар"]),
+      code: str(p["үнэлгээний_дугаар"]),
+      decidedRaw: str(p["шийдвэрлэсэн_он_сар_өдөр"]),
       year,
       month,
       period:
@@ -300,7 +302,7 @@ async function fetchLayer(service: string, layer: number, signal?: AbortSignal) 
       khoroo: str(p.address_kh),
       address: str(p.address_ne),
       parcel: str(p.parcel_id),
-      m2: Number(p.Shape__Area) || 0,
+      m2: Number(p.SHAPE__Area) || 0,
     });
 
     if (!f.geometry) continue;

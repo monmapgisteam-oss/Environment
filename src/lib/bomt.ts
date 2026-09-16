@@ -19,13 +19,13 @@
  */
 
 import { ACTIVITIES, classifyActivity } from "@/lib/assessment";
-import { asset } from "@/lib/base-path";
+import { arcgisJson } from "@/lib/arcgis";
+import { HOSTING } from "@/lib/portal";
 
-export const BOMT_SERVICE =
-  "https://environment.ub.gov.mn/hosting/rest/services/Hosted/БОМТ_нэгтгэл_2026/FeatureServer/0";
-
-/** Хуулбарын зам — бидний өөрийн эх сурвалж */
-const SNAPSHOT = "/data/bomt-2026.json";
+/* ⚠ Давхаргын дугаар 20 — 0 БИШ. Шинэ портал дээр бүх үйлчилгээ нэг
+   дараалалтай нийтлэгдсэн. Нэр нь кирилл тул хаягийг `encodeURI`-гүй
+   бичиж БОЛОХГҮЙ гэж бодож магадгүй ч `fetch` өөрөө зохицуулна. */
+export const BOMT_SERVICE = `${HOSTING}/Hosted/${encodeURIComponent("B04_БОМТ_нэгтгэл_2026")}/FeatureServer/20`;
 
 export type BomtRow = {
   oid: number;
@@ -165,19 +165,57 @@ type RawProps = {
   m2: number | null;
 };
 
-export async function fetchBomt(signal?: AbortSignal): Promise<BomtData> {
-  const res = await fetch(asset(SNAPSHOT), { signal });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  const json = (await res.json()) as {
-    fetchedAt: string;
-    features: { id: number; geometry: GeoJSON.Geometry; properties: RawProps }[];
+/**
+ * Түүхий талбар → доторх нэршил.
+ *
+ * ⚠ Буулгалтыг ТААМАГЛААГҮЙ: хуучин хуулбар файл ба амьд бичлэгийг
+ * зэрэгцүүлж харьцуулан тогтоосон (`objectid=1` дээр бүх талбар таарсан).
+ * `parcel` нь `parcel_id`-гээс ирнэ, `нэгж__талбарын_дугаар` БИШ —
+ * сүүлийнх нь ижил утгыг ТОО болгож хадгалдаг тул тэргүүлэх тэг
+ * алдагдах эрсдэлтэй.
+ */
+function raw(a: Record<string, unknown>): RawProps {
+  return {
+    oid: Number(a.objectid),
+    parcel: str(a.parcel_id) || null,
+    addr: str(a.address_ne) || null,
+    addr2: str(a.address_st) || null,
+    khoroo: str(a.address_kh) || null,
+    landuse: str(a.landuse_de) || null,
+    right: str(a.rigth_type) || null,
+    /* Дүүргийг `soum`-оос авна, `дүүрэг`-ээс БИШ: сүүлийнх нь товчилсон
+       чөлөөт бичвэр ("БЗД", "хУД", "6 дүүрэг" зэрэг 16 хувилбар) */
+    district: str(a.soum) || null,
+    districtRaw: str(a["дүүрэг"]) || null,
+    implementer: str(a["төсөл_хэрэгжүүлэгчийн_нэр"]) || null,
+    activity: str(a["үйл_ажилгааны_чиглэл"]) || null,
+    planting: str(a["мод_тарих_байршил"]) || null,
+    m2: typeof a.SHAPE__Area === "number" ? a.SHAPE__Area : null,
   };
+}
+
+export async function fetchBomt(signal?: AbortSignal): Promise<BomtData> {
+  const url =
+    `${BOMT_SERVICE}/query?` +
+    new URLSearchParams({
+      where: "1=1",
+      outFields: "*",
+      /* Геометр нь UTM 48N-д проекцлогдсон */
+      outSR: "4326",
+      orderByFields: "objectid",
+      resultRecordCount: "2000",
+      f: "geojson",
+    });
+
+  const json = await arcgisJson<{
+    features?: { properties: Record<string, unknown>; geometry: GeoJSON.Geometry | null }[];
+  }>(url, "Менежментийн төлөвлөгөө", signal ? { signal } : undefined);
 
   const rows: BomtRow[] = [];
   const shapes: GeoJSON.Feature[] = [];
 
-  for (const f of json.features) {
-    const p = f.properties;
+  for (const f of json.features ?? []) {
+    const p = raw(f.properties);
     const activityRaw = str(p.activity);
     const plantingRaw = str(p.planting);
     /* Хаяг хоёр талбарт бичигдсэн бөгөөд заримдаа зөрдөг — хоёуланг нь
@@ -202,18 +240,20 @@ export async function fetchBomt(signal?: AbortSignal): Promise<BomtData> {
       m2: p.m2 ?? 0,
     });
 
-    shapes.push({
-      type: "Feature",
-      /* Тоон `id` ЗААВАЛ — сонголтыг `feature-state`-ээр тодруулдаг */
-      id: p.oid,
-      properties: { oid: p.oid },
-      geometry: f.geometry,
-    });
+    if (f.geometry) {
+      shapes.push({
+        type: "Feature",
+        /* Тоон `id` ЗААВАЛ — сонголтыг `feature-state`-ээр тодруулдаг */
+        id: p.oid,
+        properties: { oid: p.oid },
+        geometry: f.geometry,
+      });
+    }
   }
 
   return {
     rows,
     shapes: { type: "FeatureCollection", features: shapes },
-    fetchedAt: json.fetchedAt,
+    fetchedAt: new Date().toISOString().slice(0, 10),
   };
 }
