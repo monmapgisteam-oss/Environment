@@ -37,7 +37,7 @@
   height: auto;
   object-fit: scale-down;
   object-position: center;
-  /* Fade only the decorative perimeter into the generated extension. */
+  /* Fade the decorative perimeter into the matching artwork backdrop. */
   mask-image:
     linear-gradient(to right, transparent, #000 7%, #000 93%, transparent),
     linear-gradient(to bottom, transparent, #000 9%, #000 91%, transparent);

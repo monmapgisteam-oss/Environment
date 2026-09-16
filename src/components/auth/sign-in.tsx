@@ -7,10 +7,8 @@ import styles from "./sign-in.module.css";
 
 // Keep the entrance intentionally spare: logo, sign-in, system name, owner.
 // The artwork is composed on the right; the title occupies its quiet left side.
-/* ⚠ WebP, PNG БИШ. Эх нь 1.64MB PNG байсныг 142KB болгосон (12 дахин) —
-   энэ бол хэрэглэгч бүрийн нээх ЭХНИЙ дэлгэц тул жин нь шууд мэдрэгдэнэ.
-   Хажуугийн `envi-6-extension` мөн WebP. */
-const BACKGROUND = asset("/auth/envi-6.webp");
+// Use the supplied artwork as WebP for both the image and its edge backdrop.
+const BACKGROUND = asset("/auth/envi-7.webp");
 
 export function SignIn({
   onEnter,
@@ -29,7 +27,7 @@ export function SignIn({
 
   return (
     <div className={styles.screen}>
-      <div aria-hidden="true" className={styles.extension} style={{ backgroundImage: `url("${asset("/auth/envi-6-extension.webp")}")` }} />
+      <div aria-hidden="true" className={styles.extension} style={{ backgroundImage: `url("${BACKGROUND}")` }} />
       {/* Keep the supplied artwork intact; scale-down never crops or enlarges it. */}
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img src={BACKGROUND} alt="" aria-hidden="true" width={1832} height={859} fetchPriority="high" className={styles.artwork} />
