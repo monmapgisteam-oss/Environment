@@ -5,24 +5,40 @@
  *  1. `UB_pit_toilet` — 145,462 нүхэн жорлон, орчны эрсдэлийн үнэлгээтэй.
  *  2. `City_toilet` — 17 нийтийн бие засах газар.
  *
- * ⚠️ 145 мянган цэгийг хөтөч рүү бүтнээр нь илгээх боломжгүй (14MB). Тиймээс
- * СЕРВЕР ДЭЭР нэгтгэнэ: газрын зурагт ~220м-ийн НҮДЭНД хуримтлуулсан тоо,
- * диаграмд урьдчилан бэлдсэн хөндлөн хүснэгт. Үр дүн ~500KB.
+ * ⚠️ **НЭГТГЭЛ ХӨТӨЧ ДЭЭР ЯВАГДАНА** (хэрэглэгчийн шийдвэр, 2026-09-16).
+ *
+ * Урьд нь `api/toilets` гэсэн статик зам бүтээх мөчид нэгтгэж, үр дүнг
+ * сайтад шатааж байв. Эх сурвалж хамгаалагдсан порталд шилжсэнээр тэр
+ * арга боломжгүй болсон: бүтээлт GitHub дээр явагддаг бөгөөд тэнд
+ * нэвтэрсэн хэрэглэгч байхгүй тул токен авах аргагүй. Бүтээх үеийн
+ * үйлчилгээний бүртгэл үүсгэхийн оронд нэгтгэлийг хөтөч рүү зөөв —
+ * хэрэглэгч аль хэдийн нэвтэрсэн, токен нь бэлэн.
+ *
+ * Үнэ: 73 хуудас × ~160KB ≈ 11.4MB, найман зэрэгцээ урсгалаар ~3 секунд.
+ * Хариуд нь дата ХӨЛДӨХӨӨ БОЛИВ — бүтээх мөчийн хувилбар биш, тухайн
+ * үеийн бодит байдал харагдана.
+ *
+ * ⚠ Татацыг НЭГ УДАА хийнэ. Урьд нь нэгтгэсэн нүд ба түүхий цэг гэсэн
+ * ХОЁР зам тус тусдаа бүх бичлэгийг татдаг байсан (хоёр дахин ажил).
+ * Одоо нэг явцад хоёулаа угсарна.
  *
  * `PLI` нь Pollution Load Index — бохирдлын ачааллын индекс (хэлтэс
  * баталсан, 2026-08-17). Хөрсний мониторингийн PLI-тэй ижил нэртэй ч
  * ЭНД 1.0–4.0 хооронд л савладаг тул хуваарь нь тэрхүү датагийнхтай
  * адилхан эсэхийг БАТЛААГҮЙ — 1-ийг "дэвсгэр түвшин" гэж бүү үз.
  *
- * `Toilet_zon` (1–4) юуг илэрхийлж байгаа нь ХЭВЭЭР тодорхойгүй, хэлтсээс
+ * `toilet_zon` (1–4) юуг илэрхийлж байгаа нь ХЭВЭЭР тодорхойгүй, хэлтсээс
  * асуух ёстой. Тиймээс дэлгэц дээр "1-р бүс" гэж БАЙГААГААР нь харуулна —
  * таамаглаж нэрлэхгүй.
  */
 
-export const PIT_SERVICE =
-  "https://services-ap1.arcgis.com/ACqsMOmNLi5wIdIh/arcgis/rest/services/UB_pit_toilet/FeatureServer/0";
-export const CITY_SERVICE =
-  "https://services-ap1.arcgis.com/ACqsMOmNLi5wIdIh/arcgis/rest/services/City_toilet/FeatureServer/0";
+import { arcgisJson } from "@/lib/arcgis";
+import { HOSTING } from "@/lib/portal";
+
+/* ⚠ Давхаргын дугаар 0 ба 1 — шинэ портал дээр бүх үйлчилгээ нэг
+   дараалалтай нийтлэгдсэн тул хоёулаа 0 БИШ */
+export const PIT_SERVICE = `${HOSTING}/Hosted/X10_UB_pit_toilet/FeatureServer/0`;
+export const CITY_SERVICE = `${HOSTING}/Hosted/X10_City_toilet/FeatureServer/1`;
 
 const PAGE = 2000;
 /** Зэрэг явуулах хүсэлтийн тоо — дараалуулбал минут гаруй үргэлжилнэ */
@@ -88,12 +104,12 @@ function page(offset: number) {
   return `${PIT_SERVICE}/query?${new URLSearchParams({
     f: "json",
     where: "1=1",
-    outFields: "Toilet_zon,PLI,DUUREG,KH_MON",
+    outFields: "toilet_zon,pli,duureg,kh_mon",
     outSR: "4326",
     returnGeometry: "true",
     resultOffset: String(offset),
     resultRecordCount: String(PAGE),
-    orderByFields: "OBJECTID ASC",
+    orderByFields: "objectid ASC",
   })}`;
 }
 
@@ -104,7 +120,7 @@ function page(offset: number) {
  * гүйлгэлтээс хамаардаг тул статикаар экспортлогдсон API зам үүнийг
  * үйлчилж чадахгүй.
  *
- * Атрибут ТАТАХГҮЙ (`OBJECTID` л): энэ давхарга нь "энд яг хаана байна"
+ * Атрибут ТАТАХГҮЙ (`objectid` л): энэ давхарга нь "энд яг хаана байна"
  * гэдгийг л хэлнэ, бусад тоог нэгтгэсэн самбар аль хэдийн хэлж байгаа.
  * `geometryPrecision=5` (~1 метр) нь бичлэг тутмын хэмжээг гуравны нэгээр
  * багасгана — нэг хуудас 273KB-аас ~180KB болно.
@@ -125,12 +141,12 @@ export async function fetchPitPointsIn(
       inSR: "4326",
       outSR: "4326",
       spatialRel: "esriSpatialRelIntersects",
-      outFields: "OBJECTID",
+      outFields: "objectid",
       returnGeometry: "true",
       geometryPrecision: "5",
       resultOffset: String(p * PAGE),
       resultRecordCount: String(PAGE),
-      orderByFields: "OBJECTID ASC",
+      orderByFields: "objectid ASC",
     })}`;
 
     const res = await fetch(url, { signal });
@@ -165,13 +181,34 @@ function dict() {
   };
 }
 
-export async function getToilets(): Promise<ToiletsPayload> {
-  const first = await fetch(`${PIT_SERVICE}/query?${new URLSearchParams({
-    f: "json",
-    where: "1=1",
-    returnCountOnly: "true",
-  })}`, { next: { revalidate: 86400 } });
-  const { count } = (await first.json()) as { count: number };
+/**
+ * Бүх цэгийн НЭГ УДААГИЙН татац — нэгтгэл ба түүхий цэг хоёулаа эндээс.
+ *
+ * ⚠ Урьд нь `getToilets()` ба `getToiletPointsBuffer()` гэсэн ХОЁР функц
+ * тус тусдаа 145 мянган бичлэгийг татдаг байв (хоёр дахин ажил), учир нь
+ * нэг нь бүтээх мөчийн JSON, нөгөө нь хоёртын багц үйлдвэрлэдэг байлаа.
+ * Хоёулаа хөтөч рүү шилжсэн тул тэр хуваалт утгагүй болов: нэг явцад
+ * нүдийг хуримтлуулж, зэрэг цэгийн массивыг дүүргэнэ.
+ *
+ * ⚠ ДҮҮРГИЙН ТОЛЬ НЭГ. Хоёр функц тусдаа толь барьдаг байсан тул хуудас
+ * ирэх дараалал зөрвөл цэгийн дүүрэг чимээгүйхэн буруу заах эрсдэлтэй
+ * байв. Одоо ганц `districts` толь хоёуланд нь үйлчилнэ.
+ *
+ * Цэгийн координат `Float32Array`-д сууна: ~1.4 метрийн алдаатай ч
+ * жорлонгийн байрлал өөрөө GPS-ийн алдаатай тул дүрслэлд мэдэгдэхгүй.
+ * 145 мянган бичлэгт 8 байт (хоёр float32) — нийт ~1.2MB санах ой.
+ */
+export async function fetchToilets(signal?: AbortSignal): Promise<ToiletsData> {
+  const counted = await arcgisJson<{ count: number }>(
+    `${PIT_SERVICE}/query?${new URLSearchParams({
+      f: "json",
+      where: "1=1",
+      returnCountOnly: "true",
+    })}`,
+    "Нүхэн жорлонгийн тоо",
+    signal ? { signal } : undefined,
+  );
+  const count = counted.count;
   const pages = Math.ceil(count / PAGE);
 
   const districts = dict();
@@ -188,6 +225,12 @@ export async function getToilets(): Promise<ToiletsPayload> {
   const khZonePli: number[] = [];
   const distZonePli: number[] = [];
 
+  /* Цэгийн массивыг тооллогоор урьдчилан хуваарилна — өсгөж явбал
+     145 мянган удаа дахин хуваарилагдана */
+  const coords = new Float32Array(count * 2);
+  const pDistrict = new Uint8Array(count);
+  const pZone = new Uint8Array(count);
+
   let n = 0;
   let unzoned = 0;
 
@@ -197,15 +240,23 @@ export async function getToilets(): Promise<ToiletsPayload> {
       if (!g || !Number.isFinite(g.x) || !Number.isFinite(g.y)) continue;
       const a = f.attributes;
 
-      const dName = String(a.DUUREG ?? "").trim() || "Тодорхойгүй";
+      const dName = String(a.duureg ?? "").trim() || "Тодорхойгүй";
       const di = districts.add(dName);
-      const kName = String(a.KH_MON ?? "").trim() || "Тодорхойгүй";
+      const kName = String(a.kh_mon ?? "").trim() || "Тодорхойгүй";
       const ki = khoroos.add(kName);
       khDistrict[ki] = di;
 
-      const zRaw = Number(a.Toilet_zon);
+      const zRaw = Number(a.toilet_zon);
       const z = ZONES.includes(zRaw) ? zRaw : 0; // 0 = тодорхойгүй
       if (!z) unzoned++;
+
+      /* --- түүхий цэг --- */
+      if (n < count) {
+        coords[n * 2] = g.x;
+        coords[n * 2 + 1] = g.y;
+        pDistrict[n] = di;
+        pZone[n] = z;
+      }
       n++;
 
       /* --- нүд --- */
@@ -214,15 +265,15 @@ export async function getToilets(): Promise<ToiletsPayload> {
       if (ci === undefined) {
         ci = lon.length;
         cellIndex.set(key, ci);
-        lon.push(Math.round((Math.round(g.x / CELL) * CELL) * 1e5) / 1e5);
-        lat.push(Math.round((Math.round(g.y / CELL) * CELL) * 1e5) / 1e5);
+        lon.push(Math.round(Math.round(g.x / CELL) * CELL * 1e5) / 1e5);
+        lat.push(Math.round(Math.round(g.y / CELL) * CELL * 1e5) / 1e5);
         cellDistrict.push(di);
         cellZone.push(0, 0, 0, 0);
       }
       if (z) cellZone[ci * 4 + (z - 1)]++;
 
       /* --- дүүрэг ба хороо × бүс × PLI --- */
-      const pli = Number(a.PLI);
+      const pli = Number(a.pli);
       if (z && Number.isFinite(pli) && pli >= PLI_MIN) {
         const b = Math.min(
           PLI_BUCKETS - 1,
@@ -239,131 +290,49 @@ export async function getToilets(): Promise<ToiletsPayload> {
   for (let i = 0; i < pages; i += CONCURRENCY) {
     const batch = await Promise.all(
       Array.from({ length: Math.min(CONCURRENCY, pages - i) }, (_, k) =>
-        fetch(page((i + k) * PAGE), { next: { revalidate: 86400 } }).then((r) => {
-          if (!r.ok) throw new Error(`ArcGIS ${r.status}`);
-          return r.json() as Promise<{ features?: Feature[] }>;
-        }),
+        arcgisJson<{ features?: Feature[] }>(
+          page((i + k) * PAGE),
+          "Нүхэн жорлон",
+          signal ? { signal } : undefined,
+        ),
       ),
     );
     for (const r of batch) take(r.features ?? []);
   }
 
-  /* Сийрэг массивуудыг нягтруулна — JSON дотор `null` болж хувирахаас сэргийлнэ */
+  /* Сийрэг массивуудыг нягтруулна */
   const dense = (arr: number[], len: number) =>
     Array.from({ length: len }, (_, i) => arr[i] ?? 0);
 
+  /* Геометргүй бичлэг байвал тооллогоос бага гарна — илүүдлийг таслана */
+  const kept = Math.min(n, count);
+
   return {
-    n,
-    unzoned,
-    districts: districts.list,
-    khoroos: khoroos.list,
-    khDistrict,
-    lon,
-    lat,
-    cellZone,
-    cellDistrict,
-    khZonePli: dense(khZonePli, khoroos.list.length * 4 * PLI_BUCKETS),
-    distZonePli: dense(distZonePli, districts.list.length * 4 * PLI_BUCKETS),
-    fetchedAt: new Date().toISOString(),
+    payload: {
+      n,
+      unzoned,
+      districts: districts.list,
+      khoroos: khoroos.list,
+      khDistrict,
+      lon,
+      lat,
+      cellZone,
+      cellDistrict,
+      khZonePli: dense(khZonePli, khoroos.list.length * 4 * PLI_BUCKETS),
+      distZonePli: dense(distZonePli, districts.list.length * 4 * PLI_BUCKETS),
+      fetchedAt: new Date().toISOString(),
+    },
+    points: {
+      n: kept,
+      districts: districts.list,
+      coords: coords.subarray(0, kept * 2),
+      district: pDistrict.subarray(0, kept),
+      zone: pZone.subarray(0, kept),
+    },
   };
 }
 
-/* --------------------------------------------------------------------------
-   БҮХ цэг нягт хоёртын хэлбэрээр
-   -------------------------------------------------------------------------- */
-
-/**
- * 145 мянган жорлонгийн байршлыг хөтөч рүү хүргэх багц.
- *
- * GeoJSON-оор 14MB болдог тул нүдэнд нэгтгэдэг байсан. Гэвч нэгтгэсэн
- * нүд нь 220 метрийн ХИЙМЭЛ СҮЛЖЭЭ үүсгэдэг — ойртоход жорлон хашаандаа
- * хаана байгааг биш, нүдний төвийг харуулна. Хоёртын хэлбэрээр бол
- * бичлэг тутам 10 байт л шаардана:
- *
- *   [0..4)      u32   толгойн урт
- *   [4..4+h)    JSON  { n, districts }
- *   дараа нь    f32   lon, lat ээлжлэн (n×2)
- *   дараа нь    u8    дүүргийн индекс (n)
- *   дараа нь    u8    бүс 0..4, 0 = тодорхойгүй (n)
- *
- * Нийт ~1.4MB — нэгтгэсэн 279KB-аас том ч 14MB-аас арав дахин бага.
- *
- * float32 нь ~1.4 метрийн алдаатай. Жорлонгийн байрлал өөрөө GPS-ийн
- * алдаатай тул энэ нь дүрслэлд мэдэгдэхгүй; яг нарийн координат хэрэгтэй
- * бол `fetchPitPointsIn` шууд эх сурвалжаас авна.
- *
- * Дүүргийн толь бичгийг ДОТРОО авч явна: `getToilets`-ийн жагсаалттай
- * индексээр уялдуулбал хоёр функцийн хуудас ирэх дараалал зөрөхөд
- * чимээгүйхэн буруу дүүрэг заана.
- */
-export async function getToiletPointsBuffer(): Promise<ArrayBuffer> {
-  const first = await fetch(`${PIT_SERVICE}/query?${new URLSearchParams({
-    f: "json",
-    where: "1=1",
-    returnCountOnly: "true",
-  })}`, { next: { revalidate: 86400 } });
-  const { count } = (await first.json()) as { count: number };
-  const pages = Math.ceil(count / PAGE);
-
-  const districts = dict();
-  const lon: number[] = [];
-  const lat: number[] = [];
-  const di: number[] = [];
-  const zn: number[] = [];
-
-  const take = (feats: Feature[]) => {
-    for (const f of feats) {
-      const g = f.geometry;
-      if (!g || !Number.isFinite(g.x) || !Number.isFinite(g.y)) continue;
-      const a = f.attributes;
-      lon.push(g.x);
-      lat.push(g.y);
-      di.push(districts.add(String(a.DUUREG ?? "").trim() || "Тодорхойгүй"));
-      const zRaw = Number(a.Toilet_zon);
-      zn.push(ZONES.includes(zRaw) ? zRaw : 0);
-    }
-  };
-
-  /* `getToilets`-тэй ЯГ ижил хаяг тул Next-ийн fetch кэшээс уншина —
-     бүтээх үед хоёр дахин татахгүй */
-  for (let i = 0; i < pages; i += CONCURRENCY) {
-    const batch = await Promise.all(
-      Array.from({ length: Math.min(CONCURRENCY, pages - i) }, (_, k) =>
-        fetch(page((i + k) * PAGE), { next: { revalidate: 86400 } }).then((r) => {
-          if (!r.ok) throw new Error(`ArcGIS ${r.status}`);
-          return r.json() as Promise<{ features?: Feature[] }>;
-        }),
-      ),
-    );
-    for (const r of batch) take(r.features ?? []);
-  }
-
-  const n = lon.length;
-  const header = new TextEncoder().encode(
-    JSON.stringify({ n, districts: districts.list }),
-  );
-  /* f32 нь 4 байтын заагт эхлэх ёстой */
-  const pad = (4 - ((4 + header.length) % 4)) % 4;
-  const coordsAt = 4 + header.length + pad;
-
-  const buf = new ArrayBuffer(coordsAt + n * 8 + n * 2);
-  /* Уртад НЬ дүүргэлт ОРОХГҮЙ — задлагч нь ижил томъёогоор дахин бодно.
-     Дүүргэлтийг оруулбал JSON-ы араас тэг байт унших ба задлалт унана. */
-  new DataView(buf).setUint32(0, header.length, true);
-  new Uint8Array(buf, 4, header.length).set(header);
-
-  const coords = new Float32Array(buf, coordsAt, n * 2);
-  for (let i = 0; i < n; i++) {
-    coords[i * 2] = lon[i];
-    coords[i * 2 + 1] = lat[i];
-  }
-  new Uint8Array(buf, coordsAt + n * 8, n).set(di);
-  new Uint8Array(buf, coordsAt + n * 8 + n, n).set(zn);
-
-  return buf;
-}
-
-/** Хөтөч дээрх задлалт — `getToiletPointsBuffer`-ийн эсрэг үйлдэл */
+/** Газрын зургийн ойртсон харагдацад хэрэглэгдэх түүхий цэгүүд */
 export type ToiletPoints = {
   n: number;
   districts: string[];
@@ -373,22 +342,7 @@ export type ToiletPoints = {
   zone: Uint8Array;
 };
 
-export function decodeToiletPoints(buf: ArrayBuffer): ToiletPoints {
-  const headLen = new DataView(buf).getUint32(0, true);
-  const head = JSON.parse(
-    new TextDecoder().decode(new Uint8Array(buf, 4, headLen)),
-  ) as { n: number; districts: string[] };
-  const pad = (4 - ((4 + headLen) % 4)) % 4;
-  const at = 4 + headLen + pad;
-  const n = head.n;
-  return {
-    n,
-    districts: head.districts,
-    coords: new Float32Array(buf, at, n * 2),
-    district: new Uint8Array(buf, at + n * 8, n),
-    zone: new Uint8Array(buf, at + n * 8 + n, n),
-  };
-}
+export type ToiletsData = { payload: ToiletsPayload; points: ToiletPoints };
 
 /* --------------------------------------------------------------------------
    Нийтийн бие засах газар — ердөө 17 цэг тул хөтөч шууд татна
@@ -406,7 +360,7 @@ export async function fetchCityToilets(signal?: AbortSignal): Promise<CityToilet
   const url = `${CITY_SERVICE}/query?${new URLSearchParams({
     f: "json",
     where: "1=1",
-    outFields: "OBJECTID,DUUREG,KHOROOID",
+    outFields: "objectid,duureg,khorooid",
     outSR: "4326",
     returnGeometry: "true",
   })}`;
@@ -420,12 +374,12 @@ export async function fetchCityToilets(signal?: AbortSignal): Promise<CityToilet
     const g = f.geometry;
     if (!g || !Number.isFinite(g.x) || !Number.isFinite(g.y)) continue;
     out.push({
-      oid: Number(f.attributes.OBJECTID),
+      oid: Number(f.attributes.objectid),
       lon: g.x,
       lat: g.y,
-      district: String(f.attributes.DUUREG ?? "").trim() || "Тодорхойгүй",
+      district: String(f.attributes.duureg ?? "").trim() || "Тодорхойгүй",
       khoroo:
-        typeof f.attributes.KHOROOID === "number" ? f.attributes.KHOROOID : null,
+        typeof f.attributes.khorooid === "number" ? f.attributes.khorooid : null,
     });
   }
   return out;

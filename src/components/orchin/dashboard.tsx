@@ -30,7 +30,7 @@ import {
   type MapOverlay,
 } from "@/components/wells/map";
 import {
-  decodeToiletPoints,
+  fetchToilets,
   fetchCityToilets,
   PLI_BUCKETS,
   PLI_MIN,
@@ -40,7 +40,6 @@ import {
   type ToiletPoints,
   type ToiletsPayload,
 } from "@/lib/toilets";
-import { asset } from "@/lib/base-path";
 import { Bounds } from "@/lib/extent";
 import { cn, num } from "@/lib/utils";
 
@@ -109,22 +108,24 @@ export function OrchinDashboard() {
   React.useEffect(() => {
     const ac = new AbortController();
 
-    fetch(asset("/api/toilets"), { signal: ac.signal })
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
-      .then(setData)
+    /*
+      ⚠ НЭГ ТАТАЦ, ХОЁР ҮР ДҮН. Урьд нь нэгтгэсэн мэдээ (`api/toilets`) ба
+      түүхий цэгийн хоёртын багц (`api/toilet-points`) гэсэн хоёр статик
+      зам байсныг хассан: эх сурвалж хамгаалагдсан порталд шилжсэнээр
+      бүтээх мөчид токен авах аргагүй болсон тул нэгтгэл хөтөч рүү
+      зөөгдсөн. Хоёулаа нэг явцаас гарна.
+
+      Татац ~11.4MB, найман зэрэгцээ урсгалаар ~3 секунд. Хариуд нь дата
+      бүтээх мөчид хөлдөхөө болив.
+    */
+    fetchToilets(ac.signal)
+      .then((d) => {
+        setData(d.payload);
+        setRaw(d.points);
+      })
       .catch((e: Error) => {
         if (e.name !== "AbortError") setError(e.message);
       });
-
-    /*
-      Бүх цэгийн хоёртын багц (~1.4MB). Нэгтгэсэн мэдээнээс ХОЙШ ирдэг
-      тул зураг эхлээд нүдээр гарч, дараа нь бодит цэг рүү солигдоно.
-      Алдааг нь ЗАЛГИНА: ирээгүй ч самбар нүдээрээ бүрэн ажиллана.
-    */
-    fetch(asset("/api/toilet-points"), { signal: ac.signal })
-      .then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(new Error(`HTTP ${r.status}`))))
-      .then((b) => setRaw(decodeToiletPoints(b)))
-      .catch(() => {});
 
     // Нийтийн жорлон нь 17 бичлэг — шууд ArcGIS-ээс, алдааг нь залгина
     fetchCityToilets(ac.signal)
