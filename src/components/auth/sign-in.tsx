@@ -1,174 +1,70 @@
-"use client";
+﻿"use client";
 
 import * as React from "react";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, LoaderCircle } from "lucide-react";
 import { asset } from "@/lib/base-path";
+import styles from "./sign-in.module.css";
 
-/* --------------------------------------------------------------------------
-   НЭВТРЭХ ДЭЛГЭЦ
-
-   Энэ бол системийн ЦОРЫН ГАНЦ бүтэн дэлгэцийн харагдац: толгой ч,
-   хажуугийн зурвас ч байхгүй. Шалтгаан нь энгийн — нэвтрээгүй хэрэглэгчид
-   очих газар байхгүй. Цэс харуулаад товшилт бүрийг нь хаах нь хаалгыг
-   нээлттэй мэт харуулж, дараа нь татгалзахтай адил.
-
-   ⚠ **БИЧВЭР ЦӨӨН** (хэрэглэгчийн залруулга, 2026-09-15). Систем нэрээ
-   хэлээд нэвтрэх боломжийг өгнө — өөр юу ч биш. Хэрэглээний тайлбар,
-   нууц үг хаана шалгагдах тухай тэмдэглэл хоёрыг хасав: нэвтрэхээс өөр
-   сонголт байхгүй дэлгэц дээр тайлбар уншигддаггүй. Дахин бүү нэм.
-
-   ⚠ **ДӨРВӨН БУЛАНГИЙН БҮТЭЦ** (хэрэглэгчийн лавлагаа, 2026-09-15):
-     зүүн дээд — лого · баруун дээд — нэвтрэх товч ·
-     дунд зүүн — нэр · зүүн доод — байгууллагын нэр.
-   Товч нь агуулгын дундаас булан руу гарснаар гарчиг ганцаараа үлдэж,
-   дэлгэцийн гол тэнхлэг нь СИСТЕМИЙН НЭР болно. Байгууллагын нэр
-   гарчгийн дэргэдээс хөл рүү шилжсэн — эзэмшигч нь тодорхой үлдэх ч
-   нэртэй өрсөлдөхгүй.
-   ⚠ Дөрвүүлэнгийн хөвөө ИЖИЛ (`px-5` / `lg:px-12`) тул лого, гарчиг,
-   хөл гурав нэг босоо шугам дээр эгнэнэ. Тусад нь тоо бичвэл дэлгэц
-   солигдоход эгнээ алдагдана.
-
-   ⚠ **ДЭВСГЭР ЗУРАГ НЬ БАЙХГҮЙ Ч АЖИЛЛАНА.** Зураг нь
-   `public/auth/background.webp` дээр сууна. Татагдаагүй тохиолдолд доор нь
-   давхарлагдсан градиент харагдах тул дэлгэц хэзээ ч хоосон цагаан
-   болохгүй. Зураг солих нь ганц файл солих ажил — код хөндөхгүй.
-
-   ⚠ **БИЧВЭР ЗҮҮН ТАЛД СУУНА — ЗУРГААС БОЛЖ.** Зураг (2560×1440) нь
-   нийслэлийн зураглал, зангилаануудыг өргөний **37%-иас баруун тийш**
-   агуулж, зүүн гуравны нэг нь бүдгэрсэн уулархаг дэвсгэр. Бичвэр тэр
-   хоосон хэсэгт сууна.
-   ⚠ Зураг солигдож агуулга нь нөгөө тал руу шилжвэл ГУРВАН зүйл ЗЭРЭГ
-   эргэнэ: бичвэрийн тал (`justify-end`), хөшгийн чиглэл
-   (`bg-gradient-to-l`), мөн доорх тооцоо. Ганцыг нь өөрчилвөл хөшиг
-   гол агуулгыг дарна — нэг удаа ингэж эргүүлээд буцаасан.
-
-   ⚠ **16:9 ХАРЬЦАА НЬ САНААТАЙ.** `bg-cover` нь илүүдлийг хайчилдаг
-   бөгөөд аль тэнхлэгээс хайчлагдах нь ХАРЬЦААНААС шалтгаална. Өмнөх
-   2.15:1 зураг дээр хайчлалт ХЭВТЭЭ явж, MacBook маягийн цонхон дээр
-   хажуугаас 18% хүртэл хасагддаг байв — тэр нь бичвэр ба зураглалын
-   хоорондох завсрыг иддэг. 16:9 дээр хайчлалт БОСОО болж (тэнгэр,
-   урд талын мод — 10–14%), хэвтээгээр ердөө 1% хасагдана. Тиймээс
-   зүүн хоосон хэсэг ба баруун талын зураглал хоёулаа бүтнээрээ
-   үлдэж, бичвэр зураглалыг хэзээ ч давхарлахгүй.
-
-   ⚠ **БИЧВЭР ЗУРАГ ДЭЭР УНШИГДАХ ЁСТОЙ.** Бичвэрийг зурган дээр ШУУД
-   тавихгүй: хагас тунгалаг хөшиг (`scrim`) дээр сууна. Ингэснээр зураг
-   цайвар ч, бараан ч байсан уншигдац тогтвортой.
-   -------------------------------------------------------------------------- */
-
-const BACKGROUND = asset("/auth/background.webp");
+// Keep the entrance intentionally spare: logo, sign-in, system name, owner.
+// The artwork is composed on the right; the title occupies its quiet left side.
+/* ⚠ WebP, PNG БИШ. Эх нь 1.64MB PNG байсныг 142KB болгосон (12 дахин) —
+   энэ бол хэрэглэгч бүрийн нээх ЭХНИЙ дэлгэц тул жин нь шууд мэдрэгдэнэ.
+   Хажуугийн `envi-6-extension` мөн WebP. */
+const BACKGROUND = asset("/auth/envi-6.webp");
 
 export function SignIn({
   onEnter,
   configured,
 }: {
   onEnter: () => void;
-  /** Аппын ID тохируулагдсан эсэх */
   configured: boolean;
 }) {
   const [busy, setBusy] = React.useState(false);
 
   const enter = () => {
+    if (busy) return;
     setBusy(true);
     onEnter();
   };
 
   return (
-    <div className="relative min-h-dvh w-full overflow-hidden bg-paper">
-      {/* Дэвсгэр: зураг → түүний доор градиент. Зураг ирээгүй ч дэлгэц
-          бүтэн харагдана */}
-      <div
-        aria-hidden
-        className="absolute inset-0 bg-paper-3 bg-cover bg-center"
-        style={{ backgroundImage: `url("${BACKGROUND}")` }}
-      />
+    <div className={styles.screen}>
+      <div aria-hidden="true" className={styles.extension} style={{ backgroundImage: `url("${asset("/auth/envi-6-extension.webp")}")` }} />
+      {/* Keep the supplied artwork intact; scale-down never crops or enlarges it. */}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={BACKGROUND} alt="" aria-hidden="true" width={1832} height={859} fetchPriority="high" className={styles.artwork} />
+      <div aria-hidden="true" className={styles.scrim} />
 
-      {/* Хөшиг нь ЗҮҮН тийш өтгөрнө: бичвэр тэнд сууж, баруун талын
-          зураглал нээлттэй үлдэнэ */}
-      <div
-        aria-hidden
-        className="absolute inset-0 bg-gradient-to-r from-paper via-paper/80 to-paper/25 lg:via-paper/70 lg:to-transparent"
-      />
-      {/* Нарийн дэлгэцэнд зураг ихээр хайчигдаж бичвэрийн ард ямар ч
-          хэсэг тохиолдож болох тул нэмэлт жигд хөшиг */}
-      <div aria-hidden className="absolute inset-0 bg-paper/35 lg:bg-transparent" />
-
-      {/*
-        ДЭЭД МӨР — лого зүүн, нэвтрэх товч баруун.
-
-        ⚠ Товч нь агуулгын дундаас ДЭЭД БУЛАН руу гарсан (хэрэглэгчийн
-        лавлагаа, 2026-09-15). Ингэснээр гарчиг ганцаараа үлдэж, дэлгэцийн
-        гол тэнхлэг нь нэр болно; нэвтрэх үйлдэл нь дадсан байрандаа
-        (баруун дээд) сууна.
-
-        Хөвөө нь доорх агуулгынхтай ИЖИЛ (`px-5` / `lg:px-12`) тул лого,
-        гарчиг, хөлийн бичвэр гурвуулаа нэг босоо шугам дээр эгнэнэ.
-        Тусад нь тоо бичвэл дэлгэц солигдоход эгнээ алдагдана.
-      */}
-      <header className="absolute inset-x-0 top-0 z-10 flex items-center justify-between px-5 py-6 lg:px-12 lg:py-8">
-        {/* Чимэглэл тул `aria-hidden` — гарчиг нь системийн нэрийг аль
-            хэдийн хэлдэг бөгөөд дэлгэц уншигч давтах шаардлагагүй */}
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={asset("/logo.svg")}
-          alt=""
-          aria-hidden
-          width={48}
-          height={48}
-          className="size-10 shrink-0 lg:size-12"
-        />
-
-        {configured ? (
-          <button
-            onClick={enter}
-            disabled={busy}
-            className="flex shrink-0 items-center gap-2 rounded-xs border border-line bg-paper-2/70 px-4 py-2.5 text-[12.5px] font-medium text-ink backdrop-blur-md transition-colors hover:border-(--moss)/50 hover:text-(--moss) disabled:opacity-60"
-          >
-            {busy ? "Шилжиж байна…" : "Нэвтрэх"}
-            <ArrowRight size={13} />
+      <header className={styles.header}>
+        <div className={styles.logo}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={asset("/logo.svg")} alt="Нийслэлийн сүлд" width={48} height={48} />
+        </div>
+        {configured && (
+          <button type="button" onClick={enter} disabled={busy} aria-busy={busy} className={styles.enter}>
+            <span role="status">{busy ? "Шилжиж байна…" : "Нэвтрэх"}</span>
+            <span className={styles.buttonIcon} aria-hidden="true">
+              {busy ? <LoaderCircle size={18} className={styles.spinner} /> : <ArrowRight size={18} />}
+            </span>
           </button>
-        ) : null}
+        )}
       </header>
 
-      {/*
-        ГОЛ БЛОК — нэр хоёр шатлалтай.
-
-        Эхний мөр нь ТОМ, хоёр дахь нь жижиг, өргөн зайтай том үсгээр.
-        Хоёуланг нь дараалуулж уншихад албан ёсны бүтэн нэр гарна:
-        "Байгаль орчны · хяналтын нэгдсэн систем". Тиймээс нэрийг
-        өөрчлөөгүй, зөвхөн эрэмбэлсэн.
-
-        ⚠ Гарын `<br />` ХЭРЭГЛЭХГҮЙ: хэмжээ дэлгэцээр өөрчлөгддөг тул
-        гараар тавьсан таслалт нэг өргөнд таарч нөгөөд нь эвдэрдэг.
-      */}
-      <div className="relative flex min-h-dvh items-center px-5 py-24 lg:px-12">
-        <div className="w-full max-w-[880px]">
-          <h1 className="brandmark text-[30px] leading-[1.05] text-ink uppercase sm:text-[44px] lg:text-[70px]">
-            Байгаль орчны
-          </h1>
-          <p className="mt-3 text-[13px] leading-snug tracking-[0.18em] text-ink-2 uppercase sm:mt-4 sm:text-[17px] lg:text-[21px]">
-            Хяналтын нэгдсэн систем
-          </p>
-
-          {configured ? null : (
-            /* Тохиргоо дутуу үед дээд булангийн товч гарахгүй тул
-               шалтгааныг ЭНД хэлнэ — хэрэглэгч хоосон дэлгэц харах ёсгүй */
-            <div className="hatch mt-8 max-w-[420px] rounded-xs border border-dashed border-line-2 px-4 py-4">
-              <p className="text-[12px] leading-relaxed text-ink-2">
-                Нэвтрэлтийн тохиргоо дуусаагүй байна. Системийн админтай
-                холбогдоно уу.
-              </p>
-            </div>
+      <main className={styles.main}>
+        <div className={styles.titleBlock}>
+          <div className={styles.accent} aria-hidden="true"><span /><span /><span /></div>
+          <h1 className={`brandmark ${styles.title}`}>Байгаль орчны</h1>
+          <p className={styles.subtitle}>Хяналтын нэгдсэн систем</p>
+          {!configured && (
+            <p className={styles.notice}>
+              Нэвтрэлтийн тохиргоо дуусаагүй байна. Системийн админтай холбогдоно уу.
+            </p>
           )}
         </div>
-      </div>
+      </main>
 
-      {/* ХӨЛ — байгууллагын нэр. Гол блокоос гарч доод буланд суусан тул
-          гарчигтай өрсөлдөхгүй, гэхдээ эзэмшигч нь тодорхой үлдэнэ */}
-      <footer className="absolute inset-x-0 bottom-0 z-10 px-5 py-6 lg:px-12 lg:py-8">
-        <p className="text-[11px] tracking-[0.08em] text-ink-3">
-          Нийслэлийн Байгаль орчны газар
-        </p>
+      <footer className={styles.footer}>
+        <p>Нийслэлийн Байгаль орчны газар</p>
       </footer>
     </div>
   );
