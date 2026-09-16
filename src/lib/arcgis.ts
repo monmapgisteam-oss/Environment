@@ -54,7 +54,7 @@ export async function arcgisJson<T>(
     throw new Error(`${label} татагдсангүй (сүлжээ)`);
   }
 
-  if (!res.ok) throw new Error(`${label} татагдсангүй (${res.status})`);
+  if (!res.ok) throw new Error(`${label} татагдсангүй (${res.status}${await reason(res)})`);
 
   let json: T & ArcGisError;
   try {
@@ -109,4 +109,47 @@ async function withToken(url: string): Promise<string> {
   const u = new URL(url);
   if (!u.searchParams.has("token")) u.searchParams.set("token", token);
   return u.toString();
+}
+
+/**
+ * Амжилтгүй хариунаас ШАЛТГААНЫГ салгана.
+ *
+ * ArcGIS алдааныхаа ихэнхийг HTTP 200-аар буцаадаг ч ҮНЭХЭЭР унасан үед
+ * (500, 502 …) төлөвийн код дангаараа юу ч хэлэхгүй: "татагдсангүй (500)"
+ * гэдэг нь серверийн тохиргооны асуудал уу, давхаргын гэмтэл үү гэдгийг
+ * ялгахад тус болохгүй. Сервер ихэвчлэн биедээ тайлбар явуулдаг тул
+ * түүнийг түүж хэлнэ.
+ *
+ * Бичвэр нь дэлгэцийн нэг мөрөнд багтах ёстой тул ТОВЧИЛНО. Хариу
+ * уншигдахгүй бол чимээгүй өнгөрнө — алдааны дотор алдаа гаргах нь
+ * анхны шалтгааныг нуана.
+ */
+async function reason(res: Response): Promise<string> {
+  try {
+    const text = (await res.text()).trim();
+    if (!text) return "";
+
+    /* JSON бол `error.message` нь хамгийн тодорхой */
+    if (text.startsWith("{")) {
+      const j = JSON.parse(text) as ArcGisError;
+      const m = j.error?.message?.trim();
+      const d = j.error?.details?.filter(Boolean).join("; ").trim();
+      const all = [m, d].filter(Boolean).join(" — ");
+      return all ? ` · ${clip(all)}` : "";
+    }
+
+    /* HTML алдааны хуудас — шошгыг хасаад эхний утгатай мөрийг авна */
+    const plain = text
+      .replace(/<[^>]+>/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    return plain ? ` · ${clip(plain)}` : "";
+  } catch {
+    return "";
+  }
+}
+
+/** Нэг мөрөнд багтаах урт */
+function clip(s: string, max = 120): string {
+  return s.length > max ? `${s.slice(0, max - 1)}…` : s;
 }

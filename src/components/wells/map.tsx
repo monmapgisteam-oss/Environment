@@ -297,6 +297,9 @@ function gradedRadius(stops: [number, string][], scale: number): ExpressionSpeci
  * glyph өгдөггүй тул нийтэд нээлттэй OpenMapTiles-ийн фонтын үйлчилгээг заана.
  */
 const GLYPHS = "https://fonts.openmaptiles.org/{fontstack}/{range}.pbf";
+
+/** MapLibre-ийн дээд ойртолт — давхаргын zoom мужийн дээд хязгаарт */
+const MAX_ZOOM = 24;
 const FONT = ["Open Sans Bold"];
 
 /**
@@ -1890,6 +1893,33 @@ export function WellsMap({
       );
     }
   }, [live, points, visible, weights, grades, labels]);
+
+  /*
+    Шошгын ХЯЗГААР нь амьд.
+
+    Бусад горимын тохиргоо эх сурвалж үүсгэх мөчид уншигддаг
+    (`modeRef`) ба энэ нь ихэнхдээ зөв: өнгө, бөөгнөрөл солигдвол
+    давхаргыг бүхэлд нь дахин барих шаардлагатай. Харин шошго хэдээс
+    эхлэн гарах нь ЗӨВХӨН нэг тоо бөгөөд `setLayerZoomRange` түүнийг
+    шууд сольдог.
+
+    ⚠ Үүнгүй бол дуудагч тал хязгаараа өөрчлөхөд ЧИМЭЭГҮЙ юу ч
+    болохгүй: зураг дахин үүсэх хүртэл (хуудас бүтнээр нь дахин
+    ачаалах хүртэл) хуучин утга хэвээр үлдэж, өөрчлөлт нь ажиллахгүй
+    мэт харагдана.
+  */
+  const shapeLabelZoom = shapes?.labelZoom;
+  const pointLabelZoom = labels?.minzoom;
+
+  React.useEffect(() => {
+    if (!live) return;
+    if (shapeLabelZoom != null && live.getLayer("shape-label")) {
+      live.setLayerZoomRange("shape-label", shapeLabelZoom, MAX_ZOOM);
+    }
+    if (pointLabelZoom != null && live.getLayer("wells-label")) {
+      live.setLayerZoomRange("wells-label", pointLabelZoom, MAX_ZOOM);
+    }
+  }, [live, shapeLabelZoom, pointLabelZoom]);
 
   /* ---------------- Дата олон өнцөгт ---------------- */
   const shapeData = shapes?.data;
