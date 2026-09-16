@@ -13,14 +13,14 @@
  */
 
 import { arcgisJson } from "@/lib/arcgis";
+import { HOSTING } from "@/lib/portal";
 
-const HOST = "https://services-ap1.arcgis.com/ACqsMOmNLi5wIdIh/arcgis/rest/services";
-const LAYER = "Ewdersen_gazar";
+const SERVICE = `${HOSTING}/Hosted/X06_Ewdersen_gazar/FeatureServer/8`;
 const PAGE = 2000;
 /** ~10 метрийн ерөнхийлөлт (градусаар) */
 const OFFSET = 0.0001;
 
-export const DAMAGED_SERVICE = `${HOST}/${LAYER}/FeatureServer/0`;
+export const DAMAGED_SERVICE = SERVICE;
 
 export type DamagedSite = {
   oid: number;
@@ -60,21 +60,21 @@ export function sizeClass(ha: number): number {
 
 type Feature = {
   type: "Feature";
-  properties: { OBJECTID: number; soum_name?: string; aimag_name?: string; Area_hec?: number };
+  properties: { objectid: number; soum_name?: string; aimag_name?: string; area_hec?: number };
   geometry: GeoJSON.Geometry | null;
 };
 
 async function page(offset: number): Promise<Feature[]> {
   const url =
-    `${HOST}/${LAYER}/FeatureServer/0/query?` +
+    `${SERVICE}/query?` +
     new URLSearchParams({
       where: "1=1",
-      outFields: "OBJECTID,soum_name,aimag_name,Area_hec",
+      outFields: "objectid,soum_name,aimag_name,area_hec",
       outSR: "4326",
       maxAllowableOffset: String(OFFSET),
       resultOffset: String(offset),
       resultRecordCount: String(PAGE),
-      orderByFields: "OBJECTID",
+      orderByFields: "objectid",
       f: "geojson",
     });
   const json = await arcgisJson<{ features?: Feature[] }>(url, "Эвдэрсэн газар");
@@ -91,8 +91,8 @@ export async function fetchDamaged(): Promise<DamagedData> {
 
   for (const f of feats) {
     const p = f.properties;
-    const oid = Number(p.OBJECTID);
-    const ha = Number(p.Area_hec) || 0;
+    const oid = Number(p.objectid);
+    const ha = Number(p.area_hec) || 0;
     sites.push({
       oid,
       place: p.soum_name?.trim() || "Тодорхойгүй",

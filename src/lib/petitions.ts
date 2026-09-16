@@ -12,11 +12,11 @@
  */
 
 import { arcgisJson } from "@/lib/arcgis";
+import { HOSTING } from "@/lib/portal";
 
-const HOST = "https://services-ap1.arcgis.com/ACqsMOmNLi5wIdIh/arcgis/rest/services";
-const LAYER = "Urgudliin_talbai";
+const SERVICE = `${HOSTING}/Hosted/X01_Urgudliin_talbai/FeatureServer/9`;
 
-export const PETITIONS_SERVICE = `${HOST}/${LAYER}/FeatureServer/0`;
+export const PETITIONS_SERVICE = SERVICE;
 
 export type Petition = {
   oid: number;
@@ -30,7 +30,7 @@ export type Petition = {
   /** Анхан шатны шүүлтийн бүлэг */
   screening: ScreeningId;
   screeningRaw: string;
-  /** Дараагийн алхам ("Засварлах" талбар) */
+  /** Дараагийн алхам ("засварлах" талбар) */
   stage: string;
   /** Чөлөөт бичвэрээр заасан байршил */
   place: string;
@@ -70,32 +70,32 @@ export function classifyScreening(raw: string): ScreeningId {
 }
 
 type Props = {
-  OBJECTID: number;
-  Бүртгэлийн_дугаар?: string;
-  Аж_ахуйн_нэгжийн_нэр?: string;
-  Дүүрэг?: string;
-  Хороо?: string;
+  objectid: number;
+  бүртгэлийн_дугаар?: string;
+  аж_ахуйн_нэгжийн_нэр?: string;
+  дүүрэг?: string;
+  хороо?: string;
   s?: number;
-  Анхан_шатны_шүүлт?: string;
-  Засварлах?: string;
-  Өргөдлийн_байршил?: string;
+  анхан_шатны_шүүлт?: string;
+  засварлах?: string;
+  өргөдлийн_байршил?: string;
 };
 
 export async function fetchPetitions(): Promise<PetitionData> {
   const url =
-    `${HOST}/${LAYER}/FeatureServer/0/query?` +
+    `${SERVICE}/query?` +
     new URLSearchParams({
       where: "1=1",
       outFields: [
-        "OBJECTID",
-        "Бүртгэлийн_дугаар",
-        "Аж_ахуйн_нэгжийн_нэр",
-        "Дүүрэг",
-        "Хороо",
+        "objectid",
+        "бүртгэлийн_дугаар",
+        "аж_ахуйн_нэгжийн_нэр",
+        "дүүрэг",
+        "хороо",
         "s",
-        "Анхан_шатны_шүүлт",
-        "Засварлах",
-        "Өргөдлийн_байршил",
+        "анхан_шатны_шүүлт",
+        "засварлах",
+        "өргөдлийн_байршил",
       ].join(","),
       outSR: "4326",
       resultRecordCount: "2000",
@@ -111,19 +111,19 @@ export async function fetchPetitions(): Promise<PetitionData> {
 
   for (const f of json.features ?? []) {
     const p = f.properties;
-    const oid = Number(p.OBJECTID);
-    const raw = (p.Анхан_шатны_шүүлт ?? "").replace(/\s+/g, " ").trim();
+    const oid = Number(p.objectid);
+    const raw = (p.анхан_шатны_шүүлт ?? "").replace(/\s+/g, " ").trim();
     rows.push({
       oid,
-      reg: p.Бүртгэлийн_дугаар?.trim() || "—",
-      company: p.Аж_ахуйн_нэгжийн_нэр?.trim() || "—",
-      district: p.Дүүрэг?.trim() || "Тодорхойгүй",
-      khoroo: p.Хороо?.trim() || "Тодорхойгүй",
+      reg: p.бүртгэлийн_дугаар?.trim() || "—",
+      company: p.аж_ахуйн_нэгжийн_нэр?.trim() || "—",
+      district: p.дүүрэг?.trim() || "Тодорхойгүй",
+      khoroo: p.хороо?.trim() || "Тодорхойгүй",
       ha: Number(p.s) || 0,
       screening: classifyScreening(raw),
       screeningRaw: raw,
-      stage: p.Засварлах?.replace(/\s+/g, " ").trim() || "Тодорхойгүй",
-      place: p.Өргөдлийн_байршил?.replace(/\s+/g, " ").trim() || "",
+      stage: p.засварлах?.replace(/\s+/g, " ").trim() || "Тодорхойгүй",
+      place: p.өргөдлийн_байршил?.replace(/\s+/g, " ").trim() || "",
     });
     if (!f.geometry) continue;
     shapes.push({

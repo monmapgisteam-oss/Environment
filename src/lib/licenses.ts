@@ -8,11 +8,11 @@
  */
 
 import { arcgisJson } from "@/lib/arcgis";
+import { HOSTING } from "@/lib/portal";
 
-const HOST = "https://services-ap1.arcgis.com/ACqsMOmNLi5wIdIh/arcgis/rest/services";
-const LAYER = "TTAMTZ_ashiglalt";
+const SERVICE = `${HOSTING}/Hosted/X00_TTAMTZ_ashiglalt/FeatureServer/10`;
 
-export const LICENSES_SERVICE = `${HOST}/${LAYER}/FeatureServer/0`;
+export const LICENSES_SERVICE = SERVICE;
 
 export type License = {
   oid: number;
@@ -81,32 +81,32 @@ export function termOf(expires: number | null, now: number): TermId {
 }
 
 type Props = {
-  OBJECTID: number;
-  Тусгай_дугаар?: string;
-  Эзэмшигчийн_нэр?: string;
-  Дүүрэг?: string;
-  NAME_1?: string;
-  PopupInfo?: string;
-  Талбай?: number;
-  Олгосон_он?: string;
-  Дуусах_он?: string;
+  objectid: number;
+  тусгай_дугаар?: string;
+  эзэмшигчийн_нэр?: string;
+  дүүрэг?: string;
+  name_1?: string;
+  popupinfo?: string;
+  талбай?: number;
+  олгосон_он?: string;
+  дуусах_он?: string;
 };
 
 export async function fetchLicenses(): Promise<LicenseData> {
   const url =
-    `${HOST}/${LAYER}/FeatureServer/0/query?` +
+    `${SERVICE}/query?` +
     new URLSearchParams({
       where: "1=1",
       outFields: [
-        "OBJECTID",
-        "Тусгай_дугаар",
-        "Эзэмшигчийн_нэр",
-        "Дүүрэг",
-        "NAME_1",
-        "PopupInfo",
-        "Талбай",
-        "Олгосон_он",
-        "Дуусах_он",
+        "objectid",
+        "тусгай_дугаар",
+        "эзэмшигчийн_нэр",
+        "дүүрэг",
+        "name_1",
+        "popupinfo",
+        "талбай",
+        "олгосон_он",
+        "дуусах_он",
       ].join(","),
       outSR: "4326",
       resultRecordCount: "2000",
@@ -122,17 +122,17 @@ export async function fetchLicenses(): Promise<LicenseData> {
 
   for (const f of json.features ?? []) {
     const p = f.properties;
-    const oid = Number(p.OBJECTID);
+    const oid = Number(p.objectid);
     rows.push({
       oid,
-      code: p.Тусгай_дугаар?.trim() || "—",
-      holder: p.Эзэмшигчийн_нэр?.trim() || "—",
-      district: p.Дүүрэг?.trim() || "Тодорхойгүй",
-      khoroo: p.NAME_1?.trim() || "",
-      mineral: normalMineral(p.PopupInfo),
-      ha: Number(p.Талбай) || 0,
-      granted: year(p.Олгосон_он),
-      expires: year(p.Дуусах_он),
+      code: p.тусгай_дугаар?.trim() || "—",
+      holder: p.эзэмшигчийн_нэр?.trim() || "—",
+      district: p.дүүрэг?.trim() || "Тодорхойгүй",
+      khoroo: p.name_1?.trim() || "",
+      mineral: normalMineral(p.popupinfo),
+      ha: Number(p.талбай) || 0,
+      granted: year(p.олгосон_он),
+      expires: year(p.дуусах_он),
     });
     if (!f.geometry) continue;
     shapes.push({

@@ -4,13 +4,13 @@
  *
  * ЭНЭ ЭХ СУРВАЛЖ ЦЭГЭН давхарга боловч цэг бүр нь бие даасан обьект БИШ —
  * тусгай зөвшөөрлийн талбайн БУЛАНГИЙН цэг юм. 81 цэг нийтдээ ердөө 6
- * зөвшөөрлийг тодорхойлно (`Тусгай_дугаар`-аар бүлэглэнэ). Цэгийг нь дан
+ * зөвшөөрлийг тодорхойлно (`тусгай_дугаар`-аар бүлэглэнэ). Цэгийг нь дан
  * дангаар нь тоолбол "81 уурхай" гэсэн худал дүр зураг гарна.
  *
- * Талбайн ХҮРЭЭГ булангийн цэгээс нь сэргээнэ: `OBJECTID`-ийн дарааллаар
+ * Талбайн ХҮРЭЭГ булангийн цэгээс нь сэргээнэ: `objectid`-ийн дарааллаар
  * холбож хаана. Энэ дараалал нь талбайг тойрсон дэс дараа мөн эсэхийг
  * гурван шалгуураар нотолсон:
- *   1. Хаасан олон өнцөгтийн талбай нь `Талбай_га` талбарт бичигдсэн
+ *   1. Хаасан олон өнцөгтийн талбай нь `талбай_га` талбарт бичигдсэн
  *      албан ёсны хэмжээтэй бүх 6 зөвшөөрөл дээр 1%-иас бага зөрүүтэй.
  *   2. Ямар ч цагираг өөртэйгээ огтлолцохгүй (48 булантай Налайхынх ч).
  *   3. Зөвшөөрлүүдийн хүрээ хоорондоо давхцахгүй.
@@ -22,11 +22,11 @@
  */
 
 import { arcgisJson } from "@/lib/arcgis";
+import { HOSTING } from "@/lib/portal";
 
-const HOST = "https://services-ap1.arcgis.com/ACqsMOmNLi5wIdIh/arcgis/rest/services";
-const LAYER = "Ashigt_maltmal";
+const SERVICE = `${HOSTING}/Hosted/X03_Ashigt_maltmal/FeatureServer/7`;
 
-export const MINERALS_SERVICE = `${HOST}/${LAYER}/FeatureServer/0`;
+export const MINERALS_SERVICE = SERVICE;
 
 export type MineralSite = {
   /** Бүлэглэсний дараах дугаар — газрын зураг ба жагсаалтыг холбоно */
@@ -62,38 +62,38 @@ export type MineralData = {
 };
 
 type Props = {
-  OBJECTID: number;
-  Тусгай_дугаар?: string;
-  Талбай_га?: number;
-  Дүүрэг?: string;
-  Регистрын_дугаар?: string;
-  Олгосон_Жил?: number;
-  Олгосон_Сар?: number;
-  Олгосон_Өдөр?: number;
-  Дуусах_Жил?: number;
-  Дуусах_Сар?: number;
-  Дуусах_Өдөр?: number;
-  Нэр?: string;
-  Эзэмшигчийн_нэр?: string;
-  Төрөл?: string;
+  objectid: number;
+  тусгай_дугаар?: string;
+  талбай_га?: number;
+  дүүрэг?: string;
+  регистрын_дугаар?: string;
+  олгосон_жил?: number;
+  олгосон_сар?: number;
+  олгосон_өдөр?: number;
+  дуусах_жил?: number;
+  дуусах_сар?: number;
+  дуусах_өдөр?: number;
+  нэр?: string;
+  эзэмшигчийн_нэр?: string;
+  төрөл?: string;
   soum_name?: string;
 };
 
 const FIELDS = [
-  "OBJECTID",
-  "Тусгай_дугаар",
-  "Талбай_га",
-  "Дүүрэг",
-  "Регистрын_дугаар",
-  "Олгосон_Жил",
-  "Олгосон_Сар",
-  "Олгосон_Өдөр",
-  "Дуусах_Жил",
-  "Дуусах_Сар",
-  "Дуусах_Өдөр",
-  "Нэр",
-  "Эзэмшигчийн_нэр",
-  "Төрөл",
+  "objectid",
+  "тусгай_дугаар",
+  "талбай_га",
+  "дүүрэг",
+  "регистрын_дугаар",
+  "олгосон_жил",
+  "олгосон_сар",
+  "олгосон_өдөр",
+  "дуусах_жил",
+  "дуусах_сар",
+  "дуусах_өдөр",
+  "нэр",
+  "эзэмшигчийн_нэр",
+  "төрөл",
   "soum_name",
 ];
 
@@ -124,7 +124,7 @@ export async function fetchMinerals(): Promise<MineralData> {
       outSR: "4326",
       /* Булангийн цэг нь дарааллаараа утгатай — эрэмбийг сервертээ
          тогтооно, эс тэгвээс хүрээ нь орооцолдоно */
-      orderByFields: "OBJECTID",
+      orderByFields: "objectid",
       resultRecordCount: "2000",
       f: "geojson",
     });
@@ -138,7 +138,7 @@ export async function fetchMinerals(): Promise<MineralData> {
 
   for (const f of json.features ?? []) {
     const p = f.properties;
-    const code = p.Тусгай_дугаар?.trim() || "—";
+    const code = p.тусгай_дугаар?.trim() || "—";
     if (!f.geometry || f.geometry.type !== "Point") continue;
     const [lon, lat] = f.geometry.coordinates as [number, number];
     const hit = groups.get(code) ?? { p, pts: [] };
@@ -158,16 +158,16 @@ export async function fetchMinerals(): Promise<MineralData> {
     sites.push({
       id,
       code,
-      name: p.Нэр?.trim() || "—",
-      holder: p.Эзэмшигчийн_нэр?.trim() || "—",
-      registry: p.Регистрын_дугаар?.trim() || "—",
-      mineral: p.Төрөл?.trim() || "Тодорхойгүй",
-      district: p.Дүүрэг?.trim() || p.soum_name?.trim() || "Тодорхойгүй",
-      ha: Number(p.Талбай_га) || 0,
-      granted: p.Олгосон_Жил ? Number(p.Олгосон_Жил) : null,
-      expires: p.Дуусах_Жил ? Number(p.Дуусах_Жил) : null,
-      grantedDate: stamp(p.Олгосон_Жил, p.Олгосон_Сар, p.Олгосон_Өдөр),
-      expiresDate: stamp(p.Дуусах_Жил, p.Дуусах_Сар, p.Дуусах_Өдөр),
+      name: p.нэр?.trim() || "—",
+      holder: p.эзэмшигчийн_нэр?.trim() || "—",
+      registry: p.регистрын_дугаар?.trim() || "—",
+      mineral: p.төрөл?.trim() || "Тодорхойгүй",
+      district: p.дүүрэг?.trim() || p.soum_name?.trim() || "Тодорхойгүй",
+      ha: Number(p.талбай_га) || 0,
+      granted: p.олгосон_жил ? Number(p.олгосон_жил) : null,
+      expires: p.дуусах_жил ? Number(p.дуусах_жил) : null,
+      grantedDate: stamp(p.олгосон_жил, p.олгосон_сар, p.олгосон_өдөр),
+      expiresDate: stamp(p.дуусах_жил, p.дуусах_сар, p.дуусах_өдөр),
       corners: g.pts.length,
     });
 
