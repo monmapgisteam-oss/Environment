@@ -176,3 +176,73 @@ export function SourceTabs<T extends string>({
     </div>
   );
 }
+
+/*
+  Табуудын ДЭЭД БҮЛЭГ.
+
+  Сэдэв арваас олон болоход таб зурвас хөндлөн гүйж, бүгдийг нь зэрэг
+  харах боломжгүй болно — хэрэглэгч хайж байгаа сэдвээ олохын тулд
+  зурвасаа гүйлгэх хэрэгтэй болдог. Тиймээс сэдвүүдийг ерөнхий
+  бүлэгт хуваана: бүлэг сонгоход түүний сэдвүүд л доор гарна.
+
+  ⚠ **БҮЛЭГ нь ТУСДАА ТӨЛӨВ БАРИХГҮЙ.** Идэвхтэй бүлгийг сонгосон
+  сэдвээс нь ГАРГАНА — эс тэгвээс "бүлэг нь Ургамал, гэтэл харагдаж
+  буй самбар нь Амьтных" гэсэн зөрүү үүсэх бөгөөд хэрэглэгч аль нь
+  үнэн болохыг таахад хүрнэ. Бүлэг товшиход тэр бүлгийн ЭХНИЙ сэдэв
+  рүү шилжинэ.
+
+  Харагдац нь табуудаас ЗОРИУДААР хөнгөн: нэг мөр, зүүн тийш
+  цуглуулсан, бүтэн өргөн эзлэхгүй. Бүтэн өргөнтэй бол доорх таб
+  зурвастай ижил жинтэй харагдаж, аль нь эцэг түвшин болох нь
+  алдагдана.
+*/
+export function TabGroups<T extends string>({
+  groups,
+  value,
+  onChange,
+  label = "Бүлэг",
+}: {
+  groups: readonly { id: T; label: string; note: string; icon: LucideIcon }[];
+  value: T;
+  onChange: (id: T) => void;
+  label?: string;
+}) {
+  return (
+    <div
+      role="tablist"
+      aria-label={label}
+      className="flex shrink-0 gap-1.5 self-start rounded-xs border border-line bg-paper-2 p-1"
+    >
+      {groups.map((g) => {
+        const on = g.id === value;
+        return (
+          <button
+            key={g.id}
+            role="tab"
+            aria-selected={on}
+            onClick={() => onChange(g.id)}
+            className={cn(
+              "flex items-center gap-2 rounded-xs border px-3 py-1.5 transition-colors",
+              on ? "border-data/45 bg-data/10" : "border-transparent hover:bg-paper-hi",
+            )}
+          >
+            <g.icon
+              size={14}
+              strokeWidth={1.75}
+              className={cn("shrink-0", on ? "text-data" : "text-ink-3")}
+            />
+            <span
+              className={cn(
+                "text-[12.5px] leading-none",
+                on ? "font-medium text-ink" : "text-ink-2",
+              )}
+            >
+              {g.label}
+            </span>
+            <span className="num text-[10.5px] leading-none text-ink-3">{g.note}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}

@@ -6,9 +6,8 @@ import {
   CalendarDays,
   CalendarRange,
   ClipboardList,
-  LandPlot,
+  HeartPulse,
   Loader2,
-  MapPin,
   MousePointerClick,
   PawPrint,
   ShieldAlert,
@@ -41,7 +40,7 @@ const PointMap = dynamic(
   },
 );
 
-type Skip = "species" | "rarity" | "outcome" | "soum" | "year" | "month";
+type Skip = "species" | "rarity" | "outcome" | "stage" | "year" | "month";
 
 /**
  * Аврагдсан амьтдын бүртгэл 2019–2026.
@@ -60,7 +59,13 @@ export function RescuesDashboard() {
   const [species, setSpecies] = React.useState<string | null>(null);
   const [rarity, setRarity] = React.useState<string | null>(null);
   const [outcome, setOutcome] = React.useState<string | null>(null);
-  const [soum, setSoum] = React.useState<string | null>(null);
+  /*
+    Урьд нь энэ нь "Сум, дүүрэг" байв. Порталын шинэ давхаргад засаг
+    захиргааны нэр БАЙХГҮЙ тул суудлыг эх сурвалжийн өөрийн `нас___төлөв`
+    багана эзэлнэ — байхгүй зүйлийг координатаас таамаглан нөхөхийн
+    оронд байгааг нь харуулах нь зөв.
+  */
+  const [stage, setStage] = React.useState<string | null>(null);
   const [month, setMonth] = React.useState<string | null>(null);
   /*
     Хугацаа нь МУЖ хэлбэрээр. "Он" шүүлтүүр нь тусдаа төлөв БИШ — тэр нь
@@ -93,7 +98,7 @@ export function RescuesDashboard() {
     oid → газрын зургийн тэмдэглэгээ. Эхний сонголт нь ХЭЛТСЭЭС ирсэн
     зүйлийн гэрэл зураг; тэр олдоогүй зүйлд зурсан тэмдэг рүү шилжинэ.
 
-    Зүйл давтагддаг (697 бичлэгт ~100 зүйл) тул нэрээр нь кэшлэнэ.
+    Зүйл давтагддаг (720 бичлэгт ~100 зүйл) тул нэрээр нь кэшлэнэ.
   */
   const markByOid = React.useMemo(() => {
     const cache = new Map<string, string>();
@@ -128,14 +133,14 @@ export function RescuesDashboard() {
         if (skip !== "species" && species && r.species !== species) continue;
         if (skip !== "rarity" && rarity && r.rarity !== rarity) continue;
         if (skip !== "outcome" && outcome && r.outcome !== outcome) continue;
-        if (skip !== "soum" && soum && r.soum !== soum) continue;
+        if (skip !== "stage" && stage && r.stage !== stage) continue;
         if (skip !== "year" && range && (r.year < range[0] || r.year > range[1])) continue;
         if (skip !== "month" && month && String(r.month) !== month) continue;
         out[k++] = i;
       }
       return out.subarray(0, k);
     },
-    [rows, species, rarity, outcome, soum, range, month],
+    [rows, species, rarity, outcome, stage, range, month],
   );
 
   const select = React.useCallback(
@@ -201,7 +206,7 @@ export function RescuesDashboard() {
   const speciesData = React.useMemo(() => tally((r) => r.species, "species"), [tally]);
   const rarityData = React.useMemo(() => tally((r) => r.rarity, "rarity"), [tally]);
   const outcomeData = React.useMemo(() => tally((r) => r.outcome, "outcome"), [tally]);
-  const soumData = React.useMemo(() => tally((r) => r.soum, "soum"), [tally]);
+  const stageData = React.useMemo(() => tally((r) => r.stage, "stage"), [tally]);
 
   /** Оны зурвас — цоорхой жилийг ч харуулна (тэг утга нь ч мэдээлэл) */
   const yearData = React.useMemo<Datum[]>(() => {
@@ -248,7 +253,7 @@ export function RescuesDashboard() {
 
   const focus = React.useMemo<Extent | null>(() => {
     /* ЯМАР Ч шүүлтүүр тавихад тэр сонголт руугаа ойртоно */
-    if (!rows || (!soum && !species && !rarity && !outcome && !month)) return null;
+    if (!rows || (!stage && !species && !rarity && !outcome && !month)) return null;
     const idx = selectBase();
     if (idx.length === 0) return null;
     let w = 180;
@@ -263,7 +268,7 @@ export function RescuesDashboard() {
       n = Math.max(n, r.lat);
     }
     return [w, s, e, n];
-  }, [rows, selectBase, soum, species, rarity, outcome, month]);
+  }, [rows, selectBase, stage, species, rarity, outcome, month]);
 
   /** Хулгана дагасан хөвөгч тайлбар — байрлалыг өөрөө удирдана */
   const tip = useMapTip();
@@ -304,7 +309,7 @@ export function RescuesDashboard() {
     (species ? 1 : 0) +
     (rarity ? 1 : 0) +
     (outcome ? 1 : 0) +
-    (soum ? 1 : 0) +
+    (stage ? 1 : 0) +
     (wholeRange ? 0 : 1) +
     (month ? 1 : 0) +
     (extentOn ? 1 : 0);
@@ -317,7 +322,7 @@ export function RescuesDashboard() {
     setSpecies(null);
     setRarity(null);
     setOutcome(null);
-    setSoum(null);
+    setStage(null);
     setRange(span);
     setMonth(null);
     setExtentOn(false);
@@ -399,13 +404,13 @@ export function RescuesDashboard() {
         </FilterMenu>
 
         <FilterMenu
-          label="Сум, дүүрэг"
-          icon={LandPlot}
-          value={soum}
-          active={Boolean(soum)}
-          onClear={() => setSoum(null)}
+          label="Нас, төлөв"
+          icon={HeartPulse}
+          value={stage}
+          active={Boolean(stage)}
+          onClear={() => setStage(null)}
         >
-          <PickList items={soumData} selected={soum} onPick={setSoum} searchable />
+          <PickList items={stageData} selected={stage} onPick={setStage} searchable />
         </FilterMenu>
 
         <FilterMenu
@@ -477,7 +482,7 @@ export function RescuesDashboard() {
               <Card className="relative min-h-[240px] flex-1 overflow-hidden">
                 <div className="relative h-full w-full">
                   {/*
-                    Бөөгнөрөл ХЭРЭГТЭЙ — 697 цэгийн 99% нь Улаанбаатарт өтгөрсөн.
+                    Бөөгнөрөл ХЭРЭГТЭЙ — 720 цэгийн дийлэнх нь Улаанбаатарт өтгөрсөн.
                     Гэхдээ тоо нь дугуйн дотор БИШ, баруун дээд буланд тэмдэг
                     болж суух тул дугуйн дотор чөлөөтэй үлдэж, доорх суурь зураг
                     харагдана. Худгийн самбарынхаас ингэж ялгарна.
@@ -530,8 +535,8 @@ export function RescuesDashboard() {
                           text={`${hovered.year}.${String(hovered.month).padStart(2, "0")}`}
                         />
                         <MapTipRow
-                          icon={MapPin}
-                          text={[hovered.aimag, hovered.soum].filter(Boolean).join(", ")}
+                          icon={HeartPulse}
+                          text={[hovered.stage, hovered.count].filter(Boolean).join(" · ")}
                         />
                         <MapTipRow icon={Sprout} text={hovered.outcome} />
                       </div>
@@ -589,7 +594,8 @@ export function RescuesDashboard() {
                           ) : null}
                           <Field k="Ховордлын зэрэг" v={detail.rarity} />
                           <Field k="Огноо" v={<span className="num">{dayLabel(detail)}</span>} />
-                          <Field k="Байршил" v={`${detail.aimag}, ${detail.soum}`} />
+                          <Field k="Нас, төлөв" v={detail.stage} />
+                          {detail.count ? <Field k="Тоо" v={detail.count} /> : null}
                           {detail.situation ? (
                             <Field k="Нөхцөл байдал" v={detail.situation} />
                           ) : null}

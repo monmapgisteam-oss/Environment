@@ -92,6 +92,9 @@ export function StickersDashboard() {
   const stats = React.useMemo(
     () => ({
       n: shown.length,
+      /* Стикер наагдсан нь судалгаанд хамрагдсанаас ЭРС цөөн (78-аас 8)
+         тул хоёуланг нь тусад нь тоолно */
+      stickered: shown.filter((r) => r.sticker === true).length,
       districts: new Set(shown.map((r) => r.district)).size,
       khoroos: new Set(shown.map((r) => `${r.district}|${r.khoroo}`)).size,
     }),
@@ -139,7 +142,7 @@ export function StickersDashboard() {
   return (
     <div className="flex h-full min-h-0 flex-col gap-2.5">
       <FilterBar
-        title="Стикер байршуулсан барилга"
+        title="Шилэн барилгын судалгаа"
         activeCount={district ? 1 : 0}
         onReset={reset}
       >
@@ -166,9 +169,13 @@ export function StickersDashboard() {
       */}
       <div className="shrink-0 overflow-hidden rounded-xs border border-line bg-paper-2">
         <div className="grid grid-cols-2 divide-x divide-y divide-line sm:grid-cols-3 sm:divide-y-0">
-          <Indicator icon={Sticker} label="Стикер байршуулсан барилга" value={num(stats.n)} />
-          <Indicator icon={Building2} label="Хамрагдсан дүүрэг" value={num(stats.districts)} />
-          <Indicator icon={MapPin} label="Хамрагдсан хороо" value={num(stats.khoroos)} />
+          {/* Судалгаанд хамрагдсан барилга ба тэдгээрийн хэдэд нь
+              стикер наагдсан нь ХОЁР ӨӨР тоо — эхнийхийг нь
+              "стикертэй" гэж нэрлэвэл 78 барилга бүгд стикертэй мэт
+              болно (бодит нь 8) */}
+          <Indicator icon={Building2} label="Судалгаанд хамрагдсан барилга" value={num(stats.n)} />
+          <Indicator icon={Sticker} label="Стикер байршуулсан" value={num(stats.stickered)} />
+          <Indicator icon={MapPin} label="Хамрагдсан дүүрэг" value={num(stats.districts)} />
         </div>
       </div>
 
@@ -197,7 +204,13 @@ export function StickersDashboard() {
 
           {active ? (
             <div className="pointer-events-none absolute top-2.5 left-2.5 z-10 max-w-[280px] rounded-xs border border-line bg-paper/92 px-2.5 py-2 backdrop-blur-md">
-              <div className="eyebrow mb-1.5">Стикер байршуулсан</div>
+              <div className="eyebrow mb-1.5">
+                {active.sticker === true
+                  ? "Стикер байршуулсан"
+                  : active.sticker === false
+                    ? "Стикер байршуулаагүй"
+                    : "Стикер тэмдэглэгдээгүй"}
+              </div>
               <div className="text-[12.5px] leading-snug text-ink">{active.name}</div>
               <div className="mt-1 text-[10.5px] leading-snug text-ink-3">
                 {active.address || `${active.district} · ${active.khoroo}`}

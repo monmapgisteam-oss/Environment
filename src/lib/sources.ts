@@ -8,27 +8,21 @@
 
 import { ASSESSMENT_SERVICES } from "@/lib/assessment";
 import { DAMAGED_SERVICE } from "@/lib/damaged";
-import { ECO_SERVICE, PARCELS_SERVICE } from "@/lib/eco-corridors";
-import { FLOODPLAIN_SERVICE } from "@/lib/floodplains";
-import { FOREST_LAYERS, layerName, layerService } from "@/lib/forest-layers";
+import { PARCELS_SERVICE } from "@/lib/eco-corridors";
+import { FOREST } from "@/lib/forest-layers";
+import { layerName, serviceOf, type LayerSet } from "@/lib/portal-layers";
+import { NOGOON } from "@/lib/nogoon-layers";
+import { WILDLIFE } from "@/lib/wildlife-layers";
 import { chemicalService } from "@/lib/chemicals";
 import { REPAIR_SERVICE } from "@/lib/repair-shops";
 import { LICENSES_SERVICE } from "@/lib/licenses";
-import { LICHENS_SERVICE } from "@/lib/lichens";
-import { MARMOT_SERVICES } from "@/lib/marmots";
 import { MINERALS_SERVICE } from "@/lib/minerals";
 import { PETITIONS_SERVICE } from "@/lib/petitions";
-import { POLES_SERVICE } from "@/lib/poles";
 import { RECLAMATION_SERVICES } from "@/lib/reclamation";
-import { RESCUES_SERVICE } from "@/lib/rescues";
 import { SOIL_SERVICES } from "@/lib/soil";
-import { STICKERS_SERVICE } from "@/lib/stickers";
 import { CITY_SERVICE, PIT_SERVICE } from "@/lib/toilets";
 import { BOMT_SERVICE } from "@/lib/bomt";
 import { NEUTRALIZATION_SERVICE } from "@/lib/neutralization";
-import { WATER_SERVICE } from "@/lib/water-contracts";
-import { WELLS_SERVICE } from "@/lib/wells";
-import { WILDLIFE_SERVICE } from "@/lib/wildlife";
 
 export type Source = {
   /** Аль хэлтсийн эх сурвалж вэ */
@@ -39,79 +33,48 @@ export type Source = {
   url: string;
 };
 
+/**
+ * Порталын бүртгэлийг эх сурвалжийн мөр болгоно.
+ *
+ * Нэр, хаяг хоёулаа бүртгэлээс гарах тул давхарга нэмэхэд энэ
+ * жагсаалт ӨӨРӨӨ уртасна — хоёр газар гараар бичих шаардлагагүй.
+ */
+function portalSources(slug: string, set: LayerSet): Source[] {
+  return set.layers.map((id) => ({
+    slug,
+    name: layerName(set, id),
+    /* Порталаас гадуурх давхаргыг ӨӨР төрлөөр тэмдэглэнэ — хаяг нь
+       өөр систем рүү заадаг тул "Enterprise" гэвэл худал болно */
+    kind: set.services?.[id]
+      ? "ArcGIS FeatureServer"
+      : "ArcGIS Enterprise FeatureServer",
+    url: serviceOf(set, id),
+  }));
+}
+
 export const SOURCES: Source[] = [
-  {
-    slug: "nogoon-bus",
-    name: "Өрөмдмөл худгийн бүртгэл 2015–2024",
-    kind: "ArcGIS FeatureServer",
-    url: WELLS_SERVICE,
-  },
-  {
-    slug: "nogoon-bus",
-    name: "Ус ашиглах гэрээ",
-    kind: "ArcGIS FeatureServer",
-    url: WATER_SERVICE,
-  },
-  {
-    slug: "nogoon-bus",
-    name: "Голын татам",
-    kind: "ArcGIS FeatureServer",
-    url: FLOODPLAIN_SERVICE,
-  },
-  {
-    slug: "amitan-urgamal",
-    name: "Зэрлэг амьтны дуудлагын бүртгэл",
-    kind: "ArcGIS Survey123",
-    url: WILDLIFE_SERVICE,
-  },
-  {
-    slug: "amitan-urgamal",
-    name: "Аврагдсан зэрлэг амьтад 2019–2026",
-    kind: "ArcGIS FeatureServer",
-    url: RESCUES_SERVICE,
-  },
-  {
-    slug: "amitan-urgamal",
-    name: "Экологийн коридор 2024",
-    kind: "ArcGIS FeatureServer",
-    url: ECO_SERVICE,
-  },
+  /*
+    Хэлтсийн дата 2026-09-16-нд ПОРТАЛД шилжсэн. Хуучин гурван мөр
+    хасагдав: `Us_ashiglah_geree`, `Tatam` хоёрын үйлчилгээ MUST
+    дээрээс БАЙХГҮЙ болсон (амьдаар нь шалгасан, 400 "Invalid URL"),
+    худгийнх нь ажиллаж байгаа ч таб нь порталын `N02` давхаргууд руу
+    шилжсэн. Ажиллахгүй хаягийг эх сурвалжийн хуудсанд үлдээвэл
+    хэрэглэгч түүнийг дагаад хоосон хуудас олно.
+  */
+  ...portalSources("nogoon-bus", NOGOON),
+  /*
+    Хэлтсийн долоон сэдэв 2026-09-16-нд ПОРТАЛД шилжсэн тул тэдгээр нь
+    доорх `portalSources` жагсаалтад аль хэдийн орсон — энд дахин
+    бичвэл нэг хаяг хоёр өөр нэрээр гарна. Зөвхөн нэгж талбарын
+    давхарга ArcGIS Online дээр ХЭВЭЭР үлдсэн тул тусад нь бичигдэнэ.
+  */
   {
     slug: "amitan-urgamal",
     name: "Нэгж талбар — коридортой давхцсаныг нь",
     kind: "ArcGIS FeatureServer",
     url: PARCELS_SERVICE,
   },
-  {
-    slug: "amitan-urgamal",
-    name: "Цахилгаан дамжуулах 10, 15 кВ-ын шонгууд",
-    kind: "ArcGIS FeatureServer",
-    url: POLES_SERVICE,
-  },
-  {
-    slug: "amitan-urgamal",
-    name: "Стикер байршуулсан барилга",
-    kind: "ArcGIS FeatureServer",
-    url: STICKERS_SERVICE,
-  },
-  {
-    slug: "amitan-urgamal",
-    name: "Шилжүүлэн нутагшуулсан тарвага — барьсан цэг",
-    kind: "ArcGIS FeatureServer",
-    url: MARMOT_SERVICES[0],
-  },
-  {
-    slug: "amitan-urgamal",
-    name: "Шилжүүлэн нутагшуулсан тарвага — тавьсан цэг",
-    kind: "ArcGIS FeatureServer",
-    url: MARMOT_SERVICES[1],
-  },
-  {
-    slug: "amitan-urgamal",
-    name: "Байгалийн ургамлын олон янз байдал — хаг",
-    kind: "ArcGIS FeatureServer",
-    url: LICHENS_SERVICE,
-  },
+  ...portalSources("amitan-urgamal", WILDLIFE),
   {
     slug: "orchin",
     name: "Нүхэн жорлонгийн бүртгэл, орчны үнэлгээ",
@@ -181,14 +144,7 @@ export const SOURCES: Source[] = [
     kind: "ArcGIS FeatureServer",
     url: MINERALS_SERVICE,
   },
-  /* Ойн найман давхарга — нэр, хаяг хоёулаа бүртгэлээс гарна тул
-     давхарга нэмэхэд энэ жагсаалт өөрөө уртасна */
-  ...FOREST_LAYERS.map((id) => ({
-    slug: "oi",
-    name: layerName(id),
-    kind: "ArcGIS Enterprise FeatureServer",
-    url: layerService(id),
-  })),
+  ...portalSources("oi", FOREST),
   {
     slug: "hyanalt",
     name: "Авто засварын үйлчилгээний цэг",

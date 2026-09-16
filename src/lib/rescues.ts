@@ -1,17 +1,39 @@
 /**
  * Амьтан, ургамлыг хамгаалах хэлтсийн ХОЁР ДАХЬ эх сурвалж —
- * аврагдсан зэрлэг амьтдын бүртгэл 2019–2026 (ArcGIS `GPS_SJ`).
+ * аврагдсан зэрлэг амьтдын бүртгэл 2019–2026.
  *
- * Survey123-ийн дуудлагын бүртгэлээс ялгаатай: энэ нь өнгөрсөн жилүүдийн
- * хаагдсан бүртгэл — зүйлийн латин нэр, ховордлын зэрэг, шийдвэрлэсэн
- * байдал зэрэг үр дүнгийн мэдээлэлтэй.
+ * Дуудлагын бүртгэлээс ялгаатай: энэ нь өнгөрсөн жилүүдийн хаагдсан
+ * бүртгэл — зүйлийн латин нэр, ховордлын зэрэг, шийдвэрлэсэн байдал
+ * зэрэг үр дүнгийн мэдээлэлтэй.
  *
- * `_SJ` нь орон зайн нэгтгэл: `aimag_name`, `soum_name` талбар бэлэн байгаа.
- * Геометр нь проекцлогдсон солбицолтой тул `outSR=4326`-аар асууна.
+ * ⚠ **ЭХ СУРВАЛЖ ПОРТАЛД ШИЛЖСЭН** (хэрэглэгчийн шийдвэр, 2026-09-16):
+ * ArcGIS Online дээрх `GPS_SJ`-ээс `environment.ub.gov.mn`-ий
+ * `A03_zerleg_amitdiin_burtgel` руу. Бичлэг 697-аас **720** боллоо.
+ * Гурван зүйл ДАГАЖ өөрчлөгдсөн:
+ *
+ *  1. ⚠⚠ **ЗАСАГ ЗАХИРГААНЫ НЭР БАЙХГҮЙ.** Хуучин `_SJ` хувилбар нь
+ *     орон зайн нэгтгэлээр `aimag_name`, `soum_name` авчирдаг байсан;
+ *     шинэ давхаргад тэр хос БҮРМӨСӨН алга. Координатаас нь дам
+ *     гаргаж болох ч энэ нь ТААМАГ тул хийхгүй. Оронд нь эх
+ *     сурвалжийн ӨӨРИЙН шинэ багана болох `нас___төлөв` задаргаа болов
+ *     ({@link Rescue.stage}) — байхгүй зүйлийг нөхөхийн оронд байгааг
+ *     нь харуулна.
+ *  2. **Сарын тусдаа багана байхгүй** — `огноо` нь жинхэнэ `Date`
+ *     талбар тул сарыг түүнээс гаргана. ТЭГ нь 1970 он биш
+ *     БӨГЛӨӨГҮЙН тэмдэг.
+ *  3. **Талбарын нэр жижиг үсэгтэй** (портал PostgreSQL суурьтай).
+ *
+ * ⚠ `мэдээлэгч___утас` нь иргэний утасны дугаар агуулдаг тул огт
+ * татагдахгүй — самбарт хэрэггүй хувь хүний мэдээллийг хөтөч рүү
+ * буулгахгүй.
+ *
+ * Шинэ хост токен шаардана тул хүсэлт `arcgisJson()`-оор явна.
  */
 
-export const RESCUES_SERVICE =
-  "https://services-ap1.arcgis.com/ACqsMOmNLi5wIdIh/arcgis/rest/services/GPS_SJ/FeatureServer/0";
+import { arcgisJson } from "@/lib/arcgis";
+import { layerService } from "@/lib/portal-layers";
+
+export const RESCUES_SERVICE = `${layerService("A03_zerleg_amitdiin_burtgel")}/0`;
 
 const PAGE = 2000;
 
@@ -25,10 +47,13 @@ export type Rescue = {
   /** Ховордлын зэрэг: "Ховор" / "Элбэг" */
   rarity: string;
   year: number;
+  /** `огноо`-оос гаргасан сар (1–12); огноо бөглөгдөөгүй бол 0 */
   month: number;
   date: number | null;
-  soum: string;
-  aimag: string;
+  /** Нас, төлөв — эх сурвалжийн чөлөөт бичвэр */
+  stage: string;
+  /** Тоо ширхэг. Эх сурвалж БИЧВЭРЭЭР хадгалдаг ("2 дэгдээхэй") */
+  count: string;
   /** Нөхцөл байдлын чөлөөт тайлбар */
   situation: string;
   /** Шийдвэрлэсэн байдал — бүртгэгдсэн ЭХ бичвэр */
@@ -108,16 +133,41 @@ function titleCase(v: unknown) {
   return s[0].toLocaleUpperCase("mn-MN") + s.slice(1).toLocaleLowerCase("mn-MN");
 }
 
+/**
+ * Талбарын нэрс — давхаргын тодорхойлолтоос уншсанаар.
+ *
+ * ⚠ ТААМАГЛАЖ бичээгүй: доод зураас нь эх сурвалжийн гарчиг дахь зай,
+ * хаалт, таслалын оронд орсон тул тоо нь жигд бус (`нас___төлөв`
+ * гурав, `өргөрөг__y_` хоёр).
+ */
 const F = {
-  species: "Зүйлийн_монгол_нэр",
-  latin: "Латин_нэр",
-  rarity: "Ховордлын_зэрэг",
-  date: "Дуудлага_өгсөн_сар_өдөр",
-  year: "Он",
-  month: "Сар",
-  situation: "Амьтны_гэмтэл__бэртэл__байгаа_байдал_Эмчилж__асран_хамгаалсан_ба",
-  outcome: "Шийдвэрлсэн_байдал",
+  species: "зүйлийн_монгол_нэр",
+  latin: "латин_нэр",
+  rarity: "ховордлын_зэрэг",
+  date: "огноо",
+  year: "он",
+  stage: "нас___төлөв",
+  count: "тоо",
+  lat: "өргөрөг__y_",
+  lon: "уртраг__x_",
+  situation: "амьтны_гэмтэл__бэртэл",
+  outcome: "шийдвэрлэсэн_байдал",
 };
+
+/**
+ * ArcGIS-ийн огноог миллисекунд болгоно.
+ *
+ * Тоо ч, ISO бичвэр ч ирж болно. ТЭГ нь 1970 он биш БӨГЛӨӨГҮЙН тэмдэг
+ * тул `null` болгоно.
+ */
+function epoch(v: unknown): number | null {
+  if (typeof v === "number") return v > 0 ? v : null;
+  if (typeof v === "string" && v) {
+    const t = Date.parse(v);
+    return Number.isFinite(t) && t > 0 ? t : null;
+  }
+  return null;
+}
 
 export async function fetchRescues(signal?: AbortSignal): Promise<Rescue[]> {
   const out: Rescue[] = [];
@@ -126,49 +176,62 @@ export async function fetchRescues(signal?: AbortSignal): Promise<Rescue[]> {
     const url = `${RESCUES_SERVICE}/query?${new URLSearchParams({
       f: "json",
       where: "1=1",
+      /* `мэдээлэгч___утас` ЗОРИУДААР жагсаалтад алга — хувь хүний дата */
       outFields: [
-        "OBJECTID",
+        "objectid",
         F.species,
         F.latin,
         F.rarity,
         F.date,
         F.year,
-        F.month,
+        F.stage,
+        F.count,
+        F.lat,
+        F.lon,
         F.situation,
         F.outcome,
-        "soum_name",
-        "aimag_name",
       ].join(","),
       outSR: "4326",
       returnGeometry: "true",
       resultOffset: String(offset),
       resultRecordCount: String(PAGE),
-      orderByFields: "OBJECTID ASC",
+      orderByFields: "objectid ASC",
     })}`;
 
-    const res = await fetch(url, { signal });
-    if (!res.ok) throw new Error(`ArcGIS ${res.status}`);
-    const json = (await res.json()) as { features?: EsriPointFeature[] };
+    const json = await arcgisJson<{ features?: EsriPointFeature[] }>(
+      url,
+      "Аврагдсан амьтдын бүртгэл",
+      { signal },
+    );
     const feats = json.features ?? [];
 
     for (const f of feats) {
-      const g = f.geometry;
-      if (!g || !Number.isFinite(g.x) || !Number.isFinite(g.y)) continue;
       const a = f.attributes;
+      const g = f.geometry;
+
+      /* Геометрийг эрхэмлэнэ, дутсан бол атрибутын координатаас */
+      const lon = g && Number.isFinite(g.x) ? g.x : Number(a[F.lon]);
+      const lat = g && Number.isFinite(g.y) ? g.y : Number(a[F.lat]);
+      if (!Number.isFinite(lon) || !Number.isFinite(lat)) continue;
+
       const outcomeRaw = str(a[F.outcome]);
+      const date = epoch(a[F.date]);
 
       out.push({
-        oid: Number(a.OBJECTID),
-        lon: g.x,
-        lat: g.y,
+        oid: Number(a.objectid),
+        lon,
+        lat,
         species: titleCase(a[F.species]) || "Тодорхойгүй",
         latin: str(a[F.latin]),
         rarity: str(a[F.rarity]) || "Тодорхойгүй",
         year: Number(a[F.year]) || 0,
-        month: Number(a[F.month]) || 0,
-        date: typeof a[F.date] === "number" ? (a[F.date] as number) : null,
-        soum: str(a.soum_name) || "Тодорхойгүй",
-        aimag: str(a.aimag_name) || "Тодорхойгүй",
+        /* Сарын тусдаа багана байхгүй — огнооноос. UTC-гаар уншина:
+           эх сурвалж өдрийн эхэнд тэмдэглэдэг тул орон нутгийн цагийн
+           бүсэд буулгавал сар ухарч болзошгүй */
+        month: date ? new Date(date).getUTCMonth() + 1 : 0,
+        date,
+        stage: str(a[F.stage]) || "Тэмдэглээгүй",
+        count: str(a[F.count]),
         situation: str(a[F.situation]),
         outcomeRaw,
         outcome: classifyOutcome(outcomeRaw),

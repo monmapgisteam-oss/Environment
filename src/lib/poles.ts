@@ -17,10 +17,17 @@
  * БҮҮ БИЧ — хэлтсээс ирвэл нэмнэ.
  */
 
-const HOST = "https://services-ap1.arcgis.com/ACqsMOmNLi5wIdIh/arcgis/rest/services";
-const LAYER = "Tognii_shon";
+/*
+  ⚠ **ЭХ СУРВАЛЖ ПОРТАЛД ШИЛЖСЭН** (хэрэглэгчийн шийдвэр, 2026-09-16):
+  `Tognii_shon` → `A04_tognii_shon`. Бичлэгийн тоо ижил (30), утга нь
+  ижил; талбарын нэр л өөрчлөгдсөн: `F_` → `д_д`, `Дүүрэг` → `дүүрэг`,
+  `Хороо` → `хороо`, `Байршил` → `байршил` (портал бүгдийг жижиг үсэг
+  болгож буулгадаг).
+*/
+import { arcgisJson } from "@/lib/arcgis";
+import { layerService } from "@/lib/portal-layers";
 
-export const POLES_SERVICE = `${HOST}/${LAYER}/FeatureServer/0`;
+export const POLES_SERVICE = `${layerService("A04_tognii_shon")}/0`;
 
 export type Pole = {
   oid: number;
@@ -50,11 +57,11 @@ export type PoleData = {
 };
 
 type Props = {
-  OBJECTID: number;
-  F_?: number;
-  Дүүрэг?: string;
-  Хороо?: string;
-  Байршил?: string;
+  objectid: number;
+  д_д?: number;
+  дүүрэг?: string;
+  хороо?: string;
+  байршил?: string;
 };
 
 const tidy = (s: string | undefined) => (s ?? "").replace(/\s+/g, " ").trim();
@@ -70,19 +77,17 @@ export async function fetchPoles(): Promise<PoleData> {
     `${POLES_SERVICE}/query?` +
     new URLSearchParams({
       where: "1=1",
-      outFields: "OBJECTID,F_,Дүүрэг,Хороо,Байршил",
+      outFields: "objectid,д_д,дүүрэг,хороо,байршил",
       outSR: "4326",
       /* Дугаарлалт нь шугам дагуух дэс дараа — эрэмбийг сервертээ тогтооно */
-      orderByFields: "F_",
+      orderByFields: "д_д",
       resultRecordCount: "2000",
       f: "geojson",
     });
 
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`Шонгийн мэдээлэл татагдсангүй (${res.status})`);
-  const json = (await res.json()) as {
+  const json = await arcgisJson<{
     features?: { properties: Props; geometry: GeoJSON.Geometry | null }[];
-  };
+  }>(url, "Шонгийн мэдээлэл");
 
   const rows: Pole[] = [];
   const points = { oid: [] as number[], lon: [] as number[], lat: [] as number[] };
@@ -91,13 +96,13 @@ export async function fetchPoles(): Promise<PoleData> {
     const p = f.properties;
     if (f.geometry?.type !== "Point") continue;
     const [lon, lat] = f.geometry.coordinates as [number, number];
-    const oid = Number(p.OBJECTID);
+    const oid = Number(p.objectid);
     rows.push({
       oid,
-      no: Number(p.F_) || rows.length + 1,
-      district: tidy(p.Дүүрэг) || "Тодорхойгүй",
-      khoroo: tidy(p.Хороо),
-      place: tidy(p.Байршил) || "—",
+      no: Number(p.д_д) || rows.length + 1,
+      district: tidy(p.дүүрэг) || "Тодорхойгүй",
+      khoroo: tidy(p.хороо),
+      place: tidy(p.байршил) || "—",
       lon,
       lat,
       gap: null,

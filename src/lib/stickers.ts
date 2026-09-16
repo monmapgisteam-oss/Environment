@@ -9,10 +9,22 @@
  * БҮҮ БИЧ.
  */
 
-const HOST = "https://services-ap1.arcgis.com/ACqsMOmNLi5wIdIh/arcgis/rest/services";
-const LAYER = "Sticker_naalt";
+/*
+  ⚠ **ЭХ СУРВАЛЖ ПОРТАЛД ШИЛЖСЭН** (хэрэглэгчийн шийдвэр, 2026-09-16):
+  `Sticker_naalt` → `A05_shilen_barilga_sticker`.
 
-export const STICKERS_SERVICE = `${HOST}/${LAYER}/FeatureServer/0`;
+  ⚠⚠ **АГУУЛГА НЬ ӨРГӨЖСӨН.** Хуучин давхарга нь стикер НААСАН найман
+  барилга байсан бол шинэ нь ШИЛЭН БАРИЛГЫН СУДАЛГАА: 78 барилга,
+  тэдгээрийн зөвхөн 8-д нь стикер наагдсан (`stiker = tiim`). Өөрөөр
+  хэлбэл хуучин найм нь энэ судалгааны дэд олонлог.
+
+  Тиймээс `sticker` талбар нь бичлэг бүрд ЗААВАЛ гарна: 78 барилгыг
+  бүгдийг нь "стикер байршуулсан" гэж харуулах нь ХУДАЛ болно.
+*/
+import { arcgisJson } from "@/lib/arcgis";
+import { layerService } from "@/lib/portal-layers";
+
+export const STICKERS_SERVICE = `${layerService("A05_shilen_barilga_sticker")}/0`;
 
 export type Sticker = {
   oid: number;
@@ -23,6 +35,8 @@ export type Sticker = {
   address: string;
   district: string;
   khoroo: string;
+  /** Стикер наагдсан эсэх. Бөглөгдөөгүй бол `null` */
+  sticker: boolean | null;
   lon: number;
   lat: number;
 };
@@ -33,12 +47,14 @@ export type StickerData = {
 };
 
 type Props = {
-  OBJECTID: number;
-  F_?: number;
-  байршил_хаяг?: string;
-  Дүүрэг?: string;
-  Хороо?: string;
-  Байршил?: string;
+  objectid: number;
+  rec_id?: number;
+  ner?: string;
+  hayag?: string;
+  duureg?: string;
+  horoo?: string;
+  /** Стикер наагдсан эсэх — домэйн: `tiim` / `ugui` */
+  stiker?: string;
 };
 
 const tidy = (s: string | undefined) => (s ?? "").replace(/\s+/g, " ").trim();
@@ -48,18 +64,16 @@ export async function fetchStickers(): Promise<StickerData> {
     `${STICKERS_SERVICE}/query?` +
     new URLSearchParams({
       where: "1=1",
-      outFields: "OBJECTID,F_,байршил_хаяг,Дүүрэг,Хороо,Байршил",
+      outFields: "objectid,rec_id,ner,hayag,duureg,horoo,stiker",
       outSR: "4326",
-      orderByFields: "F_",
+      orderByFields: "rec_id",
       resultRecordCount: "2000",
       f: "geojson",
     });
 
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`Стикерийн мэдээлэл татагдсангүй (${res.status})`);
-  const json = (await res.json()) as {
+  const json = await arcgisJson<{
     features?: { properties: Props; geometry: GeoJSON.Geometry | null }[];
-  };
+  }>(url, "Шилэн барилгын судалгаа");
 
   const rows: Sticker[] = [];
   const points = { oid: [] as number[], lon: [] as number[], lat: [] as number[] };
@@ -68,14 +82,16 @@ export async function fetchStickers(): Promise<StickerData> {
     const p = f.properties;
     if (f.geometry?.type !== "Point") continue;
     const [lon, lat] = f.geometry.coordinates as [number, number];
-    const oid = Number(p.OBJECTID);
+    const oid = Number(p.objectid);
     rows.push({
       oid,
-      no: Number(p.F_) || rows.length + 1,
-      name: tidy(p.Байршил) || "—",
-      address: tidy(p.байршил_хаяг),
-      district: tidy(p.Дүүрэг) || "Тодорхойгүй",
-      khoroo: tidy(p.Хороо),
+      no: Number(p.rec_id) || rows.length + 1,
+      name: tidy(p.ner) || "—",
+      address: tidy(p.hayag),
+      district: tidy(p.duureg) || "Тодорхойгүй",
+      khoroo: tidy(p.horoo),
+      /* Домэйн: `tiim` / `ugui`. Гуравдагч утга нь бөглөгдөөгүй */
+      sticker: p.stiker === "tiim" ? true : p.stiker === "ugui" ? false : null,
       lon,
       lat,
     });
