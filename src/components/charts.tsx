@@ -10,6 +10,40 @@ import { cn, num } from "@/lib/utils";
    Товшиход шүүлтүүр болно (cross-filter).
    -------------------------------------------------------------------------- */
 
+/**
+ * Диаграмын СОНГОЛТ — нэг утга эсвэл ОЛОН.
+ *
+ * Самбарууд хоёуланг нь хэрэглэдэг: ганц зүсэлт хийхэд нэг утга
+ * хангалттай, харин хэдэн ангиллыг зэрэг харьцуулах шаардлага гарвал
+ * жагсаалт хэрэгтэй. Хоёр өөр проп нэмэхийн оронд НЭГ прополтой ч
+ * хоёуланг нь хүлээж авна — дуудагч тал ямар хэлбэрээр барихаа өөрөө
+ * шийднэ.
+ */
+export type Selection = string | string[] | null;
+
+/** Мөр сонгогдсон эсэх */
+function picked(sel: Selection | undefined, key: string): boolean {
+  return Array.isArray(sel) ? sel.includes(key) : sel === key;
+}
+
+/** Сонголт огт тавиагүй эсэх — бүх мөр бүрэн тод харагдана */
+function nothingPicked(sel: Selection | undefined): boolean {
+  return sel == null || (Array.isArray(sel) && sel.length === 0);
+}
+
+/**
+ * Товшилт дуудагч тал руу ЮУ дамжуулах вэ.
+ *
+ * Нэг утгын горимд сонгогдсоныг дахин товшвол `null` (цуцлах) — хуучин
+ * бүх самбар үүнд тулгуурладаг. ОЛОН утгын горимд харин ҮРГЭЛЖ
+ * түлхүүрээ дамжуулна: аль утгыг хасахыг дуудагч тал мэдэх ёстой тул
+ * `null` нь хангалтгүй мэдээлэл болно.
+ */
+function clickValue(sel: Selection | undefined, key: string): string | null {
+  if (Array.isArray(sel)) return key;
+  return sel === key ? null : key;
+}
+
 export type Datum = {
   key: string;
   label: string;
@@ -25,47 +59,96 @@ export function BarChart({
   selected,
   onSelect,
   formatTick,
+  labels,
+  unit,
+  format = num,
 }: {
   data: Datum[];
   height?: number;
   tone?: string;
-  selected?: string | null;
+  /** Хэмжих нэгж — баганануудын дээр, тоонуудын хажууд */
+  unit?: string;
+  selected?: Selection;
   onSelect?: (key: string | null) => void;
   formatTick?: (d: Datum, i: number) => string;
+  /**
+   * Багана бүрийн утгыг бичих эсэх.
+   *
+   * Багана нь харьцааг хэлдэг ч ЯГ хэдийг хэлдэггүй — хулганы доорх
+   * тайлбарыг уншихын тулд заавал чиглүүлэх шаардлагатай болдог.
+   * Багана цөөн (жил, сар) үед бичвэр нь багтдаг тул тэнд асаана.
+   */
+  labels?: boolean;
+  /** Тооны бичиглэл — шошгонд ба хулганы тайлбарт */
+  format?: (v: number) => string;
 }) {
   const max = Math.max(...data.map((d) => d.value), 1);
   const interactive = Boolean(onSelect);
+  /*
+    Шошгонд зориулж ДЭЭД ТАЛААС зай үлдээнэ.
+
+    Шошго тус бүр өөрийн багананыхаа орой дээр суух ёстой ч хамгийн
+    өндөр багана нь хүрээний тааз хүртэл хүрдэг тул зай нэхэхгүй бол
+    түүний шошго халина. Багануудыг бага зэрэг нам болгосноор БҮХ
+    шошго ижил байрлалд — багананыхаа яг дээр — суух боломжтой болно.
+    Заримыг нь дотор, заримыг нь гадна тавибал эгнээ нь эмх замбараагүй
+    харагдана.
+  */
+  const room = labels ? Math.min(28, (15 / height) * 100) : 0;
+  const scale = (v: number) =>
+    Math.max((v / max) * (100 - room), v > 0 ? 1.5 : 0);
 
   return (
     <div>
+      {unit ? <div className="eyebrow mb-1.5">{unit}</div> : null}
       <div className="flex items-end gap-[3px]" style={{ height }}>
         {data.map((d) => {
-          const on = selected == null || selected === d.key;
+          const on = nothingPicked(selected) || picked(selected, d.key);
           return (
             <button
               key={d.key}
               type="button"
               disabled={!interactive}
-              onClick={() => onSelect?.(selected === d.key ? null : d.key)}
-              title={`${d.label} · ${num(d.value)}`}
+              onClick={() => onSelect?.(clickValue(selected, d.key))}
+              title={`${d.label} · ${format(d.value)}${unit ? ` ${unit}` : ""}`}
               className={cn(
-                "group relative flex h-full flex-1 items-end",
+                /* Хөтчийн анхдагч фокусын хүрээ нь баганыг бүхэлд нь
+                   хүрээлж, сонголтын тэмдэг мэт эндүүрүүлдэг — гарын
+                   хэрэглэгчид зориулж нимгэн зураас үлдээв */
+                "group relative flex h-full flex-1 items-end outline-none",
+                "focus-visible:outline-1 focus-visible:outline-offset-1 focus-visible:outline-(--data)",
                 interactive && "cursor-pointer",
               )}
             >
               <span
                 className="w-full rounded-t-[1px] transition-[height,background-color,opacity]"
                 style={{
-                  height: `${Math.max((d.value / max) * 100, d.value > 0 ? 1.5 : 0)}%`,
+                  height: `${scale(d.value)}%`,
                   background: tone,
                   opacity: on ? 1 : 0.22,
                 }}
               />
+
+              {/* Утгын шошго — багананыхаа яг дээр, бүгд ижил зайд */}
+              {labels && d.value > 0 ? (
+                <span
+                  aria-hidden
+                  className={cn(
+                    "num pointer-events-none absolute inset-x-0 truncate px-[1px] text-center text-[9.5px] leading-none transition-colors",
+                    on ? "text-ink-2" : "text-ink-3/60",
+                  )}
+                  style={{ bottom: `calc(${scale(d.value)}% + 4px)` }}
+                >
+                  {format(d.value)}
+                </span>
+              ) : null}
               {interactive ? (
                 <span
                   aria-hidden
                   className="absolute inset-0 opacity-0 transition-opacity group-hover:opacity-100"
-                  style={{ background: `color-mix(in oklab, ${tone} 12%, transparent)` }}
+                  style={{
+                    background: `color-mix(in oklab, ${tone} 12%, transparent)`,
+                  }}
                 />
               ) : null}
             </button>
@@ -78,13 +161,255 @@ export function BarChart({
             key={d.key}
             className={cn(
               "num flex-1 text-center text-[10px] transition-colors",
-              selected === d.key ? "text-ink" : "text-ink-3",
+              picked(selected, d.key) ? "text-ink" : "text-ink-3",
             )}
           >
             {formatTick ? formatTick(d, i) : d.label}
           </span>
         ))}
       </div>
+    </div>
+  );
+}
+
+/* --------------------------------------------------------------------------
+   Бүлэглэсэн багана — нэг зүсэлт дээр ХЭД ХЭДЭН хэмжилтийг зэрэгцүүлнэ.
+   -------------------------------------------------------------------------- */
+
+/**
+ * Бүлэг бүрд хэдэн багана зэрэгцэнэ.
+ *
+ * Нэг ангилал дээр хоёр, гурван утга (жишээ нь хоёр оны төлбөр) байхад
+ * тэднийг тусдаа диаграм болговол нүд хооронд нь үсэрч харьцуулах
+ * шаардлагатай болно. Зэрэгцүүлснээр ялгаа нь ӨӨРӨӨ харагдана.
+ *
+ * Өнгө нь ЦУВААГ ялгана (ангиллыг биш) тул `colors` нь эрэмбэтэй
+ * шатлал байх ёстой — дуудагч тал давхаргынхаа өнгөний доторх шатлалыг
+ * өгдөг. Тайлбар нь дээрээ суух ба цуваа бүрийн нэрийг өнгөтэй нь
+ * хамт хэлнэ: өнгө нь юу гэсэн үг болохыг таахаар үлдээж болохгүй.
+ */
+export function GroupedBarChart({
+  groups,
+  colors,
+  unit,
+  layout = "vertical",
+  height = 116,
+  format = num,
+  labels,
+  selected,
+  onSelect,
+}: {
+  groups: DatumGroup[];
+  /** Цуваа бүрийн өнгө — бүлэг доторх дараалалтай тохирно */
+  colors: string[];
+  /**
+   * Хэмжих нэгж — тоонуудын ХАЖУУД гарна.
+   *
+   * Гарчиг нь картын нөгөө үзүүрт, жижиг саарал бичвэрээр сууна: "40"
+   * гэсэн тоо мянга уу, сая уу гэдгийг тэндээс хайж уншина гэж
+   * найдаж болохгүй. Нэгж нь тоонуудынхаа дэргэд байх ёстой.
+   */
+  unit?: string;
+  /**
+   * Багана БОСОО эсвэл ХЭВТЭЭ.
+   *
+   * Босоо нь цаг хугацааны дараалалтай, ангилал цөөтэй үед зөв.
+   * Харин ангилал олон, нэр нь урт (дүүрэг, аж ахуйн нэгж) үед
+   * хэвтээ нь хамаагүй дээр: нэр нь хажуудаа бүтнээрээ багтаж, утга
+   * нь мөрийнхөө төгсгөлд бичигдэнэ — нарийн багананд ч шахагдахгүй.
+   */
+  layout?: "vertical" | "horizontal";
+  height?: number;
+  format?: (v: number) => string;
+  /** Багана бүрийн утгыг бичих эсэх (зөвхөн БОСОО горимд) */
+  labels?: boolean;
+  /** Сонгосон БҮЛЭГ (ангилал) */
+  selected?: Selection;
+  onSelect?: (key: string | null) => void;
+}) {
+  /* Хуваарь нь БҮХ бүлэгт нэг: бүлэг тус бүрийг өөрийнх нь дээд утгаар
+     хэмжвэл зэрэгцүүлсний учир алга болно */
+  const max = Math.max(...groups.flatMap((g) => g.rows.map((r) => r.value)), 1);
+  const series = groups[0]?.rows ?? [];
+  const interactive = Boolean(onSelect);
+
+  /* Шошгонд дээрээс зай — хамгийн өндөр багананы тоо халихаас
+     сэргийлнэ (`BarChart`-тай нэг зарчим) */
+  const room = labels ? Math.min(26, (14 / height) * 100) : 0;
+  const scale = (v: number) =>
+    Math.max((v / max) * (100 - room), v > 0 ? 1.5 : 0);
+
+  if (groups.length === 0) {
+    return (
+      <div className="py-5 text-center text-[12px] text-ink-3">
+        Үзүүлэлт байхгүй
+      </div>
+    );
+  }
+
+  return (
+    /* Картаа ДҮҮРГЭНЭ: хэвтээ горимд мөрүүд үлдсэн өндрийг
+       хуваалцах тул карт доод талаасаа хоосон үлдэхгүй */
+    <div className={cn("flex flex-col", layout === "horizontal" && "h-full")}>
+      <div className="mb-2 flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1">
+        {unit ? <span className="eyebrow shrink-0">{unit}</span> : null}
+        {series.map((r, i) => (
+          <span
+            key={r.key}
+            className="flex items-center gap-1.5 text-[10.5px] text-ink-2"
+          >
+            <span
+              aria-hidden
+              className="size-2 shrink-0 rounded-[1px]"
+              style={{ background: colors[i % colors.length] }}
+            />
+            {r.label}
+          </span>
+        ))}
+      </div>
+
+      {layout === "horizontal" ? (
+        /*
+          Нэр нь мөрийнхөө ЗҮҮН талд, баганууд баруун талд.
+
+          Нэрийг дээр нь тавьбал бүлэг бүр хоёр давхар болж, долоон
+          ангилал картдаа багтахаа больж байв. Хажуугийн багана нь
+          бас илүү зөв: бүх бүлгийн баганууд НЭГ эхлэлээс татагдах
+          тул хооронд нь харьцуулах боломжтой болно.
+
+          Бүлгүүдийг хоосон зайгаар биш ЗУРААСААР тусгаарлана —
+          платформын нягт сүлжээний дүрэм.
+        */
+        <div className="-mx-3 -mb-3 flex flex-1 flex-col divide-y divide-line border-t border-line">
+          {groups.map((g) => {
+            const on = nothingPicked(selected) || picked(selected, g.key);
+            return (
+              <button
+                key={g.key}
+                type="button"
+                disabled={!interactive}
+                onClick={() => onSelect?.(clickValue(selected, g.key))}
+                title={`${g.label} · ${format(g.total)}${unit ? ` ${unit}` : ""}`}
+                className={cn(
+                  /* Мөр бүр үлдсэн зайг тэнцүү хуваана — цөөн ангилал
+                     байхад ч карт дүүрэн харагдана */
+                  "flex w-full flex-1 items-center gap-2 px-3 py-1.5 text-left outline-none transition-colors",
+                  "focus-visible:outline-1 focus-visible:-outline-offset-1 focus-visible:outline-(--data)",
+                  interactive && "cursor-pointer hover:bg-paper-hi",
+                )}
+              >
+                <span
+                  className={cn(
+                    "w-[96px] shrink-0 truncate text-[11.5px] leading-none transition-colors",
+                    picked(selected, g.key)
+                      ? "font-medium text-ink"
+                      : "text-ink-2",
+                    !on && "opacity-40",
+                  )}
+                >
+                  {g.label}
+                </span>
+
+                <span className="min-w-0 flex-1 space-y-[3px]">
+                  {g.rows.map((r, i) => (
+                    <span key={r.key} className="flex items-center gap-1.5">
+                      <span className="relative h-[6px] min-w-0 flex-1">
+                        <span
+                          className="absolute inset-y-0 left-0 rounded-[1px] transition-[width,opacity]"
+                          style={{
+                            width: `${Math.max((r.value / max) * 100, r.value > 0 ? 0.8 : 0)}%`,
+                            background: colors[i % colors.length],
+                            opacity: on ? 1 : 0.22,
+                          }}
+                        />
+                      </span>
+                      <span
+                        className={cn(
+                          "num w-[52px] shrink-0 text-right text-[10px] leading-none",
+                          on ? "text-ink-2" : "text-ink-3/60",
+                        )}
+                      >
+                        {format(r.value)}
+                      </span>
+                    </span>
+                  ))}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      ) : (
+        <>
+          <div className="flex items-end gap-2" style={{ height }}>
+            {groups.map((g) => {
+              const on = nothingPicked(selected) || picked(selected, g.key);
+              return (
+                <button
+                  key={g.key}
+                  type="button"
+                  disabled={!interactive}
+                  onClick={() => onSelect?.(clickValue(selected, g.key))}
+                  title={`${g.label} · ${format(g.total)}${unit ? ` ${unit}` : ""}`}
+                  className={cn(
+                    "group flex h-full flex-1 items-end gap-[2px] outline-none",
+                    "focus-visible:outline-1 focus-visible:outline-offset-1 focus-visible:outline-(--data)",
+                    interactive && "cursor-pointer",
+                  )}
+                >
+                  {g.rows.map((r, i) => (
+                    <span
+                      key={r.key}
+                      /* Багана бүр ӨӨРИЙН утгаа хэлнэ: шошго багтахгүй
+                     нарийн үед энэ нь тоог мэдэх цорын ганц зам */
+                      title={`${g.label} · ${r.label} · ${format(r.value)}${unit ? ` ${unit}` : ""}`}
+                      className="relative flex h-full flex-1 items-end"
+                    >
+                      <span
+                        className="w-full rounded-t-[1px] transition-[height,opacity]"
+                        style={{
+                          height: `${scale(r.value)}%`,
+                          background: colors[i % colors.length],
+                          opacity: on ? 1 : 0.22,
+                        }}
+                      />
+                      {labels && r.value > 0 ? (
+                        <span
+                          aria-hidden
+                          className={cn(
+                            /* ТАСЛАХГҮЙ: "9,451" нь "9…" болбол тоо биш
+                           шуугиан болно. Багтахгүй бол дуудагч тал
+                           шошгыг огт асаахгүй */
+                            "num pointer-events-none absolute inset-x-0 text-center text-[9px] leading-none whitespace-nowrap",
+                            on ? "text-ink-2" : "text-ink-3/60",
+                          )}
+                          style={{ bottom: `calc(${scale(r.value)}% + 3px)` }}
+                        >
+                          {format(r.value)}
+                        </span>
+                      ) : null}
+                    </span>
+                  ))}
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="mt-1.5 flex gap-2">
+            {groups.map((g) => (
+              <span
+                key={g.key}
+                title={g.label}
+                className={cn(
+                  "flex-1 truncate text-center text-[10px] transition-colors",
+                  picked(selected, g.key) ? "text-ink" : "text-ink-3",
+                )}
+              >
+                {g.label}
+              </span>
+            ))}
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -148,7 +473,7 @@ export function AreaChart({
   data: Datum[];
   height?: number;
   tone?: string;
-  selected?: string | null;
+  selected?: Selection;
   onSelect?: (key: string | null) => void;
   formatTick?: (d: Datum, i: number) => string;
   /** Hover самбарт гарах хэмжих нэгж */
@@ -162,7 +487,11 @@ export function AreaChart({
   const interactive = Boolean(onSelect);
 
   if (data.length < 2) {
-    return <div className="py-6 text-center text-[12px] text-ink-3">Үзүүлэлт байхгүй</div>;
+    return (
+      <div className="py-6 text-center text-[12px] text-ink-3">
+        Үзүүлэлт байхгүй
+      </div>
+    );
   }
 
   const W = 100;
@@ -174,7 +503,11 @@ export function AreaChart({
   const line = smoothPath(pts);
   const area = `${line} L ${W},${height} L 0,${height} Z`;
 
-  const selIdx = selected == null ? -1 : data.findIndex((d) => d.key === selected);
+  /* Олон сонголттой үед ЭХНИЙХ нь голын бичвэрийг эзэлнэ — бөгжний
+     нүх нэгээс олон утга багтаахгүй */
+  const selIdx = nothingPicked(selected)
+    ? -1
+    : data.findIndex((d) => picked(selected, d.key));
   const active = hover ?? selIdx;
 
   const ticks = data.map((d, i) => (formatTick ? formatTick(d, i) : d.label));
@@ -267,7 +600,7 @@ export function AreaChart({
               tabIndex={interactive ? 0 : -1}
               onMouseEnter={() => setHover(i)}
               onFocus={() => setHover(i)}
-              onClick={() => onSelect?.(selected === d.key ? null : d.key)}
+              onClick={() => onSelect?.(clickValue(selected, d.key))}
               aria-label={`${d.label}: ${num(d.value)}`}
               className={cn("h-full flex-1", interactive && "cursor-pointer")}
             />
@@ -286,7 +619,7 @@ export function AreaChart({
             share={total ? (data[hover].value / total) * 100 : 0}
             delta={hover > 0 ? data[hover].value - data[hover - 1].value : null}
             unit={unit}
-            selected={selected === data[hover].key}
+            selected={picked(selected, data[hover].key)}
           />
         ) : null}
       </div>
@@ -361,7 +694,8 @@ function Tooltip({
   // Ирмэг рүү ойртохоор голлуулахаа больж, дотогшоо түшинэ
   const t = index / (count - 1);
   const anchor = t < 0.22 ? "left" : t > 0.78 ? "right" : "center";
-  const shift = anchor === "left" ? "0%" : anchor === "right" ? "-100%" : "-50%";
+  const shift =
+    anchor === "left" ? "0%" : anchor === "right" ? "-100%" : "-50%";
 
   /*
     Оргил цэг дээр самбар нь панелаас гарч дээшээ халхлахгүйн тулд доош эргэнэ.
@@ -382,10 +716,17 @@ function Tooltip({
       <div className="elevated min-w-[124px] rounded-xs border border-line-2 bg-paper-2/95 backdrop-blur-md">
         <div
           className="flex items-center gap-1.5 border-b border-line px-2 py-1"
-          style={{ background: `color-mix(in oklab, ${tone} 10%, transparent)` }}
+          style={{
+            background: `color-mix(in oklab, ${tone} 10%, transparent)`,
+          }}
         >
-          <span className="size-1.5 rounded-full" style={{ background: tone }} />
-          <span className="num text-[11.5px] font-medium text-ink">{label}</span>
+          <span
+            className="size-1.5 rounded-full"
+            style={{ background: tone }}
+          />
+          <span className="num text-[11.5px] font-medium text-ink">
+            {label}
+          </span>
           {selected ? (
             <span className="ml-auto text-[9.5px] tracking-[0.1em] text-ink-3 uppercase">
               сонгосон
@@ -395,7 +736,10 @@ function Tooltip({
 
         <div className="px-2 py-1.5">
           <div className="flex items-baseline gap-1">
-            <span className="num text-[17px] leading-none font-medium" style={{ color: tone }}>
+            <span
+              className="num text-[17px] leading-none font-medium"
+              style={{ color: tone }}
+            >
               {num(value)}
             </span>
             <span className="text-[10.5px] text-ink-3">{unit}</span>
@@ -407,8 +751,7 @@ function Tooltip({
               <span
                 className="num"
                 style={{
-                  color:
-                    delta !== 0 ? "var(--data)" : "var(--ink-3)",
+                  color: delta !== 0 ? "var(--data)" : "var(--ink-3)",
                 }}
               >
                 {delta > 0 ? "▲" : delta < 0 ? "▼" : "="} {num(Math.abs(delta))}
@@ -440,7 +783,7 @@ export function RowChart({
   tone?: string;
   /** Мөр бүрд өөр өнгө өгөх бол (жишээ нь газрын зурагтай тааруулах) */
   colorOf?: (d: Datum) => string;
-  selected?: string | null;
+  selected?: Selection;
   onSelect?: (key: string | null) => void;
   max?: number;
   /**
@@ -468,26 +811,32 @@ export function RowChart({
     guide != null && guide > base && guide < max ? at(guide) : null;
 
   if (data.length === 0) {
-    return <div className="py-5 text-center text-[12px] text-ink-3">Үзүүлэлт байхгүй</div>;
+    return (
+      <div className="py-5 text-center text-[12px] text-ink-3">
+        Үзүүлэлт байхгүй
+      </div>
+    );
   }
 
   return (
     <div className="space-y-1">
       {data.map((d) => {
-        const on = selected == null || selected === d.key;
+        const on = nothingPicked(selected) || picked(selected, d.key);
         const color = colorOf ? colorOf(d) : tone;
         return (
           <button
             key={d.key}
             type="button"
-            onClick={() => onSelect?.(selected === d.key ? null : d.key)}
+            onClick={() => onSelect?.(clickValue(selected, d.key))}
             className="group block w-full text-left"
           >
             <div className="flex items-baseline justify-between gap-2">
               <span
                 className={cn(
                   "flex min-w-0 items-center gap-1.5 text-[12px] transition-colors",
-                  selected === d.key ? "font-medium text-ink" : "text-ink-2",
+                  picked(selected, d.key)
+                    ? "font-medium text-ink"
+                    : "text-ink-2",
                   !on && "opacity-40",
                 )}
               >
@@ -503,7 +852,7 @@ export function RowChart({
               <span
                 className={cn(
                   "num shrink-0 text-[11.5px] transition-colors",
-                  selected === d.key ? "text-ink" : "text-ink-3",
+                  picked(selected, d.key) ? "text-ink" : "text-ink-3",
                   !on && "opacity-40",
                 )}
               >
@@ -535,7 +884,10 @@ export function RowChart({
                   <span
                     /* Анивчилт нь inline `opacity`-г дардаг тул бүдгэрсэн
                        (сонголтоос гадуур) мөрөнд огт өгөхгүй */
-                    className={cn("h-full transition-[width,opacity]", on && "alert-pulse")}
+                    className={cn(
+                      "h-full transition-[width,opacity]",
+                      on && "alert-pulse",
+                    )}
                     style={{
                       width: `${at(d.value) - guideAt}%`,
                       background: color,
@@ -569,7 +921,10 @@ export function RowChart({
 
 /** Бөгжний нэг зүсэм — гадна нумаар очиж, дотуур нумаар буцна */
 function donutSlice(c: number, R: number, r: number, a0: number, a1: number) {
-  const p = (rad: number, a: number) => [c + rad * Math.cos(a), c + rad * Math.sin(a)];
+  const p = (rad: number, a: number) => [
+    c + rad * Math.cos(a),
+    c + rad * Math.sin(a),
+  ];
   const big = a1 - a0 > Math.PI ? 1 : 0;
   const [x0, y0] = p(R, a0);
   const [x1, y1] = p(R, a1);
@@ -613,13 +968,17 @@ export function PieChart({
    */
   format?: (v: number) => string;
   size?: number;
-  selected?: string | null;
+  selected?: Selection;
   onSelect?: (key: string | null) => void;
 }) {
   const total = data.reduce((a, d) => a + d.value, 0);
 
   if (data.length === 0 || total === 0) {
-    return <div className="py-5 text-center text-[12px] text-ink-3">Үзүүлэлт байхгүй</div>;
+    return (
+      <div className="py-5 text-center text-[12px] text-ink-3">
+        Үзүүлэлт байхгүй
+      </div>
+    );
   }
 
   /*
@@ -702,7 +1061,7 @@ export function PieChart({
           />
         ) : (
           slices.map(({ d, i, a0, a1 }) => {
-            const on = selected == null || selected === d.key;
+            const on = nothingPicked(selected) || picked(selected, d.key);
             return (
               <path
                 key={d.key}
@@ -713,7 +1072,7 @@ export function PieChart({
                 strokeOpacity={on ? lineOp(i) : 0.15}
                 strokeWidth={1}
                 className={onSelect ? "cursor-pointer" : undefined}
-                onClick={() => onSelect?.(selected === d.key ? null : d.key)}
+                onClick={() => onSelect?.(clickValue(selected, d.key))}
               >
                 <title>{`${d.label} · ${format(d.value)}`}</title>
               </path>
@@ -734,12 +1093,12 @@ export function PieChart({
 
       <div className="min-w-0 flex-1 space-y-1.5">
         {data.map((d, i) => {
-          const on = selected == null || selected === d.key;
+          const on = nothingPicked(selected) || picked(selected, d.key);
           return (
             <button
               key={d.key}
               type="button"
-              onClick={() => onSelect?.(selected === d.key ? null : d.key)}
+              onClick={() => onSelect?.(clickValue(selected, d.key))}
               className={cn(
                 "flex w-full items-baseline gap-2 text-left transition-opacity",
                 !on && "opacity-40",
@@ -758,7 +1117,9 @@ export function PieChart({
               <span
                 className={cn(
                   "min-w-0 flex-1 truncate text-[12px]",
-                  selected === d.key ? "font-medium text-ink" : "text-ink-2",
+                  picked(selected, d.key)
+                    ? "font-medium text-ink"
+                    : "text-ink-2",
                 )}
               >
                 {d.label}
@@ -766,7 +1127,7 @@ export function PieChart({
               <span
                 className={cn(
                   "num shrink-0 text-[12px]",
-                  selected === d.key ? "text-ink" : "text-ink-2",
+                  picked(selected, d.key) ? "text-ink" : "text-ink-2",
                   /* Хоёр тоо зэрэг гарвал зүсмийн хэмжээг заасан нь
                      сүүлдээ биш, урд нь бүдэг байрлана */
                   note && "text-[11px] text-ink-3",
@@ -778,7 +1139,9 @@ export function PieChart({
                 <span
                   className={cn(
                     "num shrink-0 text-[12px]",
-                    selected === d.key ? "font-medium text-ink" : "text-ink-2",
+                    picked(selected, d.key)
+                      ? "font-medium text-ink"
+                      : "text-ink-2",
                   )}
                 >
                   {note(d)}
@@ -820,9 +1183,9 @@ export function GroupedRowChart({
 }: {
   groups: DatumGroup[];
   tone?: string;
-  selected?: string | null;
+  selected?: Selection;
   onSelect?: (key: string | null) => void;
-  selectedGroup?: string | null;
+  selectedGroup?: Selection;
   onSelectGroup?: (key: string | null) => void;
   /** Эхлээд ямар бүлэг задарсан байх вэ */
   defaultOpen?: "all" | "first" | "none";
@@ -894,7 +1257,11 @@ export function GroupedRowChart({
   const max = Math.max(...groups.flatMap((g) => g.rows.map((r) => r.value)), 1);
 
   if (groups.length === 0) {
-    return <div className="py-5 text-center text-[12px] text-ink-3">Үзүүлэлт байхгүй</div>;
+    return (
+      <div className="py-5 text-center text-[12px] text-ink-3">
+        Үзүүлэлт байхгүй
+      </div>
+    );
   }
 
   return (
@@ -902,92 +1269,98 @@ export function GroupedRowChart({
       {groups.map((g, i) => {
         const shown = isOpen(g.key, i);
         return (
-        <div key={g.key}>
-          {/*
+          <div key={g.key}>
+            {/*
             Гарчгийн мөр ХОЁР үйлдэлтэй: сум нь задлах/хураах, нэр нь
             шүүх. Нэг товч дээр хоёуланг нь ачаалбал "би шүүх гэсэн юм,
             яагаад хураачихав" гэсэн эргэлзээ төрнө.
           */}
-          <div className="mb-1.5 flex items-center gap-1.5 border-b border-line pb-1">
-            <button
-              type="button"
-              onClick={() => toggle(g.key)}
-              aria-expanded={shown}
-              aria-label={shown ? "Хураах" : "Задлах"}
-              className="shrink-0 text-ink-3 transition-colors hover:text-ink"
-            >
-              <ChevronDown
-                size={12}
-                strokeWidth={2}
-                className={cn("transition-transform", !shown && "-rotate-90")}
-              />
-            </button>
-            <button
-              type="button"
-              disabled={!onSelectGroup}
-              onClick={() => onSelectGroup?.(selectedGroup === g.key ? null : g.key)}
-              className={cn(
-                "flex min-w-0 flex-1 items-baseline gap-2 text-left",
-                onSelectGroup && "cursor-pointer",
-              )}
-            >
-              <span
+            <div className="mb-1.5 flex items-center gap-1.5 border-b border-line pb-1">
+              <button
+                type="button"
+                onClick={() => toggle(g.key)}
+                aria-expanded={shown}
+                aria-label={shown ? "Хураах" : "Задлах"}
+                className="shrink-0 text-ink-3 transition-colors hover:text-ink"
+              >
+                <ChevronDown
+                  size={12}
+                  strokeWidth={2}
+                  className={cn("transition-transform", !shown && "-rotate-90")}
+                />
+              </button>
+              <button
+                type="button"
+                disabled={!onSelectGroup}
+                onClick={() =>
+                  onSelectGroup?.(clickValue(selectedGroup, g.key))
+                }
                 className={cn(
-                  "eyebrow min-w-0 flex-1 truncate transition-colors",
-                  selectedGroup === g.key && "text-data",
+                  "flex min-w-0 flex-1 items-baseline gap-2 text-left",
+                  onSelectGroup && "cursor-pointer",
                 )}
               >
-                {g.label}
-              </span>
-              <span className="num shrink-0 text-[11.5px] text-ink-2">{num(g.total)}</span>
-            </button>
-          </div>
-
-          <div className={cn("space-y-1 pl-2", !shown && "hidden")}>
-            {g.rows.map((d) => {
-              const on = selected == null || selected === d.key;
-              return (
-                <button
-                  key={d.key}
-                  type="button"
-                  onClick={() => onSelect?.(selected === d.key ? null : d.key)}
-                  className="group block w-full text-left"
+                <span
+                  className={cn(
+                    "eyebrow min-w-0 flex-1 truncate transition-colors",
+                    picked(selectedGroup, g.key) && "text-data",
+                  )}
                 >
-                  <div className="flex items-baseline justify-between gap-2">
-                    <span
-                      className={cn(
-                        "min-w-0 truncate text-[12px] transition-colors",
-                        selected === d.key ? "font-medium text-ink" : "text-ink-2",
-                        !on && "opacity-40",
-                      )}
-                    >
-                      {d.label}
-                    </span>
-                    <span
-                      className={cn(
-                        "num shrink-0 text-[11.5px] transition-colors",
-                        selected === d.key ? "text-ink" : "text-ink-3",
-                        !on && "opacity-40",
-                      )}
-                    >
-                      {num(d.value)}
-                    </span>
-                  </div>
-                  <div className="mt-[3px] h-[2px] w-full overflow-hidden rounded-[1px] bg-paper-hi">
-                    <div
-                      className="h-full transition-[width,opacity]"
-                      style={{
-                        width: `${(d.value / max) * 100}%`,
-                        background: tone,
-                        opacity: on ? 1 : 0.3,
-                      }}
-                    />
-                  </div>
-                </button>
-              );
-            })}
+                  {g.label}
+                </span>
+                <span className="num shrink-0 text-[11.5px] text-ink-2">
+                  {num(g.total)}
+                </span>
+              </button>
+            </div>
+
+            <div className={cn("space-y-1 pl-2", !shown && "hidden")}>
+              {g.rows.map((d) => {
+                const on = nothingPicked(selected) || picked(selected, d.key);
+                return (
+                  <button
+                    key={d.key}
+                    type="button"
+                    onClick={() => onSelect?.(clickValue(selected, d.key))}
+                    className="group block w-full text-left"
+                  >
+                    <div className="flex items-baseline justify-between gap-2">
+                      <span
+                        className={cn(
+                          "min-w-0 truncate text-[12px] transition-colors",
+                          picked(selected, d.key)
+                            ? "font-medium text-ink"
+                            : "text-ink-2",
+                          !on && "opacity-40",
+                        )}
+                      >
+                        {d.label}
+                      </span>
+                      <span
+                        className={cn(
+                          "num shrink-0 text-[11.5px] transition-colors",
+                          picked(selected, d.key) ? "text-ink" : "text-ink-3",
+                          !on && "opacity-40",
+                        )}
+                      >
+                        {num(d.value)}
+                      </span>
+                    </div>
+                    <div className="mt-[3px] h-[2px] w-full overflow-hidden rounded-[1px] bg-paper-hi">
+                      <div
+                        className="h-full transition-[width,opacity]"
+                        style={{
+                          width: `${(d.value / max) * 100}%`,
+                          background: tone,
+                          opacity: on ? 1 : 0.3,
+                        }}
+                      />
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
           </div>
-        </div>
         );
       })}
     </div>
@@ -1011,7 +1384,7 @@ export function CategoryChart({
   pieMax = 4,
 }: {
   data: Datum[];
-  selected?: string | null;
+  selected?: Selection;
   onSelect?: (key: string | null) => void;
   tone?: string;
   pieMax?: number;

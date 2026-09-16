@@ -10,15 +10,9 @@ import { ASSESSMENT_SERVICES } from "@/lib/assessment";
 import { DAMAGED_SERVICE } from "@/lib/damaged";
 import { ECO_SERVICE, PARCELS_SERVICE } from "@/lib/eco-corridors";
 import { FLOODPLAIN_SERVICE } from "@/lib/floodplains";
-import { FOREST_FUND_SERVICE } from "@/lib/forest-fund";
-import { FOREST_GOODS_SERVICE } from "@/lib/forest-goods";
-import { FOREST_TYPES_SERVICE } from "@/lib/forest-types";
+import { FOREST_LAYERS, layerName, layerService } from "@/lib/forest-layers";
 import { chemicalService } from "@/lib/chemicals";
 import { REPAIR_SERVICE } from "@/lib/repair-shops";
-import {
-  PROTECTED_MAPPING_SERVICE,
-  PROTECTED_OFFICIAL_SERVICE,
-} from "@/lib/protected-areas";
 import { LICENSES_SERVICE } from "@/lib/licenses";
 import { LICHENS_SERVICE } from "@/lib/lichens";
 import { MARMOT_SERVICES } from "@/lib/marmots";
@@ -187,36 +181,14 @@ export const SOURCES: Source[] = [
     kind: "ArcGIS FeatureServer",
     url: MINERALS_SERVICE,
   },
-  {
+  /* Ойн найман давхарга — нэр, хаяг хоёулаа бүртгэлээс гарна тул
+     давхарга нэмэхэд энэ жагсаалт өөрөө уртасна */
+  ...FOREST_LAYERS.map((id) => ({
     slug: "oi",
-    name: "Ойн сангийн талбай",
-    kind: "ArcGIS FeatureServer",
-    url: FOREST_FUND_SERVICE,
-  },
-  {
-    slug: "oi",
-    name: "Ойн төрлийн зураглал",
-    kind: "ArcGIS FeatureServer",
-    url: FOREST_TYPES_SERVICE,
-  },
-  {
-    slug: "oi",
-    name: "Ногоон бүс, ойн дагалт баялгийн тархалт",
-    kind: "ArcGIS FeatureServer",
-    url: FOREST_GOODS_SERVICE,
-  },
-  {
-    slug: "oi",
-    name: "Тусгай хамгаалалттай газар — албан бүртгэл",
-    kind: "ArcGIS FeatureServer",
-    url: `${PROTECTED_OFFICIAL_SERVICE}/2`,
-  },
-  {
-    slug: "oi",
-    name: "Тусгай хамгаалалт — зураглал (талбай, шугам, цэг)",
-    kind: "ArcGIS FeatureServer",
-    url: PROTECTED_MAPPING_SERVICE,
-  },
+    name: layerName(id),
+    kind: "ArcGIS Enterprise FeatureServer",
+    url: layerService(id),
+  })),
   {
     slug: "hyanalt",
     name: "Авто засварын үйлчилгээний цэг",

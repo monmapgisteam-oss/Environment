@@ -172,7 +172,14 @@ export function PickList({
   format,
 }: {
   items: { key: string; label: string; value: number }[];
-  selected: string | null;
+  /**
+   * Сонгосон утга, эсвэл ОЛОН утга.
+   *
+   * Жагсаалт өгвөл цэс нь олон сонголтын горимд шилжинэ: товшсон утга
+   * нь `onPick` руу ҮРГЭЛЖ өөрөө очих ба нэмэх үү, хасах уу гэдгийг
+   * дуудагч тал шийднэ (аль утгыг хасахыг `null` хэлж чадахгүй).
+   */
+  selected: string | string[] | null;
   onPick: (key: string | null) => void;
   searchable?: boolean;
   /** Хажуугийн тоог хэрхэн бичих — өгөөгүй бол түүхий утга. Тоо нь
@@ -180,6 +187,9 @@ export function PickList({
   format?: (v: number) => string;
 }) {
   const [q, setQ] = React.useState("");
+  const many = Array.isArray(selected);
+  const isOn = (key: string) =>
+    many ? (selected as string[]).includes(key) : selected === key;
   const shown = q
     ? items.filter((i) => i.label.toLowerCase().includes(q.toLowerCase()))
     : items;
@@ -202,15 +212,28 @@ export function PickList({
           shown.map((i) => (
             <button
               key={i.key}
-              onClick={() => onPick(selected === i.key ? null : i.key)}
+              onClick={() => onPick(many || !isOn(i.key) ? i.key : null)}
               className={cn(
                 "flex w-full items-baseline justify-between gap-2 rounded-xs px-1.5 py-1 text-left text-[12px] transition-colors",
-                selected === i.key
+                isOn(i.key)
                   ? "bg-data/12 font-medium text-ink"
                   : "text-ink-2 hover:bg-paper-hi hover:text-ink",
               )}
             >
-              <span className="truncate">{i.label}</span>
+              <span className="flex min-w-0 items-center gap-1.5">
+                {/* Олон сонголтын горимд хайрцаг — нэг утга сонгох
+                    цэснээс ялгарч байх ёстой */}
+                {many ? (
+                  <span
+                    aria-hidden
+                    className={cn(
+                      "size-2.5 shrink-0 rounded-[2px] border",
+                      isOn(i.key) ? "border-data bg-data" : "border-line-2",
+                    )}
+                  />
+                ) : null}
+                <span className="truncate">{i.label}</span>
+              </span>
               <span className="num shrink-0 text-[11px] text-ink-3">
                 {format ? format(i.value) : i.value}
               </span>

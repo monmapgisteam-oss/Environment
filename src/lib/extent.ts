@@ -21,6 +21,19 @@ export class Bounds {
   add(lon: number, lat: number): void {
     /* Бөглөгдөөгүй координатыг алгасна — ганц NaN бүх хүрээг устгана */
     if (!Number.isFinite(lon) || !Number.isFinite(lat)) return;
+    /*
+      ⚠ ХҮРЭЭНЭЭС ГАДУУРХ утгыг мөн алгасна.
+
+      Эх сурвалж дээр заримдаа проекцлогдсон (метр) эсвэл эвдэрсэн
+      координат үлддэг: нэг ийм цэг хүрээг сая градус болгож,
+      `fitBounds` нь "Invalid LngLat latitude" гэж ШИДНЭ — улмаас
+      газрын зураг бүхэлдээ унаж, самбар хоосон харагдана (ойн
+      ялгаралын давхарга дээр яг ингэж гарсан).
+
+      Ганц эвдэрсэн цэгээс болж бүх давхарга харагдахгүй байхаас
+      түүнийг алгассан нь дээр.
+    */
+    if (Math.abs(lon) > 180 || Math.abs(lat) > 90) return;
     if (lon < this.w) this.w = lon;
     if (lon > this.e) this.e = lon;
     if (lat < this.s) this.s = lat;
@@ -53,7 +66,13 @@ export class Bounds {
   get(pad = 0.004): Extent | null {
     if (this.empty) return null;
     const p = Math.max(pad, (this.e - this.w) * 0.08, (this.n - this.s) * 0.08);
-    return [this.w - p, this.s - p, this.e + p, this.n + p];
+    /* Зай нэмэхэд туйлаас халихгүй байх ёстой */
+    return [
+      Math.max(this.w - p, -180),
+      Math.max(this.s - p, -90),
+      Math.min(this.e + p, 180),
+      Math.min(this.n + p, 90),
+    ];
   }
 }
 
