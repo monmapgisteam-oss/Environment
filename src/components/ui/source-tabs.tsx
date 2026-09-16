@@ -114,12 +114,13 @@ export function SourceTabs<T extends string>({
       role="tablist"
       aria-label={label}
       /*
-        Таб олон болоход (зургаа хүртэл) нэг мөрөнд шахагдана. Нэрийг нь
-        таслах нь зөв — гэхдээ нарийн дэлгэц дээр танигдахааргүй болтол
-        биш. Тиймээс доод хязгаар тавьж, багтахгүй бол ХӨНДЛӨН ГҮЙНЭ:
-        мөр даган бөөгнөрөх нь энэ өндөр багатай самбарт зохимжгүй.
+        ⚠ ТАБ ТЭНЦҮҮ ӨРГӨН АВАХГҮЙ (2026-09-16). Урьд нь `flex-1` байсан
+        тул найман таб болоход бүгд нарийсаж, нэр ба тайлбар ХОЁУЛАА
+        таслагдаж байв ("Долоон давхарга · эрсдэ…"). Одоо таб бүр
+        агуулгынхаа өргөнтэй; багтахгүй бол ХӨНДЛӨН ГҮЙНЭ — мөр даган
+        бөөгнөрөх нь энэ өндөр багатай самбарт зохимжгүй.
       */
-      className="flex shrink-0 gap-1.5 overflow-x-auto rounded-xs border border-line bg-paper-2 p-1"
+      className="flex shrink-0 gap-1 overflow-x-auto rounded-xs border border-line bg-paper-2 p-1"
     >
       {tabs.map((t) => {
         const checkable = Boolean(t.checkable);
@@ -134,7 +135,7 @@ export function SourceTabs<T extends string>({
             {...(checkable ? { "aria-checked": ticked } : { "aria-selected": on })}
             onClick={() => (checkable ? onToggle?.(t.id) : onChange(t.id))}
             className={cn(
-              "flex min-w-[128px] flex-1 items-center gap-2 rounded-xs border px-2.5 py-1.5 text-left transition-colors",
+              "flex shrink-0 items-center gap-2 rounded-xs border px-2.5 py-1.5 text-left transition-colors",
               on ? "border-data/45 bg-data/10" : "border-transparent hover:bg-paper-hi",
             )}
           >
@@ -157,7 +158,7 @@ export function SourceTabs<T extends string>({
                 className={cn("shrink-0", on ? "text-data" : "text-ink-3")}
               />
             )}
-            <span className="min-w-0">
+            <span className="min-w-0 max-w-[200px]">
               <span
                 className={cn(
                   "block truncate text-[12.5px] leading-none",
@@ -166,9 +167,17 @@ export function SourceTabs<T extends string>({
               >
                 {t.label}
               </span>
-              <span className="mt-1 block truncate text-[10.5px] leading-none text-ink-3">
-                {t.note}
-              </span>
+              {/*
+                ⚠ Тайлбар ЗӨВХӨН СОНГОСОН таб дээр. Уншиж чадахгүй долоон
+                тайлбар нь мэдээлэл биш дуу чимээ; тайлбар нь "би одоо юу
+                харж байна вэ" гэдгийн тодотгол тул сонголтод л хамаарна.
+                Мөн сонгоогүй табууд нарийсаж, нэр нь таслагдахаа болино.
+              */}
+              {on && t.note ? (
+                <span className="mt-1 block truncate text-[10.5px] leading-none text-ink-3">
+                  {t.note}
+                </span>
+              ) : null}
             </span>
           </button>
         );
