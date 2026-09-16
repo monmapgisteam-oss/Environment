@@ -20,8 +20,7 @@ import {
   MEASURES,
   PI_CLASSES,
   PI_LIMIT,
-  POINTS,
-  SNAPSHOT_AT,
+  fetchNeutralization,
   exceedCount,
   measuredCount,
   piColor,
@@ -94,6 +93,22 @@ function mapPointsOf(rows: NeutralPoint[]): MapPoints {
 }
 
 export function NeutralizationDashboard() {
+  /* Дата нь шинэ порталаас ирдэг болсон тул ачаалах, алдааны төлөвтэй.
+     Урьд нь кодод бичигдсэн байсан — гэрчилгээний саад арилсны дараа
+     амьд холболт руу шилжсэн */
+  const [rows, setRows] = React.useState<NeutralPoint[] | null>(null);
+  const [error, setError] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    let alive = true;
+    fetchNeutralization()
+      .then((d) => alive && setRows(d))
+      .catch((e: Error) => alive && setError(e.message));
+    return () => {
+      alive = false;
+    };
+  }, []);
+
   const [measure, setMeasure] = React.useState<MeasureId>("pi");
   /** Хөндлөн харьцуулах элемент — бүх багана дээр зэрэг тодорно */
   const [element, setElement] = React.useState<number | null>(null);
@@ -103,22 +118,27 @@ export function NeutralizationDashboard() {
   /** Хулгана дагасан хөвөгч тайлбар — байрлалыг өөрөө удирдана */
   const tip = useMapTip();
 
-  const points = React.useMemo(() => mapPointsOf(POINTS), []);
+  /* Ачаалагдаагүй үед хоосон жагсаалт — доорх `useMemo`-нууд бүгд
+     хоосон дээр аюулгүй ажиллана, хамгаалалтын блок нь зурагдахаас нь
+     өмнө таслана */
+  const sites = React.useMemo(() => rows ?? [], [rows]);
+
+  const points = React.useMemo(() => mapPointsOf(sites), [sites]);
   const visible = React.useMemo(
-    () => Uint32Array.from(POINTS.map((_, i) => i)),
-    [],
+    () => Uint32Array.from(sites.map((_, i) => i)),
+    [sites],
   );
 
   /* Цэгийн код нь цорын ганц таних тэмдэг тул зураг дээр шууд бичнэ —
      дөрвөн цэг тул шошго хоорондоо давхцахгүй */
   const labels = React.useMemo(
-    () => ({ text: POINTS.map((p) => p.code), minzoom: 0 }),
-    [],
+    () => ({ text: sites.map((p) => p.code), minzoom: 0 }),
+    [sites],
   );
 
   const hovered = React.useMemo(
-    () => (tip.oid == null ? null : (POINTS.find((p) => p.oid === tip.oid) ?? null)),
-    [tip.oid],
+    () => (tip.oid == null ? null : (sites.find((p) => p.oid === tip.oid) ?? null)),
+    [tip.oid, sites],
   );
 
   const highlight = React.useMemo<[number, number] | null>(
@@ -136,14 +156,14 @@ export function NeutralizationDashboard() {
    */
   const max = React.useMemo(() => {
     let m = 0;
-    for (const p of POINTS) {
+    for (const p of sites) {
       for (let i = 0; i < ELEMENTS.length; i++) {
         const v = valueOf(p, i, measure);
         if (v != null && v > m) m = v;
       }
     }
     return m;
-  }, [measure]);
+  }, [measure, sites]);
 
   /* ---------------- Индикатор ---------------- */
   const stats = React.useMemo(() => {
@@ -152,7 +172,7 @@ export function NeutralizationDashboard() {
     let topPi = 0;
     let topAt = "";
     let topEl = "";
-    for (const p of POINTS) {
+    for (const p of sites) {
       exceed += exceedCount(p);
       measured += measuredCount(p);
       for (let i = 0; i < ELEMENTS.length; i++) {
@@ -170,11 +190,11 @@ export function NeutralizationDashboard() {
       topPi,
       topAt,
       topEl,
-      districts: new Set(POINTS.map((p) => p.district)).size,
+      districts: new Set(sites.map((p) => p.district)).size,
     };
-  }, []);
+  }, [sites]);
 
-  const selected = picked == null ? null : (POINTS.find((p) => p.oid === picked) ?? null);
+  const selected = picked == null ? null : (sites.find((p) => p.oid === picked) ?? null);
   const activeCount = (element != null ? 1 : 0) + (picked != null ? 1 : 0);
 
   function reset() {
@@ -183,6 +203,24 @@ export function NeutralizationDashboard() {
   }
 
   const m = MEASURES.find((x) => x.id === measure)!;
+
+  if (error || !rows) {
+    return (
+      <div className="flex h-full items-center justify-center rounded-xs border border-line bg-paper-2">
+        {error ? (
+          <div className="text-center">
+            <p className="text-[14px] font-medium">Эх сурвалжийн мэдээллийг татаж чадсангүй</p>
+            <p className="num mt-2 text-[12px] text-ink-3">{error}</p>
+          </div>
+        ) : (
+          <span className="flex items-center gap-2 text-[13.5px] text-ink-3">
+            <Loader2 size={14} className="animate-spin" />
+            Саармагжуулалтын хэмжилт татаж байна…
+          </span>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-2.5">
@@ -238,7 +276,7 @@ export function NeutralizationDashboard() {
           <Stat
             icon={MapPin}
             label="Хэмжилт хийсэн цэг"
-            value={num(POINTS.length)}
+            value={num(sites.length)}
             note={`${stats.districts} дүүрэг`}
           />
           <Stat icon={FlaskConical} label="Хэмжсэн элемент" value={num(ELEMENTS.length)} />
@@ -370,7 +408,7 @@ export function NeutralizationDashboard() {
               дэвсгэр нь өөрөө зураасын өнгө болно.
             */}
             <div className="grid min-w-[400px] grid-cols-2 gap-px bg-line">
-              {POINTS.map((p) => (
+              {sites.map((p) => (
                 <Profile
                   key={p.oid}
                   point={p}
@@ -387,13 +425,9 @@ export function NeutralizationDashboard() {
         </Card>
       </Columns>
 
-      {/*
-        Эх сурвалжийн бичиг. Гэрчилгээний асуудлыг ИЛ бичнэ — дата хэзээ
-        хуулагдсаныг мэдэхгүй бол хуучирсан эсэхийг шүүх боломжгүй.
-      */}
       <p className="shrink-0 px-0.5 text-[10.5px] leading-none text-ink-3">
-        Дата: нийслэлийн байгаль орчны GIS сервер · {num(POINTS.length)} цэг ·{" "}
-        {ELEMENTS.length} элемент · {SNAPSHOT_AT}-нд хуулсан хувилбар
+        Дата: нийслэлийн байгаль орчны GIS сервер · {num(sites.length)} цэг ·{" "}
+        {ELEMENTS.length} элемент
         {selected ? ` · сонгосон: ${selected.code}` : ""}
       </p>
     </div>
