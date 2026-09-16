@@ -10,9 +10,27 @@
  * Геометр нь ЖИЖИГ (бүтнээрээ 4KB) тул ерөнхийлөх шаардлагагүй — татмын
  * давхаргаас ялгаатай нь хүрээ нь энгийн, цөөн оройтой.
  *
- * Эх сурвалж нь KMZ файлаас хөрвүүлэгдсэн (`FolderPath` талбар үүнийг
- * хэлнэ) тул `Name` нь БҮТЭН ТОМ үсгээр бичигдсэн. Дахин найруулахгүй —
- * зөвхөн илүү зайг нь цэвэрлэнэ.
+ * Эх сурвалж нь KMZ файлаас хөрвүүлэгдсэн тул нэр нь БҮТЭН ТОМ үсгээр
+ * бичигдсэн. Дахин найруулахгүй — зөвхөн илүү зайг нь цэвэрлэнэ.
+ *
+ * ⚠ **ЭХ СУРВАЛЖ ПОРТАЛД ШИЛЖСЭН** (хэрэглэгчийн шийдвэр, 2026-09-16):
+ * ArcGIS Online дээрх `Eco_korridor_2024`-ээс `environment.ub.gov.mn`-ий
+ * `A00_Ecology_korridor_2024` руу. Гурван олон өнцөгт ХЭВЭЭР; талбарын
+ * нэр л өөрчлөгдсөн (`Name` → `name`, `Дүүрэг` → `дүүрэг`, `Талбай` →
+ * `талбай`).
+ *
+ * ⚠⚠ **`Бүс` ТАЛБАРЫН ОРЛОГЧ БАЙХГҮЙ.** Шинэ давхаргын `bus_ner` нь
+ * гурвын ЗӨВХӨН нэгд бөглөгдсөн бөгөөд тэнд нь `дүүрэг`-ийн утгыг
+ * давтдаг тул задаргаа болохгүй. Оронд нь КОРИДОРЫН НЭР бүсийн
+ * тэмдэглэгээ болов: хуучин `Бүс` нь ("БЗД бүс", "А бүс", "Б бүс") мөн
+ * коридор тутамд НЭГ утгатай байсан тул задаргааны утга өөрчлөгдөхгүй.
+ *
+ * Шинэ давхаргад нэгтгэсэн үзүүлэлтүүд НЭМЭГДСЭН боловч гурвын нэгд л
+ * бөглөгдсөн тул уншаагүй: `negj_talbar` (нэгж талбарын тоо),
+ * `ortson_ga`, `irgen_too` / `turiin_too` / `huuliin_too`,
+ * `nzd_too` / `dzd_too` / `szd_too`, `ezemshih_too` / `ashiglah_too`,
+ * `nuhon_olgovor`. Давхардсан тоо харуулахаас татгалзав — доорх нэгж
+ * талбарын задаргаа нь `Parcel_all`-аас БОДИТООР тоологдоно.
  *
  * ## Давхцаж буй нэгж талбар
  *
@@ -26,17 +44,30 @@
  * ширхэг. Хүрээний геометр URL-д багтахааргүй урт тул `POST`-оор.
  */
 
-const HOST = "https://services-ap1.arcgis.com/ACqsMOmNLi5wIdIh/arcgis/rest/services";
-const LAYER = "Eco_korridor_2024";
+import { arcgisJson } from "@/lib/arcgis";
+import { layerService } from "@/lib/portal-layers";
 
-export const ECO_SERVICE = `${HOST}/${LAYER}/FeatureServer/0`;
+/**
+ * ⚠ Нэгж талбарын давхарга (`Parcel_all`) нь ArcGIS Online дээр ХЭВЭЭР —
+ * хэлтэс зөвхөн коридорыг порталд шилжүүлсэн. Огтлолцлын асуулга нь
+ * коридорын ГЕОМЕТРИЙГ явуулдаг болохоос үйлчилгээ рүү заадаггүй тул
+ * хоёр өөр сервер дээр байх нь саад биш.
+ */
+const HOST = "https://services-ap1.arcgis.com/ACqsMOmNLi5wIdIh/arcgis/rest/services";
+
+export const ECO_SERVICE = `${layerService("A00_Ecology_korridor_2024")}/0`;
 
 export type EcoCorridor = {
   oid: number;
   /** "БЗД ЭКО КОРИДОР 3" */
   name: string;
   district: string;
-  /** Бүсийн тэмдэглэгээ — "А бүс", "Б бүс", "БЗД бүс" */
+  /**
+   * Бүсийн тэмдэглэгээ.
+   *
+   * Эх сурвалжид тусдаа багана БАЙХГҮЙ болсон тул коридорын нэр
+   * (`name`) үүнийг үүрнэ — коридор тутамд нэг утга.
+   */
   zone: string;
   /** Талбай, га */
   ha: number;
@@ -76,11 +107,10 @@ export type EcoData = {
 };
 
 type Props = {
-  OBJECTID: number;
-  Name?: string;
-  Дүүрэг?: string;
-  Бүс?: string;
-  Талбай?: number;
+  objectid: number;
+  name?: string;
+  дүүрэг?: string;
+  талбай?: number;
 };
 
 /** Илүү зайг цэвэрлэнэ — эх бичвэрийг найруулахгүй */
@@ -91,31 +121,30 @@ export async function fetchEcoCorridors(): Promise<EcoData> {
     `${ECO_SERVICE}/query?` +
     new URLSearchParams({
       where: "1=1",
-      outFields: "OBJECTID,Name,Дүүрэг,Бүс,Талбай",
+      outFields: "objectid,name,дүүрэг,талбай",
       outSR: "4326",
-      orderByFields: "OBJECTID",
+      orderByFields: "objectid",
       resultRecordCount: "2000",
       f: "geojson",
     });
 
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`Экологийн коридор татагдсангүй (${res.status})`);
-  const json = (await res.json()) as {
+  const json = await arcgisJson<{
     features?: { properties: Props; geometry: GeoJSON.Geometry | null }[];
-  };
+  }>(url, "Экологийн коридор");
 
   const rows: EcoCorridor[] = [];
   const shapes: GeoJSON.Feature[] = [];
 
   for (const f of json.features ?? []) {
     const p = f.properties;
-    const oid = Number(p.OBJECTID);
+    const oid = Number(p.objectid);
+    const name = tidy(p.name) || "—";
     rows.push({
       oid,
-      name: tidy(p.Name) || "—",
-      district: tidy(p.Дүүрэг) || "Тодорхойгүй",
-      zone: tidy(p.Бүс) || "Тодорхойгүй",
-      ha: Number(p.Талбай) || 0,
+      name,
+      district: tidy(p.дүүрэг) || "Тодорхойгүй",
+      zone: name,
+      ha: Number(p.талбай) || 0,
     });
 
     if (!f.geometry) continue;
@@ -171,18 +200,16 @@ async function corridorRings(): Promise<{ oid: number; rings: number[][][] }[]> 
     `${ECO_SERVICE}/query?` +
     new URLSearchParams({
       where: "1=1",
-      outFields: "OBJECTID",
+      outFields: "objectid",
       outSR: "4326",
       f: "json",
     });
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`Коридорын хүрээ татагдсангүй (${res.status})`);
-  const json = (await res.json()) as {
-    features?: { attributes: { OBJECTID: number }; geometry?: { rings: number[][][] } }[];
-  };
+  const json = await arcgisJson<{
+    features?: { attributes: { objectid: number }; geometry?: { rings: number[][][] } }[];
+  }>(url, "Коридорын хүрээ");
   return (json.features ?? [])
     .filter((f) => f.geometry)
-    .map((f) => ({ oid: f.attributes.OBJECTID, rings: f.geometry!.rings }));
+    .map((f) => ({ oid: f.attributes.objectid, rings: f.geometry!.rings }));
 }
 
 async function fetchParcels(): Promise<{

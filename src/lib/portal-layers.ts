@@ -1,17 +1,16 @@
 /**
- * Ойн хэлтэс — нэг зураг, найман давхарга.
+ * Порталын давхаргын НЭГДСЭН ХӨДӨЛГҮҮР.
  *
- * Өмнөх дөрвөн самбар давхарга тус бүрд НЭГ таб өгдөг байсан: нэг дор
- * ганцыг л харах боломжтой тул "ялгарал ба хэсэглэл хоорондоо яаж
- * харьцдаг вэ" гэсэн асуулт хариултгүй үлддэг байв. Энэ багц нь эсрэг
- * зарчимтай — НЭГ зураг дээр давхаргуудаа асааж, унтрааж харна.
+ * `environment.ub.gov.mn` порталд хостлогдсон feature service бүр ижил
+ * зан төлөвтэй: токен шаардана, бүтцээ өөрөө хэлдэг, талбарын нэр нь
+ * жижиг үсэгтэй. Тиймээс хэлтэс бүрд кодыг хуулахын оронд ГАНЦ
+ * хөдөлгүүр бичиж, хэлтэс нь зөвхөн БҮРТГЭЛЭЭ (`LayerSet`) өгнө.
  *
- * ⚠ **БҮГД ТОКЕН ШААРДАНА.** Давхаргууд `environment.ub.gov.mn` порталд
- * `organization` түвшинд хуваалцагдсан тул нэвтрээгүй хөтөч юу ч
- * татахгүй. Токеныг `lib/arcgis.ts` өөрөө хавсаргана — энд тусгай зүйл
- * хийх шаардлагагүй.
+ * ⚠ **БҮГД ТОКЕН ШААРДАНА.** Давхаргууд `organization` түвшинд
+ * хуваалцагдсан тул нэвтрээгүй хөтөч юу ч татахгүй. Токеныг
+ * `lib/arcgis.ts` өөрөө хавсаргана — энд тусгай зүйл хийх шаардлагагүй.
  *
- * ⚠ **ТАЛБАРЫГ УРЬДЧИЛЖ ТААМАГЛААГҮЙ.** Эдгээр давхаргын бүтцийг эх
+ * ⚠ **ТАЛБАРЫГ УРЬДЧИЛЖ ТААМАГЛААГҮЙ.** Давхаргын бүтцийг эх
  * сурвалжаас ӨӨРӨӨС нь уншина (`fetchLayerInfo`): нэр, геометрийн
  * төрөл, бичлэгийн тоо, талбарын жагсаалт бүгд үйлчилгээний өөрийн
  * тодорхойлолтоос ирнэ. Ингэснээр нэр, талбар нь өөрчлөгдвөл самбар
@@ -39,133 +38,116 @@ const PAGE = 2000;
  * бөгөөд утгыг нь тайлбарлаагүй тул БҮЛЭГЛЭХГҮЙ, дарааллыг нь л
  * хадгална.
  */
-export const FOREST_LAYERS = [
-  "O01_THGN_polygon",
-  /* `O01_THGN_hil_tseg` — ХАСАГДСАН (хэрэглэгчийн шийдвэр,
-     2026-09-15). Хилийн цэг нь дээрх талбайн ирмэгийг тэмдэглэсэн
-     710 цэг: талбай нь өөрөө зурагдаж байхад тэдгээр нь давхардсан
-     мэдээлэл болно. */
-  "O03_tulbur_duureg",
-  "O03_buffer_100m",
-  "O03_oi_yalgaral",
-  "O03_oi_heseglel",
-  "O03_nogoon_bus_heseg",
-  "O03_dagalt_baylag",
-] as const;
-
-/* --------------------------------------------------------------------------
-   БАЙГАЛЬ ОРЧНЫ ҮНЭЛГЭЭ, УУР АМЬСГАЛЫН ХЭЛТСИЙН БҮЛГҮҮД
-
-   ⚠ БҮЛЭГ НЬ ҮЙЛЧИЛГЭЭНИЙ УГТВАРААР тодорхойлогдоно (хэрэглэгчийн
-   дүрэм, 2026-09-16): `B06_*` бүгд нэг утга агуулгатай тул НЭГ самбарт
-   орно. Шинэ давхарга ирэхэд зөвхөн доорх жагсаалтад нэмнэ — самбар нь
-   талбарын бүтцийг ArcGIS-ээс өөрөө уншдаг тул код бичих шаардлагагүй.
-
-   ⚠ Давхаргад ашиглахуйц талбар байхгүй байх нь ХЭВИЙН — тэр
-   тохиолдолд газрын зураг дээр л харагдана, диаграм гарахгүй.
-   -------------------------------------------------------------------------- */
-
-export const FLOOD_LAYERS = [
-  "B06_uyr_ersdelt_talbai",
-  "B06_uyr_ersdelt_tseg",
-  "B06_uyrt_urtseun_negj_talbai",
-  "B06_us_halisan_talbai_2024",
-  "B06_khoroo_ersdel",
-  "B06_barilga_ih_ersdel",
-  "B06_ail_urh_ersdel",
-] as const;
-
-export const GAS_LAYERS = ["B07_gas_tuhuurumj"] as const;
-
-export const GREEN_LAYERS = [
-  "B11_nogoon_baiguulamj",
-  "B11_tsetserlegt_hureelen",
-] as const;
-
-export const WASTE_LAYERS = [
-  "B12_hogiin_tseg_polygon",
-  "B12_hogiin_tseg_point",
-] as const;
-
-export const ECO_LAYERS = [
-  "B13_2024_он_bichilgarden",
-  "B13_2023_он_bichilgarden",
-  "B13_Duguin_Zam_line",
-  "B13_Yavgan_Zam_line",
-  "B13_Orshuulga_polygon",
-  "B13_Orshuulga_point",
-  "B13_Tsergiin_angi_polygon",
-  "B13_Tsergiin_angi_point",
-] as const;
-
-export type LayerId =
-  | (typeof FOREST_LAYERS)[number]
-  | (typeof FLOOD_LAYERS)[number]
-  | (typeof GAS_LAYERS)[number]
-  | (typeof GREEN_LAYERS)[number]
-  | (typeof WASTE_LAYERS)[number]
-  | (typeof ECO_LAYERS)[number];
-
 /**
- * ХАРАГДАХ НЭР.
+ * Нэг хэлтсийн ДАВХАРГЫН БҮРТГЭЛ.
  *
- * Үйлчилгээ өөрийгөө `O01_THGN_polygon` гэж нэрлэдэг — энэ нь
- * серверийн нэр бөгөөд хэрэглэгчид юу ч хэлэхгүй. Самбар дээр
- * латин товчлол гаргах нь платформын "товчлол задална" дүрмийг ч
- * зөрчинө.
- *
- * ⚠ Эдгээр нь ОРЧУУЛГА биш, үйлчилгээний нэрийн задаргаа: `THGN` →
- * тусгай хамгаалалттай газар нутаг, `tulbur_duureg` → төлбөр,
- * дүүргээр. Утгыг нь эх сурвалж тайлбарлаагүй тул нэрнээс нь
- * ЦААШ таамаглаагүй.
- *
- * Энд бичигдсэн нэр нь эх сурвалжийн хуудсанд (`lib/sources.ts`) мөн
- * хэрэглэгддэг — хоёр газар тусад нь бичвэл эрт орой зөрнө.
+ * Хэлтэс бүр өөрийн жагсаалт, нэр, өнгө, хасалтын дүрмээ энд өгнө —
+ * бусад бүх зүйл (татац, задаргаа, диаграм, шүүлт) хуваалцагдана.
  */
-export const LAYER_NAMES: Record<LayerId, string> = {
-  O01_THGN_polygon: "Тусгай хамгаалалттай газар нутаг",
-  O03_tulbur_duureg: "Ойн төлбөр, дүүргээр",
-  O03_buffer_100m: "100 метрийн хамгаалалтын зурвас",
-  O03_oi_yalgaral: "Ойн ялгарал",
-  O03_oi_heseglel: "Ойн хэсэглэл",
-  O03_nogoon_bus_heseg: "Ногоон бүсийн хэсэг",
-  O03_dagalt_baylag: "Ойн дагалт баялаг",
-
-  B06_uyr_ersdelt_talbai: "Үерийн эрсдэлт талбай",
-  B06_uyr_ersdelt_tseg: "Үерийн эрсдэлт цэг",
-  B06_uyrt_urtseun_negj_talbai: "Үерт өртсөн нэгж талбар",
-  B06_us_halisan_talbai_2024: "Ус халисан талбай, 2024",
-  B06_khoroo_ersdel: "Хорооны эрсдэл",
-  B06_barilga_ih_ersdel: "Их эрсдэлт барилга",
-  B06_ail_urh_ersdel: "Эрсдэлт айл өрх",
-
-  B07_gas_tuhuurumj: "Хийн төхөөрөмж",
-
-  B11_nogoon_baiguulamj: "Ногоон байгууламж",
-  B11_tsetserlegt_hureelen: "Цэцэрлэгт хүрээлэн",
-
-  B12_hogiin_tseg_polygon: "Хогийн цэгийн талбай",
-  B12_hogiin_tseg_point: "Хогийн цэг",
-
-  "B13_2024_он_bichilgarden": "Бичил цэцэрлэг, 2024",
-  "B13_2023_он_bichilgarden": "Бичил цэцэрлэг, 2023",
-  B13_Duguin_Zam_line: "Дугуйн зам",
-  B13_Yavgan_Zam_line: "Явган зам",
-  B13_Orshuulga_polygon: "Оршуулгын газрын талбай",
-  B13_Orshuulga_point: "Оршуулгын газар",
-  B13_Tsergiin_angi_polygon: "Цэргийн ангийн талбай",
-  B13_Tsergiin_angi_point: "Цэргийн анги",
+export type LayerSet = {
+  /** Хадгалалтын түлхүүрийн орон зай (`localStorage`, `Columns`) */
+  key: string;
+  /**
+   * Шүүлтүүрийн мөрөнд гарах гарчиг.
+   *
+   * ⚠ Урьд нь энэ нь "Ойн давхарга" гэж КОДОД БИЧИГДСЭН байсан тул
+   * самбарыг амьтан, ногоон бүсийн хэлтэс хуваалцмагц тэдгээр дээр
+   * ч "Ойн давхарга" гэж гарч байв. Хэлтэс бүр өөрийнхөө нэрийг өгнө.
+   */
+  title?: string;
+  /** Үйлчилгээний нэрс — жагсаалтын ДАРААЛАЛ нь өнгөний дараалал мөн */
+  layers: readonly string[];
+  /**
+   * ПОРТАЛААС ГАДУУРХ давхаргын БҮТЭН хаяг — `id` → `FeatureServer`.
+   *
+   * Давхаргууд ихэвчлэн `environment.ub.gov.mn`-ий `Hosted` доор
+   * сууна ({@link layerService}) ч бүгд биш: Survey123-ийн маягтууд
+   * ArcGIS Online дээр үүсдэг бөгөөд тэндээс нь зөөх боломжгүй
+   * тохиолдол бий.
+   *
+   * ⚠⚠ **ТОКЕН ХӨНДЛӨН ГАРАХГҮЙ.** Сессийн токен нь зөвхөн
+   * `environment.ub.gov.mn`-д хүчинтэй ({@link SECURED_HOSTS}) —
+   * ArcGIS Online бол ӨӨР систем, өөр байгууллага. Тиймээс энд
+   * бичигдэх үйлчилгээ нь **нээлттэй хуваалцагдсан байх ЁСТОЙ**;
+   * үгүй бол давхарга 499 буцааж, самбар алдааг нь мөрөндөө ил
+   * харуулна (чимээгүй тэг БИШ — `arcgisJson` барина).
+   */
+  services?: Record<string, string>;
+  /**
+   * ХАРАГДАХ НЭР.
+   *
+   * Үйлчилгээ өөрийгөө `O01_THGN_polygon` гэж нэрлэдэг — энэ нь
+   * серверийн нэр бөгөөд хэрэглэгчид юу ч хэлэхгүй. Самбар дээр латин
+   * товчлол гаргах нь платформын "товчлол задална" дүрмийг ч зөрчинө.
+   *
+   * ⚠ Эдгээр нь ОРЧУУЛГА биш, үйлчилгээний нэрийн задаргаа. Утгыг нь
+   * эх сурвалж тайлбарлаагүй тул нэрнээс нь ЦААШ таамаглахгүй.
+   *
+   * Энд бичигдсэн нэр нь эх сурвалжийн хуудсанд (`lib/sources.ts`) мөн
+   * хэрэглэгддэг — хоёр газар тусад нь бичвэл эрт орой зөрнө.
+   */
+  names: Record<string, string>;
+  /**
+   * Өнгөний ӨНЦГҮҮД — давхарга бүрд нэг.
+   *
+   * Хэлтсийн `--d-*` өнгөний эргэн тойронд сонгоно: давхаргууд нэг
+   * зураг дээр нийлдэг тул тэднийг ялгах ёстой ч хэлтсийнхээ өнгөний
+   * гэр бүлээс салах ёсгүй.
+   */
+  hues: number[];
+  /**
+   * Давхаргуудыг НЭЭХЭД НЬ шууд асаах эсэх.
+   *
+   * Олон давхаргатай нийлмэл бүрдэл ХООСОН эхэлнэ — юуг нь харахыг
+   * хэрэглэгч сонгоно. Харин сэдэв тус бүрд зориулсан цонх дээр
+   * сонгох зүйл байхгүй: тэнд байгаа бүх давхарга тэр сэдвийнх тул
+   * хоосон зураг гаргаад гараар асаалгах нь утгагүй.
+   *
+   * ⚠ Энэ нь давхаргын ТООНООС гардаггүй — БҮРТГЭЛИЙН шийдвэр.
+   * "Нэг давхаргатай бол асаа" гэсэн дүрэм нь хоёр, гурван давхаргатай
+   * сэдвийн цонхыг (усны хамгаалалтын гурван бүс гэх мэт) хоосон
+   * үлдээж байв.
+   */
+  openAll?: boolean;
+  /**
+   * ХЭМЖИЛТЭД ОРОХГҮЙ талбар — нэрээр нь.
+   *
+   * Хэлтсийн шийдвэр (жишээ нь дам гаргасан утга) тул датаны шинж
+   * БИШ: утга нь эх сурвалжид, бичлэгийн дэлгэрэнгүйд хэвээр байна.
+   */
+  skipMeasure?: RegExp;
+  /**
+   * ХЭМЖИЛТЭД ОРОХГҮЙ нэгж — талбарын БҮТЭН НЭР дээр шалгагдана.
+   *
+   * Бичиглэл нь жигд бус ("м³ нийт", "м3 2023", "куб.м") тул задалсан
+   * нэгж дээр тааруулах гэвэл шинэ бичиглэл гарах бүрд диаграм
+   * чимээгүй эргэж ирнэ.
+   */
+  skipUnit?: RegExp;
 };
 
 /** Давхаргын харагдах нэр — бүртгэлд байхгүй бол үйлчилгээнийхээр */
-export function layerName(id: string, fallback?: string): string {
-  return LAYER_NAMES[id as LayerId] ?? fallback?.trim() ?? id;
+export function layerName(
+  set: LayerSet,
+  id: string,
+  fallback?: string,
+): string {
+  return set.names[id] ?? fallback?.trim() ?? id;
 }
 
 export function layerService(id: string): string {
-  /* ⚠ Зарим үйлчилгээний нэр КИРИЛЛ үсэгтэй ("B13_2023_он_bichilgarden")
-     тул хаягт кодчилол ЗААВАЛ — эс тэгвээс зарим орчинд хүсэлт унана */
-  return `${HOSTING}/Hosted/${encodeURIComponent(id)}/FeatureServer`;
+  return `${HOSTING}/Hosted/${id}/FeatureServer`;
+}
+
+/**
+ * Бүрдэл дэх давхаргын хаяг.
+ *
+ * Бүртгэлд бүтэн хаяг бичигдсэн бол түүнийг, үгүй бол порталын
+ * жишгээр угсарсныг буцаана — дуудагч тал давхарга хаана байгааг
+ * мэдэх шаардлагагүй.
+ */
+export function serviceOf(set: LayerSet, id: string): string {
+  return set.services?.[id] ?? layerService(id);
 }
 
 /** Эх сурвалжийн талбарын тодорхойлолт */
@@ -179,6 +161,8 @@ export type LayerField = {
 
 export type LayerInfo = {
   id: string;
+  /** Аль хэлтсийн бүртгэлээс ирсэн — хасалтын дүрмүүд эндээс */
+  set: LayerSet;
   /** Давхаргын өөрийн нэр — үйлчилгээний тодорхойлолтоос */
   name: string;
   /** `Polygon` · `Polyline` · `Point` */
@@ -211,6 +195,18 @@ export type LayerInfo = {
  */
 const SKIP_FIELDS = /^(OBJECTID|FID|GlobalID|Shape_?_?(Area|Length))$/i;
 
+/**
+ * Esri-ийн ЗАСВАРЛАГЧ МӨРДӨХ талбарууд.
+ *
+ * Survey123-ийн маягт болон хостлогдсон давхарга бүрд автоматаар
+ * нэмэгддэг: хэн, хэзээ бичсэнийг заана — судалгааны сэдвийн тухай
+ * ЮУ Ч ХЭЛЭХГҮЙ. Хасахгүй бол `Creator` нь "mobile_worker2" гэсэн
+ * утгуудаар диаграм болж, `CreationDate` нь маягтын өөрийн
+ * `Бүртгэсэн огноо`-г давхардуулж хугацааны хоёр цуваа гаргана.
+ */
+const EDITOR_FIELDS =
+  /^(Creator|Editor|CreationDate|EditDate|created_(user|date)|last_edited_(user|date))$/i;
+
 /** KML-ээс хөрвүүлсэн давхаргын үлдэц талбарууд — утга агуулдаггүй */
 const KML_NOISE =
   /^(SymbolID|AltMode|Base|Clamped|Extruded|Snippet|PopupInfo)$/i;
@@ -235,10 +231,11 @@ type LayerMeta = {
  * `count` нь тодорхойлолтод байдаггүй.
  */
 export async function fetchLayerInfo(
+  set: LayerSet,
   id: string,
   signal?: AbortSignal,
 ): Promise<LayerInfo> {
-  const service = layerService(id);
+  const service = serviceOf(set, id);
 
   const svc = await arcgisJson<ServiceMeta>(`${service}?f=json`, id, {
     signal,
@@ -257,7 +254,12 @@ export async function fetchLayerInfo(
   const all = meta.fields ?? [];
 
   const fields: LayerField[] = all
-    .filter((f) => !SKIP_FIELDS.test(f.name) && !KML_NOISE.test(f.name))
+    .filter(
+      (f) =>
+        !SKIP_FIELDS.test(f.name) &&
+        !KML_NOISE.test(f.name) &&
+        !EDITOR_FIELDS.test(f.name),
+    )
     .map((f) => ({
       name: f.name,
       alias: (f.alias ?? "").trim() || f.name,
@@ -301,9 +303,10 @@ export async function fetchLayerInfo(
 
   return {
     id,
+    set,
     /* Үйлчилгээний өөрийн нэр нь техникийн (`O01_THGN_polygon`) тул
        харагдах нэрийг бүртгэлээс авна */
-    name: layerName(id, meta.name ?? first.name),
+    name: layerName(set, id, meta.name ?? first.name),
     geometry: String(meta.geometryType ?? first.geometryType ?? "").replace(
       "esriGeometry",
       "",
@@ -341,7 +344,7 @@ export async function fetchLayerFeatures(
   info: LayerInfo,
   signal?: AbortSignal,
 ): Promise<LayerFeatures> {
-  const service = layerService(info.id);
+  const service = serviceOf(info.set, info.id);
   const oid = info.objectIdField;
 
   /* Дүрслэлд хэрэглэгдэх талбар + талбайн эх сурвалж. Нэрийг бүгдийг
@@ -535,41 +538,6 @@ const MAX_MEASURES = 4;
  * давхаргад дөрвөн диаграм гаргахад арваад талбар шаардагдана.
  */
 const MAX_MEASURE_FIELDS = 12;
-
-/**
- * ХЭМЖИЛТЭД ОРОХГҮЙ талбар.
- *
- * **НЭГ ТАЛБАЙ ХАНГАЛТТАЙ** (хэрэглэгчийн шийдвэр, 2026-09-15).
- * Эх сурвалж нэг л талбайг гурван янзаар хэмждэг — тогтоолоор,
- * геодезийн аргаар, зурагнаас тоологдсоноор — дээр нь тэдгээрийн
- * хувийн зөрүүг бичдэг. Диаграмд ЗӨВХӨН ТОГТООЛЫНХ үлдэнэ: бусад нь
- * дам гаргасан утга бөгөөд нэг зүйлийг дөрвөн удаа харуулах нь
- * баруун баганыг дүүргэхээс өөр хариулт өгөхгүй. Зөрүү нь мөн
- * геодезийн талбайгаас тооцогддог тул эх нь харагдахгүй байхад хувь
- * нь гарах учир дутагдалтай.
- *
- * ⚠ Энэ нь датаны шинж БИШ, ХЭРЭГЛЭГЧИЙН СОНГОЛТ — утга нь эх
- * сурвалжид, бичлэгийн дэлгэрэнгүйд хэвээр байна. Кодод талбарын нэр
- * бичихгүй дүрмийн үл хамаарах цорын ганц зүйл нь энэ бөгөөд тиймээс
- * нэрийг нь ХАТУУ биш, үгийн ҮНДСЭЭР нь таньж байгаа (эх сурвалж
- * кирилл, латин алинаар ч бичсэн байж болно).
- */
-const SKIP_MEASURE = /геодез|geodez|geodet|зөрүү|zoruu|arcgis/i;
-
-/**
- * ЭЗЭЛХҮҮНИЙ хэмжилт — диаграмд орохгүй.
- *
- * Модны эзэлхүүний (м³) диаграмыг хэлтэс хэрэггүй гэж үзсэн
- * (хэрэглэгчийн шийдвэр, 2026-09-15).
- *
- * ⚠ Шалгалт нь БҮТЭН НЭР дээр явагдана, задалсан нэгж дээр биш:
- * бичиглэл нь жигд бус ("м³ нийт", "м3 2023", "куб.м") бөгөөд
- * задаргаа бүрд нь тааруулах гэвэл шинэ бичиглэл гарах бүрд диаграм
- * чимээгүй эргэж ирнэ. Нэгж нь ҮГИЙН ЗААГААР хүрээлэгдсэн байх ёстой
- * тул "см3", "м30" зэрэг санамсаргүй таарал үүсэхгүй.
- */
-const SKIP_UNIT =
-  /(^|[\s,.(])\s*(м\s*[3³]|куб\.?\s*м|м\.?\s*куб)\s*([\s,.)]|$)/i;
 
 /** Цаг хугацааны талбарын дээд тоо */
 const MAX_DATES = 2;
@@ -1177,7 +1145,8 @@ function pickMeasures(
   for (const f of info.fields) {
     if (out.length >= MAX_MEASURE_FIELDS) break;
     if (!NUMERIC.test(f.type)) continue;
-    if (SKIP_MEASURE.test(f.alias) || SKIP_MEASURE.test(f.name)) continue;
+    const skip = info.set.skipMeasure;
+    if (skip?.test(f.alias) || skip?.test(f.name)) continue;
 
     const values = rows.map((r) => numberOf(r[f.name]));
     const present = values.filter((v): v is number => v != null);
@@ -1189,7 +1158,7 @@ function pickMeasures(
        Тэдгээр нь ХУГАЦААНЫ диаграм болж тусдаа гарна */
     if (calendarOf(f, present)) continue;
 
-    if (SKIP_UNIT.test(f.alias)) continue;
+    if (info.set.skipUnit?.test(f.alias)) continue;
 
     const { unit, name } = unitOf(f.alias);
     /* Хувийг НЭМЭХГҮЙ — дунджаар нь. Хоёр талбайн зөрүүний хувийг

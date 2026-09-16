@@ -2,7 +2,7 @@
 
 import dynamic from "next/dynamic";
 import { Loader2 } from "lucide-react";
-import { FOREST_LAYERS } from "@/lib/layers";
+import { FOREST } from "@/lib/forest-layers";
 
 /*
   Ойн хэлтэс — НЭГ харагдац.
@@ -24,19 +24,16 @@ const spinner = () => (
 
 const LayersDashboard = dynamic(
   () =>
-    import("@/components/layers/dashboard").then((m) => {
-      const D = m.LayersDashboard;
-      const Forest = () => <D layers={FOREST_LAYERS} />;
-      Forest.displayName = "ForestLayersDashboard";
-      return { default: Forest };
-    }),
+    import("@/components/layers/portal-dashboard").then(
+      (m) => m.PortalLayersDashboard,
+    ),
   { ssr: false, loading: spinner },
 );
 
 export function OiWorkspace() {
   return (
     <div className="flex h-full min-h-0 flex-col gap-2.5">
-      <LayersDashboard />
+      <LayersDashboard set={FOREST} />
     </div>
   );
 }

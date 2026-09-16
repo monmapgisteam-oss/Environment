@@ -40,9 +40,10 @@ import {
   type ChartKind,
   type LayerLabels,
   type LayerFeatures,
+  type LayerSet,
   type Row,
   type LayerInfo,
-} from "@/lib/layers";
+} from "@/lib/portal-layers";
 import { cn, num } from "@/lib/utils";
 
 const LayerMap = dynamic(
@@ -92,23 +93,20 @@ function oklchHex(L: number, C: number, H: number): string {
 }
 
 /**
- * Давхарга бүрийн ӨНГӨНИЙ ӨНЦӨГ — ойн ногооны гэр бүл.
+ * Давхаргын үндсэн өнгө — жагсаалт, толгойн зураас, ганц өнгөт горим.
  *
- * Найман давхаргыг нэг зураг дээр ялгах ёстой тул өнгө нь энд ТАНИХ
- * ТЭМДЭГ болно (хэмжигдэхүүн БИШ) — `lib/tone-ramp.ts`-ийн зөвтгөлтэй
- * ижил үндэслэл. Ойн давхаргууд платформ дээр ногоон гэж тогтсон
- * (`wells/colors.ts` доторх `FOREST`) тул өнцгүүдийг тэр өнгөний эргэн
- * тойронд барив.
+ * Өнцгийг бүртгэл (`LayerSet.hues`) өгнө: давхаргуудыг нэг зураг дээр
+ * ялгах ёстой тул өнгө нь энд ТАНИХ ТЭМДЭГ болно (хэмжигдэхүүн БИШ) —
+ * `lib/tone-ramp.ts`-ийн зөвтгөлтэй ижил үндэслэл.
  *
  * Зөвхөн ӨНЦГИЙГ хадгалсан нь санаатай: давхарга доторх ангиллыг мөн
  * өнгөөр ялгах шаардлага гардаг бөгөөд тэдгээр нь ИЖИЛ өнцөг дээр
  * гэрэлтэлтээрээ сална. Ингэснээр ангилал олонтой ч давхарга нь
  * өөрөө таних өнгөө алдахгүй.
  */
-const LAYER_HUE = [175, 168, 160, 152, 145, 138, 132, 128];
-
-/** Давхаргын үндсэн өнгө — жагсаалт, толгойн зураас, ганц өнгөт горим */
-const LAYER_TONE = LAYER_HUE.map((h) => oklchHex(0.74, 0.15, h));
+function toneOfHue(hue: number): string {
+  return oklchHex(0.74, 0.15, hue);
+}
 
 /**
  * Давхарга доторх ангиллын өнгөний шатлал.
@@ -233,23 +231,32 @@ function labelFor(hit: Loaded, oid: number): string {
  * мегабайт дэмий явна. Нэг удаа татсаныг санах ойд үлдээнэ — дахин
  * асаахад шууд гарна.
  */
-/**
- * Давхаргын үзүүлэгч — НЭГ зураг, олон давхарга.
- *
- * ⚠ Давхаргын жагсаалт нь ПРОПООР ирнэ, кодод шууд бичигдэхгүй. Анх ойн
- * хэлтэст зориулж бичигдсэн боловч бүтэц нь сэдвээс хамаарахгүй: талбарын
- * тодорхойлолтыг ArcGIS-ээс өөрөө уншиж диаграмыг гаргадаг тул ямар ч
- * бүлэгт тохирно. Байгаль орчны үнэлгээний таван бүлэг мөн үүнийг
- * хэрэглэдэг (`lib/layers.ts` доторх бүртгэлүүд).
- */
-export function LayersDashboard({ layers }: { layers: readonly string[] }) {
+export function PortalLayersDashboard({ set }: { set: LayerSet }) {
   /** Давхарга бүрийн тодорхойлолт — эхэнд бүгдийг НЭГ удаа уншина */
   const [infos, setInfos] = React.useState<Record<string, LayerInfo>>({});
   const [failed, setFailed] = React.useState<Record<string, string>>({});
   const [ready, setReady] = React.useState(false);
 
-  /** Асаалттай давхаргууд */
-  const [on, setOn] = React.useState<string[]>([]);
+  /* Асаалттай давхаргууд. Эхлэх төлөвийг бүртгэл шийднэ
+     ({@link LayerSet.openAll}) — давхаргын тоо БИШ */
+  const [on, setOn] = React.useState<string[]>(() =>
+    set.openAll ? [...set.layers] : [],
+  );
+
+  /*
+    ДАВХАРГА СОНГОХ ХЭСЭГ ГАРАХ ЭСЭХ.
+
+    ⚠ Сэдэв тус бүрд зориулсан цонх дээр (`openAll`) сонгох зүйл
+    БАЙХГҮЙ: тэнд байгаа давхаргууд бүгд тэр сэдвийнх бөгөөд аль
+    хэдийн асаалттай. Хоосон сонголттой жагсаалт нь дэлгэцийн зүүн
+    гуравны нэгийг эзлээд хариулт өгөхгүй тул баганыг нь БҮХЭЛД НЬ
+    авч, диаграмууд шууд харагдана (хэрэглэгчийн шийдвэр, 2026-09-16:
+    "бүх давхарга хэсгийг авч шууд чартууд харагддаг болго").
+
+    Ойн хэлтэс дээр долоон давхарга ХООСОН эхэлдэг тул тэнд жагсаалт
+    хэвээр — тэр нь жинхэнэ сонголт.
+  */
+  const picker = !set.openAll;
   /** Татагдсан бичлэгүүд — унтраасан ч санах ойд үлдэнэ */
   const [loaded, setLoaded] = React.useState<Record<string, Loaded>>({});
   /* Явж буй хүсэлтүүд — ref, учир нь зурагдалтад нөлөөлдөггүй. Төлөвд
@@ -322,8 +329,8 @@ export function LayersDashboard({ layers }: { layers: readonly string[] }) {
     let alive = true;
 
     Promise.all(
-      layers.map((id) =>
-        fetchLayerInfo(id, ac.signal).then(
+      set.layers.map((id) =>
+        fetchLayerInfo(set, id, ac.signal).then(
           (info) => ({ id, info }),
           (e: Error) => ({ id, error: e.message }),
         ),
@@ -345,7 +352,9 @@ export function LayersDashboard({ layers }: { layers: readonly string[] }) {
       alive = false;
       ac.abort();
     };
-  }, [layers]);
+    /* Бүртгэл солигдвол (өөр хэлтсийн самбар) тодорхойлолтыг шинээр
+       уншина — хуучин давхаргууд жагсаалтад үлдэх ёсгүй */
+  }, [set]);
 
   /* Асаалттай боловч татагдаагүй давхаргыг татна */
   React.useEffect(() => {
@@ -537,17 +546,16 @@ export function LayersDashboard({ layers }: { layers: readonly string[] }) {
 
   const toneOf = React.useCallback(
     (id: string) =>
-      LAYER_TONE[layers.indexOf(id) % LAYER_TONE.length],
-    [layers],
+      toneOfHue(set.hues[set.layers.indexOf(id) % set.hues.length]),
+    [set],
   );
   const uidBase = React.useCallback(
-    (id: string) => layers.indexOf(id) * STRIDE,
-    [layers],
+    (id: string) => set.layers.indexOf(id) * STRIDE,
+    [set],
   );
   const hueOf = React.useCallback(
-    (id: string) =>
-      LAYER_HUE[layers.indexOf(id) % LAYER_HUE.length],
-    [layers],
+    (id: string) => set.hues[set.layers.indexOf(id) % set.hues.length],
+    [set],
   );
 
   /*
@@ -683,13 +691,13 @@ export function LayersDashboard({ layers }: { layers: readonly string[] }) {
     (uid: number | null) => {
       if (uid == null) return null;
       const index = Math.floor(uid / STRIDE);
-      const id = layers[index];
+      const id = set.layers[index];
       const hit = id ? loaded[id] : undefined;
       if (!id || !hit) return null;
       const row = hit.data.rows[uid - index * STRIDE];
       return row ? { id, hit, info: hit.info, row } : null;
     },
-    [loaded, layers],
+    [loaded, set.layers],
   );
 
   const hovered = React.useMemo(() => lookup(tip.oid), [lookup, tip.oid]);
@@ -739,7 +747,7 @@ export function LayersDashboard({ layers }: { layers: readonly string[] }) {
       delete next[id];
       return next;
     });
-    fetchLayerInfo(id)
+    fetchLayerInfo(set, id)
       .then((info) => setInfos((m) => ({ ...m, [id]: info })))
       .catch((e: Error) => setFailed((f) => ({ ...f, [id]: e.message })));
   }
@@ -768,7 +776,7 @@ export function LayersDashboard({ layers }: { layers: readonly string[] }) {
         давхаргад өөр утга агуулж болох тул тэдгээрийг холих аргагүй.
       */}
       <FilterBar
-        title="Ойн давхарга"
+        title={set.title ?? "Давхарга"}
         activeCount={activeCount}
         onReset={() => {
           setFilters({});
@@ -859,108 +867,132 @@ export function LayersDashboard({ layers }: { layers: readonly string[] }) {
       </FilterBar>
 
       <Columns
-        id={`layers-${layers[0] ?? "x"}`}
-        left={286}
+        id={`layers-${set.key}`}
+        left={picker ? 286 : undefined}
         /* Бүлэглэсэн багана энд сууна — 300px дээр гурван оны
          харьцуулалт зураас болно. Хэрэглэгч чирж өөрчилнө */
         right={420}
         className="min-h-0 flex-1"
       >
-        {/* ---- ЗҮҮН: давхаргын жагсаалт ---- */}
-        <div className="flex min-h-0 flex-col gap-2.5">
-          <Card className="shrink-0">
-            <div className="grid grid-cols-3 divide-x divide-line">
-              <Stat
-                icon={Layers3}
-                label="Асаалттай давхарга"
-                value={num(stats.layers)}
-              />
-              <Stat
-                icon={Shapes}
-                label="Нийт бичлэг"
-                value={num(stats.records)}
-              />
-              <Stat
-                icon={Ruler}
-                label="Нийт талбай, га"
-                value={stats.ha > 0 ? num(Math.round(stats.ha)) : "—"}
-              />
-            </div>
-          </Card>
+        {/* ---- ЗҮҮН: давхаргын жагсаалт (зөвхөн сонголттой үед) ---- */}
+        {picker ? (
+          <div className="flex min-h-0 flex-col gap-2.5">
+            <Card className="shrink-0">
+              <div className="grid grid-cols-3 divide-x divide-line">
+                <Stat
+                  icon={Layers3}
+                  label="Асаалттай давхарга"
+                  value={num(stats.layers)}
+                />
+                <Stat
+                  icon={Shapes}
+                  label="Нийт бичлэг"
+                  value={num(stats.records)}
+                />
+                <Stat
+                  icon={Ruler}
+                  label="Нийт талбай, га"
+                  value={stats.ha > 0 ? num(Math.round(stats.ha)) : "—"}
+                />
+              </div>
+            </Card>
 
-          <Card className="min-h-[140px] flex-1">
-            <Head title="Давхарга">
-              <span className="num text-[11.5px] text-ink-3">
-                {num(on.length)} / {num(layers.length)}
-              </span>
-            </Head>
-            <div className="min-h-0 flex-1 divide-y divide-line overflow-y-auto">
-              {layers.map((id) => {
-                const info = infos[id];
-                const error = failed[id];
-                const isOn = on.includes(id);
-                /* Асаалттай атлаа татагдаагүй, алдаагүй бол явагдаж байна */
-                const loading = isOn && !loaded[id] && !error;
+            <Card className="min-h-[140px] flex-1">
+              <Head title="Давхарга">
+                <span className="num text-[11.5px] text-ink-3">
+                  {num(on.length)} / {num(set.layers.length)}
+                </span>
+              </Head>
+              <div className="min-h-0 flex-1 divide-y divide-line overflow-y-auto">
+                {set.layers.map((id) => {
+                  const info = infos[id];
+                  const error = failed[id];
+                  const isOn = on.includes(id);
+                  /* Асаалттай атлаа татагдаагүй, алдаагүй бол явагдаж байна */
+                  const loading = isOn && !loaded[id] && !error;
 
-                return (
-                  <button
-                    key={id}
-                    onClick={() => (info ? toggle(id) : retry(id))}
-                    className={cn(
-                      "flex w-full items-start gap-2 px-3 py-2.5 text-left transition-colors hover:bg-paper-hi",
-                      isOn && "bg-paper-hi",
-                    )}
-                  >
-                    {/*
+                  return (
+                    <button
+                      key={id}
+                      onClick={() => (info ? toggle(id) : retry(id))}
+                      className={cn(
+                        "flex w-full items-start gap-2 px-3 py-2.5 text-left transition-colors hover:bg-paper-hi",
+                        isOn && "bg-paper-hi",
+                      )}
+                    >
+                      {/*
                     Хайрцаг нь асаалттай эсэхийг хэлнэ, дүүргэлт нь
                     давхаргын өнгө — жагсаалт нь зургийн тайлбар болно
                   */}
-                    <span
-                      aria-hidden
-                      className={cn(
-                        "mt-[2px] size-3 shrink-0 rounded-[2px] border transition-colors",
-                        isOn ? "border-transparent" : "border-line-2",
-                      )}
-                      style={isOn ? { background: toneOf(id) } : undefined}
-                    />
-
-                    <span className="min-w-0 flex-1">
                       <span
+                        aria-hidden
                         className={cn(
-                          "block truncate text-[12px] leading-tight",
-                          isOn ? "text-ink" : "text-ink-2",
+                          "mt-[2px] size-3 shrink-0 rounded-[2px] border transition-colors",
+                          isOn ? "border-transparent" : "border-line-2",
                         )}
-                      >
-                        {info?.name ?? id}
-                      </span>
-                      {error ? (
-                        <span className="mt-1 block text-[10.5px] leading-snug text-clay">
-                          {error}
-                        </span>
-                      ) : (
-                        <span className="num mt-1 block truncate text-[10.5px] leading-none text-ink-3">
-                          {info
-                            ? `${num(info.count)} бичлэг · ${GEOMETRY_LABEL[info.geometry] ?? info.geometry}`
-                            : "Уншиж байна…"}
-                        </span>
-                      )}
-                    </span>
-
-                    {loading ? (
-                      <Loader2
-                        size={12}
-                        className="mt-[2px] shrink-0 animate-spin text-ink-3"
+                        style={isOn ? { background: toneOf(id) } : undefined}
                       />
-                    ) : null}
-                  </button>
-                );
-              })}
-            </div>
-          </Card>
-        </div>
+
+                      <span className="min-w-0 flex-1">
+                        <span
+                          className={cn(
+                            "block truncate text-[12px] leading-tight",
+                            isOn ? "text-ink" : "text-ink-2",
+                          )}
+                        >
+                          {info?.name ?? id}
+                        </span>
+                        {error ? (
+                          <span className="mt-1 block text-[10.5px] leading-snug text-clay">
+                            {error}
+                          </span>
+                        ) : (
+                          <span className="num mt-1 block truncate text-[10.5px] leading-none text-ink-3">
+                            {info
+                              ? `${num(info.count)} бичлэг · ${GEOMETRY_LABEL[info.geometry] ?? info.geometry}`
+                              : "Уншиж байна…"}
+                          </span>
+                        )}
+                      </span>
+
+                      {loading ? (
+                        <Loader2
+                          size={12}
+                          className="mt-[2px] shrink-0 animate-spin text-ink-3"
+                        />
+                      ) : null}
+                    </button>
+                  );
+                })}
+              </div>
+            </Card>
+          </div>
+        ) : null}
 
         {/* ---- БАРУУН: зураг, доор нь диаграмын зурвас ---- */}
         <div className="flex min-h-0 flex-col gap-2.5">
+          {/*
+            Давхаргын багана байхгүй үед үзүүлэлтүүд зургийн ДЭЭР
+            суана — эс тэгвээс бичлэгийн тоо, талбай хоёр огт
+            харагдахгүй болно. "Асаалттай давхарга" гэсэн нүд энд
+            ОРОХГҮЙ: бүгд асаалттай тул тэр тоо юу ч хэлэхгүй.
+          */}
+          {picker ? null : (
+            <Card className="shrink-0">
+              <div className="grid grid-cols-2 divide-x divide-line">
+                <Stat
+                  icon={Shapes}
+                  label="Нийт бичлэг"
+                  value={num(stats.records)}
+                />
+                <Stat
+                  icon={Ruler}
+                  label="Нийт талбай, га"
+                  value={stats.ha > 0 ? num(Math.round(stats.ha)) : "—"}
+                />
+              </div>
+            </Card>
+          )}
           <Card className="relative min-h-[300px] flex-1 overflow-hidden">
             <div className="relative h-full w-full">
               {/*
@@ -1073,7 +1105,9 @@ export function LayersDashboard({ layers }: { layers: readonly string[] }) {
               {on.length === 0 ? (
                 <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
                   <p className="elevated max-w-[300px] rounded-xs border border-line bg-paper/92 px-4 py-3 text-center text-[12.5px] leading-relaxed text-ink-2 backdrop-blur-md">
-                    Зүүн талын жагсаалтаас давхарга сонгоно уу.
+                    {picker
+                      ? "Зүүн талын жагсаалтаас давхарга сонгоно уу."
+                      : "Давхарга уншигдсангүй."}
                   </p>
                 </div>
               ) : null}
@@ -1093,7 +1127,9 @@ export function LayersDashboard({ layers }: { layers: readonly string[] }) {
               <Head title="Задаргаа" />
               <div className="hatch flex flex-1 items-center justify-center px-4">
                 <p className="text-center text-[12px] leading-relaxed text-ink-3">
-                  Давхарга асаахад задаргаа нь энд гарна.
+                  {picker
+                    ? "Давхарга асаахад задаргаа нь энд гарна."
+                    : "Задаргаа гарахуйц талбар олдсонгүй."}
                 </p>
               </div>
             </Card>

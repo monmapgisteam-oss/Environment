@@ -13,13 +13,8 @@ import {
   Route,
 } from "lucide-react";
 import { SourceTabs, useStoredTab } from "@/components/ui/source-tabs";
-import {
-  ECO_LAYERS,
-  FLOOD_LAYERS,
-  GAS_LAYERS,
-  GREEN_LAYERS,
-  WASTE_LAYERS,
-} from "@/lib/layers";
+import type { LayerSet } from "@/lib/portal-layers";
+import { ECO, FLOOD, GAS, GREEN, WASTE } from "@/lib/unelgee-layers";
 
 /*
   Хэлтэс гурван эх сурвалжтай тул самбар хооронд сольж харна.
@@ -69,21 +64,24 @@ const WeatherDashboard = dynamic(
  * шинэ давхарга ирэхэд `lib/layers.ts`-ийн жагсаалтад нэмэхэд л
  * хангалттай.
  */
-function group(layers: readonly string[]) {
+function group(set: LayerSet) {
   const D = dynamic(
-    () => import("@/components/layers/dashboard").then((m) => m.LayersDashboard),
+    () =>
+      import("@/components/layers/portal-dashboard").then(
+        (m) => m.PortalLayersDashboard,
+      ),
     { ssr: false, loading: spinner },
   );
-  const G = () => <D layers={layers} />;
-  G.displayName = "LayerGroup";
+  const G = () => <D set={set} />;
+  G.displayName = `LayerGroup(${set.key})`;
   return G;
 }
 
-const FloodDashboard = group(FLOOD_LAYERS);
-const GasDashboard = group(GAS_LAYERS);
-const GreenDashboard = group(GREEN_LAYERS);
-const WasteDashboard = group(WASTE_LAYERS);
-const EcoDashboard = group(ECO_LAYERS);
+const FloodDashboard = group(FLOOD);
+const GasDashboard = group(GAS);
+const GreenDashboard = group(GREEN);
+const WasteDashboard = group(WASTE);
+const EcoDashboard = group(ECO);
 
 const TABS = [
   {

@@ -5,13 +5,13 @@
  * Нэг бичлэг = "энэ зүйл энэ цэгт бүртгэгдсэн" гэсэн утга. Тиймээс
  * "хэдэн бичлэг" гэсэн тоо нь зүйлийн ч, цэгийн ч тоо БИШ.
  *
- * **Координат нь ЦЭГИЙН түвшинд.** `LON`/`LAT` нь зүйл бүрийнх биш
+ * **Координат нь ЦЭГИЙН түвшинд.** `lon`/`lat` нь зүйл бүрийнх биш
  * бүртгэлийн цэгийнх тул нэг цэгийн олон зүйл ЯГ давхарлана. Газрын
  * зурагт зүйл бүрийг цэг болгож зурвал 178 зүйл нэг пикселд овоолно —
  * тиймээс газрын зураг дээр ЦЭГ (site) харагдана, тэдгээрийн хэмжээ нь
  * тухайн цэгт бүртгэгдсэн зүйлийн тоог хэлнэ.
  *
- * `REC_TYPE` нь гурван утгатай:
+ * `rec_type` нь гурван утгатай:
  *   · `species` (2,380) — жинхэнэ тархалтын бичлэг
  *   · `site_only` (9) — цэг нь бүртгэгдсэн ч зүйл хавсрагдаагүй
  *   · `no_distrib` (2) — зүйлийн үзүүлэлт бүрэн ч координатгүй
@@ -23,22 +23,34 @@
  * бүлэглэхээс өмнө нэгэн жигд болгоно — эс тэгвээс нэг ангилал хоёр
  * мөр болно.
  *
- * Тайлбарын урт талбарууд (`DIAG_CHAR`, `CURR_STAT`, `PHENOLOGY`,
- * `HABITAT` …) нь зүйл бүрд давтагддаг бөгөөд хэдэн зуун тэмдэгт тул
+ * Тайлбарын урт талбарууд (`diag_char`, `curr_stat`, `phenology`,
+ * `habitat` …) нь зүйл бүрд давтагддаг бөгөөд хэдэн зуун тэмдэгт тул
  * ЭХНИЙ татацад ОРОХГҮЙ — сонгосон зүйлийн дэлгэрэнгүйг тухай бүрд нь
  * татна (`fetchLichenDetail`).
  */
 
-const HOST = "https://services-ap1.arcgis.com/ACqsMOmNLi5wIdIh/arcgis/rest/services";
-const LAYER = "Urgamal_hag";
+import { arcgisJson } from "@/lib/arcgis";
+import { layerService } from "@/lib/portal-layers";
+
+/*
+  ⚠ **ЭХ СУРВАЛЖ ПОРТАЛД ШИЛЖСЭН** (хэрэглэгчийн шийдвэр, 2026-09-16):
+  ArcGIS Online дээрх `Urgamal_hag`-аас `environment.ub.gov.mn`-ий
+  `A02_hag_sudalgaa` руу. Бичлэгийн тоо ИЖИЛ (2,391), талбарууд ч
+  ижил — зөвхөн нэр нь ЖИЖИГ ҮСЭГ болсон (портал PostgreSQL суурьтай)
+  бөгөөд `use` нь `use` болсон. Тиймээс самбар өөрчлөгдөөгүй, зөвхөн
+  талбарын бичиглэл шинэчлэгдэв.
+
+  Шинэ хост токен шаардана тул бүх хүсэлт `arcgisJson()`-оор явна —
+  тэр нь ArcGIS-ийн HTTP 200-аар ирдэг далд алдааг ч барина.
+*/
 const PAGE = 2000;
 
-export const LICHENS_SERVICE = `${HOST}/${LAYER}/FeatureServer/0`;
+export const LICHENS_SERVICE = `${layerService("A02_hag_sudalgaa")}/0`;
 
-/** Ховордлын зэрэг — IUCN-ий олон улсын товчлол, эрсдэл өсөх дарааллаар */
+/** Ховордлын зэрэг — iucn-ий олон улсын товчлол, эрсдэл өсөх дарааллаар */
 export const IUCN_ORDER = ["LC", "NT", "VU", "EN", "CR", "DD"] as const;
 
-/** Товчлолын тайлбар — эх сурвалж өгөөгүй тул IUCN-ий албан ёсны нэршил */
+/** Товчлолын тайлбар — эх сурвалж өгөөгүй тул iucn-ий албан ёсны нэршил */
 export const IUCN_LABEL: Record<string, string> = {
   LC: "LC · Санаа зовох шаардлагагүй",
   NT: "NT · Ховордож болзошгүй",
@@ -56,7 +68,7 @@ export type LichenRecord = {
   mn: string;
   family: string;
   genus: string;
-  /** IUCN зэрэг — бөглөгдөөгүй бол "—" */
+  /** iucn зэрэг — бөглөгдөөгүй бол "—" */
   iucn: string;
   /** Экологийн бүлэг — "Хүйтсүү чийгсэг" */
   ecogroup: string;
@@ -114,43 +126,43 @@ export type LichenDetail = {
 };
 
 type Props = {
-  OBJECTID: number;
-  REC_TYPE?: string;
-  SCI_NAME?: string;
-  NAME_MN?: string;
-  FAMILY?: string;
-  GENUS?: string;
-  IUCN?: string;
-  ECOGROUP?: string;
-  LIFEFORM?: string;
-  INDICATOR?: string;
-  SUBSTRATE?: string;
-  DISTRICT?: string;
-  SITE_CODE?: string;
-  SITE_NAME?: string;
-  LON?: number;
-  LAT?: number;
-  ELEV_M?: number;
+  objectid: number;
+  rec_type?: string;
+  sci_name?: string;
+  name_mn?: string;
+  family?: string;
+  genus?: string;
+  iucn?: string;
+  ecogroup?: string;
+  lifeform?: string;
+  indicator?: string;
+  substrate?: string;
+  district?: string;
+  site_code?: string;
+  site_name?: string;
+  lon?: number;
+  lat?: number;
+  elev_m?: number;
 };
 
 const FIELDS = [
-  "OBJECTID",
-  "REC_TYPE",
-  "SCI_NAME",
-  "NAME_MN",
-  "FAMILY",
-  "GENUS",
-  "IUCN",
-  "ECOGROUP",
-  "LIFEFORM",
-  "INDICATOR",
-  "SUBSTRATE",
-  "DISTRICT",
-  "SITE_CODE",
-  "SITE_NAME",
-  "LON",
-  "LAT",
-  "ELEV_M",
+  "objectid",
+  "rec_type",
+  "sci_name",
+  "name_mn",
+  "family",
+  "genus",
+  "iucn",
+  "ecogroup",
+  "lifeform",
+  "indicator",
+  "substrate",
+  "district",
+  "site_code",
+  "site_name",
+  "lon",
+  "lat",
+  "elev_m",
 ];
 
 const tidy = (s: string | undefined | null) => (s ?? "").replace(/\s+/g, " ").trim();
@@ -174,21 +186,22 @@ async function page(offset: number): Promise<{ properties: Props }[]> {
       where: "1=1",
       outFields: FIELDS.join(","),
       returnGeometry: "false",
-      orderByFields: "OBJECTID",
+      orderByFields: "objectid",
       resultOffset: String(offset),
       resultRecordCount: String(PAGE),
       f: "geojson",
     });
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`Хагийн мэдээлэл татагдсангүй (${res.status})`);
-  const json = (await res.json()) as { features?: { properties: Props }[] };
+  const json = await arcgisJson<{ features?: { properties: Props }[] }>(
+    url,
+    "Хагийн судалгаа",
+  );
   return json.features ?? [];
 }
 
 export async function fetchLichens(): Promise<LichenData> {
   /*
     Геометрийг ТАТАХГҮЙ (`returnGeometry: false`): цэгийн координат
-    атрибутад (`LON`/`LAT`) аль хэдийн бий бөгөөд 2,391 мөрийн бараг
+    атрибутад (`lon`/`lat`) аль хэдийн бий бөгөөд 2,391 мөрийн бараг
     бүгд нь ижил 41 цэгийг давтдаг — дэмий жин.
   */
   const pages = await Promise.all([page(0), page(PAGE)]);
@@ -200,8 +213,8 @@ export async function fetchLichens(): Promise<LichenData> {
 
   for (const f of feats) {
     const p = f.properties;
-    const type = tidy(p.REC_TYPE);
-    const code = tidy(p.SITE_CODE);
+    const type = tidy(p.rec_type);
+    const code = tidy(p.site_code);
 
     if (type === "no_distrib") {
       noDistrib++;
@@ -212,11 +225,11 @@ export async function fetchLichens(): Promise<LichenData> {
     if (code && !sites.has(code)) {
       sites.set(code, {
         code,
-        name: tidy(p.SITE_NAME) || code,
-        district: tidy(p.DISTRICT) || "Тодорхойгүй",
-        lon: Number(p.LON),
-        lat: Number(p.LAT),
-        elev: Number.isFinite(Number(p.ELEV_M)) ? Number(p.ELEV_M) : null,
+        name: tidy(p.site_name) || code,
+        district: tidy(p.district) || "Тодорхойгүй",
+        lon: Number(p.lon),
+        lat: Number(p.lat),
+        elev: Number.isFinite(Number(p.elev_m)) ? Number(p.elev_m) : null,
         species: 0,
       });
     }
@@ -227,17 +240,17 @@ export async function fetchLichens(): Promise<LichenData> {
     if (site) site.species++;
 
     rows.push({
-      oid: Number(p.OBJECTID),
-      sci: tidy(p.SCI_NAME) || "—",
-      mn: tidy(p.NAME_MN),
-      family: tidy(p.FAMILY) || "Тодорхойгүй",
-      genus: tidy(p.GENUS) || "Тодорхойгүй",
-      iucn: tidy(p.IUCN) || "—",
-      ecogroup: norm(p.ECOGROUP) || "Тодорхойгүй",
-      lifeform: norm(p.LIFEFORM) || "Тодорхойгүй",
-      indicator: norm(p.INDICATOR) || "Тодорхойгүй",
-      substrate: norm(p.SUBSTRATE) || "Тодорхойгүй",
-      district: tidy(p.DISTRICT) || "Тодорхойгүй",
+      oid: Number(p.objectid),
+      sci: tidy(p.sci_name) || "—",
+      mn: tidy(p.name_mn),
+      family: tidy(p.family) || "Тодорхойгүй",
+      genus: tidy(p.genus) || "Тодорхойгүй",
+      iucn: tidy(p.iucn) || "—",
+      ecogroup: norm(p.ecogroup) || "Тодорхойгүй",
+      lifeform: norm(p.lifeform) || "Тодорхойгүй",
+      indicator: norm(p.indicator) || "Тодорхойгүй",
+      substrate: norm(p.substrate) || "Тодорхойгүй",
+      district: tidy(p.district) || "Тодорхойгүй",
       siteCode: code,
     });
   }
@@ -268,52 +281,54 @@ export async function fetchLichenDetail(sci: string): Promise<LichenDetail | nul
     `${LICHENS_SERVICE}/query?` +
     new URLSearchParams({
       /* Нэрэнд ганц хашилт орвол SQL нь эвдэрнэ — хоёр дахин бичиж мултална */
-      where: `SCI_NAME='${sci.replace(/'/g, "''")}'`,
+      where: `sci_name='${sci.replace(/'/g, "''")}'`,
       outFields: [
-        "SCI_NAME",
-        "NAME_MN",
-        "AUTHOR",
-        "HABITAT",
-        "SUBSTRATE",
-        "DIAG_CHAR",
-        "CURR_STAT",
-        "PHENOLOGY",
-        "ADAPTATION",
-        "GROWTH",
-        "REPROD",
-        "CULTIVATE",
-        "DISTR_STAT",
-        "USE_",
-        "ECOROLE_2",
+        "sci_name",
+        "name_mn",
+        "author",
+        "habitat",
+        "substrate",
+        "diag_char",
+        "curr_stat",
+        "phenology",
+        "adaptation",
+        "growth",
+        "reprod",
+        "cultivate",
+        "distr_stat",
+        "use",
+        "ecorole_2",
       ].join(","),
       returnGeometry: "false",
       resultRecordCount: "1",
       f: "json",
     });
 
-  const res = await fetch(url);
-  if (!res.ok) return null;
-  const json = (await res.json()) as {
-    features?: { attributes: Record<string, string | null> }[];
-  };
+  let json: { features?: { attributes: Record<string, string | null> }[] };
+  try {
+    json = await arcgisJson(url, "Хагийн дэлгэрэнгүй");
+  } catch {
+    /* Дэлгэрэнгүй нь НЭМЭЛТ: татагдахгүй бол жагсаалт, зураг хэвээр */
+    return null;
+  }
   const a = json.features?.[0]?.attributes;
   if (!a) return null;
 
   return {
-    sci: tidy(a.SCI_NAME),
-    mn: tidy(a.NAME_MN),
-    author: tidy(a.AUTHOR),
-    habitat: tidy(a.HABITAT),
-    substrate: tidy(a.SUBSTRATE),
-    diag: tidy(a.DIAG_CHAR),
-    status: tidy(a.CURR_STAT),
-    phenology: tidy(a.PHENOLOGY),
-    adaptation: tidy(a.ADAPTATION),
-    growth: tidy(a.GROWTH),
-    reprod: tidy(a.REPROD),
-    cultivate: tidy(a.CULTIVATE),
-    distrStat: tidy(a.DISTR_STAT),
-    use: tidy(a.USE_),
-    ecorole: tidy(a.ECOROLE_2),
+    sci: tidy(a.sci_name),
+    mn: tidy(a.name_mn),
+    author: tidy(a.author),
+    habitat: tidy(a.habitat),
+    substrate: tidy(a.substrate),
+    diag: tidy(a.diag_char),
+    status: tidy(a.curr_stat),
+    phenology: tidy(a.phenology),
+    adaptation: tidy(a.adaptation),
+    growth: tidy(a.growth),
+    reprod: tidy(a.reprod),
+    cultivate: tidy(a.cultivate),
+    distrStat: tidy(a.distr_stat),
+    use: tidy(a.use),
+    ecorole: tidy(a.ecorole_2),
   };
 }
