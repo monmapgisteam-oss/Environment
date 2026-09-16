@@ -305,13 +305,18 @@ export function PortalLayersDashboard({ set }: { set: LayerSet }) {
 
   const [picked, setPicked] = React.useState<number | null>(null);
   /*
-    Шошго АНХНААСАА УНТРААЛТТАЙ (хэрэглэгчийн шийдвэр, 2026-09-15).
+    Шошгын эхлэх төлөвийг БҮРТГЭЛ шийднэ ({@link LayerSet.labels}).
 
-    Олон хэсэгтэй дүрс (100 метрийн зурвас гэх мэт) хэсэг болгондоо
-    шошго авдаг тул хоёрхон бичлэгтэй давхарга зургийг бүхэлд нь
-    дүүргэж орхино. Хэрэгтэй үед нь асаах нь дээр.
+    Ойн хэлтэс дээр АНХНААСАА УНТРААЛТТАЙ (хэрэглэгчийн шийдвэр,
+    2026-09-15): олон хэсэгтэй дүрс (100 метрийн зурвас гэх мэт)
+    хэсэг болгондоо шошго авдаг тул найман давхарга нэг зурагт
+    нийлэхэд бичвэр нь зургийг дардаг.
+
+    Ногоон бүсийн хэлтэс дээр харин АСААЛТТАЙ (хэрэглэгчийн шийдвэр,
+    2026-09-16): цэс бүр нэг, хоёр давхаргатай тул тэр эрсдэл бага
+    бөгөөд шошго нь "энэ юу вэ" гэдэгт шууд хариулна.
   */
-  const [showLabels, setShowLabels] = React.useState(false);
+  const [showLabels, setShowLabels] = React.useState(Boolean(set.labels));
 
   const [basemap, setBasemap] = React.useState<Basemap>(defaultBasemap);
   const tip = useMapTip();

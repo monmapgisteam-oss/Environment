@@ -59,7 +59,9 @@ type Props = {
 
 const tidy = (s: string | undefined) => (s ?? "").replace(/\s+/g, " ").trim();
 
-export async function fetchStickers(): Promise<StickerData> {
+export async function fetchStickers(
+  signal?: AbortSignal,
+): Promise<StickerData> {
   const url =
     `${STICKERS_SERVICE}/query?` +
     new URLSearchParams({
@@ -73,10 +75,14 @@ export async function fetchStickers(): Promise<StickerData> {
 
   const json = await arcgisJson<{
     features?: { properties: Props; geometry: GeoJSON.Geometry | null }[];
-  }>(url, "Шилэн барилгын судалгаа");
+  }>(url, "Шилэн барилгын судалгаа", { signal });
 
   const rows: Sticker[] = [];
-  const points = { oid: [] as number[], lon: [] as number[], lat: [] as number[] };
+  const points = {
+    oid: [] as number[],
+    lon: [] as number[],
+    lat: [] as number[],
+  };
 
   for (const f of json.features ?? []) {
     const p = f.properties;

@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import dynamic from "next/dynamic";
-import { Building2, Loader2, Ruler, Zap } from "lucide-react";
+import { Building2, Loader2, Ruler, X, Zap } from "lucide-react";
 import { BasemapGallery } from "@/components/map/basemap-gallery";
 import { FilterBar, FilterMenu, PickList } from "@/components/wells/filter-bar";
 import { PieChart } from "@/components/charts";
@@ -157,6 +157,13 @@ export function PolesDashboard() {
     return id == null ? null : (rows?.find((r) => r.oid === id) ?? null);
   }, [rows, hover, picked]);
 
+  /** ТОВШСОН шон — hover-оос ҮЛ ХАМААРНА */
+  const chosen = React.useMemo(
+    () =>
+      picked == null ? null : (rows?.find((r) => r.oid === picked) ?? null),
+    [rows, picked],
+  );
+
   function reset() {
     setPlace(null);
     setPicked(null);
@@ -298,6 +305,38 @@ export function PolesDashboard() {
                   </div>
                 </div>
               ) : null}
+              {/*
+                ТОВШИЛТЫН ЦОНХ — hover картаас ТУСДАА.
+
+                hover карт нь хулганы доорх зүйлийг хэлдэг тул хулгана
+                хөдлөх бүрд солигдоно; энэ нь СОНГОСОН обьектоо барьж,
+                хаах товчтой. Хоёрыг нэгтгэвэл сонголтоо тогтоосон
+                хойноо агуулга нь мултарна.
+              */}
+              {chosen ? (
+                <div className="elevated absolute right-2.5 bottom-2.5 z-10 w-[250px] rounded-xs border border-line-2 bg-paper/92 backdrop-blur-md">
+                  <div className="flex items-center justify-between gap-2 border-b border-line px-2.5 py-1.5">
+                    <span className="eyebrow">Шонгийн бичилт</span>
+                    <button
+                      onClick={() => setPicked(null)}
+                      aria-label="Хаах"
+                      className="shrink-0 text-ink-3 transition-colors hover:text-ink"
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                  <dl className="space-y-1.5 px-2.5 py-2">
+                    <PopField k="Дугаар" v={`${String(chosen.no).padStart(2, "0")}-р шон`} />
+                    <PopField k="Байршил" v={chosen.place} />
+                    <PopField k="Дүүрэг" v={chosen.district} />
+                    <PopField k="Хороо" v={chosen.khoroo} />
+                    <PopField k="Өмнөх шон" v={chosen.gap == null
+                        ? "Шугамын эхний шон"
+                        : `${Math.round(chosen.gap)} м`} />
+                  </dl>
+                </div>
+              ) : null}
+
             </div>
           </Card>
 
@@ -350,6 +389,24 @@ function Stat({
           {value}
         </span>
       </span>
+    </div>
+  );
+}
+
+/**
+ * Товшилтын цонхны мөр.
+ *
+ * Хоосон утга ОГТ гарахгүй — "Тодорхойгүй" гэсэн мөрүүд цонхыг
+ * дүүргэхээс өөр юу ч хэлэхгүй.
+ */
+function PopField({ k, v }: { k: string; v: string }) {
+  if (!v) return null;
+  return (
+    <div className="flex gap-2">
+      <dt className="w-[74px] shrink-0 text-[10px] tracking-[0.06em] text-ink-3 uppercase">
+        {k}
+      </dt>
+      <dd className="min-w-0 flex-1 text-[11.5px] leading-snug text-ink-2">{v}</dd>
     </div>
   );
 }

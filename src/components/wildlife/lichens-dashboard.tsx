@@ -5,6 +5,7 @@ import dynamic from "next/dynamic";
 import {
   Activity,
   Building2,
+  Image as ImageIcon,
   Leaf,
   Loader2,
   MapPin,
@@ -21,10 +22,20 @@ import {
 import { BasemapGallery } from "@/components/map/basemap-gallery";
 import { DATA_COLOR } from "@/components/wells/colors";
 import { FilterBar, FilterMenu, PickList } from "@/components/wells/filter-bar";
-import { defaultBasemap, type Basemap, type Extent } from "@/components/wells/map";
+import {
+  defaultBasemap,
+  type Basemap,
+  type Extent,
+} from "@/components/wells/map";
 import { Columns } from "@/components/ui/resizable-columns";
 import { MapPanel, useMapPanel } from "@/components/map/panel";
 import { Bounds } from "@/lib/extent";
+import {
+  fetchLichenPhotos,
+  hasPhoto,
+  lichenPhotoUrl,
+  type LichenPhotos,
+} from "@/lib/lichen-photos";
 import {
   fetchLichenDetail,
   fetchLichens,
@@ -72,12 +83,35 @@ export function LichensDashboard() {
   const [district, setDistrict] = React.useState<string | null>(null);
   const [species, setSpecies] = React.useState<string | null>(null);
   const panel = useMapPanel("left");
+  /*
+    ⚠ ХОЁР ХӨВӨГЧ ЦОНХ, тус бүр ӨӨРИЙН төлөвтэй. Нэгийг хуваалцвал
+    хоёул нэг байрлал, нэг хэмжээ барих тул зэрэг нээхэд бие бие
+    рүүгээ шилжинэ. Зүйлийнх баруун доод, цэгийнх зүүн дээд буланд.
+  */
+  const sitePanel = useMapPanel("right");
   const [query, setQuery] = React.useState("");
   const [hover, setHover] = React.useState<number | null>(null);
   /** Товшсон бүртгэлийн цэгийн код — тухайн цэгийн зүйлийн жагсаалт руу */
   const [site, setSite] = React.useState<string | null>(null);
 
   const [detail, setDetail] = React.useState<LichenDetail | null>(null);
+
+  /*
+    ЗҮЙЛИЙН ЗУРАГ — давхаргын хавсралтаас.
+
+    ⚠ Толийг НЭГ удаагийн хүсэлтээр угсарна (`fetchLichenPhotos`);
+    зургийн БИЕ нь зөвхөн тухайн зүйлийг сонгоход татагдана. 183
+    зүйлийн 23-д л зураг бий тул ихэнх сонголтод юу ч татагдахгүй.
+  */
+  const [photos, setPhotos] = React.useState<LichenPhotos | null>(null);
+  /** Зөвхөн зурагтай зүйлийг үлдээх эсэх */
+  const [photoOnly, setPhotoOnly] = React.useState(false);
+  /* Зургийг ЗҮЙЛИЙНХЭЭ нэртэй хамт барина — эс тэгвээс эффектийн биед
+     цэвэрлэх шаардлага гарч, шаталсан зурагдалт үүснэ
+     (`react-hooks/set-state-in-effect`). `detail`-тэй нэг загвар. */
+  const [photo, setPhoto] = React.useState<{ sci: string; url: string } | null>(
+    null,
+  );
   /** Тодорхойлолт нь олдоогүй зүйлийн нэр — эцэс төгсгөлгүй хүлээхээс сэргийлнэ */
   const [missing, setMissing] = React.useState<string | null>(null);
 
@@ -119,12 +153,63 @@ export function LichensDashboard() {
 
   /** Сонгосон зүйлийн IUCN зэрэг — тархалтын мөрөөс уншина */
   const speciesIucn = React.useMemo(
-    () => (species ? (data?.rows.find((r) => r.sci === species)?.iucn ?? null) : null),
+    () =>
+      species
+        ? (data?.rows.find((r) => r.sci === species)?.iucn ?? null)
+        : null,
     [data, species],
   );
 
   /** Гарт байгаа тодорхойлолт нь СОНГОСОН зүйлийнх мөн үү */
+  /* Зургийн толь — бичлэгүүд уншигдсаны ДАРАА: хавсралтын хүсэлт
+     зүйлийн нэрийг буцаадаггүй тул дугаараар нь холбоно */
+  React.useEffect(() => {
+    if (!data) return;
+    const ac = new AbortController();
+    const sciByOid = new Map(data.rows.map((r) => [r.oid, r.sci]));
+    fetchLichenPhotos(sciByOid, ac.signal)
+      .then(setPhotos)
+      /* Зураг нь НЭМЭЛТ: татагдахгүй бол самбар хэвийн ажиллана */
+      .catch(() => {});
+    return () => ac.abort();
+  }, [data]);
+
+  /*
+    СОНГОСОН ЦЭГИЙН ХУРААНГУЙ.
+
+    Цэг товшихад зүүн талын жагсаалт тэр цэгийн зүйлээр хумигддаг
+    байсан ч ЦЭГ ӨӨРӨӨ юу болох (нэр, дүүрэг, өндөршил) нь хаана ч
+    гарахгүй байв. Одоо хөвөгч цонх нээгдэж, тэнд бүртгэгдсэн
+    зүйлүүдийг жагсаана — товшиход зүйл нь сонгогдоно.
+  */
+  const siteCard = React.useMemo(() => {
+    if (!data || !site) return null;
+    const s = data.sites.find((x) => x.code === site);
+    if (!s) return null;
+    /* Тэр цэгт бүртгэгдсэн зүйлүүд — давхардалгүй, цагаан толгойгоор */
+    const names = [
+      ...new Set(
+        data.rows.filter((r) => r.siteCode === site).map((r) => r.sci),
+      ),
+    ].sort((a, b) => a.localeCompare(b));
+    return { site: s, names };
+  }, [data, site]);
+
+  /* Сонгосон зүйлийн зураг. Зураггүй зүйл дээр юу ч татахгүй */
+  React.useEffect(() => {
+    if (!photos || !species) return;
+    const p = lichenPhotoUrl(photos, species);
+    if (!p) return;
+    let alive = true;
+    p.then((url) => alive && setPhoto({ sci: species, url })).catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [photos, species]);
+
   const shownDetail = species && detail?.sci === species ? detail : null;
+  /* Өмнөх зүйлийн зураг шинэ сонголт дээр гарах ЁСГҮЙ */
+  const shownPhoto = species && photo?.sci === species ? photo.url : null;
   const detailLoading = Boolean(species) && !shownDetail && missing !== species;
 
   const rows = data?.rows;
@@ -143,9 +228,12 @@ export function LichensDashboard() {
     ) => {
       if (skip !== "family" && family && r.family !== family) return false;
       if (skip !== "iucn" && iucn && r.iucn !== iucn) return false;
-      if (skip !== "ecogroup" && ecogroup && r.ecogroup !== ecogroup) return false;
-      if (skip !== "indicator" && indicator && r.indicator !== indicator) return false;
-      if (skip !== "district" && district && r.district !== district) return false;
+      if (skip !== "ecogroup" && ecogroup && r.ecogroup !== ecogroup)
+        return false;
+      if (skip !== "indicator" && indicator && r.indicator !== indicator)
+        return false;
+      if (skip !== "district" && district && r.district !== district)
+        return false;
       /* Цэг сонгосон бол ЗҮЙЛИЙН ЖАГСААЛТ тэр цэгийнхээр хумигдана —
          "энэ уулан дээр юу ургадаг вэ" гэсэн асуултын хариу */
       if (skip !== "site" && site && r.siteCode !== site) return false;
@@ -154,7 +242,10 @@ export function LichensDashboard() {
     [family, iucn, ecogroup, indicator, district, site],
   );
 
-  const shown = React.useMemo(() => (rows ?? []).filter((r) => keep(r)), [rows, keep]);
+  const shown = React.useMemo(
+    () => (rows ?? []).filter((r) => keep(r)),
+    [rows, keep],
+  );
 
   /*
     Зүйлийн жагсаалт — тархалтын мөрүүдээс НЭГТГЭНЭ.
@@ -178,18 +269,53 @@ export function LichensDashboard() {
       hit.sites++;
       m.set(r.sci, hit);
     }
-    return [...m.values()].sort((a, b) => b.sites - a.sites || a.sci.localeCompare(b.sci));
+    return [...m.values()].sort(
+      (a, b) => b.sites - a.sites || a.sci.localeCompare(b.sci),
+    );
   }, [shown]);
 
   const listed = React.useMemo(() => {
     const q = query.trim().toLocaleLowerCase("mn-MN");
-    if (!q) return speciesList;
-    return speciesList.filter(
-      (s) =>
+    return speciesList.filter((s) => {
+      /*
+        ⚠ ЗУРАГТАЙ ЗҮЙЛ ЦӨӨН: 183-аас ердөө 21-д нь зураг бий. Ямар
+        зүйл зурагтайг урьдчилан мэдэх арга байхгүй тул хэрэглэгч
+        санамсаргүй сонгосон зүйл дээрээ зураг олохгүй бөгөөд систем
+        эвдэрсэн гэж бодно (хэрэглэгч 2026-09-16-нд яг ингэж мэдэгдсэн).
+        Энэ шүүлт нь тэр 21-ийг нэг товшилтоор тусгаарлана.
+      */
+      if (photoOnly && (!photos || !hasPhoto(photos, s.sci))) return false;
+      if (!q) return true;
+      return (
         s.sci.toLocaleLowerCase("mn-MN").includes(q) ||
-        s.mn.toLocaleLowerCase("mn-MN").includes(q),
-    );
-  }, [speciesList, query]);
+        s.mn.toLocaleLowerCase("mn-MN").includes(q)
+      );
+    });
+  }, [speciesList, query, photoOnly, photos]);
+
+  /** Зурагтай зүйлийн тоо — товчны хажууд гарна */
+  const photoCount = React.useMemo(() => {
+    if (!photos) return 0;
+    return speciesList.filter((s) => hasPhoto(photos, s.sci)).length;
+  }, [speciesList, photos]);
+
+  /*
+    ЗУРГИЙН ЭГНЭЭ — баруун баганад, диаграмуудын хажууд.
+
+    Зураг нь дэлгэрэнгүй цонхонд гардаг хэвээр (сонгосон зүйлийн
+    тодорхойлолттой хамт) ч тэр нь ЗӨВХӨН товшсоны дараа нээгддэг тул
+    ямар зүйл зурагтайг урьдчилан харуулдаггүй. Энэ эгнээ нь
+    диаграмуудтай адил ИЛ сууж, товшилтоор зүйлээ сонгуулна
+    (хэрэглэгчийн хүсэлт, 2026-09-16).
+
+    ⚠ Одоогийн шүүлтийг ДАГАНА: дүүрэг, ховордол сонгосон бол зөвхөн
+    тэр багцын зурагтай зүйлүүд үлдэнэ — эгнээ нь дэлгэцийн бусад
+    хэсэгтэй зөрөх ёсгүй.
+  */
+  const gallery = React.useMemo(() => {
+    if (!photos) return [];
+    return speciesList.filter((s) => hasPhoto(photos, s.sci));
+  }, [speciesList, photos]);
 
   /*
     Овог → зүйл гэсэн НЭГ диаграм.
@@ -274,7 +400,10 @@ export function LichensDashboard() {
   */
   const grades = React.useMemo(() => {
     if (!data) return undefined;
-    const values = Float32Array.from(data.sites, (s) => perSite.get(s.code) ?? 0);
+    const values = Float32Array.from(
+      data.sites,
+      (s) => perSite.get(s.code) ?? 0,
+    );
     let hi = 0;
     for (const v of values) if (v > hi) hi = v;
     return {
@@ -319,7 +448,11 @@ export function LichensDashboard() {
     const order = [...IUCN_ORDER, "—"];
     return order
       .filter((k) => m.has(k))
-      .map((k) => ({ key: k, label: IUCN_LABEL[k] ?? k, value: m.get(k) ?? 0 }));
+      .map((k) => ({
+        key: k,
+        label: IUCN_LABEL[k] ?? k,
+        value: m.get(k) ?? 0,
+      }));
   }, [rows, keep]);
 
   const byEcogroup = React.useMemo<Datum[]>(() => {
@@ -385,7 +518,17 @@ export function LichensDashboard() {
       if ((perSite.get(s.code) ?? 0) > 0) b.add(s.lon, s.lat);
     }
     return b.get(0.01);
-  }, [data, perSite, site, species, family, iucn, ecogroup, indicator, district]);
+  }, [
+    data,
+    perSite,
+    site,
+    species,
+    family,
+    iucn,
+    ecogroup,
+    indicator,
+    district,
+  ]);
 
   /**
    * Сонгосон зүйл ХААНА тааралдсан вэ.
@@ -424,6 +567,7 @@ export function LichensDashboard() {
     setSpecies(null);
     setSite(null);
     setQuery("");
+    setPhotoOnly(false);
   }
 
   if (error || !data) {
@@ -451,7 +595,8 @@ export function LichensDashboard() {
     (indicator ? 1 : 0) +
     (district ? 1 : 0) +
     (species ? 1 : 0) +
-    (site ? 1 : 0);
+    (site ? 1 : 0) +
+    (photoOnly ? 1 : 0);
 
   const siteName = site ? data.sites.find((s) => s.code === site)?.name : null;
 
@@ -484,7 +629,12 @@ export function LichensDashboard() {
           onClear={() => setFamily(null)}
           width={280}
         >
-          <PickList items={byFamily} selected={family} onPick={setFamily} searchable />
+          <PickList
+            items={byFamily}
+            selected={family}
+            onPick={setFamily}
+            searchable
+          />
         </FilterMenu>
 
         <FilterMenu
@@ -506,7 +656,11 @@ export function LichensDashboard() {
           onClear={() => setEcogroup(null)}
           width={250}
         >
-          <PickList items={byEcogroup} selected={ecogroup} onPick={setEcogroup} />
+          <PickList
+            items={byEcogroup}
+            selected={ecogroup}
+            onPick={setEcogroup}
+          />
         </FilterMenu>
 
         {/*
@@ -523,7 +677,11 @@ export function LichensDashboard() {
           onClear={() => setIndicator(null)}
           width={300}
         >
-          <PickList items={byIndicator} selected={indicator} onPick={setIndicator} />
+          <PickList
+            items={byIndicator}
+            selected={indicator}
+            onPick={setIndicator}
+          />
         </FilterMenu>
 
         <FilterMenu
@@ -534,11 +692,50 @@ export function LichensDashboard() {
           onClear={() => setDistrict(null)}
           width={230}
         >
-          <PickList items={byDistrict} selected={district} onPick={setDistrict} />
+          <PickList
+            items={byDistrict}
+            selected={district}
+            onPick={setDistrict}
+          />
         </FilterMenu>
+
+        {/*
+          ЗУРАГТАЙ ЗҮЙЛ — цэс биш ШУУД ТОВЧ.
+
+          Хоёрхон төлөвтэй зүйлийг унждаг цэс болгох нь нэмэлт товшилт
+          шаардана. Мөн тоог нь товчин дээрээ хэлнэ: 183-аас ердөө 21-д
+          нь зураг байгааг урьдчилан мэдэхгүй бол хэрэглэгч зураггүй
+          зүйл сонгоод "зураг байхгүй" гэж дүгнэнэ.
+
+          Толь татагдаагүй үед товч ГАРАХГҮЙ — тэглэсэн тоо худал хэлнэ.
+        */}
+        {photoCount > 0 ? (
+          <button
+            onClick={() => setPhotoOnly((v) => !v)}
+            className={cn(
+              "flex h-7 shrink-0 items-center gap-1.5 rounded-xs border px-2.5 text-[11.5px] transition-colors",
+              photoOnly
+                ? "border-data/45 bg-data/10 text-ink"
+                : "border-line text-ink-2 hover:bg-paper-hi hover:text-ink",
+            )}
+          >
+            <ImageIcon
+              size={12}
+              className={cn("shrink-0", photoOnly ? "text-data" : "text-ink-3")}
+            />
+            Зурагтай
+            <span className="num text-ink-3">{num(photoCount)}</span>
+          </button>
+        ) : null}
       </FilterBar>
 
-      <Columns layout="flex" id="lichens" left={320} right={300} className="min-h-0 flex-1">
+      <Columns
+        layout="flex"
+        id="lichens"
+        left={320}
+        right={300}
+        className="min-h-0 flex-1"
+      >
         {/* ---- ЗҮҮН: овог → зүйл, нэг шатлалт диаграм ---- */}
         <Card className="min-h-[180px] flex-1 xl:w-(--col-l) xl:flex-none">
           <Head title="Овог, зүйл">
@@ -628,6 +825,66 @@ export function LichensDashboard() {
                 самбарт — жагсаалтын мөрөнд багтахгүй. Хөвөгч гадаргуу
                 тул `.elevated` сүүдэр зөвшөөрөгдөнө.
               */}
+              {/*
+                ЦЭГИЙН ЦОНХ — зургийн зүүн дээд буланд.
+
+                Зүйлийн цонх баруун доод буланд суудаг тул хоёулаа
+                зэрэг нээгдэхэд давхцахгүй.
+              */}
+              {siteCard ? (
+                <MapPanel
+                  state={sitePanel}
+                  title="Бүртгэлийн цэг"
+                  onClose={() => setSite(null)}
+                  className="elevated top-2.5 left-2.5 max-h-[70%] w-[250px]"
+                >
+                  <div className="min-h-0 flex-1 overflow-y-auto p-2.5">
+                    <p className="text-[12.5px] leading-snug font-medium text-ink">
+                      {siteCard.site.name}
+                    </p>
+                    <dl className="mt-2 space-y-1.5 border-t border-line pt-2">
+                      <Field k="Код" v={siteCard.site.code} />
+                      <Field k="Дүүрэг" v={siteCard.site.district} />
+                      {siteCard.site.elev != null ? (
+                        <Field
+                          k="Өндөршил"
+                          v={`${num(siteCard.site.elev)} м`}
+                        />
+                      ) : null}
+                    </dl>
+
+                    <div className="mt-2 border-t border-line pt-2">
+                      <div className="eyebrow mb-1.5">
+                        Бүртгэгдсэн зүйл · {num(siteCard.names.length)}
+                      </div>
+                      {siteCard.names.length ? (
+                        <ul className="space-y-1">
+                          {siteCard.names.map((n) => (
+                            <li key={n}>
+                              <button
+                                onClick={() =>
+                                  setSpecies(species === n ? null : n)
+                                }
+                                className={cn(
+                                  "block w-full truncate text-left text-[11.5px] leading-snug italic transition-colors hover:text-ink",
+                                  species === n ? "text-data" : "text-ink-2",
+                                )}
+                              >
+                                {n}
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="text-[11.5px] text-ink-3">
+                          Зүйл хавсрагдаагүй байна
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </MapPanel>
+              ) : null}
+
               {species ? (
                 <MapPanel
                   state={panel}
@@ -636,6 +893,55 @@ export function LichensDashboard() {
                   className="elevated right-2.5 bottom-2.5 max-h-[70%] w-[300px]"
                 >
                   <div className="max-h-[calc(70vh-40px)] overflow-y-auto p-2.5">
+                    {/*
+                      ЗҮЙЛИЙН ЗУРАГ — тодорхойлолтоос ҮЛ ХАМААРНА.
+
+                      ⚠ Зураг нь тайлбарын БЛОК ДОТОР байсныг ГАДАГШ
+                      гаргав: тодорхойлолт татагдаж дуустал, эсвэл
+                      тухайн зүйлд тайлбар огт байхгүй үед зураг ч
+                      хамт алга болдог байв. Зураг нь тусдаа эх
+                      сурвалж (хавсралт) тул тусдаа гарах ёстой.
+
+                      ⚠ Зураг нь тухайн БИЧЛЭГИЙНХ биш ЗҮЙЛИЙНХ: нэг
+                      зүйлийн бүх мөр ижил файлыг үүрдэг. Зураггүй
+                      зүйл дээр хоосон хайрцаг ГАРГАХГҮЙ — зай
+                      эзлэхээс өөр юу ч хэлэхгүй.
+                    */}
+                    {shownPhoto ? (
+                      <figure className="mb-2.5">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={shownPhoto}
+                          alt={species ?? ""}
+                          className="block aspect-[3/2] w-full rounded-xs border border-line object-cover"
+                        />
+                      </figure>
+                    ) : photos && species && !hasPhoto(photos, species) ? (
+                      /*
+                        ⚠ ЗУРАГГҮЙГ НЬ ИЛ ХЭЛНЭ.
+
+                        Урьд нь зураггүй зүйл дээр юу ч гаргадаггүй
+                        байсан нь "зай хэмнэнэ" гэсэн бодлоор хийгдсэн
+                        ч ЭСРЭГ үр дагавар өгөв: 183 зүйлийн ердөө
+                        21-д нь зураг байдаг тул хэрэглэгч санамсаргүй
+                        сонголтуудаараа дандаа хоосон газар харж,
+                        "зураг ажиллахгүй байна" гэж хоёр удаа
+                        мэдэгдсэн (2026-09-16).
+
+                        Хоосон төлөв нь платформын дизайны нэг хэсэг
+                        (`.hatch`): "энэ зүйлд зураг бүртгэгдээгүй"
+                        гэдэг нь ӨӨРӨӨ баримт бөгөөд "систем эвдэрсэн"
+                        гэсэн эндүүрлийг таслана. Энэ нь арга зүйн
+                        тайлбар БИШ.
+                      */
+                      <div className="hatch mb-2.5 flex h-[54px] items-center justify-center rounded-xs border border-dashed border-line">
+                        <span className="flex items-center gap-1.5 text-[11px] text-ink-3">
+                          <ImageIcon size={12} className="shrink-0" />
+                          Зураг бүртгэгдээгүй
+                        </span>
+                      </div>
+                    ) : null}
+
                     {detailLoading ? (
                       <div className="flex items-center gap-2 py-2 text-ink-3">
                         <Loader2 size={12} className="animate-spin" />
@@ -663,12 +969,17 @@ export function LichensDashboard() {
                           </div>
                         ) : null}
                         {shownDetail.mn ? (
-                          <div className="mt-1 text-[12px] text-ink-2">{shownDetail.mn}</div>
+                          <div className="mt-1 text-[12px] text-ink-2">
+                            {shownDetail.mn}
+                          </div>
                         ) : null}
                         <dl className="mt-2 space-y-1.5 border-t border-line pt-2">
                           <Field k="Амьдрах орчин" v={shownDetail.habitat} />
                           <Field k="Суурь" v={shownDetail.substrate} />
-                          <Field k="Амьдралын хэлбэр" v={shownDetail.adaptation} />
+                          <Field
+                            k="Амьдралын хэлбэр"
+                            v={shownDetail.adaptation}
+                          />
                           <Field k="Үржил" v={shownDetail.reprod} />
                           <Field k="Тархац" v={shownDetail.distrStat} />
                           <Field k="Экологийн үүрэг" v={shownDetail.ecorole} />
@@ -690,7 +1001,9 @@ export function LichensDashboard() {
                               {speciesSites.map((s) => (
                                 <button
                                   key={s.code}
-                                  onClick={() => setSite(site === s.code ? null : s.code)}
+                                  onClick={() =>
+                                    setSite(site === s.code ? null : s.code)
+                                  }
                                   className={cn(
                                     "rounded-xs border px-1.5 py-[2px] text-[10.5px] transition-colors",
                                     site === s.code
@@ -723,7 +1036,9 @@ export function LichensDashboard() {
                         ) : null}
                       </>
                     ) : (
-                      <p className="py-2 text-[12px] text-ink-3">Тодорхойлолт олдсонгүй</p>
+                      <p className="py-2 text-[12px] text-ink-3">
+                        Тодорхойлолт олдсонгүй
+                      </p>
                     )}
                   </div>
                 </MapPanel>
@@ -732,9 +1047,11 @@ export function LichensDashboard() {
           </Card>
 
           <p className="shrink-0 px-0.5 text-[10.5px] leading-none text-ink-3">
-            Суурь зураг: Esri · Дата: ArcGIS · {num(data.sites.length)} бүртгэлийн цэг ·
-            зүйлийн тоо нь цэг дээр хулгана аваачихад
-            {emptySites > 0 ? ` · ${num(emptySites)} цэгт зүйл хавсрагдаагүй` : ""}
+            Суурь зураг: Esri · Дата: ArcGIS · {num(data.sites.length)}{" "}
+            бүртгэлийн цэг · зүйлийн тоо нь цэг дээр хулгана аваачихад
+            {emptySites > 0
+              ? ` · ${num(emptySites)} цэгт зүйл хавсрагдаагүй`
+              : ""}
             {data.noDistrib > 0
               ? ` · ${num(data.noDistrib)} зүйл координатгүй тул зурагт ороогүй`
               : ""}
@@ -746,12 +1063,64 @@ export function LichensDashboard() {
           <Card className="shrink-0">
             <div className="grid grid-cols-2 divide-x divide-y divide-line">
               <Stat icon={Leaf} label="Зүйл" value={num(stats.species)} />
-              <Stat icon={MapPin} label="Бүртгэлийн цэг" value={num(stats.sites)} />
+              <Stat
+                icon={MapPin}
+                label="Бүртгэлийн цэг"
+                value={num(stats.sites)}
+              />
               <Stat icon={Sprout} label="Овог" value={num(stats.families)} />
               {/* Ховордсон зэрэгтэй зүйл — үйлдэл шаардах цорын ганц тоо */}
-              <Stat icon={ShieldAlert} label="VU · EN · CR зүйл" value={num(stats.rare)} />
+              <Stat
+                icon={ShieldAlert}
+                label="VU · EN · CR зүйл"
+                value={num(stats.rare)}
+              />
             </div>
           </Card>
+
+          {/*
+            Зургийн эгнээ — үзүүлэлтийн доор, диаграмуудын дээр.
+
+            ⚠ Зөвхөн зурагтай зүйл байгаа үед л гарна: хоосон карт нь
+            баруун баганаас зай эзлэхээс өөр юу ч хэлэхгүй.
+          */}
+          {gallery.length > 0 ? (
+            <Card className="max-h-[300px] shrink-0">
+              <Head title="Зүйлийн зураг">
+                <span className="num text-[11.5px] text-ink-3">
+                  {num(gallery.length)}
+                </span>
+              </Head>
+              <div className="min-h-0 flex-1 overflow-y-auto p-2">
+                <div className="grid grid-cols-2 gap-1.5">
+                  {gallery.map((g) => (
+                    <Thumb
+                      key={g.sci}
+                      photos={photos!}
+                      sci={g.sci}
+                      mn={g.mn}
+                      on={species === g.sci}
+                      onPick={() => {
+                        /*
+                          ⚠ ЦЭГИЙН СОНГОЛТЫГ ЦЭВЭРЛЭНЭ. `focus` нь
+                          цэг сонгогдсон үед ЗӨВХӨН тэр цэг рүү
+                          ойртдог (дээрх дараалал) тул түүнийг
+                          үлдээвэл зураг хөдлөхгүй — хэрэглэгч зураг
+                          дарсан ч юу ч болоогүй мэт харагдана.
+
+                          Зураг дарах нь "энэ зүйлийг ХААНА
+                          тааралдсаныг харуул" гэсэн үйлдэл тул
+                          зураг түүний бүх цэгийг багтаана.
+                        */
+                        setSite(null);
+                        setSpecies(species === g.sci ? null : g.sci);
+                      }}
+                    />
+                  ))}
+                </div>
+              </div>
+            </Card>
+          ) : null}
 
           <Card className="shrink-0">
             <Head title="Ховордлын зэргээр">
@@ -776,7 +1145,11 @@ export function LichensDashboard() {
               <span className="text-[10.5px] text-ink-3">бүртгэл</span>
             </Head>
             <div className="min-h-0 flex-1 overflow-y-auto p-3">
-              <RowChart data={byEcogroup} selected={ecogroup} onSelect={setEcogroup} />
+              <RowChart
+                data={byEcogroup}
+                selected={ecogroup}
+                onSelect={setEcogroup}
+              />
             </div>
           </Card>
         </div>
@@ -794,6 +1167,73 @@ export function LichensDashboard() {
  * бусад нь саарал. Өнгө = утга: "энд анхаарах зүйл байна" гэсэн дохио
  * бөгөөд ангилал ялгах чимэг биш.
  */
+/**
+ * Зургийн нүд.
+ *
+ * Зураг бүр ӨӨРИЙГӨӨ татна: толь нь зөвхөн хавсралтын дугаарыг мэддэг
+ * бөгөөд бие нь тухай бүрд татагдана (`lichenPhotoUrl` кэшлэнэ). Ингэж
+ * тарааснаар нэг нүд унасан ч бусад нь гарсаар байна.
+ *
+ * ⚠ Ачаалж дуустал ХООСОН ДӨРВӨЛЖИН биш дэвсгэр өнгө үлдээнэ —
+ * анивчсан орлуулагч нь эгнээг тогтворгүй харуулна.
+ */
+function Thumb({
+  photos,
+  sci,
+  mn,
+  on,
+  onPick,
+}: {
+  photos: LichenPhotos;
+  sci: string;
+  mn: string;
+  on: boolean;
+  onPick: () => void;
+}) {
+  const [url, setUrl] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    const p = lichenPhotoUrl(photos, sci);
+    if (!p) return;
+    let alive = true;
+    p.then((u) => alive && setUrl(u)).catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [photos, sci]);
+
+  return (
+    <button
+      onClick={onPick}
+      title={mn ? `${sci} · ${mn}` : sci}
+      className={cn(
+        "group block overflow-hidden rounded-xs border text-left transition-colors",
+        on ? "border-data/60" : "border-line hover:border-line-2",
+      )}
+    >
+      <span className="block aspect-[4/3] w-full bg-paper-3">
+        {url ? (
+          /* eslint-disable-next-line @next/next/no-img-element */
+          <img
+            src={url}
+            alt={sci}
+            className="block h-full w-full object-cover"
+            loading="lazy"
+          />
+        ) : null}
+      </span>
+      <span
+        className={cn(
+          "block truncate px-1.5 py-1 text-[10px] leading-none italic",
+          on ? "text-data" : "text-ink-3 group-hover:text-ink-2",
+        )}
+      >
+        {sci}
+      </span>
+    </button>
+  );
+}
+
 function IucnChip({ code }: { code: string }) {
   const risky = code === "VU" || code === "EN" || code === "CR";
   return (
@@ -816,20 +1256,39 @@ function Field({ k, v }: { k: string; v: string }) {
       <dt className="w-[86px] shrink-0 text-[10px] tracking-[0.06em] text-ink-3 uppercase">
         {k}
       </dt>
-      <dd className="min-w-0 flex-1 text-[11.5px] leading-snug text-ink-2">{v}</dd>
+      <dd className="min-w-0 flex-1 text-[11.5px] leading-snug text-ink-2">
+        {v}
+      </dd>
     </div>
   );
 }
 
-function Card({ className, children }: { className?: string; children: React.ReactNode }) {
+function Card({
+  className,
+  children,
+}: {
+  className?: string;
+  children: React.ReactNode;
+}) {
   return (
-    <div className={cn("flex flex-col rounded-xs border border-line bg-paper-2", className)}>
+    <div
+      className={cn(
+        "flex flex-col rounded-xs border border-line bg-paper-2",
+        className,
+      )}
+    >
       {children}
     </div>
   );
 }
 
-function Head({ title, children }: { title: string; children?: React.ReactNode }) {
+function Head({
+  title,
+  children,
+}: {
+  title: string;
+  children?: React.ReactNode;
+}) {
   return (
     <div className="flex shrink-0 items-center justify-between gap-2 border-b border-line px-3 py-2">
       <h2 className="display text-[13.5px] leading-none tracking-[0.06em] uppercase">

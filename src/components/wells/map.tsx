@@ -1,5 +1,6 @@
 "use client";
 
+import { Minus, Plus } from "lucide-react";
 import * as React from "react";
 import {
   Map as MapLibreMap,
@@ -141,11 +142,36 @@ export type Basemap = {
 
 /** Хиймэл дагуул нь үндсэн суурь — цуглуулгын эхэнд байрлана */
 export const BASEMAPS: Basemap[] = [
-  { id: "imagery", name: "Хиймэл дагуул", service: "World_Imagery", dark: true, maxzoom: 19 },
+  /*
+    ⚠⚠ **`maxzoom` нь ЗАРЛАСАН биш БОДИТ хамрах хүрээ.**
+
+    Esri үйлчилгээндээ 19–20 хүртэл түвшин зарладаг ч Монголын нутагт
+    бодит зураг нь ХАМААГҮЙ ЭРТ дуусдаг (2026-09-16-нд хавтан бүрчлэн
+    шалгасан):
+
+      · Улаанбаатарын төв — хиймэл дагуул z19, гудамж z19, байр зүй z18
+      · Хот ГАДУУР (Гачуурт, Горхи-Тэрэлж, Зуунмод) — ГУРВУУЛАА z17
+
+    Түүнээс цааш сервер 2,521 байтын "Map data not yet available"
+    гэсэн ГАНЦ орлуулагч зургийг буцаана. Зарласнаар нь бичвэл
+    хэрэглэгч ойртоход зураг саарал хавтангийн тор болж, систем
+    эвдэрсэн мэт харагдана (хэрэглэгч 2026-09-16-нд мэдээлсэн).
+
+    ⚠ `tileSize: 256` тул MapLibre нь газрын зургийн zoom дээр НЭГ
+    НЭМЖ хавтан гуйдаг (`tileZoom = mapZoom + 1`). Тиймээс z18-ын
+    хоосон хавтан нь газрын зураг 17 болоход л гарч ирнэ — хязгаарыг
+    тэр тооцоог оруулж тавина.
+
+    Хязгаарыг бодит хамрах хүрээгээр нь бичсэнээр MapLibre сүүлчийн
+    БОДИТ хавтанг томруулж харуулна: бага зэрэг бүдэг ч ХООСОН биш.
+    Хотод z18–19-ийн эх нарийвчлалыг алдаж байгаа нь ухамсартай
+    солилцоо — саарал хоосон тор нь бүдэг зурагнаас хамаагүй дор.
+  */
+  { id: "imagery", name: "Хиймэл дагуул", service: "World_Imagery", dark: true, maxzoom: 17 },
   { id: "dark", name: "Бараан", service: "Canvas/World_Dark_Gray_Base", dark: true, maxzoom: 16 },
   { id: "light", name: "Цайвар", service: "Canvas/World_Light_Gray_Base", dark: false, maxzoom: 16 },
-  { id: "street", name: "Гудамж", service: "World_Street_Map", dark: false, maxzoom: 19 },
-  { id: "topo", name: "Байр зүй", service: "World_Topo_Map", dark: false, maxzoom: 19 },
+  { id: "street", name: "Гудамж", service: "World_Street_Map", dark: false, maxzoom: 17 },
+  { id: "topo", name: "Байр зүй", service: "World_Topo_Map", dark: false, maxzoom: 17 },
   { id: "hillshade", name: "Газрын гадарга", service: "Elevation/World_Hillshade", dark: false, maxzoom: 16 },
   { id: "natgeo", name: "NatGeo", service: "NatGeo_World_Map", dark: false, maxzoom: 16 },
 ];
@@ -792,6 +818,14 @@ export function WellsMap({
       style: baseStyle(basemapRef.current),
       center: [106.9, 47.9],
       zoom: 9,
+      /*
+        ⚠ ДЭЭД ОЙРТОЛТЫГ хязгаарлана. Суурь зургийн бодит хамрах
+        хүрээнээс цааш ойртвол MapLibre сүүлчийн хавтанг улам бүр
+        томруулж, зураг нь таних аргагүй болтол бүдгэрнэ. 1:500-аас
+        нарийн масштаб энэ платформд хэрэггүй: бүртгэлийн цэг нь
+        байршил заадаг болохоос барилгын дотоод бүтэц биш.
+      */
+      maxZoom: 18,
       attributionControl: false,
     });
     map.current = m;
@@ -2149,5 +2183,46 @@ export function WellsMap({
     maplibre-gl.css нь `.maplibregl-map { position: relative }` тавьдаг тул
     байрлал дарагдаж, элемент 0 өндөртэй болно.
   */
-  return <div ref={holder} className="h-full w-full" />;
+  return (
+    <div className="relative h-full w-full">
+      <div ref={holder} className="h-full w-full" />
+      <ZoomButtons map={map} />
+    </div>
+  );
+}
+
+/**
+ * ОЙРТУУЛАХ, ХОЛДУУЛАХ товч.
+ *
+ * ⚠ Урьд нь платформ дээр товч БАЙХГҮЙ байсан (дугуй, хос товшилтоор
+ * л ойртдог). Хэрэглэгч 2026-09-16-нд нэмүүлэв: хулганы дугуйгүй
+ * төхөөрөмж дээр, мөн зургийн дээгүүр хөвөгч цонх байх үед дугуй нь
+ * цонхонд баригдаж зураг ойртдоггүй.
+ *
+ * ⚠ БҮХ ДӨРВӨН БУЛАН ЭЗЭЛГДСЭН: дээд талд суурь зургийн сонголт
+ * (баруун эсвэл зүүн), зүүн дээд буланд hover карт, доод буланд
+ * товшилтын цонх, масштабын заалт, тарвагын тэмдэглэгээ. Тиймээс
+ * товчнууд БАРУУН ИРМЭГИЙН ДУНДАД суана — тэнд юу ч байхгүй.
+ *
+ * Хөвөгч гадаргуу тул `.elevated` сүүдэр зөвшөөрөгдөнө.
+ */
+function ZoomButtons({ map }: { map: React.RefObject<MapLibreMap | null> }) {
+  return (
+    <div className="elevated absolute top-1/2 right-2.5 z-10 flex -translate-y-1/2 flex-col divide-y divide-line overflow-hidden rounded-xs border border-line-2 bg-paper/92 backdrop-blur-md">
+      <button
+        onClick={() => map.current?.zoomIn()}
+        aria-label="Ойртуулах"
+        className="flex size-7 items-center justify-center text-ink-2 transition-colors hover:bg-paper-hi hover:text-ink"
+      >
+        <Plus size={13} />
+      </button>
+      <button
+        onClick={() => map.current?.zoomOut()}
+        aria-label="Холдуулах"
+        className="flex size-7 items-center justify-center text-ink-2 transition-colors hover:bg-paper-hi hover:text-ink"
+      >
+        <Minus size={13} />
+      </button>
+    </div>
+  );
 }

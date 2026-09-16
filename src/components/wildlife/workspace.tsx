@@ -4,7 +4,6 @@ import * as React from "react";
 import dynamic from "next/dynamic";
 import {
   ClipboardList,
-  LandPlot,
   Leaf,
   LeafyGreen,
   Loader2,
@@ -19,7 +18,11 @@ import {
   Waypoints,
   Zap,
 } from "lucide-react";
-import { SourceTabs, TabGroups, useStoredTab } from "@/components/ui/source-tabs";
+import {
+  SourceTabs,
+  TabGroups,
+  useStoredTab,
+} from "@/components/ui/source-tabs";
 import { WILDLIFE_SOLO } from "@/lib/wildlife-layers";
 
 /*
@@ -87,6 +90,55 @@ const LichensDashboard = dynamic(
 );
 
 /*
+  Хөвд, мөөг — ХАГТАЙ нэг хэвийн самбар (хэрэглэгчийн шийдвэр,
+  2026-09-16: "хөвд, мөөг хоёрыг хаг шиг болгоё").
+
+  Гурван судалгаа нэг асуултад хариулна: "аль цэгт ямар зүйл
+  бүртгэгдсэн бэ". Урьд нь хоёулаа бүтцээ өөрөө уншдаг ерөнхий
+  самбараар зурагдаж байсан бөгөөд зүйлийн жагсаалт нь НЭГ нүдэнд
+  бөөндөө үлдэж, хайх ч, задлах ч боломжгүй байв.
+
+  ⚠ Хоёр судалгаа НЭГ бүрэлдэхүүнээр зурагдана — ялгаа нь зөвхөн
+  `kind` проп. `key` ЗААВАЛ: эс тэгвээс таб солиход React дахин
+  үүсгэхгүй, өмнөх судалгааны төлөв үлдэнэ.
+*/
+/*
+  Биотехник — ХҮСНЭГТ ТӨВТЭЙ самбар.
+
+  14 бичлэг тус бүр ДОКУМЕНТ (давс, өвс хавар, өвс намар, зам —
+  дөрвөн тоог зэрэг харах шаардлагатай) тул диаграм нэмэх нь
+  хүснэгтэд аль хэдийн байгаа тоог дахин зурахаас өөр юу ч хэлэхгүй.
+*/
+const BiotechDashboard = dynamic(
+  () =>
+    import("@/components/wildlife/biotech-dashboard").then(
+      (m) => m.BiotechDashboard,
+    ),
+  { ssr: false, loading: spinner },
+);
+
+/*
+  Минж — ГУРВАН давхарга НЭГ зурган дээр: судалгааны талбай (хүрээ),
+  явсан маршрут (шугам), олдсон ажиглалт (цэг). "Хаана явж, юу
+  олсон" гэдгийг зөвхөн гуравт нь зэрэг харж ойлгоно.
+*/
+const BeaverDashboard = dynamic(
+  () =>
+    import("@/components/wildlife/beaver-dashboard").then(
+      (m) => m.BeaverDashboard,
+    ),
+  { ssr: false, loading: spinner },
+);
+
+const FloraDashboard = dynamic(
+  () =>
+    import("@/components/wildlife/flora-dashboard").then(
+      (m) => m.FloraDashboard,
+    ),
+  { ssr: false, loading: spinner },
+);
+
+/*
   Порталын давхаргын самбар — ойн хэлтэстэй ХУВААЛЦСАН
   ([layers/portal-dashboard.tsx](src/components/layers/portal-dashboard.tsx)).
 
@@ -120,7 +172,7 @@ const PortalLayers = dynamic(
   `A02` бүлгийн гурав л (хаг, хөвд, мөөг) орно.
 */
 const GROUPS = [
-  { id: "amitan", label: "Амьтан", note: "9 сэдэв", icon: PawPrint },
+  { id: "amitan", label: "Амьтан", note: "8 сэдэв", icon: PawPrint },
   { id: "urgamal", label: "Ургамал", note: "3 сэдэв", icon: Leaf },
 ] as const;
 
@@ -191,24 +243,23 @@ const TABS = [
     id: "biotechnik",
     group: "amitan",
     label: "Биотехник",
-    note: "14 арга хэмжээ · давс, өвс",
+    note: "14 байршил · давс, өвс",
     full: "Биотехникийн арга хэмжээний бүртгэл",
     icon: Tractor,
   },
+  /*
+    ⚠ Талбай, маршрут, ажиглалт ГУРВАН давхарга НЭГ цэсэнд. Урьд нь
+    талбай, ажиглалт хоёр тусдаа цэстэй байсан бөгөөд "Минжний
+    талбай" нь ердөө хоёр мөр агуулж хоосон харагддаг, маршрут нь
+    огт цэсгүй үлдсэн байв. "Хаана явж, юу олсон" гэдгийг зөвхөн
+    гуравт нь зэрэг харж ойлгоно.
+  */
   {
-    id: "minj-talbai",
+    id: "minj",
     group: "amitan",
-    label: "Минжний талбай",
-    note: "2 талбай",
-    full: "Минж бүртгэгдсэн талбай",
-    icon: LandPlot,
-  },
-  {
-    id: "minj-busad",
-    group: "amitan",
-    label: "Минж ба бусад",
-    note: "120 цэг · судалгааны үе",
-    full: "Минж ба бусад зүйлийн ажиглалт",
+    label: "Минжний судалгаа",
+    note: "424 км маршрут · 120 ажиглалт",
+    full: "Минжний судалгааны талбай, маршрут, ажиглалт",
     icon: Turtle,
   },
   {
@@ -223,7 +274,7 @@ const TABS = [
     id: "hovd",
     group: "urgamal",
     label: "Хөвд",
-    note: "30 цэг · зүйлийн бүртгэл",
+    note: "30 цэг · 55 зүйл",
     full: "Хөвдний судалгааны цэгүүд",
     icon: Sprout,
   },
@@ -231,7 +282,7 @@ const TABS = [
     id: "moog",
     group: "urgamal",
     label: "Мөөг",
-    note: "55 цэг · зүйлийн бүртгэл",
+    note: "55 цэг · 47 зүйл",
     full: "Мөөгний судалгааны цэгүүд",
     icon: Microscope,
   },
@@ -249,7 +300,10 @@ export function WildlifeWorkspace() {
   /* Бүлэг нь ТУСДАА төлөв БИШ — сонгосон сэдвээсээ гарна */
   const group: GroupId = TABS.find((t) => t.id === tab)?.group ?? GROUPS[0].id;
 
-  const shown = React.useMemo(() => TABS.filter((t) => t.group === group), [group]);
+  const shown = React.useMemo(
+    () => TABS.filter((t) => t.group === group),
+    [group],
+  );
 
   /* Бүлэг товшиход түүний эхний сэдэв нээгдэнэ */
   const pickGroup = React.useCallback(
@@ -288,24 +342,13 @@ export function WildlifeWorkspace() {
         ) : tab === "lichens" ? (
           <LichensDashboard />
         ) : tab === "hovd" ? (
-          <PortalLayers key={WILDLIFE_SOLO.hovd.key} set={WILDLIFE_SOLO.hovd} />
+          <FloraDashboard key="hovd" kind="hovd" />
         ) : tab === "moog" ? (
-          <PortalLayers key={WILDLIFE_SOLO.moog.key} set={WILDLIFE_SOLO.moog} />
+          <FloraDashboard key="moog" kind="moog" />
         ) : tab === "biotechnik" ? (
-          <PortalLayers
-            key={WILDLIFE_SOLO.biotechnik.key}
-            set={WILDLIFE_SOLO.biotechnik}
-          />
-        ) : tab === "minj-talbai" ? (
-          <PortalLayers
-            key={WILDLIFE_SOLO.minjTalbai.key}
-            set={WILDLIFE_SOLO.minjTalbai}
-          />
-        ) : tab === "minj-busad" ? (
-          <PortalLayers
-            key={WILDLIFE_SOLO.minjBusad.key}
-            set={WILDLIFE_SOLO.minjBusad}
-          />
+          <BiotechDashboard />
+        ) : tab === "minj" ? (
+          <BeaverDashboard />
         ) : (
           <PortalLayers
             key={WILDLIFE_SOLO.burtgel.key}

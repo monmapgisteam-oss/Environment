@@ -2,11 +2,19 @@
 
 import * as React from "react";
 import dynamic from "next/dynamic";
-import { Building2, Loader2, MapPin, Sticker } from "lucide-react";
+import {
+  Building2,
+  Check,
+  Loader2,
+  MapPin,
+  Sticker,
+  Target,
+} from "lucide-react";
+import { RowChart, type Datum } from "@/components/charts";
 import { BasemapGallery } from "@/components/map/basemap-gallery";
 import { FilterBar, FilterMenu, PickList } from "@/components/wells/filter-bar";
-import { defaultBasemap, type Basemap, type Extent } from "@/components/wells/map";
-import { Bounds } from "@/lib/extent";
+import { defaultBasemap, type Basemap } from "@/components/wells/map";
+import { Columns } from "@/components/ui/resizable-columns";
 import { fetchStickers, type StickerData } from "@/lib/stickers";
 import { cn, num } from "@/lib/utils";
 
@@ -23,259 +31,437 @@ const PointMap = dynamic(
 );
 
 /**
- * Стикер байршуулсан барилгын самбар.
+ * Шилэн барилгын судалгааны самбар.
  *
- * Ердөө НАЙМАН барилга. Ийм цөөн зүйлд жагсаалт, диаграм хоёулаа
- * илүүц — найман мөрийн "тархалт" гэж байхгүй. Тиймээс бүтэц нь
- * хэлтсийн бусад самбараас өөр: газрын зураг бүтэн өргөнөөр дээр
- * сууж, доор нь барилга бүрийн КАРТ хөндлөн эгнэнэ.
+ * ⚠⚠ **БҮТЭЦ НЬ БҮРЭН СОЛИГДСОН** (хэрэглэгчийн шийдвэр, 2026-09-16).
+ * Хуучин харагдац нь НАЙМАН барилгад зориулагдсан байв: зураг бүтэн
+ * өргөнөөр дээр, доор нь хөндлөн картын эгнээ. Эх сурвалж порталд
+ * шилжихэд бичлэг **78 болж өсөхөд** тэр эгнээ арван баганат жижиг
+ * картын тор болж хувирсан — нэр нь таслагдаж, эрэмбэ алга болж,
+ * аль барилгад стикер наагдсаныг огт харуулахгүй байв.
  *
- * Карт бүр өөрөө сонгогч: товшиход газрын зураг тухайн барилга руу
- * ойртоно. Хөндлөн эгнээ нь найман зүйлийг НЭГ ХАРЦААР харуулна —
- * босоо жагсаалт бол гүйлгэх шаардлагатай болно.
+ * **ГОЛ АСУУЛТ НЬ ХАМРАЛТ**: 78 барилга судлагдсанаас ердөө 8-д нь
+ * стикер наагдсан. Тиймээс самбар нь тэр ЗӨРҮҮГ харуулна — жагсаалт,
+ * зураг, задаргаа гурвуулаа стикертэй эсэхийг эхний ээлжинд хэлнэ.
+ *
+ * ⚠ **ӨНГӨ нь ТӨЛӨВИЙГ хэлнэ**: стикертэй бол `--moss` (хийгдсэн),
+ * үгүй бол `--ochre` (анхаарах). Энэ нь чимэглэл биш ДОХИО тул
+ * "дата дүрслэлийн өнгө ганц" дүрэмд хамаарахгүй — ландфиллийн
+ * эрсдэлийн зэрэгтэй ижил үндэслэл. Хуучин самбар бүх цэгийг
+ * анхааруулгын улаанаар зурдаг байсан нь одоо ХУДАЛ болно: 78-аас
+ * 70 нь л анхаарал шаардана.
+ *
+ * ⚠ Бөглөгдөөгүй стикерийн утгыг "байхгүй" рүү БҮҮ хамааруул —
+ * гурав дахь төлөв болж үлдэнэ.
  */
 export function StickersDashboard() {
   const [data, setData] = React.useState<StickerData | null>(null);
   const [error, setError] = React.useState<string | null>(null);
 
   const [district, setDistrict] = React.useState<string | null>(null);
+  const [khoroo, setKhoroo] = React.useState<string | null>(null);
+  /** "Байршуулсан" / "Байршуулаагүй" / "Тэмдэглээгүй" */
+  const [state, setState] = React.useState<string | null>(null);
   const [picked, setPicked] = React.useState<number | null>(null);
-  const [hover, setHover] = React.useState<number | null>(null);
+  const [query, setQuery] = React.useState("");
 
   const [basemap, setBasemap] = React.useState<Basemap>(defaultBasemap);
 
   React.useEffect(() => {
-    let alive = true;
-    fetchStickers()
-      .then((d) => alive && setData(d))
-      .catch((e: Error) => alive && setError(e.message));
-    return () => {
-      alive = false;
-    };
+    const ac = new AbortController();
+    fetchStickers(ac.signal)
+      .then(setData)
+      .catch((e: Error) => {
+        if (e.name !== "AbortError") setError(e.message);
+      });
+    return () => ac.abort();
   }, []);
 
-  const rows = data?.rows;
-
-  const shown = React.useMemo(
-    () => (rows ?? []).filter((r) => !district || r.district === district),
-    [rows, district],
-  );
-
-  const visible = React.useMemo(() => {
-    if (!data) return new Uint32Array(0);
-    const on = new Set(shown.map((r) => r.oid));
+  const shown = React.useMemo(() => {
+    const q = query.trim().toLowerCase();
     const out: number[] = [];
-    for (let i = 0; i < data.points.oid.length; i++) {
-      if (on.has(data.points.oid[i])) out.push(i);
-    }
-    return Uint32Array.from(out);
-  }, [data, shown]);
+    (data?.rows ?? []).forEach((r, i) => {
+      if (district && r.district !== district) return;
+      if (khoroo && r.khoroo !== khoroo) return;
+      if (state && stateOf(r.sticker) !== state) return;
+      if (q && !`${r.name} ${r.address}`.toLowerCase().includes(q)) return;
+      out.push(i);
+    });
+    return out;
+  }, [data, district, khoroo, state, query]);
 
-  /* Цэгийн шошго — барилгын нэр. Найман цэг тул эрт харагдаж болно */
+  const visible = React.useMemo(() => Uint32Array.from(shown), [shown]);
+
+  /* Зураг дээрх шошго — барилгын нэр */
   const labels = React.useMemo(() => {
     if (!data) return undefined;
-    const name = new Map(data.rows.map((r) => [r.oid, r.name]));
-    return {
-      text: data.points.oid.map((oid) => name.get(oid) ?? ""),
-      minzoom: 11,
-    };
+    return { text: data.rows.map((r) => r.name), minzoom: 13 };
   }, [data]);
 
-  const byDistrict = React.useMemo(() => {
-    const m = new Map<string, number>();
-    for (const r of rows ?? []) m.set(r.district, (m.get(r.district) ?? 0) + 1);
-    return [...m]
-      .map(([k, v]) => ({ key: k, label: k, value: v }))
-      .sort((a, b) => b.value - a.value);
-  }, [rows]);
-
-  const stats = React.useMemo(
-    () => ({
-      n: shown.length,
-      /* Стикер наагдсан нь судалгаанд хамрагдсанаас ЭРС цөөн (78-аас 8)
-         тул хоёуланг нь тусад нь тоолно */
-      stickered: shown.filter((r) => r.sticker === true).length,
-      districts: new Set(shown.map((r) => r.district)).size,
-      khoroos: new Set(shown.map((r) => `${r.district}|${r.khoroo}`)).size,
-    }),
-    [shown],
+  /**
+   * Тэмдэглэгээний өнгө — ТӨЛӨВӨӨР.
+   *
+   * MapLibre CSS хувьсагч уншдаггүй ч дохиоллын тэмдэглэгээ нь ердийн
+   * DOM элемент тул хувьсагч дамжина ({@link pulseColor}).
+   */
+  const pulseColor = React.useCallback(
+    (oid: number) => {
+      const r = data?.rows.find((x) => x.oid === oid);
+      if (!r) return undefined;
+      return r.sticker === true ? "var(--moss)" : "var(--ochre)";
+    },
+    [data],
   );
 
-  /* ---------------- Сонголтын хүрээ (zoom action) ---------------- */
-  const focus = React.useMemo<Extent | null>(() => {
-    if (picked == null && !district) return null;
-    const b = new Bounds();
-    for (const r of picked != null ? shown.filter((x) => x.oid === picked) : shown) {
-      b.add(r.lon, r.lat);
+  /* Задаргаа бүр өөрийнхөө тэнхлэгийг АЛГАСЧ шүүгдэнэ */
+  const tally = React.useCallback(
+    (
+      of: (i: number) => string,
+      skip: "district" | "khoroo" | "state",
+    ): Datum[] => {
+      if (!data) return [];
+      const counts = new Map<string, number>();
+      data.rows.forEach((r, i) => {
+        if (skip !== "district" && district && r.district !== district) return;
+        if (skip !== "khoroo" && khoroo && r.khoroo !== khoroo) return;
+        if (skip !== "state" && state && stateOf(r.sticker) !== state) return;
+        const key = of(i);
+        if (!key) return;
+        counts.set(key, (counts.get(key) ?? 0) + 1);
+      });
+      return [...counts.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .map(([key, value]) => ({ key, label: key, value }));
+    },
+    [data, district, khoroo, state],
+  );
+
+  const byDistrict = React.useMemo(
+    () => tally((i) => data?.rows[i].district ?? "", "district"),
+    [tally, data],
+  );
+  const byKhoroo = React.useMemo(
+    () => tally((i) => data?.rows[i].khoroo ?? "", "khoroo"),
+    [tally, data],
+  );
+  const byState = React.useMemo(
+    () => tally((i) => stateOf(data?.rows[i].sticker ?? null), "state"),
+    [tally, data],
+  );
+
+  /**
+   * Дүүрэг бүрийн СТИКЕРТЭЙ барилгын тоо.
+   *
+   * ⚠ Хамралтын диаграм нь ХАНГАСАН тоог харуулна, дутуугийнх БИШ —
+   * урт зурвас "сайн" гэж уншигдах ёстой (ландфиллийн хамралттай нэг
+   * зарчим). Хуваарь нь тухайн дүүрэгт СУДЛАГДСАН нийт тоо.
+   */
+  const coverage = React.useMemo<Datum[]>(() => {
+    if (!data) return [];
+    const total = new Map<string, number>();
+    const done = new Map<string, number>();
+    for (const i of shown) {
+      const r = data.rows[i];
+      total.set(r.district, (total.get(r.district) ?? 0) + 1);
+      if (r.sticker === true)
+        done.set(r.district, (done.get(r.district) ?? 0) + 1);
     }
-    return b.get(0.003);
-  }, [shown, picked, district]);
+    return [...total.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .map(([key, n]) => ({
+        key,
+        label: `${key} · ${num(done.get(key) ?? 0)} / ${num(n)}`,
+        value: done.get(key) ?? 0,
+      }));
+  }, [data, shown]);
 
-  const active = React.useMemo(() => {
-    const id = hover ?? picked;
-    return id == null ? null : (rows?.find((r) => r.oid === id) ?? null);
-  }, [rows, hover, picked]);
+  const stats = React.useMemo(() => {
+    if (!data) return null;
+    let stickered = 0;
+    const districts = new Set<string>();
+    for (const i of shown) {
+      const r = data.rows[i];
+      if (r.sticker === true) stickered++;
+      districts.add(r.district);
+    }
+    const n = shown.length;
+    return {
+      n,
+      stickered,
+      districts: districts.size,
+      share: n > 0 ? Math.round((stickered / n) * 100) : 0,
+    };
+  }, [data, shown]);
 
-  function reset() {
-    setDistrict(null);
-    setPicked(null);
-  }
+  const detail = React.useMemo(() => {
+    if (!data || picked == null) return null;
+    return data.rows.find((r) => r.oid === picked) ?? null;
+  }, [data, picked]);
 
-  if (error || !data) {
+  if (error) {
     return (
       <div className="flex h-full items-center justify-center rounded-xs border border-line bg-paper-2">
-        {error ? (
-          <div className="text-center">
-            <p className="text-[14px] font-medium">Эх сурвалж татагдсангүй</p>
-            <p className="num mt-2 text-[12px] text-ink-3">{error}</p>
-          </div>
-        ) : (
-          <span className="flex items-center gap-2 text-[13.5px] text-ink-3">
-            <Loader2 size={14} className="animate-spin" />
-            Стикер байршуулсан барилга татаж байна…
-          </span>
-        )}
+        <p className="max-w-[420px] px-6 text-center text-[12.5px] leading-relaxed text-clay">
+          {error}
+        </p>
       </div>
     );
   }
+
+  if (!data || !stats) {
+    return (
+      <div className="flex h-full items-center justify-center rounded-xs border border-line bg-paper-2">
+        <Loader2 size={16} className="animate-spin text-ink-3" />
+      </div>
+    );
+  }
+
+  const activeCount =
+    (district ? 1 : 0) + (khoroo ? 1 : 0) + (state ? 1 : 0) + (query ? 1 : 0);
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-2.5">
       <FilterBar
         title="Шилэн барилгын судалгаа"
-        activeCount={district ? 1 : 0}
-        onReset={reset}
+        activeCount={activeCount}
+        onReset={() => {
+          setDistrict(null);
+          setKhoroo(null);
+          setState(null);
+          setPicked(null);
+          setQuery("");
+        }}
       >
+        <FilterMenu
+          label="Стикер"
+          icon={Sticker}
+          value={state}
+          active={Boolean(state)}
+          onClear={() => setState(null)}
+          width={230}
+        >
+          <PickList items={byState} selected={state} onPick={setState} />
+        </FilterMenu>
+
         <FilterMenu
           label="Дүүрэг"
           icon={Building2}
           value={district}
           active={Boolean(district)}
           onClear={() => setDistrict(null)}
-          width={220}
+          width={230}
         >
-          <PickList items={byDistrict} selected={district} onPick={setDistrict} />
+          <PickList
+            items={byDistrict}
+            selected={district}
+            onPick={setDistrict}
+          />
+        </FilterMenu>
+
+        <FilterMenu
+          label="Хороо"
+          icon={MapPin}
+          value={khoroo}
+          active={Boolean(khoroo)}
+          onClear={() => setKhoroo(null)}
+          width={200}
+        >
+          <PickList
+            items={byKhoroo}
+            selected={khoroo}
+            onPick={setKhoroo}
+            searchable
+          />
         </FilterMenu>
       </FilterBar>
 
-      {/*
-        Индикаторын зурвас — бүтэн өргөнөөр, зураасаар тусгаарласан.
-
-        Нүд нь ӨӨРӨӨ ХЭЛБЭРЭЭ АВНА: өргөн дэлгэц дээр гурвуулаа нэг мөрөнд
-        дэлгэгдэж, нарийн дээр хоёр мөр болж эвхэгдэнэ. Тоо, иконы хэмжээ
-        нь дэлгэцийн өргөнөөс хамаарч томорч жижигрэх тул зайг бүрэн
-        ашиглана — өмнө нь шүүлтүүрийн мөрөнд шахагдсан жижиг бичвэр
-        байсан бөгөөд гол тоонууд нь харагдахгүй байлаа.
-      */}
-      <div className="shrink-0 overflow-hidden rounded-xs border border-line bg-paper-2">
-        <div className="grid grid-cols-2 divide-x divide-y divide-line sm:grid-cols-3 sm:divide-y-0">
-          {/* Судалгаанд хамрагдсан барилга ба тэдгээрийн хэдэд нь
-              стикер наагдсан нь ХОЁР ӨӨР тоо — эхнийхийг нь
-              "стикертэй" гэж нэрлэвэл 78 барилга бүгд стикертэй мэт
-              болно (бодит нь 8) */}
-          <Indicator icon={Building2} label="Судалгаанд хамрагдсан барилга" value={num(stats.n)} />
-          <Indicator icon={Sticker} label="Стикер байршуулсан" value={num(stats.stickered)} />
-          <Indicator icon={MapPin} label="Хамрагдсан дүүрэг" value={num(stats.districts)} />
-        </div>
+      <div className="grid shrink-0 grid-cols-2 divide-x divide-y divide-line rounded-xs border border-line bg-paper-2 sm:grid-cols-4 sm:divide-y-0">
+        {/* Судалгаанд хамрагдсан барилга ба тэдгээрийн хэдэд нь стикер
+            наагдсан нь ХОЁР ӨӨР тоо — эхнийхийг нь "стикертэй" гэж
+            нэрлэвэл 78 барилга бүгд стикертэй мэт болно */}
+        <Stat
+          icon={Building2}
+          label="Хамрагдсан барилга"
+          value={num(stats.n)}
+        />
+        <Stat
+          icon={Sticker}
+          label="Стикер байршуулсан"
+          value={num(stats.stickered)}
+        />
+        <Stat
+          icon={Target}
+          label="Хамрах хүрээ, хувь"
+          value={num(stats.share)}
+        />
+        <Stat
+          icon={MapPin}
+          label="Хамрагдсан дүүрэг"
+          value={num(stats.districts)}
+        />
       </div>
 
-      {/* Газрын зураг бүтэн өргөнөөр — доор нь картын эгнээ */}
-      <Card className="relative min-h-[240px] flex-1 overflow-hidden">
-        {/*
-          `warn-pins` — тэмдэглэгээг дохионы өнгөнд оруулна: цөм нь
-          улбар шар, тэлэх цагираг нь улаан. Эдгээр барилга нь "хэр их"
-          гэсэн хэмжигдэхүүн биш ШУВУУ МӨРГӨХ ЭРСДЭЛ-ийн тэмдэг тул
-          дата дүрслэлийн цэнхэр нь утгыг нь дутуу хэлж байв.
-        */}
-        <div className="warn-pins relative h-full w-full">
-          {/* Цэг цөөхөн (8) тул бөөгнөрүүлэхгүй */}
-          <PointMap
-            points={data.points}
-            visible={visible}
-            labels={labels}
-            basemap={basemap}
-            onSelect={(oid) => setPicked(picked === oid ? null : oid)}
-            onHover={setHover}
-            focus={focus}
-            cluster={false}
-            pulse
-          />
-          <BasemapGallery value={basemap} onChange={setBasemap} />
-
-          {active ? (
-            <div className="pointer-events-none absolute top-2.5 left-2.5 z-10 max-w-[280px] rounded-xs border border-line bg-paper/92 px-2.5 py-2 backdrop-blur-md">
-              <div className="eyebrow mb-1.5">
-                {active.sticker === true
-                  ? "Стикер байршуулсан"
-                  : active.sticker === false
-                    ? "Стикер байршуулаагүй"
-                    : "Стикер тэмдэглэгдээгүй"}
-              </div>
-              <div className="text-[12.5px] leading-snug text-ink">{active.name}</div>
-              <div className="mt-1 text-[10.5px] leading-snug text-ink-3">
-                {active.address || `${active.district} · ${active.khoroo}`}
-              </div>
-            </div>
-          ) : null}
-        </div>
-      </Card>
-
-      {/*
-        Барилгын карт — эгнээ.
-
-        Тогтмол өргөнтэй (`w-[190px]`) байсныг СҮЛЖЭЭ болгов: найман карт
-        190px-ээр тавигдахад өргөн дэлгэцэн дээр баруун талд хоосон зай
-        үлдэж, эгнээ таллаа тасарсан мэт харагдаж байлаа. `auto-fit` нь
-        боломжит өргөнг картуудад ТЭНЦҮҮ хуваана — нарийн дэлгэцэн дээр
-        өөрөө хоёр, дөрвөн мөр болж эвхэгдэнэ.
-
-        Зураас нь `gap-px` + дэвсгэрээр гарна: мөр даган эвхэгдэх үед
-        `divide-x` нь буруу тал дээр зураас үлдээдэг тул тохирохгүй.
-      */}
-      <div
-        className="grid shrink-0 gap-px overflow-hidden rounded-xs border border-line bg-line"
-        style={{ gridTemplateColumns: "repeat(auto-fit, minmax(168px, 1fr))" }}
+      <Columns
+        layout="flex"
+        id="stickers"
+        left={320}
+        right={300}
+        className="min-h-0 flex-1"
       >
-        {shown.map((r) => (
-          <button
-            key={r.oid}
-            onClick={() => setPicked(picked === r.oid ? null : r.oid)}
-            onMouseEnter={() => setHover(r.oid)}
-            onMouseLeave={() => setHover(null)}
-            className={cn(
-              "px-3 py-2.5 text-left transition-colors hover:bg-paper-hi",
-              picked === r.oid ? "bg-paper-hi" : "bg-paper-2",
-            )}
-          >
-            <div className="flex items-center gap-1.5">
-              {/* Иконы өнгө газрын зурган дээрх тэмдэглэгээтэй нэг —
-                  карт ба цэг хоёр нэг зүйл болохыг холбоно */}
-              <Sticker size={12} strokeWidth={1.75} className="shrink-0 text-ochre" />
-              <span className="num text-[10px] text-ink-3">
-                {String(r.no).padStart(2, "0")}
-              </span>
-            </div>
-            <div className="mt-1.5 truncate text-[12.5px] leading-none text-ink">
-              {r.name}
-            </div>
-            <div className="mt-1.5 flex items-start gap-1 text-[10.5px] leading-snug text-ink-3">
-              <MapPin size={10} strokeWidth={1.75} className="mt-[1px] shrink-0" />
-              <span className="min-w-0 truncate">
-                {r.district} · {r.khoroo}
-              </span>
-            </div>
-          </button>
-        ))}
-        {shown.length === 0 ? (
-          <div className="bg-paper-2 py-5 text-center text-[12px] text-ink-3">
-            Шүүлтүүрт тохирох барилга алга
+        {/* ---- ЗҮҮН: барилгын жагсаалт ---- */}
+        <Card className="min-h-[180px] flex-1 xl:w-(--col-l) xl:flex-none">
+          <Head title="Барилга">
+            <span className="num text-[11.5px] text-ink-3">
+              {num(shown.length)} / {num(data.rows.length)}
+            </span>
+          </Head>
+          <div className="shrink-0 border-b border-line p-2">
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Барилгын нэр, хаягаар хайх…"
+              className="h-7 w-full rounded-xs border border-line bg-paper px-2 text-[12px] text-ink outline-none placeholder:text-ink-3 focus:border-line-2"
+            />
           </div>
-        ) : null}
-      </div>
+          <div className="min-h-0 flex-1 divide-y divide-line overflow-y-auto">
+            {shown.map((i) => {
+              const r = data.rows[i];
+              const on = picked === r.oid;
+              return (
+                <button
+                  key={r.oid}
+                  onClick={() => setPicked(on ? null : r.oid)}
+                  className={cn(
+                    "flex w-full items-start gap-2 px-3 py-2 text-left transition-colors hover:bg-paper-hi",
+                    on && "bg-data/10",
+                  )}
+                >
+                  {/*
+                    Стикерийн төлөв — зүүн ирмэгийн тэмдэг. Стикертэйд
+                    л дүүргэлт гарна: 78-аас 8 нь тодрох ёстой, эсрэгээр
+                    биш.
+                  */}
+                  <span
+                    aria-hidden
+                    className={cn(
+                      "mt-[2px] flex size-3.5 shrink-0 items-center justify-center rounded-[2px] border",
+                      r.sticker === true
+                        ? "border-transparent bg-moss"
+                        : r.sticker === false
+                          ? "border-ochre/60"
+                          : "border-line-2",
+                    )}
+                  >
+                    {r.sticker === true ? (
+                      <Check size={10} strokeWidth={3} className="text-paper" />
+                    ) : null}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[12px] leading-tight text-ink">
+                      {r.name || "—"}
+                    </span>
+                    <span className="mt-1 block truncate text-[10.5px] leading-none text-ink-3">
+                      {[r.district, r.khoroo].filter(Boolean).join(" · ")}
+                    </span>
+                  </span>
+                  <span className="num shrink-0 text-[10.5px] leading-none text-ink-3">
+                    {r.no}
+                  </span>
+                </button>
+              );
+            })}
+            {shown.length === 0 ? (
+              <p className="py-5 text-center text-[12px] text-ink-3">
+                Тохирох барилга олдсонгүй
+              </p>
+            ) : null}
+          </div>
+        </Card>
 
-      <p className="shrink-0 px-0.5 text-[10.5px] leading-none text-ink-3">
-        Суурь зураг: Esri · Дата: ArcGIS · {num(data.rows.length)} барилга
-      </p>
+        {/* ---- ГОЛ: газрын зураг ---- */}
+        <div className="flex min-h-0 flex-1 flex-col gap-2.5">
+          <Card className="relative min-h-[260px] flex-1 overflow-hidden">
+            <div className="relative h-full w-full">
+              {/* Цэг 78 тул бөөгнөрүүлэхгүй — хотын төвд нягтарсан ч
+                  тус бүр нь тодорхой барилга */}
+              <PointMap
+                points={data.points}
+                visible={visible}
+                labels={labels}
+                pulse
+                pulseColor={pulseColor}
+                cluster={false}
+                highlight={detail ? [detail.lon, detail.lat] : null}
+                basemap={basemap}
+                onSelect={(oid) => setPicked(picked === oid ? null : oid)}
+              />
+              <BasemapGallery value={basemap} onChange={setBasemap} />
+
+              {detail ? (
+                <div className="elevated absolute bottom-2.5 left-2.5 z-10 w-[250px] rounded-xs border border-line-2 bg-paper/92 backdrop-blur-md">
+                  <div className="flex items-baseline justify-between gap-2 border-b border-line px-2.5 py-2">
+                    <span className="min-w-0 flex-1 truncate text-[12.5px] leading-none font-medium text-ink">
+                      {detail.name || "—"}
+                    </span>
+                    <span className="num shrink-0 text-[10.5px] leading-none text-ink-3">
+                      №{detail.no}
+                    </span>
+                  </div>
+                  <dl className="space-y-1.5 px-2.5 py-2">
+                    <Field k="Стикер" v={stateOf(detail.sticker)} />
+                    <Field
+                      k="Байршил"
+                      v={[detail.district, detail.khoroo]
+                        .filter(Boolean)
+                        .join(", ")}
+                    />
+                    <Field k="Хаяг" v={detail.address} />
+                  </dl>
+                </div>
+              ) : null}
+            </div>
+          </Card>
+
+          <p className="shrink-0 px-0.5 text-[10.5px] leading-none text-ink-3">
+            Суурь зураг: Esri · Дата: ArcGIS Enterprise ·{" "}
+            {num(data.rows.length)} барилга
+          </p>
+        </div>
+
+        {/* ---- БАРУУН: хамралт, задаргаа ---- */}
+        <div className="flex min-h-0 flex-col gap-2.5 overflow-y-auto xl:w-(--col-r) xl:shrink-0">
+          <Card className="shrink-0">
+            <Head title="Стикерийн байдал">
+              <span className="text-[10.5px] text-ink-3">барилга</span>
+            </Head>
+            <div className="p-3">
+              <RowChart data={byState} selected={state} onSelect={setState} />
+            </div>
+          </Card>
+
+          <Card className="shrink-0">
+            <Head title="Дүүргээр — стикертэй">
+              <span className="text-[10.5px] text-ink-3">байршуулсан</span>
+            </Head>
+            <div className="p-3">
+              <RowChart data={coverage} />
+            </div>
+          </Card>
+
+          <Card className="min-h-[120px] flex-1">
+            <Head title="Хороогоор">
+              <span className="text-[10.5px] text-ink-3">барилга</span>
+            </Head>
+            <div className="min-h-0 flex-1 overflow-y-auto p-3">
+              <RowChart
+                data={byKhoroo}
+                selected={khoroo}
+                onSelect={setKhoroo}
+              />
+            </div>
+          </Card>
+        </div>
+      </Columns>
     </div>
   );
 }
@@ -283,45 +469,88 @@ export function StickersDashboard() {
 /* -------------------------------------------------------------------------- */
 
 /**
- * Индикаторын нэгж нүд.
+ * Стикерийн төлөвийн НЭР.
  *
- * Хэмжээ нь дэлгэцийн өргөнд ЗОХИЦНО (`clamp`): нарийн дэлгэцэд 18px,
- * өргөнд 26px хүртэл томорно. Тогтмол хэмжээтэй бол найман барилгын
- * самбарт өргөн зай хоосон үлдэж, тоо нь бяцхан харагдана.
+ * ⚠ Бөглөгдөөгүй утга нь "байршуулаагүй" БИШ — гурав дахь төлөв.
+ * Хоёрыг нэгтгэвэл судалгаа хийгдсэн ч тэмдэглэгдээгүй барилгыг
+ * "стикергүй" гэж батлах болно.
  */
-function Indicator({
+function stateOf(v: boolean | null): string {
+  return v === true
+    ? "Байршуулсан"
+    : v === false
+      ? "Байршуулаагүй"
+      : "Тэмдэглээгүй";
+}
+
+function Field({ k, v }: { k: string; v: string }) {
+  if (!v) return null;
+  return (
+    <div className="flex gap-2">
+      <dt className="w-[66px] shrink-0 text-[10px] tracking-[0.06em] text-ink-3 uppercase">
+        {k}
+      </dt>
+      <dd className="min-w-0 flex-1 text-[11.5px] leading-snug text-ink-2">
+        {v}
+      </dd>
+    </div>
+  );
+}
+
+function Card({
+  className,
+  children,
+}: {
+  className?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div
+      className={cn(
+        "flex flex-col rounded-xs border border-line bg-paper-2",
+        className,
+      )}
+    >
+      {children}
+    </div>
+  );
+}
+
+function Head({
+  title,
+  children,
+}: {
+  title: string;
+  children?: React.ReactNode;
+}) {
+  return (
+    <div className="flex shrink-0 items-center justify-between gap-2 border-b border-line px-3 py-2">
+      <h2 className="display text-[13.5px] leading-none tracking-[0.06em] uppercase">
+        {title}
+      </h2>
+      {children}
+    </div>
+  );
+}
+
+function Stat({
   label,
   value,
   icon: Icon,
 }: {
   label: string;
   value: string;
-  icon: typeof Sticker;
+  icon: typeof MapPin;
 }) {
   return (
-    <div className="flex flex-col px-3.5 py-3">
-      <span className="eyebrow block min-h-[30px] leading-[1.35]">{label}</span>
-      <div className="mt-auto flex items-center gap-2">
-        <Icon
-          strokeWidth={1.6}
-          className="shrink-0 text-ink-3"
-          style={{ width: "clamp(18px, 2.4vw, 28px)", height: "clamp(18px, 2.4vw, 28px)" }}
-        />
-        <span
-          className="num truncate leading-none font-medium text-ink"
-          style={{ fontSize: "clamp(18px, 2.2vw, 26px)" }}
-        >
+    <div className="px-3 py-2.5">
+      <span className="eyebrow block min-h-[28px] leading-[1.25]">{label}</span>
+      <span className="mt-1.5 flex items-center gap-1.5">
+        <Icon size={20} strokeWidth={1.6} className="shrink-0 text-ink-3" />
+        <span className="num truncate text-[16px] leading-none font-medium text-ink">
           {value}
         </span>
-      </div>
-    </div>
-  );
-}
-
-function Card({ className, children }: { className?: string; children: React.ReactNode }) {
-  return (
-    <div className={cn("flex flex-col rounded-xs border border-line bg-paper-2", className)}>
-      {children}
+      </span>
     </div>
   );
 }

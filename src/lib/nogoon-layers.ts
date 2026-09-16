@@ -152,6 +152,9 @@ function tab(key: string, title: string, layers: readonly string[]): LayerSet {
        давхарга хаана байгааг мэдэх шаардлагагүй */
     services: { [SURVEY]: SURVEY_URL },
     openAll: true,
+    /* Цэс бүр нэг сэдвийн давхаргатай тул шошго нь зургийг дарахгүй —
+       харин ч "энэ бүс юу вэ" гэдэгт шууд хариулна */
+    labels: true,
   };
 }
 

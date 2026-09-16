@@ -54,7 +54,10 @@ export async function arcgisJson<T>(
     throw new Error(`${label} татагдсангүй (сүлжээ)`);
   }
 
-  if (!res.ok) throw new Error(`${label} татагдсангүй (${res.status}${await reason(res)})`);
+  if (!res.ok)
+    throw new Error(
+      `${label} татагдсангүй (${res.status}${await reason(res)})`,
+    );
 
   let json: T & ArcGisError;
   try {
@@ -98,6 +101,44 @@ export async function arcgisJson<T>(
  * "нэвтрэлтийн хугацаа дууссан" гэж ойлгомжтой хэлнэ. Энд чимээгүй
  * шидвэл нээлттэй давхаргууд ч татагдахаа болино.
  */
+/**
+ * ХАВСРАЛТ ЗУРГИЙГ татаж, хөтчийн дотоод хаяг болгоно.
+ *
+ * ⚠⚠ **ТОКЕНЫГ `<img src>`-Д ТАВИХГҮЙ.** Хамгаалагдсан давхаргын
+ * зураг токен шаарддаг бөгөөд хамгийн хялбар зам нь хаягт нь
+ * `?token=` залгах явдал байв. Тэгвэл токен DOM-д, хөгжүүлэгчийн
+ * хэрэгсэлд, дэлгэцийн агшин бүрд ил үлдэнэ. Оронд нь зургийг
+ * `fetch`-ээр татаж (токен нь толгойд биш хаягт нь явах ч хүсэлт
+ * DOM-д үлдэхгүй) `blob:` хаяг болгоно.
+ *
+ * ⚠ Буцаасан хаягийг дуудагч тал ХЭРЭГЛЭЖ дуусахдаа
+ * `URL.revokeObjectURL`-ээр суллана — эс тэгвээс таб хаагдтал санах
+ * ойд үлдэнэ.
+ */
+export async function arcgisBlobUrl(
+  url: string,
+  label: string,
+): Promise<string> {
+  const ready = await withToken(url);
+
+  let res: Response;
+  try {
+    res = await fetch(ready);
+  } catch (e) {
+    if (e instanceof DOMException && e.name === "AbortError") throw e;
+    throw new Error(`${label} татагдсангүй (сүлжээ)`);
+  }
+  if (!res.ok) throw new Error(`${label} татагдсангүй (${res.status})`);
+
+  const blob = await res.blob();
+  /* ArcGIS алдаагаа HTTP 200 + JSON-оор буцаадаг тул төрлийг шалгана:
+     зургийн оронд алдааны бичвэр ирвэл хоосон дөрвөлжин гарах байв */
+  if (!blob.type.startsWith("image/")) {
+    throw new Error(`${label}: зураг ирсэнгүй`);
+  }
+  return URL.createObjectURL(blob);
+}
+
 async function withToken(url: string): Promise<string> {
   if (!needsToken(url)) return url;
 

@@ -11,6 +11,7 @@ import {
   MousePointerClick,
   Ruler,
   Waypoints,
+  X,
 } from "lucide-react";
 import {
   GroupedRowChart,
@@ -329,6 +330,22 @@ export function EcoDashboard() {
   const hovered = React.useMemo(() => resolve(tip.oid), [resolve, tip.oid]);
 
   /* Тогтмол самбар: товшсон, эсвэл ЖАГСААЛТЫН мөр дээр очсон зүйл */
+  /**
+   * ТОВШСОН обьект — hover-оос ҮЛ ХАМААРНА.
+   *
+   * Коридор ба нэгж талбар хоёр ӨӨР бичилт тул төрлийг нь хамт
+   * барина: талбарууд нь огт давхцахгүй.
+   */
+  const chosen = React.useMemo(() => {
+    if (picked == null) return null;
+    if (picked >= PARCEL_BASE) {
+      const p = data?.parcels.find((x) => x.oid === picked - PARCEL_BASE);
+      return p ? ({ kind: "parcel", p } as const) : null;
+    }
+    const c = rows?.find((r) => r.oid === picked);
+    return c ? ({ kind: "corridor", c } as const) : null;
+  }, [data, rows, picked]);
+
   const active = React.useMemo(() => {
     const id = hover ?? picked;
     if (id == null) return null;
@@ -632,6 +649,67 @@ export function EcoDashboard() {
                 </MapTip>
               ) : null}
 
+              {/*
+                ТОВШИЛТЫН ЦОНХ — hover картаас ТУСДАА.
+
+                hover карт нь хулганы доорх зүйлийг хэлдэг тул хулгана
+                хөдлөх бүрд солигдоно; энэ нь СОНГОСОН обьектоо барьж,
+                хаах товчтой. Хоёрыг нэгтгэвэл сонголтоо тогтоосон
+                хойноо агуулга нь мултарна.
+              */}
+              {chosen?.kind === "corridor" ? (
+                <div className="elevated absolute right-2.5 bottom-2.5 z-10 w-[250px] rounded-xs border border-line-2 bg-paper/92 backdrop-blur-md">
+                  <div className="flex items-center justify-between gap-2 border-b border-line px-2.5 py-1.5">
+                    <span className="eyebrow">Экологийн коридор</span>
+                    <button
+                      onClick={() => setPicked(null)}
+                      aria-label="Хаах"
+                      className="shrink-0 text-ink-3 transition-colors hover:text-ink"
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                  <dl className="space-y-1.5 px-2.5 py-2">
+                    <PopField k="Бүс" v={chosen.c.zone} />
+                    <PopField k="Нэр" v={chosen.c.name} />
+                    <PopField k="Дүүрэг" v={chosen.c.district} />
+                    <PopField k="Талбай" v={`${num(Math.round(chosen.c.ha))} га`} />
+                  </dl>
+                </div>
+              ) : null}
+
+              {/*
+                ТОВШИЛТЫН ЦОНХ — hover картаас ТУСДАА.
+
+                hover карт нь хулганы доорх зүйлийг хэлдэг тул хулгана
+                хөдлөх бүрд солигдоно; энэ нь СОНГОСОН обьектоо барьж,
+                хаах товчтой. Хоёрыг нэгтгэвэл сонголтоо тогтоосон
+                хойноо агуулга нь мултарна.
+              */}
+              {chosen?.kind === "parcel" ? (
+                <div className="elevated absolute right-2.5 bottom-2.5 z-10 w-[250px] rounded-xs border border-line-2 bg-paper/92 backdrop-blur-md">
+                  <div className="flex items-center justify-between gap-2 border-b border-line px-2.5 py-1.5">
+                    <span className="eyebrow">Нэгж талбар</span>
+                    <button
+                      onClick={() => setPicked(null)}
+                      aria-label="Хаах"
+                      className="shrink-0 text-ink-3 transition-colors hover:text-ink"
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                  <dl className="space-y-1.5 px-2.5 py-2">
+                    <PopField k="Дугаар" v={chosen.p.parcelId} />
+                    <PopField k="Эрх" v={chosen.p.right} />
+                    <PopField k="Зориулалт" v={chosen.p.landuse} />
+                    <PopField k="Байршил" v={[chosen.p.district, chosen.p.khoroo]
+                        .filter(Boolean)
+                        .join(", ")} />
+                    <PopField k="Талбай" v={`${chosen.p.ha.toFixed(2)} га`} />
+                  </dl>
+                </div>
+              ) : null}
+
               {active ? (
                 <div className="pointer-events-none absolute top-2.5 left-2.5 z-10 max-w-[280px] rounded-xs border border-line bg-paper/92 px-2.5 py-2 backdrop-blur-md">
                   {active.kind === "corridor" ? (
@@ -758,6 +836,24 @@ function Stat({
           {value}
         </span>
       </span>
+    </div>
+  );
+}
+
+/**
+ * Товшилтын цонхны мөр.
+ *
+ * Хоосон утга ОГТ гарахгүй — "Тодорхойгүй" гэсэн мөрүүд цонхыг
+ * дүүргэхээс өөр юу ч хэлэхгүй.
+ */
+function PopField({ k, v }: { k: string; v: string }) {
+  if (!v) return null;
+  return (
+    <div className="flex gap-2">
+      <dt className="w-[74px] shrink-0 text-[10px] tracking-[0.06em] text-ink-3 uppercase">
+        {k}
+      </dt>
+      <dd className="min-w-0 flex-1 text-[11.5px] leading-snug text-ink-2">{v}</dd>
     </div>
   );
 }
