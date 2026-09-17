@@ -1,15 +1,52 @@
 /* Workspace: editorial overview, compact navigation, map-first data surfaces. */
-:root { --workspace-accent: #d7ed99; --workspace-accent-ink: #243820; }
+/*
+  ⚠ АЖЛЫН ТАЛБАРЫН ӨНГӨ ХОЁР ГОРИМД (2026-09-17, хэрэглэгч: "харанхуйд
+  бүгд гоё, гэрэлд UI сонин харагдаад байна"). Урьд нь dock, accent,
+  зураасууд ХАРАНХУЙД зориулж хатуу бичигдсэн (#203b32, #d7ed99,
+  #ffffff12) бөгөөд гэрэл горимд ч тэр чигээрээ гарч байв: цайвар
+  хуудсан дээр бараан ногоон хавтан, шар-ногоон товч. Харанхуйн утга
+  ЯГ ХЭВЭЭР; гэрлийнх `globals.css`-ийн ногоон палитраас гарна.
+  Шинэ өнгө нэмвэл хоёр блокт зэрэг нэм — `globals.css`-тэй нэг дүрэм.
+*/
+:root,
+:root[data-theme="light"] {
+  --workspace-accent: var(--moss);
+  --workspace-accent-ink: #ffffff;
+  --workspace-accent-hover: var(--moss-deep);
+  --dock-bg: var(--paper-3);
+  --dock-ink: var(--ink);
+  --dock-ink-2: var(--ink-2);
+  --dock-ink-3: var(--ink-3);
+  --dock-line: var(--line);
+  --dock-line-2: var(--line-2);
+  --dock-hover: var(--paper-hi);
+  --dock-active-bg: var(--moss);
+  --dock-active-ink: #ffffff;
+}
+:root[data-theme="dark"] {
+  --workspace-accent: #d7ed99;
+  --workspace-accent-ink: #243820;
+  --workspace-accent-hover: #c7e47a;
+  --dock-bg: #203b32;
+  --dock-ink: #dde6d6;
+  --dock-ink-2: #c0d0c3;
+  --dock-ink-3: #a4b7a6;
+  --dock-line: #ffffff12;
+  --dock-line-2: #ffffff16;
+  --dock-hover: #ffffff0c;
+  --dock-active-bg: #d7ed99;
+  --dock-active-ink: #203b32;
+}
 .workspace-frame { margin-left: 104px; }
 .workspace-main { padding-left: clamp(20px, 2.4vw, 48px); padding-right: clamp(20px, 2.4vw, 48px); }
-.workspace-dock { position: fixed; inset: 0 auto 0 0; z-index: 60; width: 104px; display: flex; flex-direction: column; align-items: center; background: #203b32; color: #dde6d6; border-right: 1px solid #ffffff12; }
-.dock-brand { display: grid; place-items: center; width: 48px; height: 48px; min-height: 48px; margin: 20px 0 17px; border-radius: 50%; background: var(--workspace-accent); color: #203b32; }
+.workspace-dock { position: fixed; inset: 0 auto 0 0; z-index: 60; width: 104px; display: flex; flex-direction: column; align-items: center; background: var(--dock-bg); color: var(--dock-ink); border-right: 1px solid var(--dock-line); }
+.dock-brand { display: grid; place-items: center; width: 48px; height: 48px; min-height: 48px; margin: 20px 0 17px; border-radius: 50%; background: var(--dock-active-bg); color: var(--dock-active-ink); }
 .dock-nav { width: 100%; padding: 0 12px; overflow-y: auto; scrollbar-width: none; }
-.dock-link { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; min-height: 57px; margin: 3px 0; border-radius: 13px; color: #c0d0c3; font-size: 10px; font-weight: 500; transition: color 160ms, background 160ms; }
-.dock-link:hover { color: white; background: #ffffff0c; }
-.dock-link.active { background: var(--workspace-accent); color: #203b32; }
-.dock-divider { height: 1px; background: #ffffff16; margin: 12px 16px; }
-.dock-end { margin: auto 0 0; padding: 16px; color: #a4b7a6; }
+.dock-link { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; min-height: 57px; margin: 3px 0; border-radius: 13px; color: var(--dock-ink-2); font-size: 10px; font-weight: 500; transition: color 160ms, background 160ms; }
+.dock-link:hover { color: var(--dock-ink); background: var(--dock-hover); }
+.dock-link.active { background: var(--dock-active-bg); color: var(--dock-active-ink); }
+.dock-divider { height: 1px; background: var(--dock-line-2); margin: 12px 16px; }
+.dock-end { margin: auto 0 0; padding: 16px; color: var(--dock-ink-3); }
 .workspace-header { position: sticky; top: 0; z-index: 40; display: flex; gap: 20px; align-items: center; height: var(--head-h); padding: 0 clamp(20px, 2.4vw, 48px); border-bottom: 1px solid var(--line); background: color-mix(in oklab, var(--paper) 94%, transparent); backdrop-filter: blur(16px); }
 .workspace-wordmark { display: flex; align-items: center; gap: 12px; font-family: var(--font-manrope), sans-serif; font-size: 16px; font-weight: 700; line-height: 1.35; }
 .workspace-identity { position: relative; padding-left: 72px; }
@@ -35,7 +72,7 @@
 .intro-description { margin-top: 22px; color: var(--ink-3); font-size: 14px; line-height: 1.9; }
 .intro-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 24px; margin-top: 28px; }
 .action-primary { display: inline-flex; justify-content: center; align-items: center; gap: 24px; min-height: 46px; padding: 12px 20px; border-radius: 8px; background: var(--workspace-accent); color: var(--workspace-accent-ink); font-size: 12px; font-weight: 600; transition: background 160ms; }
-.action-primary:hover { background: #c7e47a; }
+.action-primary:hover { background: var(--workspace-accent-hover); }
 .action-text { display: inline-flex; align-items: center; gap: 10px; min-height: 42px; font-size: 12px; font-weight: 500; color: var(--ink-2); }
 .action-text:hover { color: var(--moss); }
 .intro-index { display: flex; align-items: center; gap: 18px; margin-top: 34px; color: var(--ink-3); font-size: 10px; }
@@ -51,7 +88,7 @@
 .landscape-caption h2 { margin-top: 12px; font-family: var(--font-manrope), sans-serif; font-weight: 500; font-size: clamp(25px, 2.8vw, 40px); line-height: 1.2; letter-spacing: -.04em; }
 .landscape-caption > div > span { color: #d1ddcc; font-size: 9px; letter-spacing: .16em; }
 .landscape-arrow { display: grid; place-items: center; flex-shrink: 0; width: 50px; height: 50px; border: 1px solid #ffffff40; border-radius: 50%; transition: color 160ms, background 160ms; }
-.landscape-feature:hover .landscape-arrow { background: var(--workspace-accent); color: #203b32; }
+.landscape-feature:hover .landscape-arrow { background: var(--workspace-accent); color: var(--workspace-accent-ink); }
 .system-summary { display: grid; grid-template-columns: 1.2fr 1fr 1fr 1fr 1.05fr; align-items: center; gap: 24px; padding: 26px 0; border-top: 1px solid var(--line-2); border-bottom: 1px solid var(--line-2); }
 .summary-heading p { font-size: 14px; font-weight: 500; line-height: 1.6; margin-top: 5px; }
 .summary-number { padding-left: 24px; border-left: 1px solid var(--line); }
@@ -87,7 +124,7 @@
 .entry-status > span { width: 5px; height: 5px; border-radius: 50%; background: var(--moss); }
 .is-pending .entry-status > span { background: var(--ochre); }
 .entry-arrow { display: grid; place-items: center; width: 32px; height: 32px; flex-shrink: 0; color: var(--ink-3); border-radius: 50%; transition: color 160ms, background 160ms; }
-.department-entry:hover .entry-icon, .department-entry:hover .entry-arrow { background: var(--workspace-accent); color: #243820; }
+.department-entry:hover .entry-icon, .department-entry:hover .entry-arrow { background: var(--workspace-accent); color: var(--workspace-accent-ink); }
 .department-entry:hover h3 { color: var(--moss); }
 .department-collection.as-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; border: none; }
 .as-grid .department-entry { position: relative; flex-wrap: wrap; gap: 12px; align-items: start; padding: 22px; border: 1px solid var(--line); border-radius: 14px; background: var(--paper-2); }
@@ -115,7 +152,7 @@
 @media (max-width: 900px) {
   .workspace-frame { margin-left: 0; }
   .workspace-main { padding-bottom: 100px; }
-  .workspace-dock { inset: auto 0 0; width: 100%; height: 76px; padding-bottom: env(safe-area-inset-bottom, 0px); border-top: 1px solid #ffffff20; }
+  .workspace-dock { inset: auto 0 0; width: 100%; height: 76px; padding-bottom: env(safe-area-inset-bottom, 0px); border-top: 1px solid var(--dock-line-2); }
   .dock-brand, .dock-divider, .dock-end { display: none; }
   .dock-nav { display: flex; gap: 5px; padding: 5px 10px; overflow-x: auto; overflow-y: hidden; height: 100%; }
   .dock-link { flex-shrink: 0; width: 70px; margin: 0; min-height: 58px; }
