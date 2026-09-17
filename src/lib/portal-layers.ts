@@ -351,69 +351,50 @@ export type LayerFeatures = {
 };
 
 /**
- * Давхаргын бичлэгүүдийг татна.
+ * Давхаргын бичлэгүүдийг ХОЁР ҮЕ ШАТТАЙ татна.
  *
- * ЗӨВХӨН асаасан давхарга татагдана — найман давхаргыг эхнээс нь бүгдийг
- * татах нь хэдэн мегабайт дэмий жин болно.
+ * ⚠⚠ **АТРИБУТ ЭХЛЭЭД, ГЕОМЕТР АРД НЬ** (2026-09-17, хэмжилтээс).
+ * Хүнд талбайн давхарга дээр (ойн хэсэглэл, 7,699 талбай) хуудас
+ * бүр 1.5 секунд — саад нь серверийн геометр ЕРӨНХИЙЛӨЛТ (CPU), хуудсыг
+ * зэрэг гуйхад ч буурдаггүй. Харин ГЕОМЕТРГҮЙ асуулга нь тэр хуудсыг
+ * 76 мс-д буцаана. Диаграм, жагсаалт, шошго, талбай бүгд атрибутаас
+ * гардаг тул тэднийг эхлээд татаж самбарыг 0.1 секундэд амьд болгоод,
+ * геометрийг ард нь зураг руу урсгана — хэрэглэгч "мэдээ татаж байна"
+ * гэж хүлээхийн оронд шууд ажиллаж эхэлнэ.
  *
- * Геометрийг серверт ерөнхийлүүлнэ: ойн давхаргууд маш нягт (талбай
- * тутамд хэдэн зуун орой) тул ерөнхийлөлтгүй бол хэдэн арван мегабайт
- * болно. Талбайн утга ерөнхийлөлтөөс өөрчлөгддөггүй тул `Shape__Area`-г
- * тусад нь татаж авна.
+ * Геометрийн асуулга ЗӨВХӨН дугаарын талбарыг авна — атрибутыг хоёр
+ * дахин татахгүй.
+ *
+ * Хуудсуудыг ЗЭРЭГ гуйна (тоо мэдэгдвэл): цэгэн давхаргад 7.5 дахин,
+ * хөнгөн талбайд 4.6 дахин хурдан (хэмжсэн). Тоо хуучирсан бол дүүрэн
+ * хуудасны араас дараалан үргэлжлүүлнэ.
  */
-async function loadLayerFeatures(
+type Raw = {
+  properties: Record<string, unknown>;
+  geometry: GeoJSON.Geometry | null;
+};
+
+async function pagesOf(
   info: LayerInfo,
-  signal?: AbortSignal,
-): Promise<LayerFeatures> {
+  params: Record<string, string>,
+): Promise<Raw[]> {
   const service = serviceOf(info.set, info.id);
-  const oid = info.objectIdField;
   const size = info.pageSize;
-
-  /* Дүрслэлд хэрэглэгдэх талбар + талбайн эх сурвалж. Нэрийг бүгдийг
-     давхарга ӨӨРӨӨ зарласнаас авна — үсгийн тэмдэглэгээ ч түүнийх */
-  const out = [
-    oid,
-    ...info.fields.map((f) => f.name),
-    ...(info.areaField ? [info.areaField] : []),
-  ];
-
-  type Raw = {
-    properties: Record<string, unknown>;
-    geometry: GeoJSON.Geometry | null;
-  };
-
   const page = (offset: number) =>
     arcgisJson<{ features?: Raw[] }>(
       `${service}/${info.layerId}/query?` +
         new URLSearchParams({
           where: "1=1",
-          outFields: out.join(","),
           outSR: "4326",
-          maxAllowableOffset: String(OFFSET),
-          geometryPrecision: "5",
           resultOffset: String(offset),
           resultRecordCount: String(size),
-          orderByFields: oid,
+          orderByFields: info.objectIdField,
           f: "geojson",
+          ...params,
         }),
       info.name,
-      { signal },
     ).then((j) => j.features ?? []);
 
-  /*
-    ⚠ ХУУДСУУДЫГ ЗЭРЭГ ТАТНА (2026-09-17, хэрэглэгч: "мэдээ татаж байна
-    гээд маш их удаж байна"). Урьд нь хуудас бүр өмнөхөө дуустал хүлээдэг
-    байв: 14 мянган бичлэгтэй давхарга долоон эргэлтийг ДАРААЛАН хийж,
-    геометрийн ерөнхийлөлтийг сервер долоон удаа ээлжлэн бодож байлаа.
-    Бичлэгийн тоо тодорхойлолтоос МЭДЭГДДЭГ тул хэдэн хуудас болохыг
-    урьдчилан тоолж, бүгдийг нэг дор гуйна — хүлээх хугацаа хамгийн урт
-    хуудсынхаас хэтрэхгүй.
-
-    Тоо нь ХУУЧИРСАН байж болно (давхарга бөглөгдсөөр байвал): сүүлчийн
-    хуудас дүүрэн ирвэл дараагийнхыг дараалан үргэлжлүүлж, дүүрээгүй
-    хуудас ирэх хүртэл татна. Тоо огт мэдэгдээгүй бол (тоолол 500-аар
-    унасан) анхнаасаа дараалан явна.
-  */
   const known = info.count > 0 ? Math.ceil(info.count / size) : 1;
   const pages = await Promise.all(
     Array.from({ length: known }, (_, i) => page(i * size)),
@@ -423,39 +404,57 @@ async function loadLayerFeatures(
     last = await page(offset);
     pages.push(last);
   }
+  return pages.flat();
+}
 
-  const shapes: GeoJSON.Feature[] = [];
+type LayerRows = Pick<LayerFeatures, "rows" | "area">;
+
+async function loadLayerRows(info: LayerInfo): Promise<LayerRows> {
+  const oid = info.objectIdField;
+  /* Дүрслэлд хэрэглэгдэх талбар + талбайн эх сурвалж. Нэрийг бүгдийг
+     давхарга ӨӨРӨӨ зарласнаас авна — үсгийн тэмдэглэгээ ч түүнийх */
+  const out = [
+    oid,
+    ...info.fields.map((f) => f.name),
+    ...(info.areaField ? [info.areaField] : []),
+  ];
   const rows: Record<number, Record<string, unknown>> = {};
   const area: Record<number, number> = {};
-
-  for (const f of pages.flat()) {
+  for (const f of await pagesOf(info, {
+    outFields: out.join(","),
+    returnGeometry: "false",
+  })) {
     const p = f.properties ?? {};
     const uid = Number(p[oid]);
     if (!Number.isFinite(uid)) continue;
-
     rows[uid] = p;
     if (info.areaField) {
       const a = Number(p[info.areaField]);
       if (Number.isFinite(a)) area[uid] = a;
     }
-
-    if (f.geometry) {
-      shapes.push({
-        type: "Feature",
-        /* `feature-state`-д тоон `id` шаардлагатай */
-        id: uid,
-        properties: { oid: uid },
-        geometry: f.geometry,
-      });
-    }
   }
+  return { rows, area };
+}
 
-  return {
-    id: info.id,
-    shapes: { type: "FeatureCollection", features: shapes },
-    rows,
-    area,
-  };
+async function loadLayerShapes(info: LayerInfo): Promise<GeoJSON.Feature[]> {
+  const oid = info.objectIdField;
+  const shapes: GeoJSON.Feature[] = [];
+  for (const f of await pagesOf(info, {
+    outFields: oid,
+    maxAllowableOffset: String(OFFSET),
+    geometryPrecision: "5",
+  })) {
+    const uid = Number(f.properties?.[oid]);
+    if (!Number.isFinite(uid) || !f.geometry) continue;
+    shapes.push({
+      type: "Feature",
+      /* `feature-state`-д тоон `id` шаардлагатай */
+      id: uid,
+      properties: { oid: uid },
+      geometry: f.geometry,
+    });
+  }
+  return shapes;
 }
 
 /** Диаграмын төрөл — юуг хэмжиж байгаа нь */
@@ -1708,7 +1707,8 @@ export function totalHa(data: LayerFeatures): number {
    дууссан, сүлжээ тасарсан) дараагийн оролдлогыг хаах ёсгүй.
    -------------------------------------------------------------------------- */
 const infoCache = new Map<string, Promise<LayerInfo>>();
-const featureCache = new Map<string, Promise<LayerFeatures>>();
+const rowsCache = new Map<string, Promise<LayerRows>>();
+const shapesCache = new Map<string, Promise<GeoJSON.Feature[]>>();
 
 /** Дуудагчийн `signal` тасрахад хүлээхээ болино — амлалт өөрөө үргэлжилнэ */
 function abortable<T>(p: Promise<T>, signal?: AbortSignal): Promise<T> {
@@ -1735,9 +1735,33 @@ export function fetchLayerInfo(set: LayerSet, id: string, signal?: AbortSignal):
   return abortable(memo(infoCache, serviceOf(set, id), () => loadLayerInfo(set, id)), signal);
 }
 
-export function fetchLayerFeatures(info: LayerInfo, signal?: AbortSignal): Promise<LayerFeatures> {
+const NO_SHAPES: GeoJSON.FeatureCollection = { type: "FeatureCollection", features: [] };
+
+/**
+ * `onRows` нь атрибут ирмэгц (геометрээс ӨМНӨ) хоосон геометртэй
+ * хувилбарыг өгнө — самбар түүгээр диаграм, жагсаалтаа шууд зурна.
+ * Буцаах амлалт нь геометртэй бүтэн хувилбараар шийдэгдэнэ.
+ * Хоёр үе шат тус тусдаа кэшлэгдэнэ.
+ */
+export function fetchLayerFeatures(
+  info: LayerInfo,
+  signal?: AbortSignal,
+  onRows?: (partial: LayerFeatures) => void,
+): Promise<LayerFeatures> {
+  const key = `${serviceOf(info.set, info.id)}/${info.layerId}`;
+  const rows = memo(rowsCache, key, () => loadLayerRows(info));
+  const shapes = memo(shapesCache, key, () => loadLayerShapes(info));
+  if (onRows) {
+    void rows.then((r) => {
+      if (!signal?.aborted) onRows({ id: info.id, shapes: NO_SHAPES, ...r });
+    }, () => undefined);
+  }
   return abortable(
-    memo(featureCache, `${serviceOf(info.set, info.id)}/${info.layerId}`, () => loadLayerFeatures(info)),
+    Promise.all([rows, shapes]).then(([r, features]) => ({
+      id: info.id,
+      shapes: { type: "FeatureCollection", features },
+      ...r,
+    })),
     signal,
   );
 }

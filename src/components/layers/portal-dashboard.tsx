@@ -379,19 +379,22 @@ export function PortalLayersDashboard({ set }: { set: LayerSet }) {
 
     for (const id of want) {
       const info = infos[id];
-      fetchLayerFeatures(info, ac.signal)
-        .then((data) => {
-          if (!alive) return;
-          setLoaded((m) => ({
-            ...m,
-            [id]: {
-              info,
-              data,
-              charts: breakdowns(info, data),
-              labels: labelParts(info, data),
-            },
-          }));
-        })
+      /* Атрибут ирмэгц (геометрээс өмнө) диаграм, жагсаалтыг зурна;
+         геометр ирэхэд ижил бичлэг зураг дээр нэмэгдэнэ */
+      const place = (data: LayerFeatures) => {
+        if (!alive) return;
+        setLoaded((m) => ({
+          ...m,
+          [id]: {
+            info,
+            data,
+            charts: breakdowns(info, data),
+            labels: labelParts(info, data),
+          },
+        }));
+      };
+      fetchLayerFeatures(info, ac.signal, place)
+        .then(place)
         .catch((e: Error) => {
           if (!alive || e.name === "AbortError") return;
           setFailed((f) => ({ ...f, [id]: e.message }));
