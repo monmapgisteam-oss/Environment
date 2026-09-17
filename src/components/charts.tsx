@@ -50,6 +50,15 @@ export type Datum = {
   value: number;
   /** Толь бичиг дэх байрлал — өнгө сонгоход хэрэглэнэ */
   rank?: number;
+  /**
+   * Мөрийн ӨӨРИЙН өнгө — өгвөл диаграмын `tone`-ыг дарна.
+   *
+   * ⚠ Зөвхөн ЭРЭМБЭТЭЙ хэмжигдэхүүнд (PLI, эрсдэлийн зэрэг): нэрлэсэн
+   * ангиллыг өнгөөр ялгавал утгагүй солонго болно — "дата дүрслэлийн
+   * өнгө ганц" дүрэм. Ариун цэврийн самбар дүүрэг, хороо, бүсийн
+   * зурвасаа дундаж PLI-ээр өнгөлдөг (хэрэглэгчийн хүсэлт, 2026-09-17).
+   */
+  color?: string;
 };
 
 export function BarChart({
@@ -965,7 +974,7 @@ export function GroupedRowChart({
                         className="h-full transition-[width,opacity]"
                         style={{
                           width: `${(d.value / rowMax) * 100}%`,
-                          background: tone,
+                          background: d.color ?? tone,
                           opacity: on ? 1 : 0.3,
                         }}
                       />

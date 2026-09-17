@@ -40,6 +40,7 @@ import {
   type ToiletPoints,
   type ToiletsPayload,
 } from "@/lib/toilets";
+import { pliColor } from "@/lib/soil";
 import { Bounds } from "@/lib/extent";
 import { cn, num } from "@/lib/utils";
 
@@ -299,19 +300,27 @@ export function OrchinDashboard() {
   const zoneData = React.useMemo<Datum[]>(() => {
     if (!data) return [];
     return ZONES.map((z, zi) => {
+      /* Тоо ба жигнэсэн дундаж PLI хоёуланг нэг гүйлтээр — өнгө нь
+         тухайн бүсийн дундаж PLI (шүүлтийг дагана) */
       let n = 0;
-      const ki = khoroo ? data.khoroos.indexOf(khoroo) : -1;
-      if (ki >= 0) {
-        for (let b = 0; b < PLI_BUCKETS; b++) n += data.khZonePli[(ki * 4 + zi) * PLI_BUCKETS + b];
-        return { key: String(z), label: `${z}-р бүс`, value: n };
-      }
-      for (let d = 0; d < data.districts.length; d++) {
-        if (dIdx >= 0 && d !== dIdx) continue;
+      let sum = 0;
+      const add = (table: number[], unit: number) => {
         for (let b = 0; b < PLI_BUCKETS; b++) {
-          n += data.distZonePli[(d * 4 + zi) * PLI_BUCKETS + b];
+          const c = table[(unit * 4 + zi) * PLI_BUCKETS + b];
+          if (!c) continue;
+          n += c;
+          sum += (PLI_MIN + b * PLI_STEP) * c;
+        }
+      };
+      const ki = khoroo ? data.khoroos.indexOf(khoroo) : -1;
+      if (ki >= 0) add(data.khZonePli, ki);
+      else {
+        for (let d = 0; d < data.districts.length; d++) {
+          if (dIdx >= 0 && d !== dIdx) continue;
+          add(data.distZonePli, d);
         }
       }
-      return { key: String(z), label: `${z}-р бүс`, value: n };
+      return { key: String(z), label: `${z}-р бүс`, value: n, color: n ? pliColor(sum / n) : undefined };
     }).filter((d) => d.value > 0);
   }, [data, dIdx, khoroo]);
 
@@ -379,7 +388,7 @@ export function OrchinDashboard() {
       if (!data) return [];
       for (let k = 0; k < data.khoroos.length; k++) {
         if (dIdx >= 0 && data.khDistrict[k] !== dIdx) continue;
-        const { n } = avgPli(data.khZonePli, k);
+        const { avg, n } = avgPli(data.khZonePli, k);
         if (n <= 0) continue;
         const dName = data.districts[data.khDistrict[k]] ?? "Тодорхойгүй";
         /*
@@ -388,10 +397,13 @@ export function OrchinDashboard() {
           болох тул байгаагаар нь үлдээнэ.
         */
         const numPart = data.khoroos[k].split("_")[1];
-        const row = {
+        /* Зурвасын өнгө = хорооны дундаж PLI (хөрсний самбартай нэг
+           шатлал, `lib/soil.ts`) — урт нь ТОО, өнгө нь ТҮВШИН */
+        const row: Datum = {
           key: data.khoroos[k],
           label: numPart ? `${numPart}-р хороо` : data.khoroos[k],
           value: n,
+          color: pliColor(avg),
         };
         byDistrict.set(dName, [...(byDistrict.get(dName) ?? []), row]);
       }
@@ -709,7 +721,7 @@ export function OrchinDashboard() {
           {/* Бүс нь нийтийн жорлонд байхгүй хэмжигдэхүүн */}
           {pit ? (
             <Card className="shrink-0">
-              <Head title="Бүсийн тархалт" />
+              <Head title="Бүсийн тархалт"><PliKey /></Head>
               <div className="p-3">
                 <ZoneBars data={zoneData} selected={zone} onSelect={setZone} />
               </div>
@@ -720,6 +732,7 @@ export function OrchinDashboard() {
           <Card className="min-h-[120px] flex-1">
             {/* Дүүрэг + хороо хоёр шатлалыг агуулдаг тул нэр нь "хороогоор" биш */}
             <Head title="Байршлын мэдээлэл">
+              {pit && <PliKey />}
               <span className="num text-[11.5px] text-ink-3">{khorooData.length} хороо</span>
             </Head>
             <div className="min-h-0 flex-1 overflow-y-auto p-3">
@@ -764,6 +777,26 @@ function Help({ text }: { text: string }) {
   return <span className="group relative inline-flex shrink-0 normal-case tracking-normal"><button type="button" aria-label={text} className="rounded text-ink-3 hover:text-ink focus-visible:outline-2 focus-visible:outline-(--data)"><Info size={13} /></button><span role="tooltip" className="pointer-events-none absolute right-0 top-5 z-30 hidden w-60 max-w-[75vw] rounded-md border border-line bg-paper-2 p-3 text-[11px] font-normal leading-relaxed text-ink-2 shadow-lg group-hover:block group-focus-within:block">{text}</span></span>;
 }
 
+/**
+ * PLI-ийн өнгөний ТҮЛХҮҮР — картын толгойд жижиг тасралтгүй тууз.
+ *
+ * Зурвасын өнгө нь дундаж PLI тул юу гэсэн үг болохыг таахаар
+ * үлдээж болохгүй. Тууз нь `lib/soil.ts`-ийн шатлалаас гарна —
+ * хөрсний самбартай нэг өнгө, нэг утга. Салангид дугуй биш ТУУЗ:
+ * шатлал тасралтгүй тул дугуйнууд ангилал мэт уншуулна.
+ * Тоо нь 1 ба 4 — энэ эх сурвалжийн PLI-ийн бодит муж.
+ */
+function PliKey() {
+  const stops = [1, 1.5, 2, 2.5, 3, 4].map((v) => pliColor(v)).join(", ");
+  return (
+    <span className="flex items-center gap-1.5 text-[10px] text-ink-3" aria-label="Зурвасын өнгө — дундаж PLI, 1-ээс 4">
+      <span className="num">PLI 1</span>
+      <span className="h-1.5 w-12 rounded-full" style={{ background: `linear-gradient(to right, ${stops})` }} />
+      <span className="num">4</span>
+    </span>
+  );
+}
+
 function ZoneBars({ data, selected, onSelect }: { data: Datum[]; selected: string | null; onSelect: (key: string | null) => void }) {
   const total = data.reduce((sum, row) => sum + row.value, 0);
   if (!total) return <p className="py-3 text-[12px] text-ink-3">Бүсийн бүртгэл байхгүй</p>;
@@ -774,7 +807,7 @@ function ZoneBars({ data, selected, onSelect }: { data: Datum[]; selected: strin
       const active = selected === row.key;
       return <button key={row.key} type="button" aria-pressed={active} onClick={() => onSelect(active ? null : row.key)} className={cn("block w-full rounded-md px-2 py-2 text-left transition-colors hover:bg-paper-hi focus-visible:outline-2 focus-visible:outline-(--data)", active && "bg-paper-hi ring-1 ring-(--data)", selected && !active && "opacity-50")}>
         <span className="flex items-baseline justify-between gap-2 text-[12px]"><span>{row.label}</span><span className="num font-medium">{num(row.value)}<span className="ml-2 inline-block w-11 text-right text-[10.5px] font-normal text-ink-3">{share.toFixed(1)}%</span></span></span>
-        <span className="mt-2 block h-1.5 overflow-hidden rounded-full bg-paper-hi"><span className="block h-full rounded-full bg-data transition-[width]" style={{ width: `${share}%` }} /></span>
+        <span className="mt-2 block h-1.5 overflow-hidden rounded-full bg-paper-hi"><span className="block h-full rounded-full transition-[width]" style={{ width: `${share}%`, background: row.color ?? "var(--data)" }} /></span>
       </button>;
     })}</div>
   </div>;
