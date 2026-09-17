@@ -32,8 +32,14 @@ const LayersDashboard = dynamic(
 
 export function OiWorkspace() {
   return (
-    <div className="flex h-full min-h-0 flex-col gap-2.5">
-      <LayersDashboard set={FOREST} />
+    <div className="flex h-full min-h-0 flex-col">
+      {/*
+        ⚠ ТОЛГОЙ БАЙХГҮЙ (хэрэглэгчийн шийдвэр, 2026-09-17). Бусад таван
+        хэлтэс мөн толгойгүй — платформын толгой ба хажуугийн зурвас
+        хэлтсийн нэрийг аль хэдийн харуулдаг тул самбар доторх гарчиг нь
+        давхардал (санхүүгийн хэлтэстэй нэг сургамж). Дахин бүү нэм.
+      */}
+      <div className="min-h-0 flex-1"><LayersDashboard set={FOREST} /></div>
     </div>
   );
 }
