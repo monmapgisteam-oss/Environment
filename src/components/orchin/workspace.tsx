@@ -158,10 +158,10 @@ export function OrchinWorkspace() {
   const [tab, pick] = useStoredTab<TabId>("orchin.tab", IDS, "sanitation");
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-2.5">
+    <div className="department-workspace">
       <SourceTabs tabs={TABS} value={tab} onChange={pick} label="Сэдэв" />
 
-      <div className="min-h-0 flex-1">
+      <div className="department-workspace-content">
         {tab === "sanitation" ? (
           <SanitationDashboard />
         ) : tab === "soil" ? (

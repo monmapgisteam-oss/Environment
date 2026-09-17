@@ -53,141 +53,48 @@ export type Datum = {
 };
 
 export function BarChart({
-  data,
-  height = 130,
-  tone = "var(--data)",
-  selected,
-  onSelect,
-  formatTick,
-  labels,
-  unit,
-  format = num,
+  data, height = 130, tone = "var(--data)", selected, onSelect, formatTick, labels, unit, format = num,
 }: {
-  data: Datum[];
-  height?: number;
-  tone?: string;
-  /** Хэмжих нэгж — баганануудын дээр, тоонуудын хажууд */
-  unit?: string;
-  selected?: Selection;
-  onSelect?: (key: string | null) => void;
-  formatTick?: (d: Datum, i: number) => string;
-  /**
-   * Багана бүрийн утгыг бичих эсэх.
-   *
-   * Багана нь харьцааг хэлдэг ч ЯГ хэдийг хэлдэггүй — хулганы доорх
-   * тайлбарыг уншихын тулд заавал чиглүүлэх шаардлагатай болдог.
-   * Багана цөөн (жил, сар) үед бичвэр нь багтдаг тул тэнд асаана.
-   */
-  labels?: boolean;
-  /** Тооны бичиглэл — шошгонд ба хулганы тайлбарт */
-  format?: (v: number) => string;
+  data: Datum[]; height?: number; tone?: string; selected?: Selection;
+  onSelect?: (key: string | null) => void; formatTick?: (d: Datum, i: number) => string;
+  labels?: boolean; unit?: string; format?: (v: number) => string;
 }) {
+  if (!data.length) return <div className="chart-empty">Үзүүлэлт байхгүй</div>;
   const max = Math.max(...data.map((d) => d.value), 1);
   const interactive = Boolean(onSelect);
-  /*
-    Шошгонд зориулж ДЭЭД ТАЛААС зай үлдээнэ.
-
-    Шошго тус бүр өөрийн багананыхаа орой дээр суух ёстой ч хамгийн
-    өндөр багана нь хүрээний тааз хүртэл хүрдэг тул зай нэхэхгүй бол
-    түүний шошго халина. Багануудыг бага зэрэг нам болгосноор БҮХ
-    шошго ижил байрлалд — багананыхаа яг дээр — суух боломжтой болно.
-    Заримыг нь дотор, заримыг нь гадна тавибал эгнээ нь эмх замбараагүй
-    харагдана.
-  */
-  const room = labels ? Math.min(28, (15 / height) * 100) : 0;
-  const scale = (v: number) =>
-    Math.max((v / max) * (100 - room), v > 0 ? 1.5 : 0);
+  const showValues = labels ?? data.length <= 8;
+  const room = showValues ? Math.min(28, 20 / height * 100) : 6;
+  const scale = (v: number) => Math.max(0, v / max * (100 - room));
+  const axisTicks = format(max / 2) === format(0) || format(max / 2) === format(max) ? [0, 1] : [0, .5, 1];
 
   return (
-    <div>
-      {unit ? <div className="eyebrow mb-1.5">{unit}</div> : null}
-      <div className="flex items-end gap-[3px]" style={{ height }}>
-        {data.map((d) => {
-          const on = nothingPicked(selected) || picked(selected, d.key);
-          return (
-            <button
-              key={d.key}
-              type="button"
-              disabled={!interactive}
-              onClick={() => onSelect?.(clickValue(selected, d.key))}
-              title={`${d.label} · ${format(d.value)}${unit ? ` ${unit}` : ""}`}
-              className={cn(
-                /* Хөтчийн анхдагч фокусын хүрээ нь баганыг бүхэлд нь
-                   хүрээлж, сонголтын тэмдэг мэт эндүүрүүлдэг — гарын
-                   хэрэглэгчид зориулж нимгэн зураас үлдээв */
-                "group relative flex h-full flex-1 items-end outline-none",
-                "focus-visible:outline-1 focus-visible:outline-offset-1 focus-visible:outline-(--data)",
-                interactive && "cursor-pointer",
-              )}
-            >
-              <span
-                className="w-full rounded-t-[1px] transition-[height,background-color,opacity]"
-                style={{
-                  height: `${scale(d.value)}%`,
-                  background: tone,
-                  opacity: on ? 1 : 0.22,
-                }}
-              />
-
-              {/* Утгын шошго — багананыхаа яг дээр, бүгд ижил зайд */}
-              {labels && d.value > 0 ? (
-                <span
-                  aria-hidden
-                  className={cn(
-                    "num pointer-events-none absolute inset-x-0 truncate px-[1px] text-center text-[9.5px] leading-none transition-colors",
-                    on ? "text-ink-2" : "text-ink-3/60",
-                  )}
-                  style={{ bottom: `calc(${scale(d.value)}% + 4px)` }}
-                >
-                  {format(d.value)}
-                </span>
-              ) : null}
-              {interactive ? (
-                <span
-                  aria-hidden
-                  className="absolute inset-0 opacity-0 transition-opacity group-hover:opacity-100"
-                  style={{
-                    background: `color-mix(in oklab, ${tone} 12%, transparent)`,
-                  }}
-                />
-              ) : null}
-            </button>
-          );
-        })}
-      </div>
-      <div className="mt-1.5 flex gap-[3px]">
-        {data.map((d, i) => (
-          <span
-            key={d.key}
-            className={cn(
-              "num flex-1 text-center text-[10px] transition-colors",
-              picked(selected, d.key) ? "text-ink" : "text-ink-3",
-            )}
-          >
-            {formatTick ? formatTick(d, i) : d.label}
-          </span>
-        ))}
+    <div className="bar-chart">
+      {unit && <div className="chart-unit">{unit}</div>}
+      <div className="bar-chart-layout">
+        <div className="bar-chart-axis" style={{ height }} aria-hidden="true">
+          {axisTicks.map((ratio) => <span key={ratio} style={{ bottom: `${ratio * (100 - room)}%` }} title={format(max * ratio)}>{format(max * ratio)}</span>)}
+        </div>
+        <div className="min-w-0">
+          <div className="bar-chart-plot" style={{ height }}>
+            {[0, .25, .5, .75, 1].map((ratio) => <span key={ratio} className="chart-gridline" style={{ bottom: `${ratio * (100 - room)}%` }} aria-hidden="true" />)}
+            <div className="bar-chart-columns">
+              {data.map((d) => {
+                const active = nothingPicked(selected) || picked(selected, d.key);
+                return <button key={d.key} type="button" disabled={!interactive} aria-label={`${d.label}: ${format(d.value)}${unit ? ` ${unit}` : ""}`} aria-pressed={interactive ? picked(selected, d.key) : undefined} title={`${d.label} · ${format(d.value)}${unit ? ` ${unit}` : ""}`} onClick={() => onSelect?.(clickValue(selected, d.key))} className="bar-chart-column">
+                  <span className="bar-chart-fill" style={{ height: `${scale(d.value)}%`, background: tone, opacity: active ? .88 : .18 }} />
+                  {showValues && <span className="bar-chart-value" style={{ bottom: `calc(${scale(d.value)}% + 5px)`, opacity: active ? 1 : .35 }}>{format(d.value)}</span>}
+                </button>;
+              })}
+            </div>
+          </div>
+          <div className="bar-chart-ticks">{data.map((d, i) => <span key={d.key} title={d.label} className={picked(selected, d.key) ? "is-selected" : undefined}>{formatTick ? formatTick(d, i) : d.label}</span>)}</div>
+        </div>
       </div>
     </div>
   );
 }
 
-/* --------------------------------------------------------------------------
-   Бүлэглэсэн багана — нэг зүсэлт дээр ХЭД ХЭДЭН хэмжилтийг зэрэгцүүлнэ.
-   -------------------------------------------------------------------------- */
 
-/**
- * Бүлэг бүрд хэдэн багана зэрэгцэнэ.
- *
- * Нэг ангилал дээр хоёр, гурван утга (жишээ нь хоёр оны төлбөр) байхад
- * тэднийг тусдаа диаграм болговол нүд хооронд нь үсэрч харьцуулах
- * шаардлагатай болно. Зэрэгцүүлснээр ялгаа нь ӨӨРӨӨ харагдана.
- *
- * Өнгө нь ЦУВААГ ялгана (ангиллыг биш) тул `colors` нь эрэмбэтэй
- * шатлал байх ёстой — дуудагч тал давхаргынхаа өнгөний доторх шатлалыг
- * өгдөг. Тайлбар нь дээрээ суух ба цуваа бүрийн нэрийг өнгөтэй нь
- * хамт хэлнэ: өнгө нь юу гэсэн үг болохыг таахаар үлдээж болохгүй.
- */
 export function GroupedBarChart({
   groups,
   colors,
@@ -365,7 +272,7 @@ export function GroupedBarChart({
                       className="relative flex h-full flex-1 items-end"
                     >
                       <span
-                        className="w-full rounded-t-[1px] transition-[height,opacity]"
+                        className="w-full rounded-t-[4px] transition-[height,opacity]"
                         style={{
                           height: `${scale(r.value)}%`,
                           background: colors[i % colors.length],
@@ -536,17 +443,18 @@ export function AreaChart({
         >
           <defs>
             <linearGradient id={`fill-${gid}`} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor={tone} stopOpacity={0.34} />
+              <stop offset="0%" stopColor={tone} stopOpacity={0.22} />
               <stop offset="100%" stopColor={tone} stopOpacity={0.02} />
             </linearGradient>
           </defs>
 
+          {[.25, .5, .75, 1].map((ratio) => <line key={ratio} x1={0} x2={W} y1={height * ratio} y2={height * ratio} stroke="var(--line)" strokeDasharray="3 4" vectorEffect="non-scaling-stroke" />)}
           <path d={area} fill={`url(#fill-${gid})`} />
           <path
             d={line}
             fill="none"
             stroke={tone}
-            strokeWidth={1.5}
+            strokeWidth={2}
             strokeLinejoin="round"
             strokeLinecap="round"
             vectorEffect="non-scaling-stroke"
@@ -713,7 +621,7 @@ function Tooltip({
         transform: `translate(${shift}, ${below ? "10px" : "calc(-100% - 10px)"})`,
       }}
     >
-      <div className="elevated min-w-[124px] rounded-xs border border-line-2 bg-paper-2/95 backdrop-blur-md">
+      <div className="elevated min-w-[140px] overflow-hidden rounded-xl border border-line-2 bg-paper-2/95 backdrop-blur-md">
         <div
           className="flex items-center gap-1.5 border-b border-line px-2 py-1"
           style={{
@@ -769,157 +677,39 @@ function Tooltip({
    -------------------------------------------------------------------------- */
 
 export function RowChart({
-  data,
-  tone = "var(--data)",
-  colorOf,
-  selected,
-  onSelect,
-  max: maxOverride,
-  base = 0,
-  format,
-  guide,
+  data, tone = "var(--data)", colorOf, selected, onSelect, max: maxOverride, base = 0, format = num, guide,
 }: {
-  data: Datum[];
-  tone?: string;
-  /** Мөр бүрд өөр өнгө өгөх бол (жишээ нь газрын зурагтай тааруулах) */
-  colorOf?: (d: Datum) => string;
-  selected?: Selection;
-  onSelect?: (key: string | null) => void;
-  max?: number;
-  /**
-   * Зурвасын ЭХЛЭХ утга. Тоо хэмжээнд 0 зөв ч 1–4 гэсэн ИНДЕКС дээр
-   * 0-оос эхлүүлбэл бүх зурвас бараг ижил урттай болж ялгаа алга болно.
-   * Индексийн жинхэнэ доод хязгаарыг өгвөл харьцуулалт уншигдана.
-   */
-  base?: number;
-  /** Тооны бичиглэл — бутархай дундажид `num()` тохирохгүй */
-  format?: (v: number) => string;
-  /**
-   * ХЭВИЙН байх хязгаар. Өгвөл тэр утган дээр босоо заагч зурагдаж,
-   * түүнээс ХЭТЭРСЭН хэсэг нь анивчиж (`alert-pulse`) анхаарал татна.
-   *
-   * ЗӨВХӨН баримтжсан хязгаартай хэмжигдэхүүнд өгнө. Хязгаарыг таамаглаж
-   * зурвал "энэ хэвийн, энэ хэвийн бус" гэсэн худал дүгнэлт болно.
-   */
-  guide?: number;
+  data: Datum[]; tone?: string; colorOf?: (d: Datum) => string; selected?: Selection;
+  onSelect?: (key: string | null) => void; max?: number; base?: number;
+  format?: (v: number) => string; guide?: number;
 }) {
   const max = maxOverride ?? Math.max(...data.map((d) => d.value), 1);
   const span = Math.max(max - base, 1e-9);
   const at = (v: number) => Math.max(0, Math.min(1, (v - base) / span)) * 100;
-  /* Хязгаар нь диаграмын мужаас гадуур бол заагч зурах утгагүй */
-  const guideAt =
-    guide != null && guide > base && guide < max ? at(guide) : null;
-
-  if (data.length === 0) {
-    return (
-      <div className="py-5 text-center text-[12px] text-ink-3">
-        Үзүүлэлт байхгүй
-      </div>
-    );
-  }
-
+  const guideAt = guide != null && guide > base && guide < max ? at(guide) : null;
+  if (!data.length) return <div className="chart-empty">Үзүүлэлт байхгүй</div>;
   return (
-    <div className="space-y-1">
+    <div className="row-chart">
       {data.map((d) => {
-        const on = nothingPicked(selected) || picked(selected, d.key);
+        const active = nothingPicked(selected) || picked(selected, d.key);
+        const isSelected = picked(selected, d.key);
         const color = colorOf ? colorOf(d) : tone;
-        return (
-          <button
-            key={d.key}
-            type="button"
-            onClick={() => onSelect?.(clickValue(selected, d.key))}
-            className="group block w-full text-left"
-          >
-            <div className="flex items-baseline justify-between gap-2">
-              <span
-                className={cn(
-                  "flex min-w-0 items-center gap-1.5 text-[12px] transition-colors",
-                  picked(selected, d.key)
-                    ? "font-medium text-ink"
-                    : "text-ink-2",
-                  !on && "opacity-40",
-                )}
-              >
-                {colorOf ? (
-                  <span
-                    className="size-1.5 shrink-0 rounded-full"
-                    style={{ background: color }}
-                    aria-hidden
-                  />
-                ) : null}
-                <span className="truncate">{d.label}</span>
-              </span>
-              <span
-                className={cn(
-                  "num shrink-0 text-[11.5px] transition-colors",
-                  picked(selected, d.key) ? "text-ink" : "text-ink-3",
-                  !on && "opacity-40",
-                )}
-              >
-                {format ? format(d.value) : num(d.value)}
-              </span>
-            </div>
-            {/*
-              Зурвас ХОЁР хэсэгтэй байж болно: хязгаар хүртэлх нь тогтуун,
-              түүнээс цааших нь анивчина. Ингэснээр "хэр их хэтэрсэн"
-              гэдэг нь өөрөө харагдана — бүтэн зурвасыг анивчуулбал
-              хэтрэлтийн ХЭМЖЭЭ алдагдана.
-
-              Заагчийн зураас нь `overflow-hidden`-ээс ГАДНА байрлана:
-              дотор нь тавибал 2px өндөрт хумигдаж үл үзэгдэнэ. Зурвасаас
-              дээш доош 3px сунгаснаар мөр дамжсан тасархай багана болж
-              харагдана.
-            */}
-            <div className="relative mt-[3px]">
-              <div className="flex h-[2px] w-full overflow-hidden rounded-[1px] bg-paper-hi">
-                <span
-                  className="h-full transition-[width,opacity]"
-                  style={{
-                    width: `${guideAt != null ? Math.min(at(d.value), guideAt) : at(d.value)}%`,
-                    background: color,
-                    opacity: on ? 1 : 0.3,
-                  }}
-                />
-                {guideAt != null && at(d.value) > guideAt ? (
-                  <span
-                    /* Анивчилт нь inline `opacity`-г дардаг тул бүдгэрсэн
-                       (сонголтоос гадуур) мөрөнд огт өгөхгүй */
-                    className={cn(
-                      "h-full transition-[width,opacity]",
-                      on && "alert-pulse",
-                    )}
-                    style={{
-                      width: `${at(d.value) - guideAt}%`,
-                      background: color,
-                      opacity: on ? 1 : 0.3,
-                    }}
-                  />
-                ) : null}
-              </div>
-              {guideAt != null ? (
-                <span
-                  aria-hidden
-                  className="pointer-events-none absolute -top-[3px] -bottom-[3px] w-px bg-ink-3"
-                  style={{ left: `${guideAt}%` }}
-                />
-              ) : null}
-            </div>
-          </button>
-        );
+        return <button key={d.key} type="button" disabled={!onSelect} aria-pressed={onSelect ? isSelected : undefined} title={`${d.label} · ${format(d.value)}`} onClick={() => onSelect?.(clickValue(selected, d.key))} className={cn("row-chart-item", isSelected && "is-selected")} style={{ opacity: active ? 1 : .35 }}>
+          <span className="row-chart-heading"><span className="row-chart-label">{colorOf && <i aria-hidden="true" style={{ background: color }} />}{d.label}</span><strong>{format(d.value)}</strong></span>
+          <span className="row-chart-track">
+            <span className="row-chart-track-inner">
+              <span style={{ width: `${guideAt != null ? Math.min(at(d.value), guideAt) : at(d.value)}%`, background: color }} />
+              {guideAt != null && at(d.value) > guideAt && <span className={active ? "alert-pulse" : undefined} style={{ width: `${at(d.value) - guideAt}%`, background: color }} />}
+            </span>
+            {guideAt != null && <span className="row-chart-guide" style={{ left: `${guideAt}%` }} aria-hidden="true" />}
+          </span>
+        </button>;
       })}
     </div>
   );
 }
 
-/* --------------------------------------------------------------------------
-   Бөгж (donut) — ЗӨВХӨН 2–4 ангилалтай үед.
 
-   Хэсгүүдийг өөр өнгөөр БУДАХГҮЙ: дата дүрслэлийн өнгө ганц. Ялгааг нэг
-   өнгөний тунгалагийн шатлалаар (эрэмбээр) гаргана. Ангилал олон бол энэ
-   хэлбэр уншигдахаа больдог тул мөрөн диаграм (`RowChart`) руу шилжинэ.
-   -------------------------------------------------------------------------- */
-
-/** Бөгжний нэг зүсэм — гадна нумаар очиж, дотуур нумаар буцна */
 function donutSlice(c: number, R: number, r: number, a0: number, a1: number) {
   const p = (rad: number, a: number) => [
     c + rad * Math.cos(a),
@@ -934,235 +724,47 @@ function donutSlice(c: number, R: number, r: number, a0: number, a1: number) {
 }
 
 export function PieChart({
-  data,
-  tone = "var(--data)",
-  colorOf,
-  note,
-  format = num,
-  /*
-    Голын тоо нь бөгжний НҮХЭНД багтах ёстой. 145,458 гэх 7 тэмдэгт утга
-    78px бөгжинд халиж байсан тул бөгжийг томсгож, бичвэрийг нь жижигрүүлэв.
-  */
-  size = 96,
-  selected,
-  onSelect,
+  data, tone = "var(--data)", colorOf, note, format = num, size = 112, selected, onSelect,
 }: {
-  data: Datum[];
-  tone?: string;
-  /**
-   * Зүсэм бүрийн өнгө. Дээрх дүрмийн ЦОРЫН ГАНЦ үл хамаарах тохиолдол:
-   * ангилал нь өөрөө ЭРЭМБЭТЭЙ шатлалтай (PLI гэх мэт) бөгөөд өнгө нь
-   * тухайн шатлалаас гардаг үед. Нэрлэсэн ангиллыг (сум, гүйцэтгэгч)
-   * өнгөөр ялгах гэж энийг БҮҮ хэрэглэ — солонго болно.
-   *
-   * Өгвөл эрэмбийн тунгалагийн шатлал унтарна: хоёр кодчилол зэрэг
-   * ажиллавал аль нь утга илэрхийлж байгаа нь ойлгомжгүй болно.
-   */
-  colorOf?: (d: Datum) => string;
-  /** Тайлбарын мөрөнд гарах хоёр дахь утга ("PLI 1.35") */
-  note?: (d: Datum) => string;
-  /**
-   * Тооны бичиглэл — голын нийлбэрт ба тайлбарын мөрөнд хоёуланд нь.
-   * Анхдагч `num()` нь бүхэл болгодог тул 0.07 га гэх бутархай утга
-   * "0" болж, бөгж утгагүй харагдана.
-   */
-  format?: (v: number) => string;
-  size?: number;
-  selected?: Selection;
+  data: Datum[]; tone?: string; colorOf?: (d: Datum) => string; note?: (d: Datum) => string;
+  format?: (v: number) => string; size?: number; selected?: Selection;
   onSelect?: (key: string | null) => void;
 }) {
-  const total = data.reduce((a, d) => a + d.value, 0);
-
-  if (data.length === 0 || total === 0) {
-    return (
-      <div className="py-5 text-center text-[12px] text-ink-3">
-        Үзүүлэлт байхгүй
-      </div>
-    );
-  }
-
-  /*
-    Гадна тойрог нь зурагны ирмэгт ЯГ хүрч болохгүй: зураас нь замын
-    голоор татагддаг тул хагас нь viewBox-оос гарч тайрагдана. Тайралт нь
-    дээд, доод, хоёр хажуу дөрвөн цэгт л тохиолддог учир дугуй нь дөрвөн
-    талаасаа шахагдсан мэт харагдана. Тиймээс захаас зай авна.
-  */
-  const PAD = 3;
-  const c = size / 2;
-  const R = c - PAD;
-  const r = R * 0.62;
-  /** Эрэмбийн дагуух тунгалаг — хамгийн олон нь хамгийн тод */
-  const fade = (i: number) => Math.max(1 - i * 0.34, 0.24);
-  /*
-    Дүүргэлт нь ТУНГАЛАГ, хүрээ нь ижил өнгөөр бүтэн — газрын зургийн
-    бөөгнөрөлтэй нэг зарчим. Ингэснээр бөгж дүүрэн өнгө болж дэлгэцийг
-    дарахгүй, хэсгийн ирмэг нь харин тод үлдэнэ.
-  */
-  const FILL = 0.42;
-
-  /* Зүсмийн өнгө ба тунгалаг — `colorOf` өгсөн эсэхээс шалтгаална */
-  const hue = (d: Datum) => (colorOf ? colorOf(d) : tone);
-  const fillOp = (i: number) => (colorOf ? FILL : fade(i) * FILL);
-  const lineOp = (i: number) => (colorOf ? 0.9 : Math.max(fade(i), 0.5));
-
-  /*
-    Өнцгийг ХУРИМТЛУУЛЖ бодно. `map`-ийн дотор хуримтлуулагчийг өөрчилвөл
-    рендерийн цэвэр байдал алдагдана (компилятор ч анхааруулна) тул энгийн
-    давталтаар урьдчилж бэлдэнэ. 12 цагийн байрлалаас (−90°) эхэлнэ.
-  */
+  const total = data.reduce((sum, d) => sum + d.value, 0);
+  if (!data.length || total <= 0) return <div className="chart-empty">Үзүүлэлт байхгүй</div>;
+  const c = size / 2, R = c - 4, r = R * .72;
+  const hue = (d: Datum) => colorOf ? colorOf(d) : tone;
+  const opacity = (i: number) => colorOf ? .88 : Math.max(.92 - i * .22, .24);
   const slices: { d: Datum; i: number; a0: number; a1: number }[] = [];
-  let acc = 0;
+  let sum = 0;
   for (let i = 0; i < data.length; i++) {
-    const a0 = (acc / total) * Math.PI * 2 - Math.PI / 2;
-    acc += data[i].value;
-    const a1 = (acc / total) * Math.PI * 2 - Math.PI / 2;
-    slices.push({ d: data[i], i, a0, a1 });
+    const a0 = sum / total * Math.PI * 2 - Math.PI / 2;
+    sum += data[i].value;
+    slices.push({ d: data[i], i, a0, a1: sum / total * Math.PI * 2 - Math.PI / 2 });
   }
-
-  const only = slices.length === 1;
-
+  const single = data.filter((d) => d.value > 0).length === 1;
+  const singleDatum = data.find((d) => d.value > 0)!;
+  const text = format(total);
   return (
-    <div className="flex items-center gap-3">
-      <svg
-        width={size}
-        height={size}
-        viewBox={`0 0 ${size} ${size}`}
-        className="shrink-0"
-        role="img"
-      >
-        {/*
-          Гадна хүрээ — бөгж бүрэн тойрог гэдгийг барих зураас. Зүсэм нь
-          өөрийн шатлалын өнгөтэй үед энэ хүрээ accent өнгөөр гарвал
-          өөр нэг ангилал мэт уншигдана: саарал зураас болгоно.
-        */}
-        <circle
-          cx={c}
-          cy={c}
-          r={R}
-          fill="none"
-          stroke={colorOf ? "var(--line-2)" : tone}
-          strokeOpacity={colorOf ? 1 : 0.4}
-          strokeWidth={1}
-        />
-
-        {/*
-          Ганц ангилалтай үед нумын эхлэл, төгсгөл нь давхцаж зам хоосон
-          гардаг тул бүтэн бөгжийг зузаан зураасаар зурна.
-        */}
-        {only ? (
-          <circle
-            cx={c}
-            cy={c}
-            r={(R + r) / 2}
-            fill="none"
-            stroke={hue(data[0])}
-            strokeOpacity={FILL}
-            strokeWidth={R - r}
-          />
-        ) : (
-          slices.map(({ d, i, a0, a1 }) => {
-            const on = nothingPicked(selected) || picked(selected, d.key);
-            return (
-              <path
-                key={d.key}
-                d={donutSlice(c, R, r, a0, a1)}
-                fill={hue(d)}
-                fillOpacity={on ? fillOp(i) : 0.06}
-                stroke={hue(d)}
-                strokeOpacity={on ? lineOp(i) : 0.15}
-                strokeWidth={1}
-                className={onSelect ? "cursor-pointer" : undefined}
-                onClick={() => onSelect?.(clickValue(selected, d.key))}
-              >
-                <title>{`${d.label} · ${format(d.value)}`}</title>
-              </path>
-            );
-          })
-        )}
-
-        {/* Голд нийт — бөгжний нүх хоосон байх шалтгаангүй */}
-        <text
-          x={c}
-          y={c + 4}
-          textAnchor="middle"
-          className="num fill-ink text-[11px] font-medium"
-        >
-          {format(total)}
-        </text>
+    <div className="donut-chart">
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="donut-chart-ring" role="img" aria-label={`Нийт ${text}`}>
+        <circle cx={c} cy={c} r={(R + r) / 2} fill="none" stroke="var(--paper-hi)" strokeWidth={R - r} />
+        {single ? <circle cx={c} cy={c} r={(R + r) / 2} fill="none" stroke={hue(singleDatum)} strokeWidth={R - r} strokeOpacity={nothingPicked(selected) || picked(selected, singleDatum.key) ? .88 : .15} onClick={() => onSelect?.(clickValue(selected, singleDatum.key))} className={onSelect ? "cursor-pointer" : undefined}><title>{`${singleDatum.label} · ${format(singleDatum.value)}`}</title></circle> : slices.filter(({ d }) => d.value > 0).map(({ d, i, a0, a1 }) => <path key={d.key} d={donutSlice(c, R, r, a0, a1)} fill={hue(d)} fillOpacity={nothingPicked(selected) || picked(selected, d.key) ? opacity(i) : .12} stroke="var(--paper-2)" strokeWidth={2} className={onSelect ? "cursor-pointer" : undefined} onClick={() => onSelect?.(clickValue(selected, d.key))}><title>{`${d.label} · ${format(d.value)}`}</title></path>)}
+        <text x={c} y={c - 6} textAnchor="middle" className="fill-ink-3" fontSize={Math.max(8, size * .08)}>НИЙТ</text>
+        <text x={c} y={c + 14} textAnchor="middle" className="num fill-ink font-semibold" fontSize={Math.min(size * .18, (r * 2 - 8) / Math.max(text.length * .64, 1))}>{text}</text>
       </svg>
-
-      <div className="min-w-0 flex-1 space-y-1.5">
-        {data.map((d, i) => {
-          const on = nothingPicked(selected) || picked(selected, d.key);
-          return (
-            <button
-              key={d.key}
-              type="button"
-              onClick={() => onSelect?.(clickValue(selected, d.key))}
-              className={cn(
-                "flex w-full items-baseline gap-2 text-left transition-opacity",
-                !on && "opacity-40",
-              )}
-            >
-              {/* Тайлбарын тэмдэг нь зүсмийн дүрслэлийг давтана: тунгалаг
-                  дүүргэлт + бүтэн хүрээ */}
-              <span
-                aria-hidden
-                className="size-2 shrink-0 translate-y-[1px] rounded-[1px] border"
-                style={{
-                  background: `color-mix(in oklab, ${hue(d)} ${fillOp(i) * 100}%, transparent)`,
-                  borderColor: `color-mix(in oklab, ${hue(d)} ${lineOp(i) * 100}%, transparent)`,
-                }}
-              />
-              <span
-                className={cn(
-                  "min-w-0 flex-1 truncate text-[12px]",
-                  picked(selected, d.key)
-                    ? "font-medium text-ink"
-                    : "text-ink-2",
-                )}
-              >
-                {d.label}
-              </span>
-              <span
-                className={cn(
-                  "num shrink-0 text-[12px]",
-                  picked(selected, d.key) ? "text-ink" : "text-ink-2",
-                  /* Хоёр тоо зэрэг гарвал зүсмийн хэмжээг заасан нь
-                     сүүлдээ биш, урд нь бүдэг байрлана */
-                  note && "text-[11px] text-ink-3",
-                )}
-              >
-                {format(d.value)}
-              </span>
-              {note ? (
-                <span
-                  className={cn(
-                    "num shrink-0 text-[12px]",
-                    picked(selected, d.key)
-                      ? "font-medium text-ink"
-                      : "text-ink-2",
-                  )}
-                >
-                  {note(d)}
-                </span>
-              ) : null}
-            </button>
-          );
-        })}
+      <div className="donut-chart-legend">
+        {data.map((d, i) => <button key={d.key} type="button" disabled={!onSelect} aria-pressed={onSelect ? picked(selected, d.key) : undefined} onClick={() => onSelect?.(clickValue(selected, d.key))} title={`${d.label} · ${format(d.value)}`} className={cn("donut-legend-item", picked(selected, d.key) && "is-selected")} style={{ opacity: nothingPicked(selected) || picked(selected, d.key) ? 1 : .35 }}>
+          <span className="donut-legend-swatch" style={{ background: hue(d), opacity: opacity(i) }} />
+          <span className="donut-legend-label">{d.label}</span>
+          <strong>{format(d.value)}</strong>
+          <span className="donut-legend-note">{note ? note(d) : `${(d.value / total * 100).toFixed(1)}%`}</span>
+        </button>)}
       </div>
     </div>
   );
 }
 
-/* --------------------------------------------------------------------------
-   БҮЛЭГЛЭСЭН мөрөн диаграм.
-
-   Хоёр шатлалтай нэршил ("Сүхбаатар дүүрэг · 6") нэг мөрөнд шахагдвал
-   уншихад хүнд: дүүргийн нэр давтагдаж, хорооны дугаар нь араас нь
-   нуугдана. Дүүргийг ГАРЧИГ болгож, хороог доор нь эгнүүлбэл давталт
-   алга болж, харьцуулалт нэг л баганад цэгцэрнэ.
-   -------------------------------------------------------------------------- */
 
 export type DatumGroup = {
   key: string;
@@ -1346,7 +948,7 @@ export function GroupedRowChart({
                         {num(d.value)}
                       </span>
                     </div>
-                    <div className="mt-[3px] h-[2px] w-full overflow-hidden rounded-[1px] bg-paper-hi">
+                    <div className="mt-2 h-[6px] w-full overflow-hidden rounded-full bg-paper-hi">
                       <div
                         className="h-full transition-[width,opacity]"
                         style={{

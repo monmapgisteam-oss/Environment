@@ -46,21 +46,21 @@ export function UserChip() {
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
         title={session.fullName}
-        className="flex h-8 items-center gap-2 rounded-xs border border-line bg-paper-2 pr-2.5 pl-1.5 text-ink-2 transition-colors hover:border-line-2 hover:text-ink"
+        className="flex h-10 items-center gap-2 rounded-full border border-line bg-paper-2 pr-3 pl-1.5 text-ink-2 transition-colors hover:border-line-2 hover:text-ink"
       >
         {session.avatar ? (
           /* eslint-disable-next-line @next/next/no-img-element */
           <img
             src={session.avatar}
             alt=""
-            className="size-5 shrink-0 rounded-xs object-cover"
+            className="size-7 shrink-0 rounded-full object-cover"
           />
         ) : (
-          <span className="flex size-5 shrink-0 items-center justify-center rounded-xs bg-paper-3">
+          <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-paper-3">
             <User size={11} strokeWidth={1.75} />
           </span>
         )}
-        <span className="hidden max-w-[140px] truncate text-[11.5px] leading-none sm:block">
+        <span className="hidden max-w-[120px] truncate text-xs leading-none lg:block">
           {session.fullName}
         </span>
       </button>

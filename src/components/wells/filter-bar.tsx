@@ -28,9 +28,9 @@ export function FilterBar({
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex shrink-0 flex-wrap items-center gap-1.5 rounded-xs border border-line bg-paper-2 px-2 py-1.5">
+    <div className="workspace-filterbar flex shrink-0 flex-wrap items-center gap-2 rounded-xl border border-line bg-paper-2 px-3 py-2.5">
       {/* Гарчиг зүүн талд, шүүлтүүрүүд баруун тийш шахагдана */}
-      <span className="shrink-0 text-[12px] font-semibold tracking-[0.12em] text-ink uppercase">
+      <span className="shrink-0 text-[13px] font-semibold text-ink">
         {title}
       </span>
 
@@ -112,7 +112,7 @@ export function FilterMenu({
       <button
         onClick={() => setOpen((o) => !o)}
         className={cn(
-          "flex items-center gap-1.5 rounded-xs border px-2 py-1 text-[12px] transition-colors",
+          "flex min-h-8 items-center gap-2 rounded-lg border px-3 py-1.5 text-[12px] transition-colors",
           active
             ? "border-data/45 bg-data/10 text-ink"
             : "border-line text-ink-2 hover:border-line-2 hover:text-ink",

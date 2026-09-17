@@ -164,7 +164,7 @@ export function NogoonBusWorkspace() {
   const set = SETS[tab];
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-2.5">
+    <div className="department-workspace">
       <SourceTabs tabs={TABS} value={tab} onChange={pick} label="Сэдэв" />
 
       {/*
@@ -172,7 +172,7 @@ export function NogoonBusWorkspace() {
         React нь таб солиход түүнийг ДАХИН ҮҮСГЭДЭГГҮЙ — асаалттай
         давхарга, шүүлтүүр, татагдсан бичлэг өмнөх табынхаараа үлдэнэ.
       */}
-      <div className="min-h-0 flex-1">
+      <div className="department-workspace-content">
         <PortalLayers key={set.key} set={set} />
       </div>
     </div>

@@ -4,6 +4,7 @@ import * as React from "react";
 import dynamic from "next/dynamic";
 import {
   CalendarRange,
+  ChartNoAxesCombined,
   Layers3,
   Loader2,
   Palette,
@@ -232,6 +233,7 @@ function labelFor(hit: Loaded, oid: number): string {
  * асаахад шууд гарна.
  */
 export function PortalLayersDashboard({ set }: { set: LayerSet }) {
+  const [showCharts, setShowCharts] = React.useState(true);
   /** Давхарга бүрийн тодорхойлолт — эхэнд бүгдийг НЭГ удаа уншина */
   const [infos, setInfos] = React.useState<Record<string, LayerInfo>>({});
   const [failed, setFailed] = React.useState<Record<string, string>>({});
@@ -782,6 +784,7 @@ export function PortalLayersDashboard({ set }: { set: LayerSet }) {
       */}
       <FilterBar
         title={set.title ?? "Давхарга"}
+        leading={<button type="button" aria-pressed={showCharts} onClick={() => setShowCharts((value) => !value)} className={cn("map-view-toggle", showCharts && "selected")}><ChartNoAxesCombined size={15} /> Шинжилгээ</button>}
         activeCount={activeCount}
         onReset={() => {
           setFilters({});
@@ -871,37 +874,23 @@ export function PortalLayersDashboard({ set }: { set: LayerSet }) {
         })}
       </FilterBar>
 
+      <div className="analytics-overview" aria-label="Өгөгдлийн тойм">
+        <Stat icon={Layers3} label="Идэвхтэй давхарга" value={num(stats.layers)} />
+        <Stat icon={Shapes} label="Шүүлтэд тохирох бичлэг" value={num(stats.records)} />
+        <Stat icon={Ruler} label="Талбай, га" value={stats.ha > 0 ? num(Math.round(stats.ha)) : "—"} />
+      </div>
+
       <Columns
         id={`layers-${set.key}`}
         left={picker ? 286 : undefined}
         /* Бүлэглэсэн багана энд сууна — 300px дээр гурван оны
          харьцуулалт зураас болно. Хэрэглэгч чирж өөрчилнө */
-        right={420}
+        right={showCharts ? 350 : undefined}
         className="min-h-0 flex-1"
       >
         {/* ---- ЗҮҮН: давхаргын жагсаалт (зөвхөн сонголттой үед) ---- */}
         {picker ? (
           <div className="flex min-h-0 flex-col gap-2.5">
-            <Card className="shrink-0">
-              <div className="grid grid-cols-3 divide-x divide-line">
-                <Stat
-                  icon={Layers3}
-                  label="Асаалттай давхарга"
-                  value={num(stats.layers)}
-                />
-                <Stat
-                  icon={Shapes}
-                  label="Нийт бичлэг"
-                  value={num(stats.records)}
-                />
-                <Stat
-                  icon={Ruler}
-                  label="Нийт талбай, га"
-                  value={stats.ha > 0 ? num(Math.round(stats.ha)) : "—"}
-                />
-              </div>
-            </Card>
-
             <Card className="min-h-[140px] flex-1">
               <Head title="Давхарга">
                 <span className="num text-[11.5px] text-ink-3">
@@ -945,7 +934,7 @@ export function PortalLayersDashboard({ set }: { set: LayerSet }) {
                             isOn ? "text-ink" : "text-ink-2",
                           )}
                         >
-                          {info?.name ?? id}
+                          {info?.name ?? set.names?.[id] ?? id}
                         </span>
                         {error ? (
                           <span className="mt-1 block text-[10.5px] leading-snug text-clay">
@@ -976,28 +965,6 @@ export function PortalLayersDashboard({ set }: { set: LayerSet }) {
 
         {/* ---- БАРУУН: зураг, доор нь диаграмын зурвас ---- */}
         <div className="flex min-h-0 flex-col gap-2.5">
-          {/*
-            Давхаргын багана байхгүй үед үзүүлэлтүүд зургийн ДЭЭР
-            суана — эс тэгвээс бичлэгийн тоо, талбай хоёр огт
-            харагдахгүй болно. "Асаалттай давхарга" гэсэн нүд энд
-            ОРОХГҮЙ: бүгд асаалттай тул тэр тоо юу ч хэлэхгүй.
-          */}
-          {picker ? null : (
-            <Card className="shrink-0">
-              <div className="grid grid-cols-2 divide-x divide-line">
-                <Stat
-                  icon={Shapes}
-                  label="Нийт бичлэг"
-                  value={num(stats.records)}
-                />
-                <Stat
-                  icon={Ruler}
-                  label="Нийт талбай, га"
-                  value={stats.ha > 0 ? num(Math.round(stats.ha)) : "—"}
-                />
-              </div>
-            </Card>
-          )}
           <Card className="relative min-h-[300px] flex-1 overflow-hidden">
             <div className="relative h-full w-full">
               {/*
@@ -1126,7 +1093,7 @@ export function PortalLayersDashboard({ set }: { set: LayerSet }) {
         </div>
 
         {/* ---- БАРУУН: ангиллын задаргаа ---- */}
-        <div className="flex min-h-0 flex-col gap-2.5 overflow-y-auto">
+        {showCharts && <div className="flex min-h-0 flex-col gap-2.5 overflow-y-auto">
           {views.length === 0 ? (
             <Card className="min-h-[120px] flex-1">
               <Head title="Задаргаа" />
@@ -1297,7 +1264,7 @@ export function PortalLayersDashboard({ set }: { set: LayerSet }) {
               </React.Fragment>
             );
           })}
-        </div>
+        </div>}
       </Columns>
     </div>
   );
@@ -1588,32 +1555,22 @@ function CutCard({
   return (
     <div
       className={cn(
-        /*
-          Карт нь үлдсэн өндрийг ХУВААЛЦАНА — баганын доод тал хоосон
-          үлдэхгүй.
-
-          ⚠ Агуулга нь картынхаа ДЭЭД ирмэгт наалдана (`justify-start`).
-          Голлуулж үзсэн боловч тэгэхэд толгой ба диаграмын хооронд
-          хоосон зай үүсч, карт хагас хоосон мэт харагддаг байв —
-          илүү зай нь ДООД талд хуримтлагдсан нь эмх цэгцтэй.
-        */
-        "flex min-h-0 grow flex-col rounded-xs border border-line bg-paper-2",
+        // Each chart keeps its natural height; long breakdowns scroll inside it.
+        "analytics-chart-card flex min-h-0 flex-col rounded-xl border border-line bg-paper-2",
         first && "border-t-2",
       )}
       style={first ? { borderTopColor: tone } : undefined}
     >
-      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-line px-3 py-2">
+      <div className="analytics-chart-head">
         <h2
-          className="min-w-0 flex-1 truncate text-[11.5px] leading-none text-ink-2"
+          className="text-ink"
           title={title}
         >
           {title}
         </h2>
         {action}
       </div>
-      {/* Агуулга нь картынхаа өндрийг МЭДЭХ ёстой: хэвтээ
-          харьцуулалт үлдсэн зайг мөрүүддээ хуваарилдаг */}
-      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-3">
+      <div className="analytics-chart-body">
         {children}
       </div>
     </div>
@@ -1684,7 +1641,7 @@ function Card({
   return (
     <div
       className={cn(
-        "flex flex-col rounded-xs border border-line bg-paper-2",
+        "data-surface flex flex-col rounded-xl border border-line bg-paper-2",
         className,
       )}
     >
@@ -1707,8 +1664,8 @@ function Head({
   children?: React.ReactNode;
 }) {
   return (
-    <div className="flex shrink-0 items-center justify-between gap-2 border-b border-line px-3 py-2">
-      <h2 className="display min-w-0 truncate text-[13.5px] leading-none tracking-[0.06em] uppercase">
+    <div className="flex shrink-0 items-center justify-between gap-2 border-b border-line px-4 py-3">
+      <h2 className="display min-w-0 truncate text-[13px] leading-snug">
         {title}
       </h2>
       {children}
@@ -1726,14 +1683,12 @@ function Stat({
   icon: typeof Layers3;
 }) {
   return (
-    <div className="px-3 py-2.5">
-      <span className="eyebrow block min-h-[28px] leading-[1.25]">{label}</span>
-      <span className="mt-1.5 flex items-center gap-1.5">
-        <Icon size={18} strokeWidth={1.6} className="shrink-0 text-ink-3" />
-        <span className="num truncate text-[15px] leading-none font-medium text-ink">
-          {value}
-        </span>
-      </span>
+    <div className="analytics-stat">
+      <span className="analytics-stat-icon"><Icon size={20} strokeWidth={1.5} /></span>
+      <div className="min-w-0">
+        <span className="analytics-stat-label">{label}</span>
+        <span className="analytics-stat-value">{value}</span>
+      </div>
     </div>
   );
 }

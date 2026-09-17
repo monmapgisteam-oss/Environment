@@ -146,10 +146,10 @@ export function UnelgeeWorkspace() {
   const [tab, pick] = useStoredTab<TabId>("unelgee.tab", IDS, "unelgee");
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-2.5">
+    <div className="department-workspace">
       <SourceTabs tabs={TABS} value={tab} onChange={pick} label="Сэдэв" />
 
-      <div className="min-h-0 flex-1">
+      <div className="department-workspace-content">
         {tab === "unelgee" ? <UnelgeeDashboard /> : null}
         {tab === "bomt" ? <BomtDashboard /> : null}
         {tab === "flood" ? <FloodDashboard /> : null}

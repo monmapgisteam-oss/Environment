@@ -1,61 +1,44 @@
 ﻿import Link from "next/link";
-import { ArrowRight, Database, Layers3, Leaf, Radio, Timer } from "lucide-react";
+import { ArrowDown, ArrowUpRight, Database, Layers3, MoveUpRight } from "lucide-react";
 import { DepartmentDirectory } from "@/components/home/department-directory";
 import { DEPARTMENTS } from "@/lib/departments";
+import { SOURCES } from "@/lib/sources";
+import { asset } from "@/lib/base-path";
 
 export default function Home() {
-  const live = DEPARTMENTS.filter((department) => department.status === "live").length;
-  const waiting = DEPARTMENTS.length - live;
-
+  const live = DEPARTMENTS.filter((d) => d.status === "live").length;
+  const sourceCounts = Object.fromEntries(DEPARTMENTS.map((d) => [d.slug, SOURCES.filter((s) => s.slug === d.slug).length]));
   return (
-    <div className="mx-auto max-w-[1400px] space-y-8">
-      <header className="relative overflow-hidden rounded-xl border border-line bg-paper-2">
-        <svg className="pointer-events-none absolute inset-y-0 right-0 h-full w-[60%] text-moss opacity-[0.14]" viewBox="0 0 600 400" fill="none" aria-hidden="true">
-          {Array.from({ length: 12 }, (_, index) => (
-            <path key={index} d="M640 30C490-65 340 5 370 110S540 190 465 270 265 200 220 315 360 465 510 430" stroke="currentColor" strokeWidth="1" transform={`translate(${index * -19} ${index * 5})`} />
-          ))}
-        </svg>
-        <div className="relative max-w-[660px] p-6 sm:p-8 lg:p-10">
-          <div className="mb-6 inline-flex items-center gap-2 text-xs font-medium text-moss">
-            <Leaf size={15} aria-hidden="true" />
-            Байгаль орчны хяналтын нэгдсэн систем
+    <div className="command-home">
+      <section className="home-intro" aria-labelledby="home-title">
+        <div className="intro-copy">
+          <p className="section-kicker"><span /> НИЙСЛЭЛИЙН БАЙГАЛЬ ОРЧНЫ ГАЗАР</p>
+          <h1 id="home-title">Байгаль орчин.<br /><span>Нэгдсэн хяналт.</span></h1>
+          <p className="intro-description">Мэдээллээс ойлголт руу.<br />Хэлтсүүдийн өгөгдөл, орон зайн зураглал,<br className="hidden sm:block" /> хяналтын үзүүлэлтийг нэг дороос.</p>
+          <div className="intro-actions">
+            <a href="#departments" className="action-primary">Ажлын самбар нээх <ArrowDown size={17} /></a>
+            <Link href="/sources" className="action-text">Эх сурвалжууд <ArrowUpRight size={17} /></Link>
           </div>
-          <h1 className="display text-3xl leading-tight sm:text-[38px]">Ерөнхий самбар</h1>
-          <p className="mt-3 max-w-[450px] text-sm leading-7 text-ink-2">
-            Байгаль орчны мэдээлэл нэг дор.<br />
-            Хэлтсээ сонгож, холбогдсон өгөгдөлтэй танилцаарай.
-          </p>
-          <div className="mt-6 flex flex-wrap items-center gap-3">
-            <a href="#departments" className="inline-flex min-h-11 items-center gap-3 rounded-md bg-moss px-4 text-sm font-semibold text-paper transition-opacity hover:opacity-85">
-              Хэлтсүүдийг харах <ArrowRight size={16} aria-hidden="true" />
-            </a>
-            <Link href="/sources" className="inline-flex min-h-11 items-center gap-2 rounded-md border border-line-2 bg-paper-2 px-4 text-sm text-ink-2 transition-colors hover:bg-paper-hi">
-              <Database size={15} aria-hidden="true" /> Дата эх сурвалж
-            </Link>
-          </div>
+          <div className="intro-index"><span>01 — 08</span><span>Нэг систем. Найман хэлтэс.</span></div>
         </div>
-        <dl className="relative grid grid-cols-1 border-t border-line bg-paper-2/80 sm:grid-cols-3">
-          {[
-            { label: "Нийт хэлтэс", value: DEPARTMENTS.length, icon: Layers3, color: "text-ink-2" },
-            { label: "Дата холбогдсон", value: live, icon: Radio, color: "text-moss" },
-            { label: "Бүрэн холбогдоогүй", value: waiting, icon: Timer, color: "text-ink-3" },
-          ].map((stat) => (
-            <div key={stat.label} className="flex items-center gap-4 border-line px-6 py-5 max-sm:border-b max-sm:last:border-b-0 sm:border-r sm:last:border-r-0 lg:px-10">
-              <span className={`flex size-10 shrink-0 items-center justify-center rounded-lg border border-line ${stat.color}`}><stat.icon size={19} strokeWidth={1.5} aria-hidden="true" /></span>
-              <div><dt className="text-xs text-ink-3">{stat.label}</dt><dd className="num mt-1 text-2xl font-semibold leading-none">{stat.value.toString().padStart(2, "0")}</dd></div>
-            </div>
-          ))}
-        </dl>
-      </header>
-      <DepartmentDirectory />
-      <Link href="/sources" className="group flex items-center gap-4 rounded-lg border border-line bg-paper-2 p-5 transition-colors hover:border-line-2 hover:bg-paper-hi sm:px-6">
-        <span className="flex size-11 shrink-0 items-center justify-center rounded-lg border border-line text-moss"><Database size={20} strokeWidth={1.5} aria-hidden="true" /></span>
-        <div className="min-w-0 flex-1">
-          <h2 className="text-sm font-semibold">Мэдээллийн эх сурвалжтай танилцах</h2>
-          <p className="mt-1 text-xs leading-5 text-ink-3">Хэлтсүүдэд холбогдсон өгөгдөл, үйлчилгээний нэгдсэн бүртгэл.</p>
-        </div>
-        <ArrowRight size={18} className="shrink-0 text-ink-3 transition-transform group-hover:translate-x-1" aria-hidden="true" />
-      </Link>
+        <Link href="/departments/oi" className="landscape-feature" aria-label="Ойн хэлтсийн орон зайн мэдээллийг нээх">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={asset("/auth/envi-7.webp")} width={1832} height={859} alt="Уул, ой, ус бүхий байгалийн зураг" fetchPriority="high" />
+          <div className="landscape-top"><span><span className="size-1.5 rounded-full bg-[#d7f08b]" /> ОРОН ЗАЙН МЭДЭЭЛЭЛ</span><Layers3 size={19} /></div>
+          <div className="landscape-caption"><div><span>ГАЗРЫН ЗУРГААС ЭХЛЭХ</span><h2>Байгалиа<br />бүхлээр нь харъя.</h2></div><span className="landscape-arrow"><MoveUpRight size={25} /></span></div>
+        </Link>
+      </section>
+
+      <section className="system-summary" aria-label="Системийн бүртгэлийн тойм">
+        <div className="summary-heading"><span className="section-kicker">СИСТЕМИЙН ТОЙМ</span><p>Мэдээллийн<br />хамрах хүрээ</p></div>
+        <div className="summary-number"><strong>{String(DEPARTMENTS.length).padStart(2, "0")}</strong><span>Хэлтэс</span></div>
+        <div className="summary-number"><strong>{String(live).padStart(2, "0")}<small> / {DEPARTMENTS.length}</small></strong><span>Дата холбогдсон</span></div>
+        <div className="summary-number"><strong>{SOURCES.length}</strong><span>Бүртгэлтэй эх сурвалж</span></div>
+        <Link href="/sources" className="summary-link"><Database size={19} /><span>Өгөгдлийн<br />бүртгэл харах</span><ArrowUpRight size={18} /></Link>
+      </section>
+
+      <DepartmentDirectory sourceCounts={sourceCounts} />
+      <footer className="workspace-footer"><span>Нийслэлийн байгаль орчны газар</span><p>Хяналтын нэгдсэн систем</p><span className="hidden sm:block">Мэдээлэлд тулгуурласан хамгаалал</span></footer>
     </div>
   );
 }

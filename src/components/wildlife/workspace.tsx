@@ -316,12 +316,9 @@ export function WildlifeWorkspace() {
   );
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-2.5">
-      {/* Эцэг түвшин — амьтан уу, ургамал уу */}
-      <TabGroups groups={GROUPS} value={group} onChange={pickGroup} />
-
-      {/* Сэлгэх зурвас — аль самбар идэвхтэйг үргэлж ил байлгана */}
-      <SourceTabs tabs={shown} value={tab} onChange={pick} label="Сэдэв" />
+    <div className="department-workspace">
+      {/* Бүлэг болон өгөгдлийн багцын сонголт зүүн панельд байрлана. */}
+      <SourceTabs groupControl={<TabGroups groups={GROUPS} value={group} onChange={pickGroup} />} tabs={shown} value={tab} onChange={pick} label="Сэдэв" />
 
       {/*
         ⚠ `key` нь ЗААВАЛ: доорх салаануудын зургаа нь НЭГ бүрэлдэхүүн
@@ -329,7 +326,7 @@ export function WildlifeWorkspace() {
         давхарга, шүүлтүүр, татагдсан бичлэг өмнөх табынхаараа үлдэнэ.
         Бүрдлийн түлхүүрийг өгснөөр таб бүр цэвэр төлөвтэй нээгдэнэ.
       */}
-      <div className="min-h-0 flex-1">
+      <div className="department-workspace-content">
         {tab === "rescues" ? (
           <RescuesDashboard />
         ) : tab === "eco" ? (

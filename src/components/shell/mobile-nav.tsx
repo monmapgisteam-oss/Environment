@@ -3,7 +3,7 @@
 import type * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutGrid } from "lucide-react";
+import { Database, LayoutGrid } from "lucide-react";
 import { DEPARTMENTS } from "@/lib/departments";
 import { cn, isActivePath } from "@/lib/utils";
 
@@ -27,6 +27,9 @@ export function MobileNav() {
           {d.name}
         </Chip>
       ))}
+      <Chip href="/sources" active={isActivePath(pathname, "/sources", true)}>
+        <Database size={13} strokeWidth={1.75} /> Дата эх сурвалж
+      </Chip>
     </div>
   );
 }

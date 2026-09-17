@@ -61,15 +61,11 @@
 .logo {
   display: grid;
   place-items: center;
-  width: 68px;
-  height: 76px;
-  border: 1px solid #d4edf220;
-  border-radius: 16px;
-  background: #10273366;
-  backdrop-filter: blur(12px);
+  width: 96px;
+  height: 96px;
 }
 
-.logo img { width: 46px; height: 46px; }
+.logo img { width: 96px; height: 96px; }
 
 .enter {
   display: inline-flex;
@@ -180,8 +176,8 @@
 }
 
 @media (max-width: 480px) {
-  .logo { width: 52px; height: 60px; border-radius: 12px; }
-  .logo img { width: 36px; height: 36px; }
+  .logo { width: 72px; height: 72px; }
+  .logo img { width: 72px; height: 72px; }
   .enter { gap: 14px; padding-left: 16px; }
   .main { padding-top: 150px; padding-bottom: 48px; }
   .accent { margin-bottom: 24px; }

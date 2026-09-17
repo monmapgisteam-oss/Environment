@@ -165,6 +165,7 @@ export function useColumns(key: string, def: ColumnSizes) {
  * мөрөөрөө бичигдсэн байх ёстой — хэсэгчлэн угсарвал үүсэхгүй.
  */
 export function columnsClass(def: ColumnSizes) {
+  if (def.left == null && def.right == null) return "grid-cols-1";
   if (def.left != null && def.right != null)
     return "xl:grid-cols-[var(--col-l)_1fr_var(--col-r)]";
   if (def.left != null) return "xl:grid-cols-[var(--col-l)_1fr]";

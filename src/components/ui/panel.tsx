@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils";
 
 /* --------------------------------------------------------------------------
    Panel — үндсэн агуулгын хайрцаг.
-   Сүүдэр байхгүй. Зөвхөн 1px зураас + цаасан өнгө. Булан бараг хурц.
+   Нимгэн хүрээ, зөөлөн булантай нийтлэг панель.
    -------------------------------------------------------------------------- */
 
 export function Panel({
@@ -14,7 +14,7 @@ export function Panel({
   return (
     <div
       className={cn(
-        "border border-line bg-paper-2 rounded-xs",
+        "border border-line bg-paper-2 rounded-xl",
         !flush && "overflow-hidden",
         className,
       )}

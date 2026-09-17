@@ -16,7 +16,7 @@ export const metadata: Metadata = { title: DEPT.name };
 export default function SanhuuPage() {
   return (
     <div
-      className="h-full min-h-[420px] xl:h-[calc(100dvh-var(--head-h)-3rem)]"
+      className="h-full min-h-[420px] xl:h-[calc(100dvh-var(--head-h)-var(--workspace-gutter,3rem))]"
       style={{ "--tone": `var(${DEPT.tone})` } as React.CSSProperties}
     >
       <SanhuuDashboard />

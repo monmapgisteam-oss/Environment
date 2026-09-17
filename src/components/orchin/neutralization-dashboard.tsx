@@ -223,7 +223,7 @@ export function NeutralizationDashboard() {
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-2.5">
+    <div className="flex h-full min-h-0 flex-col gap-2">
       {/* ============ ШҮҮЛТҮҮРИЙН МӨР ============ */}
       <FilterBar
         title="Хөрсний саармагжуулалт"
@@ -391,7 +391,7 @@ export function NeutralizationDashboard() {
           агуулдаг тул хэт нарийсвал тоо таслагдана. Үлдсэн зайг газрын
           зураг авна.
         */}
-        <Card className="min-h-0 min-w-0 flex-1 overflow-hidden">
+        <Card className="min-h-0 min-w-0 overflow-hidden xl:max-h-full xl:flex-1 xl:self-start">
           <Head title="Цэг бүрийн элементийн профайл">
             <span className="text-[10.5px] text-ink-3">
               {m.label}
@@ -596,8 +596,8 @@ function Stat({
 }) {
   return (
     <div className="px-3 py-2.5">
-      <span className="eyebrow block min-h-[28px] leading-[1.25]">{label}</span>
-      <span className="mt-1.5 flex items-center gap-1.5">
+      <span className="eyebrow block leading-[1.25]">{label}</span>
+      <span className="mt-2 flex items-center gap-1.5">
         <Icon size={20} strokeWidth={1.6} className="shrink-0 text-ink-3" />
         <span className="num truncate text-[16px] leading-none font-medium text-ink">
           {value}

@@ -152,7 +152,7 @@ export function HyanaltWorkspace() {
   const open = CHECKABLE.has(tab) && !enabled.has(tab) ? null : tab;
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-2.5">
+    <div className="department-workspace">
       <SourceTabs
         tabs={TABS}
         value={tab}
@@ -162,7 +162,7 @@ export function HyanaltWorkspace() {
         onToggle={toggle}
       />
 
-      <div className="min-h-0 flex-1">
+      <div className="department-workspace-content">
         {open === "chemsystem" ? (
           <ChemSystemDashboard />
         ) : open === "repair" ? (
