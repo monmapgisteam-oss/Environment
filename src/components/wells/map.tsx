@@ -1,6 +1,7 @@
 "use client";
 
 import { Minus, Plus } from "lucide-react";
+import { SceneOverlay } from "@/components/map/scene-overlay";
 import * as React from "react";
 import {
   Map as MapLibreMap,
@@ -2184,10 +2185,65 @@ export function WellsMap({
     maplibre-gl.css нь `.maplibregl-map { position: relative }` тавьдаг тул
     байрлал дарагдаж, элемент 0 өндөртэй болно.
   */
+  /*
+    2D / 3D (хэрэглэгчийн хүсэлт, 2026-09-17). 2D нь одоогийн MapLibre
+    зураг хэвээр; 3D нь түүний ДЭЭГҮҮР Esri-ийн `SceneView` давхарга
+    ([map/scene-overlay.tsx](src/components/map/scene-overlay.tsx)) —
+    гурван нэгдсэн торон загварыг харуулна. MapLibre доор нь амьд
+    үлдэнэ тул 2D руу буцахад байрлал, давхарга, сонголт бүгд хэвээр.
+    3D-д ойртуулах товч нуугдана — тэр нь MapLibre-ийнх бөгөөд торон
+    загварт нөлөөлөхгүй; SceneView-г хулгана, хуруугаар удирдана.
+  */
+  const [dim, setDim] = React.useState<"2d" | "3d">("2d");
+
   return (
     <div className="relative h-full w-full">
       <div ref={holder} className="h-full w-full" />
-      <ZoomButtons map={map} />
+      {dim === "3d" && <SceneOverlay />}
+      {dim === "2d" && <ZoomButtons map={map} />}
+      <DimensionToggle value={dim} onChange={setDim} />
+    </div>
+  );
+}
+
+/**
+ * 2D / 3D сэлгэгч — ойртуулах товчны доор, баруун ирмэгт.
+ *
+ * Бичвэр нь "2D", "3D" — икон биш: хоёр үсэг нь ямар ч иконоос илүү
+ * ойлгомжтой бөгөөд товчлол задлах дүрэмд хамаарахгүй (олон улсын
+ * тэмдэглэгээ). Идэвхтэй тал `--data` өнгөөр.
+ */
+function DimensionToggle({
+  value,
+  onChange,
+}: {
+  value: "2d" | "3d";
+  onChange: (v: "2d" | "3d") => void;
+}) {
+  return (
+    <div
+      role="radiogroup"
+      aria-label="Харагдацын хэмжээс"
+      className="elevated absolute top-[calc(50%+48px)] right-2.5 z-10 flex flex-col divide-y divide-line overflow-hidden rounded-xs border border-line-2 bg-paper/90 backdrop-blur"
+    >
+      {(["2d", "3d"] as const).map((d) => {
+        const on = value === d;
+        return (
+          <button
+            key={d}
+            role="radio"
+            aria-checked={on}
+            onClick={() => onChange(d)}
+            className={
+              on
+                ? "flex size-7 items-center justify-center bg-data/15 text-[11px] font-semibold text-data"
+                : "flex size-7 items-center justify-center text-[11px] font-medium text-ink-2 transition-colors hover:bg-paper-hi hover:text-ink"
+            }
+          >
+            {d.toUpperCase()}
+          </button>
+        );
+      })}
     </div>
   );
 }
