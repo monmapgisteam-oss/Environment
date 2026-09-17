@@ -59,6 +59,14 @@ export type Datum = {
    * зурвасаа дундаж PLI-ээр өнгөлдөг (хэрэглэгчийн хүсэлт, 2026-09-17).
    */
   color?: string;
+  /**
+   * Утгын хажууд гарах ХОЁР ДАХЬ ТООН ТЭМДЭГЛЭЛ — өгвөл `locationDetail`
+   * горимын хувийг орлоно. Ариун цэврийн самбар хорооны дундаж PLI-г
+   * тавьдаг (хэрэглэгчийн хүсэлт, 2026-09-17: "25.8%-ийн оронд PLI
+   * дундаж"): хувь нь тооноос дам гардаг тул шинэ мэдээлэл өгдөггүй,
+   * PLI нь өгдөг.
+   */
+  hint?: string;
 };
 
 export function BarChart({
@@ -942,7 +950,7 @@ export function GroupedRowChart({
                     type="button"
                     disabled={locationDetail && !onSelect}
                     aria-pressed={onSelect ? picked(selected, d.key) : undefined}
-                    title={locationDetail ? `${d.label}: ${num(d.value)} · дүүргийн нийт ${num(g.total)}-ийн ${share}%` : undefined}
+                    title={locationDetail ? `${d.label}: ${num(d.value)} · дүүргийн нийт ${num(g.total)}-ийн ${share}%${d.hint ? ` · ${d.hint}` : ""}` : undefined}
                     onClick={() => onSelect?.(clickValue(selected, d.key))}
                     className={cn("group block w-full text-left", locationDetail && "rounded-md px-1 py-2 focus-visible:outline-2 focus-visible:outline-(--data)", locationDetail && onSelect && "cursor-pointer hover:bg-paper-hi", locationDetail && picked(selected, d.key) && "bg-paper-hi ring-1 ring-(--data)")}
                   >
@@ -966,7 +974,7 @@ export function GroupedRowChart({
                         )}
                       >
                         {num(d.value)}
-                        {locationDetail && <span className="ml-2 inline-block w-10 text-right text-[10px] text-ink-3">{share}%</span>}
+                        {locationDetail && <span className="ml-2 inline-block min-w-10 text-right text-[10px] text-ink-3">{d.hint ?? `${share}%`}</span>}
                       </span>
                     </div>
                     <div className="mt-2 h-[6px] w-full overflow-hidden rounded-full bg-paper-hi">

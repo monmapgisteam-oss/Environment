@@ -404,6 +404,7 @@ export function OrchinDashboard() {
           label: numPart ? `${numPart}-р хороо` : data.khoroos[k],
           value: n,
           color: pliColor(avg),
+          hint: `PLI ${avg.toFixed(2)}`,
         };
         byDistrict.set(dName, [...(byDistrict.get(dName) ?? []), row]);
       }
