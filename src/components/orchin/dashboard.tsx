@@ -659,10 +659,6 @@ export function OrchinDashboard() {
               )}
               <BasemapGallery value={basemap} onChange={setBasemap} />
               <OverlayControl value={overlays} onChange={setOverlays} />
-              <div className="pointer-events-none absolute bottom-7 left-3 z-10 max-w-[240px] rounded-md border border-line bg-paper-2/95 px-3 py-2 text-[11px] text-ink-2 shadow-sm">
-                <p className="font-medium text-ink">{pit ? "Нүхэн жорлонгийн нягтрал" : "Нийтийн ариун цэврийн байгууламж"}</p>
-                {pit ? <><div className="my-1.5 h-2 rounded-full" style={{ background: "linear-gradient(to right, rgba(0,200,255,.08), rgba(0,200,255,.32) 25%, rgba(92,225,255,.62) 60%, rgba(230,251,255,.92))" }} /><div className="flex justify-between text-[10px]"><span>Бага</span><span>Их</span></div><p className="mt-1 text-[10px] text-ink-3">Харьцангуй нягтрал · ойртоход цэгээр харагдана</p></> : <p className="mt-1">Гэрэлтсэн цэг — бүртгэлтэй байршил</p>}
-              </div>
 
               {/*
                 ХӨВӨГЧ ТАЙЛБАР. Тэмдэглэгээний хажууд гарна — 17 цэгийн
