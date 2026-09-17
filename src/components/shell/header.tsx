@@ -18,7 +18,7 @@ export function Header() {
         <Link href="/" className="workspace-wordmark">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={asset("/logo.svg")} alt="" aria-hidden="true" width={60} height={60} />
-          <span>Нийслэлийн байгаль орчны газар</span>
+          <span className="uppercase">Нийслэлийн байгаль орчны газар</span>
         </Link>
         <div className="workspace-breadcrumb mt-1 flex min-w-0 items-center gap-1.5 text-[11px] text-ink-3">
           <span className="hidden shrink-0 sm:inline">Хяналтын нэгдсэн систем</span>

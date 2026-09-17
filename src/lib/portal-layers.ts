@@ -196,6 +196,16 @@ export type LayerInfo = {
   /** Талбайн талбарын нэр (`Shape__Area` эсвэл жижиг үсгээр) — байхгүй ч байж болно */
   areaField: string | null;
   count: number;
+  /**
+   * Нэг хуудсанд татах бичлэг — серверийн `maxRecordCount` ба бидний
+   * дээд хязгаарын бага нь.
+   *
+   * ⚠ Серверийн хязгаарыг ХЭТРҮҮЛЖ асуувал сервер хязгаараараа буцаах
+   * бөгөөд "хуудас дүүрээгүй = сүүлчийнх" гэсэн дүрэм тэр даруй
+   * ТАСАЛНА: 2000 гуйгаад 1000 ирэхэд давхарга дутуу татагдаж, хэн ч
+   * анзаарахгүй. Тиймээс хуудасны хэмжээ давхаргаас өөрөөс нь гарна.
+   */
+  pageSize: number;
   fields: LayerField[];
 };
 
@@ -235,6 +245,8 @@ type LayerMeta = {
   geometryType?: string;
   objectIdField?: string;
   fields?: { name: string; alias?: string; type: string }[];
+  /** Сервер нэг хүсэлтэд буцаах дээд бичлэг — хуудасны хэмжээ үүнээс */
+  maxRecordCount?: number;
 };
 
 /**
@@ -244,7 +256,7 @@ type LayerMeta = {
  * давхаргын дэлгэрэнгүй. Бичлэгийн тоог гурав дахь хүсэлтээр авна —
  * `count` нь тодорхойлолтод байдаггүй.
  */
-export async function fetchLayerInfo(
+async function loadLayerInfo(
   set: LayerSet,
   id: string,
   signal?: AbortSignal,
@@ -257,13 +269,32 @@ export async function fetchLayerInfo(
   const first = svc.layers?.[0];
   if (!first) throw new Error(`${id}: давхарга байхгүй байна`);
 
-  const meta = await arcgisJson<LayerMeta>(
-    `${service}/${first.id}?f=json`,
-    id,
-    {
-      signal,
-    },
-  );
+  /*
+    Давхаргын дэлгэрэнгүй ба бичлэгийн тоог ЗЭРЭГ асууна — хоёулаа зөвхөн
+    `first.id`-ээс хамаардаг. Урьд нь дараалан явдаг байсан нь давхарга
+    бүрд нэг илүү сүлжээний эргэлт нэмдэг байв.
+
+    Бичлэгийн тоог АЛГАСЧ болно: тоолол нь тав тухын үзүүлэлт бөгөөд
+    хостинг сервер зарим давхарга дээр тооллын асуулгад 500 буцаадаг
+    тул түүнийг шаардлагатай гэж үзвэл ажиллагаатай давхарга ч
+    нээгдэхгүй болно. Тоо мэдэгдвэл хуудсуудыг ЗЭРЭГ татах боломж
+    нээгдэнэ ({@link fetchLayerFeatures}).
+  */
+  const [meta, count] = await Promise.all([
+    arcgisJson<LayerMeta>(`${service}/${first.id}?f=json`, id, { signal }),
+    arcgisJson<{ count?: number }>(
+      `${service}/${first.id}/query?` +
+        new URLSearchParams({ where: "1=1", returnCountOnly: "true", f: "json" }),
+      id,
+      { signal },
+    ).then(
+      (r) => Number(r.count) || 0,
+      (e: unknown) => {
+        if (e instanceof DOMException && e.name === "AbortError") throw e;
+        return 0;
+      },
+    ),
+  ]);
 
   const all = meta.fields ?? [];
 
@@ -290,31 +321,6 @@ export async function fetchLayerInfo(
   const areaField =
     all.find((f) => /^shape_+area$/i.test(f.name))?.name ?? null;
 
-  /*
-    Бичлэгийн тоог АЛГАСЧ болно.
-
-    Тоолол нь тав тухын үзүүлэлт — давхаргыг нээхэд шаардлагагүй.
-    Хостинг сервер нь зарим давхарга дээр тооллын асуулгад 500 буцаадаг
-    тул түүнийг шаардлагатай гэж үзвэл ажиллагаатай давхарга ч
-    нээгдэхгүй болно.
-  */
-  let count = 0;
-  try {
-    const counted = await arcgisJson<{ count?: number }>(
-      `${service}/${first.id}/query?` +
-        new URLSearchParams({
-          where: "1=1",
-          returnCountOnly: "true",
-          f: "json",
-        }),
-      id,
-      { signal },
-    );
-    count = Number(counted.count) || 0;
-  } catch (e) {
-    if (e instanceof DOMException && e.name === "AbortError") throw e;
-  }
-
   return {
     id,
     set,
@@ -329,6 +335,7 @@ export async function fetchLayerInfo(
     objectIdField: oidField,
     areaField,
     count,
+    pageSize: Math.max(1, Math.min(PAGE, Number(meta.maxRecordCount) || PAGE)),
     fields,
   };
 }
@@ -354,12 +361,13 @@ export type LayerFeatures = {
  * болно. Талбайн утга ерөнхийлөлтөөс өөрчлөгддөггүй тул `Shape__Area`-г
  * тусад нь татаж авна.
  */
-export async function fetchLayerFeatures(
+async function loadLayerFeatures(
   info: LayerInfo,
   signal?: AbortSignal,
 ): Promise<LayerFeatures> {
   const service = serviceOf(info.set, info.id);
   const oid = info.objectIdField;
+  const size = info.pageSize;
 
   /* Дүрслэлд хэрэглэгдэх талбар + талбайн эх сурвалж. Нэрийг бүгдийг
      давхарга ӨӨРӨӨ зарласнаас авна — үсгийн тэмдэглэгээ ч түүнийх */
@@ -369,56 +377,77 @@ export async function fetchLayerFeatures(
     ...(info.areaField ? [info.areaField] : []),
   ];
 
+  type Raw = {
+    properties: Record<string, unknown>;
+    geometry: GeoJSON.Geometry | null;
+  };
+
+  const page = (offset: number) =>
+    arcgisJson<{ features?: Raw[] }>(
+      `${service}/${info.layerId}/query?` +
+        new URLSearchParams({
+          where: "1=1",
+          outFields: out.join(","),
+          outSR: "4326",
+          maxAllowableOffset: String(OFFSET),
+          geometryPrecision: "5",
+          resultOffset: String(offset),
+          resultRecordCount: String(size),
+          orderByFields: oid,
+          f: "geojson",
+        }),
+      info.name,
+      { signal },
+    ).then((j) => j.features ?? []);
+
+  /*
+    ⚠ ХУУДСУУДЫГ ЗЭРЭГ ТАТНА (2026-09-17, хэрэглэгч: "мэдээ татаж байна
+    гээд маш их удаж байна"). Урьд нь хуудас бүр өмнөхөө дуустал хүлээдэг
+    байв: 14 мянган бичлэгтэй давхарга долоон эргэлтийг ДАРААЛАН хийж,
+    геометрийн ерөнхийлөлтийг сервер долоон удаа ээлжлэн бодож байлаа.
+    Бичлэгийн тоо тодорхойлолтоос МЭДЭГДДЭГ тул хэдэн хуудас болохыг
+    урьдчилан тоолж, бүгдийг нэг дор гуйна — хүлээх хугацаа хамгийн урт
+    хуудсынхаас хэтрэхгүй.
+
+    Тоо нь ХУУЧИРСАН байж болно (давхарга бөглөгдсөөр байвал): сүүлчийн
+    хуудас дүүрэн ирвэл дараагийнхыг дараалан үргэлжлүүлж, дүүрээгүй
+    хуудас ирэх хүртэл татна. Тоо огт мэдэгдээгүй бол (тоолол 500-аар
+    унасан) анхнаасаа дараалан явна.
+  */
+  const known = info.count > 0 ? Math.ceil(info.count / size) : 1;
+  const pages = await Promise.all(
+    Array.from({ length: known }, (_, i) => page(i * size)),
+  );
+  let last = pages[pages.length - 1] ?? [];
+  for (let offset = known * size; last.length >= size; offset += size) {
+    last = await page(offset);
+    pages.push(last);
+  }
+
   const shapes: GeoJSON.Feature[] = [];
   const rows: Record<number, Record<string, unknown>> = {};
   const area: Record<number, number> = {};
 
-  for (let offset = 0; ; offset += PAGE) {
-    const url =
-      `${service}/${info.layerId}/query?` +
-      new URLSearchParams({
-        where: "1=1",
-        outFields: out.join(","),
-        outSR: "4326",
-        maxAllowableOffset: String(OFFSET),
-        geometryPrecision: "5",
-        resultOffset: String(offset),
-        resultRecordCount: String(PAGE),
-        orderByFields: oid,
-        f: "geojson",
-      });
+  for (const f of pages.flat()) {
+    const p = f.properties ?? {};
+    const uid = Number(p[oid]);
+    if (!Number.isFinite(uid)) continue;
 
-    const json = await arcgisJson<{
-      features?: {
-        properties: Record<string, unknown>;
-        geometry: GeoJSON.Geometry | null;
-      }[];
-    }>(url, info.name, { signal });
-
-    const page = json.features ?? [];
-    for (const f of page) {
-      const p = f.properties ?? {};
-      const uid = Number(p[oid]);
-      if (!Number.isFinite(uid)) continue;
-
-      rows[uid] = p;
-      if (info.areaField) {
-        const a = Number(p[info.areaField]);
-        if (Number.isFinite(a)) area[uid] = a;
-      }
-
-      if (f.geometry) {
-        shapes.push({
-          type: "Feature",
-          /* `feature-state`-д тоон `id` шаардлагатай */
-          id: uid,
-          properties: { oid: uid },
-          geometry: f.geometry,
-        });
-      }
+    rows[uid] = p;
+    if (info.areaField) {
+      const a = Number(p[info.areaField]);
+      if (Number.isFinite(a)) area[uid] = a;
     }
 
-    if (page.length < PAGE) break;
+    if (f.geometry) {
+      shapes.push({
+        type: "Feature",
+        /* `feature-state`-д тоон `id` шаардлагатай */
+        id: uid,
+        properties: { oid: uid },
+        geometry: f.geometry,
+      });
+    }
   }
 
   return {
@@ -1656,4 +1685,59 @@ export function totalHa(data: LayerFeatures): number {
   let m2 = 0;
   for (const v of Object.values(data.area)) m2 += v;
   return m2 / 10000;
+}
+
+/* --------------------------------------------------------------------------
+   САНАХ ОЙН КЭШ (2026-09-17, хэрэглэгч: "мэдээ татаж байна гээд маш их
+   удаж байна")
+
+   Урьд нь давхаргын тодорхойлолт, бичлэг хоёулаа САМБАРЫН ТӨЛӨВД л
+   суудаг байв: өөр хэлтэс рүү очоод буцахад, таб солиход, бүр давхаргыг
+   унтрааж асаахад бүгд дахин татагдаж байлаа. Дата нь нэг сессийн
+   дотор өөрчлөгдөхгүй тул үйлчилгээний хаягаар түлхүүрлэсэн модулийн
+   түвшний кэш хангалттай — хуудас сэргээхэд л хоосорно.
+
+   ⚠ АМЛАЛТЫГ кэшилнэ, үр дүнг биш: хоёр самбар нэг давхаргыг зэрэг
+   гуйвал нэг л татац явна.
+
+   ⚠ ТАТАЦ ДУУДАГЧИЙН ABORT-ООС ҮЛ ХАМААРНА. Хэрэглэгч татагдаж дуусахаас
+   өмнө өөр хуудас руу шилжвэл татац ЗОГСОХГҮЙ, дуусаад кэшид сууна —
+   буцаж ирэхэд бэлэн байна. Дуудагч тал л хүлээхээ болино (`race`).
+   Зогсоовол хагас татсан ажил хаягдаж, буцаж ирэхэд эхнээсээ эхлэх
+   байсан. Унасан амлалт кэшээс ХАСАГДАНА — түр зуурын алдаа (токен
+   дууссан, сүлжээ тасарсан) дараагийн оролдлогыг хаах ёсгүй.
+   -------------------------------------------------------------------------- */
+const infoCache = new Map<string, Promise<LayerInfo>>();
+const featureCache = new Map<string, Promise<LayerFeatures>>();
+
+/** Дуудагчийн `signal` тасрахад хүлээхээ болино — амлалт өөрөө үргэлжилнэ */
+function abortable<T>(p: Promise<T>, signal?: AbortSignal): Promise<T> {
+  if (!signal) return p;
+  if (signal.aborted) return Promise.reject(new DOMException("Aborted", "AbortError"));
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => reject(new DOMException("Aborted", "AbortError"));
+    signal.addEventListener("abort", onAbort, { once: true });
+    p.then(resolve, reject).finally(() => signal.removeEventListener("abort", onAbort));
+  });
+}
+
+function memo<T>(cache: Map<string, Promise<T>>, key: string, load: () => Promise<T>): Promise<T> {
+  let p = cache.get(key);
+  if (!p) {
+    p = load();
+    cache.set(key, p);
+    p.catch(() => cache.delete(key));
+  }
+  return p;
+}
+
+export function fetchLayerInfo(set: LayerSet, id: string, signal?: AbortSignal): Promise<LayerInfo> {
+  return abortable(memo(infoCache, serviceOf(set, id), () => loadLayerInfo(set, id)), signal);
+}
+
+export function fetchLayerFeatures(info: LayerInfo, signal?: AbortSignal): Promise<LayerFeatures> {
+  return abortable(
+    memo(featureCache, `${serviceOf(info.set, info.id)}/${info.layerId}`, () => loadLayerFeatures(info)),
+    signal,
+  );
 }
