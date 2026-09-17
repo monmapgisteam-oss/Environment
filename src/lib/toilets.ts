@@ -149,9 +149,13 @@ export async function fetchPitPointsIn(
       orderByFields: "objectid ASC",
     })}`;
 
-    const res = await fetch(url, { signal });
-    if (!res.ok) throw new Error(`Жорлонгийн цэг татагдсангүй (${res.status})`);
-    const json = (await res.json()) as { features?: GeoJSON.Feature[] };
+    /* ⚠ `arcgisJson` ЗААВАЛ — энгийн `fetch` токен хавсаргадаггүй тул
+       ойртоход цэгүүд ЧИМЭЭГҮЙ алга болж байв (2026-09-17) */
+    const json = await arcgisJson<{ features?: GeoJSON.Feature[] }>(
+      url,
+      "Жорлонгийн цэг",
+      { signal },
+    );
     const got = json.features ?? [];
     features.push(...got);
     /* Дүүрээгүй хуудас = сүүлчийнх */
@@ -230,6 +234,7 @@ export async function fetchToilets(signal?: AbortSignal): Promise<ToiletsData> {
   const coords = new Float32Array(count * 2);
   const pDistrict = new Uint8Array(count);
   const pZone = new Uint8Array(count);
+  const pKhoroo = new Uint32Array(count);
 
   let n = 0;
   let unzoned = 0;
@@ -256,6 +261,7 @@ export async function fetchToilets(signal?: AbortSignal): Promise<ToiletsData> {
         coords[n * 2 + 1] = g.y;
         pDistrict[n] = di;
         pZone[n] = z;
+        pKhoroo[n] = ki;
       }
       n++;
 
@@ -328,6 +334,8 @@ export async function fetchToilets(signal?: AbortSignal): Promise<ToiletsData> {
       coords: coords.subarray(0, kept * 2),
       district: pDistrict.subarray(0, kept),
       zone: pZone.subarray(0, kept),
+      khoroos: khoroos.list,
+      khoroo: pKhoroo.subarray(0, kept),
     },
   };
 }
@@ -340,6 +348,8 @@ export type ToiletPoints = {
   coords: Float32Array;
   district: Uint8Array;
   zone: Uint8Array;
+  khoroos: string[];
+  khoroo: Uint32Array;
 };
 
 export type ToiletsData = { payload: ToiletsPayload; points: ToiletPoints };
@@ -365,9 +375,15 @@ export async function fetchCityToilets(signal?: AbortSignal): Promise<CityToilet
     returnGeometry: "true",
   })}`;
 
-  const res = await fetch(url, { signal });
-  if (!res.ok) throw new Error(`ArcGIS ${res.status}`);
-  const json = (await res.json()) as { features?: Feature[] };
+  /* ⚠ `arcgisJson` ЗААВАЛ — энгийн `fetch` токен хавсаргадаггүй. Портал
+     нэвтрээгүй хүсэлтэд HTTP 200 + `{error: 499}` буцаадаг тул `res.ok`
+     үнэн, `features` байхгүй → 17 байгууламж ЧИМЭЭГҮЙ 0 болж байв
+     (2026-09-17). Нүхэн жорлонгийн зам шилжсэн ч энэ функц мартагдсан. */
+  const json = await arcgisJson<{ features?: Feature[] }>(
+    url,
+    "Нийтийн ариун цэврийн байгууламж",
+    signal ? { signal } : undefined,
+  );
 
   const out: CityToilet[] = [];
   for (const f of json.features ?? []) {

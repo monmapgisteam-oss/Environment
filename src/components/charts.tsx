@@ -782,6 +782,7 @@ export function GroupedRowChart({
   onSelectGroup,
   defaultOpen = "all",
   storageKey,
+  locationDetail = false,
 }: {
   groups: DatumGroup[];
   tone?: string;
@@ -796,6 +797,8 @@ export function GroupedRowChart({
    * ачаалахад сэргэнэ. Өгөхгүй бол зөвхөн санах ойд.
    */
   storageKey?: string;
+  /** Дүүрэг → хороо: дүүрэг доторх хэмжээс, хувь, тогтмол гарчиг. */
+  locationDetail?: boolean;
 }) {
   /*
     Хураалтын төлөв: задарсан бүлгүүдийн НЭРИЙН олонлог. `null` нь
@@ -867,9 +870,10 @@ export function GroupedRowChart({
   }
 
   return (
-    <div className="space-y-3">
+    <div className={locationDetail ? "space-y-1" : "space-y-3"}>
       {groups.map((g, i) => {
         const shown = isOpen(g.key, i);
+        const rowMax = locationDetail ? Math.max(...g.rows.map((r) => r.value), 1) : max;
         return (
           <div key={g.key}>
             {/*
@@ -877,13 +881,13 @@ export function GroupedRowChart({
             шүүх. Нэг товч дээр хоёуланг нь ачаалбал "би шүүх гэсэн юм,
             яагаад хураачихав" гэсэн эргэлзээ төрнө.
           */}
-            <div className="mb-1.5 flex items-center gap-1.5 border-b border-line pb-1">
+            <div className={cn("mb-1.5 flex items-center gap-1.5 border-b border-line pb-1", locationDetail && "sticky top-0 z-10 rounded-md border bg-paper-2 px-1.5 py-1.5 shadow-sm", locationDetail && g.label === "Тодорхойгүй" && "text-ink-3")}>
               <button
                 type="button"
                 onClick={() => toggle(g.key)}
                 aria-expanded={shown}
-                aria-label={shown ? "Хураах" : "Задлах"}
-                className="shrink-0 text-ink-3 transition-colors hover:text-ink"
+                aria-label={`${g.label}: ${shown ? "Хураах" : "Задлах"}`}
+                className="shrink-0 rounded p-1 text-ink-3 transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-(--data)"
               >
                 <ChevronDown
                   size={12}
@@ -894,21 +898,24 @@ export function GroupedRowChart({
               <button
                 type="button"
                 disabled={!onSelectGroup}
+                aria-pressed={onSelectGroup ? picked(selectedGroup, g.key) : undefined}
                 onClick={() =>
                   onSelectGroup?.(clickValue(selectedGroup, g.key))
                 }
                 className={cn(
                   "flex min-w-0 flex-1 items-baseline gap-2 text-left",
+                  "rounded focus-visible:outline-2 focus-visible:outline-(--data)",
                   onSelectGroup && "cursor-pointer",
                 )}
               >
                 <span
                   className={cn(
-                    "eyebrow min-w-0 flex-1 truncate transition-colors",
+                    locationDetail ? "min-w-0 flex-1 text-[12px] font-medium leading-snug transition-colors" : "eyebrow min-w-0 flex-1 truncate transition-colors",
                     picked(selectedGroup, g.key) && "text-data",
                   )}
                 >
                   {g.label}
+                  {locationDetail && <span className="ml-1.5 whitespace-nowrap text-[10px] font-normal text-ink-3">· {g.rows.length} хороо</span>}
                 </span>
                 <span className="num shrink-0 text-[11.5px] text-ink-2">
                   {num(g.total)}
@@ -916,15 +923,19 @@ export function GroupedRowChart({
               </button>
             </div>
 
-            <div className={cn("space-y-1 pl-2", !shown && "hidden")}>
+            <div className={cn("space-y-1 pl-2", locationDetail && "ml-3 border-l border-line pl-3", !shown && "hidden")}>
               {g.rows.map((d) => {
                 const on = nothingPicked(selected) || picked(selected, d.key);
+                const share = g.total > 0 ? (d.value / g.total * 100).toFixed(1) : "0.0";
                 return (
                   <button
                     key={d.key}
                     type="button"
+                    disabled={locationDetail && !onSelect}
+                    aria-pressed={onSelect ? picked(selected, d.key) : undefined}
+                    title={locationDetail ? `${d.label}: ${num(d.value)} · дүүргийн нийт ${num(g.total)}-ийн ${share}%` : undefined}
                     onClick={() => onSelect?.(clickValue(selected, d.key))}
-                    className="group block w-full text-left"
+                    className={cn("group block w-full text-left", locationDetail && "rounded-md px-1 py-2 focus-visible:outline-2 focus-visible:outline-(--data)", locationDetail && onSelect && "cursor-pointer hover:bg-paper-hi", locationDetail && picked(selected, d.key) && "bg-paper-hi ring-1 ring-(--data)")}
                   >
                     <div className="flex items-baseline justify-between gap-2">
                       <span
@@ -946,13 +957,14 @@ export function GroupedRowChart({
                         )}
                       >
                         {num(d.value)}
+                        {locationDetail && <span className="ml-2 inline-block w-10 text-right text-[10px] text-ink-3">{share}%</span>}
                       </span>
                     </div>
                     <div className="mt-2 h-[6px] w-full overflow-hidden rounded-full bg-paper-hi">
                       <div
                         className="h-full transition-[width,opacity]"
                         style={{
-                          width: `${(d.value / max) * 100}%`,
+                          width: `${(d.value / rowMax) * 100}%`,
                           background: tone,
                           opacity: on ? 1 : 0.3,
                         }}

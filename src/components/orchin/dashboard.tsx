@@ -6,6 +6,7 @@ import {
   Building2,
   Droplets,
   Gauge,
+  Info,
   LandPlot,
   Layers3,
   Loader2,
@@ -13,7 +14,6 @@ import {
   Toilet,
 } from "lucide-react";
 import {
-  CategoryChart,
   GroupedRowChart,
   type Datum,
   type DatumGroup,
@@ -79,6 +79,7 @@ export function OrchinDashboard() {
   /** Бүх 145 мянган цэгийн байршил — газрын зурагт л хэрэглэнэ */
   const [raw, setRaw] = React.useState<ToiletPoints | null>(null);
   const [city, setCity] = React.useState<CityToilet[]>([]);
+  const [cityStatus, setCityStatus] = React.useState<"loading" | "ready" | "error">("loading");
   const [error, setError] = React.useState<string | null>(null);
 
   /*
@@ -92,7 +93,7 @@ export function OrchinDashboard() {
 
   const [district, setDistrict] = React.useState<string | null>(null);
   const [zone, setZone] = React.useState<string | null>(null);
-  /** Хорооны сонголт — нийтийн жорлон дээр л утгатай (нүд нь хороогоо мэдэхгүй) */
+  /** Хорооны сонголт нь түүхий цэгийн хорооны кодоор шүүнэ. */
   const [khoroo, setKhoroo] = React.useState<string | null>(null);
   /** Хулгана дээр нь очсон нийтийн жорлон */
   /** Хулгана дагасан хөвөгч тайлбар — байрлалыг өөрөө удирдана */
@@ -129,8 +130,8 @@ export function OrchinDashboard() {
 
     // Нийтийн жорлон нь 17 бичлэг — шууд ArcGIS-ээс, алдааг нь залгина
     fetchCityToilets(ac.signal)
-      .then(setCity)
-      .catch(() => {});
+      .then((rows) => { setCity(rows); setCityStatus("ready"); })
+      .catch((e: Error) => { if (e.name !== "AbortError") setCityStatus("error"); });
 
     return () => ac.abort();
   }, []);
@@ -187,6 +188,8 @@ export function OrchinDashboard() {
        мэт бүгдийг гаргавал сонголт үл ажиллах мэт харагдана */
     if (district && dAt < 0) return { oid: [], lon: [], lat: [], w: [] as number[] };
     const zAt = zone ? Number(zone) : 0;
+    const kAt = khoroo ? raw.khoroos.indexOf(khoroo) : -1;
+    if (khoroo && kAt < 0) return { oid: [], lon: [], lat: [], w: [] as number[] };
 
     const oid: number[] = [];
     const lon: number[] = [];
@@ -194,12 +197,13 @@ export function OrchinDashboard() {
     for (let i = 0; i < raw.n; i++) {
       if (dAt >= 0 && raw.district[i] !== dAt) continue;
       if (zAt && raw.zone[i] !== zAt) continue;
+      if (kAt >= 0 && raw.khoroo[i] !== kAt) continue;
       oid.push(i);
       lon.push(raw.coords[i * 2]);
       lat.push(raw.coords[i * 2 + 1]);
     }
     return { oid, lon, lat, w: new Array<number>(oid.length).fill(1) };
-  }, [raw, cells, district, zone]);
+  }, [raw, cells, district, zone, khoroo]);
 
   const cellIdx = React.useMemo(
     () => Uint32Array.from(mapPoints.oid, (_, i) => i),
@@ -296,6 +300,11 @@ export function OrchinDashboard() {
     if (!data) return [];
     return ZONES.map((z, zi) => {
       let n = 0;
+      const ki = khoroo ? data.khoroos.indexOf(khoroo) : -1;
+      if (ki >= 0) {
+        for (let b = 0; b < PLI_BUCKETS; b++) n += data.khZonePli[(ki * 4 + zi) * PLI_BUCKETS + b];
+        return { key: String(z), label: `${z}-р бүс`, value: n };
+      }
       for (let d = 0; d < data.districts.length; d++) {
         if (dIdx >= 0 && d !== dIdx) continue;
         for (let b = 0; b < PLI_BUCKETS; b++) {
@@ -304,7 +313,7 @@ export function OrchinDashboard() {
       }
       return { key: String(z), label: `${z}-р бүс`, value: n };
     }).filter((d) => d.value > 0);
-  }, [data, dIdx]);
+  }, [data, dIdx, khoroo]);
 
   /**
    * Нэгж (дүүрэг/хороо) бүрийн ДУНДАЖ PLI ба тоо.
@@ -424,12 +433,12 @@ export function OrchinDashboard() {
     if (!district && !khoroo && !zone) return null;
     const b = new Bounds();
     if (pit) {
-      for (let i = 0; i < cells.lon.length; i++) b.add(cells.lon[i], cells.lat[i]);
+      for (let i = 0; i < mapPoints.lon.length; i++) b.add(mapPoints.lon[i], mapPoints.lat[i]);
     } else {
       for (const c of cityRows) b.add(c.lon, c.lat);
     }
     return b.get(0.004);
-  }, [pit, district, khoroo, zone, cells, cityRows]);
+  }, [pit, district, khoroo, zone, mapPoints, cityRows]);
 
   /* ---------------- Индикатор ---------------- */
   const stats = React.useMemo(() => {
@@ -439,8 +448,7 @@ export function OrchinDashboard() {
       зөвхөн бүс тодорхойлогдсон бичлэгийг агуулдаг тул түүнийг нийлбэрлэвэл
       145,458 гарч, эх сурвалжийн 145,462-той зөрөх байв.
     */
-    const filtered = districtData.reduce((s, d) => s + d.value, 0);
-    const total = dIdx < 0 && zIdx < 0 ? data.n : filtered;
+    const total = mapPoints.oid.length;
     /** Жигнэсэн дундаж PLI — сонгосон дүүрэг(үүд)-ийн нийлбэрээр */
     let sum = 0;
     let cnt = 0;
@@ -450,18 +458,29 @@ export function OrchinDashboard() {
       sum += avg * n;
       cnt += n;
     }
+    if (khoroo && pit) {
+      const ki = data.khoroos.indexOf(khoroo);
+      const selectedPli = ki >= 0 ? avgPli(data.khZonePli, ki) : { avg: 0, n: 0 };
+      sum = selectedPli.avg * selectedPli.n;
+      cnt = selectedPli.n;
+    }
 
     return {
       total: pit ? total : cityRows.length,
-      districts: districtData.length,
-      khoroos: khorooData.length,
+      districts: pit ? district || khoroo ? (total > 0 ? 1 : 0) : districtData.length : new Set(cityRows.map((r) => r.district)).size,
+      khoroos: pit ? khoroo ? (total > 0 ? 1 : 0) : khorooData.length : new Set(cityRows.map(khorooKey)).size,
       pli: cnt ? sum / cnt : 0,
     };
-  }, [pit, data, districtData, khorooData, cityRows, dIdx, zIdx, avgPli]);
+  }, [pit, data, districtData, khorooData, cityRows, dIdx, avgPli, mapPoints, khoroo, district]);
 
   /** Бүсийн шүүлтүүр нь зөвхөн нүхэн жорлонд утгатай */
   const activeCount =
-    (district ? 1 : 0) + (pit && zone ? 1 : 0) + (!pit && khoroo ? 1 : 0);
+    (district ? 1 : 0) + (pit && zone ? 1 : 0) + (khoroo ? 1 : 0);
+
+  function pickDistrict(value: string | null) {
+    setDistrict(value);
+    setKhoroo(null);
+  }
 
   function reset() {
     setDistrict(null);
@@ -478,7 +497,7 @@ export function OrchinDashboard() {
     /* Нөгөө эх сурвалжид байхгүй хэмжигдэхүүний сонголт үлдэх ёсгүй —
        буцаж ирэхэд далд шүүлтүүр болно */
     if (id === "city") setZone(null);
-    else setKhoroo(null);
+    setKhoroo(null);
     /* Хөвөгч тайлбар нь өөрөө хулгана салахад цэвэрлэгддэг тул энд
        тусгайлан унтраах шаардлагагүй */
   }
@@ -531,7 +550,7 @@ export function OrchinDashboard() {
                   />
                   {s.label}
                   <span className="num text-ink-3">
-                    {num(s.id === "pit" ? (data?.n ?? 0) : city.length)}
+                    {s.id === "pit" ? num(data.n) : cityStatus === "loading" ? "Татаж байна…" : cityStatus === "error" ? "Татаж чадсангүй" : city.length ? num(city.length) : "Бүртгэлгүй"}
                   </span>
                 </button>
               );
@@ -544,10 +563,10 @@ export function OrchinDashboard() {
           icon={Building2}
           value={district}
           active={Boolean(district)}
-          onClear={() => setDistrict(null)}
+          onClear={() => pickDistrict(null)}
           width={240}
         >
-          <PickList items={districtData} selected={district} onPick={setDistrict} />
+          <PickList items={districtData} selected={district} onPick={pickDistrict} />
         </FilterMenu>
 
         {/* Бүс нь зөвхөн нүхэн жорлонгийн хэмжигдэхүүн */}
@@ -564,6 +583,9 @@ export function OrchinDashboard() {
           </FilterMenu>
         ) : null}
       </FilterBar>
+      {khoroo && <div className="flex items-center gap-2 px-1 text-[12px] text-ink-2"><span>Сонгосон хороо: {khorooGroups.flatMap((g) => g.rows.map((r) => ({ ...r, district: g.label }))).filter((r) => r.key === khoroo).map((r) => `${r.district} · ${r.label}`).join(", ")}</span><button type="button" onClick={() => setKhoroo(null)} className="rounded border border-line px-2 py-1 text-data">Арилгах ×</button></div>}
+      {!pit && cityStatus !== "ready" && <p role="status" className="px-3 text-[12px] text-ink-2">{cityStatus === "loading" ? "Нийтийн ариун цэврийн байгууламжийн мэдээллийг татаж байна…" : "Мэдээллийг татаж чадсангүй. Хуудсыг дахин ачаална уу."}</p>}
+      {!pit && cityStatus === "ready" && city.length === 0 && <p className="px-3 text-[12px] text-ink-2">Бүртгэл байхгүй байна.</p>}
 
       {/*
         ГУРАВ биш ХОЁР багана, зураг нь давамгайлна. Баруун багана 380px:
@@ -584,12 +606,12 @@ export function OrchinDashboard() {
               <Stat
                 icon={pit ? Toilet : Droplets}
                 label={pit ? "Нүхэн жорлон" : "Нийтийн ариун цэврийн байгууламж"}
-                value={num(stats.total)}
+                value={!pit && cityStatus !== "ready" ? "—" : num(stats.total)}
               />
               <Stat icon={Building2} label="Дүүрэг" value={num(stats.districts)} />
               <Stat icon={LandPlot} label="Хороо" value={num(stats.khoroos)} />
               {pit ? (
-                <Stat icon={Gauge} label="Дундаж PLI" value={stats.pli.toFixed(2)} />
+                <Stat icon={Gauge} label="Дундаж PLI" value={stats.total ? stats.pli.toFixed(2) : "—"} description="PLI — бохирдлын ачааллын индекс" />
               ) : null}
             </div>
           </Card>
@@ -637,6 +659,10 @@ export function OrchinDashboard() {
               )}
               <BasemapGallery value={basemap} onChange={setBasemap} />
               <OverlayControl value={overlays} onChange={setOverlays} />
+              <div className="pointer-events-none absolute bottom-7 left-3 z-10 max-w-[240px] rounded-md border border-line bg-paper-2/95 px-3 py-2 text-[11px] text-ink-2 shadow-sm">
+                <p className="font-medium text-ink">{pit ? "Нүхэн жорлонгийн нягтрал" : "Нийтийн ариун цэврийн байгууламж"}</p>
+                {pit ? <><div className="my-1.5 h-2 rounded-full" style={{ background: "linear-gradient(to right, rgba(0,200,255,.08), rgba(0,200,255,.32) 25%, rgba(92,225,255,.62) 60%, rgba(230,251,255,.92))" }} /><div className="flex justify-between text-[10px]"><span>Бага</span><span>Их</span></div><p className="mt-1 text-[10px] text-ink-3">Харьцангуй нягтрал · ойртоход цэгээр харагдана</p></> : <p className="mt-1">Гэрэлтсэн цэг — бүртгэлтэй байршил</p>}
+              </div>
 
               {/*
                 ХӨВӨГЧ ТАЙЛБАР. Тэмдэглэгээний хажууд гарна — 17 цэгийн
@@ -674,7 +700,7 @@ export function OrchinDashboard() {
           <p className="shrink-0 px-0.5 text-[10.5px] leading-none text-ink-3">
             Суурь зураг: Esri · Дата: ArcGIS ·{" "}
             {pit
-              ? `${num(data.lon.length)} нүдэнд хураасан (~220м)`
+              ? raw ? "бодит байршлын нягтрал" : `${num(data.lon.length)} нүдэнд хураасан (~220м)`
               : "бодит байршил"}
             {pit && data.unzoned > 0
               ? ` · бүс тодорхойгүй ${num(data.unzoned)}`
@@ -687,22 +713,18 @@ export function OrchinDashboard() {
           {/* Бүс нь нийтийн жорлонд байхгүй хэмжигдэхүүн */}
           {pit ? (
             <Card className="shrink-0">
-              <Head title="Бүсээр" />
+              <Head title="Бүсийн тархалт" />
               <div className="p-3">
-                <CategoryChart data={zoneData} selected={zone} onSelect={setZone} />
+                <ZoneBars data={zoneData} selected={zone} onSelect={setZone} />
               </div>
             </Card>
           ) : null}
 
-          {/*
-            Хорооны мөр нь ЗӨВХӨН нийтийн жорлон дээр сонгогдоно: нүхэн
-            жорлонгийн нүд аль хороонд байгаагаа мэддэггүй тул сонголт нь
-            газрын зурагт нөлөөлж чадахгүй — товшигддог мөнх дүр эсэргүү.
-          */}
+          {/* Хорооны сонголт түүхий цэгийн байршил болон индикаторыг шүүнэ. */}
           <Card className="min-h-[120px] flex-1">
             {/* Дүүрэг + хороо хоёр шатлалыг агуулдаг тул нэр нь "хороогоор" биш */}
             <Head title="Байршлын мэдээлэл">
-              <span className="num text-[11.5px] text-ink-3">{khorooData.length}</span>
+              <span className="num text-[11.5px] text-ink-3">{khorooData.length} хороо</span>
             </Head>
             <div className="min-h-0 flex-1 overflow-y-auto p-3">
               {/*
@@ -715,11 +737,12 @@ export function OrchinDashboard() {
                 сонголтыг дарж бичнэ.
               */}
               <GroupedRowChart
+                locationDetail
                 groups={khorooGroups}
-                selected={pit ? null : khoroo}
-                onSelect={pit ? undefined : setKhoroo}
+                selected={khoroo}
+                onSelect={setKhoroo}
                 selectedGroup={district}
-                onSelectGroup={setDistrict}
+                onSelectGroup={pickDistrict}
                 defaultOpen={pit ? "first" : "all"}
                 storageKey={`orchin.toilets.${source}.groups`}
               />
@@ -741,6 +764,26 @@ function Card({ className, children }: { className?: string; children: React.Rea
   );
 }
 
+function Help({ text }: { text: string }) {
+  return <span className="group relative inline-flex shrink-0 normal-case tracking-normal"><button type="button" aria-label={text} className="rounded text-ink-3 hover:text-ink focus-visible:outline-2 focus-visible:outline-(--data)"><Info size={13} /></button><span role="tooltip" className="pointer-events-none absolute right-0 top-5 z-30 hidden w-60 max-w-[75vw] rounded-md border border-line bg-paper-2 p-3 text-[11px] font-normal leading-relaxed text-ink-2 shadow-lg group-hover:block group-focus-within:block">{text}</span></span>;
+}
+
+function ZoneBars({ data, selected, onSelect }: { data: Datum[]; selected: string | null; onSelect: (key: string | null) => void }) {
+  const total = data.reduce((sum, row) => sum + row.value, 0);
+  if (!total) return <p className="py-3 text-[12px] text-ink-3">Бүсийн бүртгэл байхгүй</p>;
+  return <div>
+    <div className="mb-2 flex items-center justify-between text-[11px] text-ink-3"><span>Бүсээр ангилсан бүртгэл</span><span className="num font-medium text-ink">{num(total)}</span></div>
+    <div className="space-y-1">{data.map((row) => {
+      const share = row.value / total * 100;
+      const active = selected === row.key;
+      return <button key={row.key} type="button" aria-pressed={active} onClick={() => onSelect(active ? null : row.key)} className={cn("block w-full rounded-md px-2 py-2 text-left transition-colors hover:bg-paper-hi focus-visible:outline-2 focus-visible:outline-(--data)", active && "bg-paper-hi ring-1 ring-(--data)", selected && !active && "opacity-50")}>
+        <span className="flex items-baseline justify-between gap-2 text-[12px]"><span>{row.label}</span><span className="num font-medium">{num(row.value)}<span className="ml-2 inline-block w-11 text-right text-[10.5px] font-normal text-ink-3">{share.toFixed(1)}%</span></span></span>
+        <span className="mt-2 block h-1.5 overflow-hidden rounded-full bg-paper-hi"><span className="block h-full rounded-full bg-data transition-[width]" style={{ width: `${share}%` }} /></span>
+      </button>;
+    })}</div>
+  </div>;
+}
+
 function Head({ title, children }: { title: string; children?: React.ReactNode }) {
   return (
     <div className="flex shrink-0 items-center justify-between gap-2 border-b border-line px-3 py-2">
@@ -756,14 +799,16 @@ function Stat({
   label,
   value,
   icon: Icon,
+  description,
 }: {
   label: string;
   value: string;
   icon: typeof Toilet;
+  description?: string;
 }) {
   return (
     <div className="flex flex-col px-3 py-2">
-      <span className="eyebrow block min-h-[28px] leading-[1.25]">{label}</span>
+      <span className="eyebrow flex min-h-[28px] items-start gap-1.5 leading-[1.25]">{label}{description && <Help text={description} />}</span>
       <div className="mt-auto flex items-center gap-1.5">
         <Icon size={20} strokeWidth={1.6} className="shrink-0 text-ink-3" />
         <span className="num truncate text-[16px] leading-none font-medium text-ink">
