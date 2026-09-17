@@ -890,14 +890,32 @@ function trimShared(names: string[]): string[] {
  * "Баянгол" ба "Баянзүрх" хоёрын аль нь болох нь тодорхойгүй.
  */
 function foldPrefixes(parts: Set<string>): Map<string, string> {
-  const all = [...parts];
+  /*
+    ⚠ O(n log n), O(n²) БИШ (2026-09-17). Урьд нь хэсэг бүрийг бүх
+    хэсэгтэй `startsWith`-ээр харьцуулдаг байсан нь 16 мянган ялгаатай
+    хаягтай талбар дээр 256 сая шалгалт болж, худгийн паспортын
+    самбарыг 11 секунд хөлдөөж байв (CPU профайлын 85%).
+    Эрэмбэлсэн жагсаалтад "`short` + зай"-гаар эхлэх бүх мөр НЭГ ДОР,
+    `short`-ын шууд ард байрлана — хоёр талыг нь хоёртын хайлтаар олно.
+  */
+  const all = [...parts].sort();
   const fold = new Map<string, string>();
 
+  const lowerBound = (key: string) => {
+    let lo = 0;
+    let hi = all.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (all[mid] < key) lo = mid + 1;
+      else hi = mid;
+    }
+    return lo;
+  };
+
   for (const short of all) {
-    const hits = all.filter(
-      (long) => long !== short && long.startsWith(`${short} `),
-    );
-    if (hits.length === 1) fold.set(short, hits[0]);
+    const from = lowerBound(`${short} `);
+    const to = lowerBound(`${short} ￿`);
+    if (to - from === 1) fold.set(short, all[from]);
   }
   return fold;
 }
@@ -1017,16 +1035,26 @@ function candidateOf(field: LayerField, raw: string[]): Candidate | null {
     const cut = raw.map((v) =>
       v === "Бүртгэгдээгүй" ? [v] : v.split(SEPARATOR).filter(Boolean),
     );
-    const folded = foldPrefixes(new Set(cut.flat()));
-    const split = cut.map((ks) => [
-      ...new Set(ks.map((k) => folded.get(k) ?? k)),
-    ]);
+    const rawParts = new Set(cut.flat());
+    /*
+      Хэсгүүд нь өөрсдөө хэт олон бол задлах ч, нэгтгэх ч утгагүй:
+      нэгтгэлт тоог хамгийн ихдээ хагасаар л бууруулна, харин
+      `MAX_VALUES`-ээс олон ангилал ямар ч байсан диаграм болохгүй.
+      Хаяг, нэрийн талбар (бичлэг тутамд өөр, таслалтай) яг энд
+      унадаг — тэдэнд зориулж нэгтгэлт тооцох нь дэмий ажил.
+    */
+    if (rawParts.size <= 2 * MAX_VALUES) {
+      const folded = foldPrefixes(rawParts);
+      const split = cut.map((ks) => [
+        ...new Set(ks.map((k) => folded.get(k) ?? k)),
+      ]);
 
-    const parts = new Set(split.flat()).size;
-    if (parts < flat) {
-      keys = split;
-      multi = true;
-      fold = folded;
+      const parts = new Set(split.flat()).size;
+      if (parts < flat) {
+        keys = split;
+        multi = true;
+        fold = folded;
+      }
     }
   }
 

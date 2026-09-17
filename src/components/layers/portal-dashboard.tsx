@@ -383,15 +383,22 @@ export function PortalLayersDashboard({ set }: { set: LayerSet }) {
          геометр ирэхэд ижил бичлэг зураг дээр нэмэгдэнэ */
       const place = (data: LayerFeatures) => {
         if (!alive) return;
-        setLoaded((m) => ({
-          ...m,
-          [id]: {
-            info,
-            data,
-            charts: breakdowns(info, data),
-            labels: labelParts(info, data),
-          },
-        }));
+        setLoaded((m) => {
+          /* Хэсэгчилсэн (атрибут) ба бүтэн (геометртэй) хувилбар НЭГ
+             мөрийн обьектыг хуваалцдаг тул задаргааг дахин тооцохгүй —
+             худаг дээр тэр нь секундээр хэмжигддэг ажил */
+          const prev = m[id];
+          const same = prev && prev.data.rows === data.rows;
+          return {
+            ...m,
+            [id]: {
+              info,
+              data,
+              charts: same ? prev.charts : breakdowns(info, data),
+              labels: same ? prev.labels : labelParts(info, data),
+            },
+          };
+        });
       };
       fetchLayerFeatures(info, ac.signal, place)
         .then(place)
