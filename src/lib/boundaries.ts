@@ -47,6 +47,7 @@ async function query(
     returnGeometry: "true",
     ...params,
   })}`;
+  // eslint-disable-next-line no-restricted-globals -- ArcGIS Online-ийн нээлттэй үйлчилгээ — порталын токен тэнд хүчингүй
   const res = await fetch(
     url,
     cacheable ? { next: { revalidate: 86400 } } : undefined,

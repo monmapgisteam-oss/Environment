@@ -83,6 +83,7 @@ export type PlanData = {
 };
 
 export async function fetchPlan(signal?: AbortSignal): Promise<PlanData> {
+  // eslint-disable-next-line no-restricted-globals -- өөрийн статик JSON — портал биш
   const res = await fetch(asset(SNAPSHOT), signal ? { signal } : undefined);
   if (!res.ok) throw new Error(`Төлөвлөгөөний биелэлт татагдсангүй (${res.status})`);
   return (await res.json()) as PlanData;

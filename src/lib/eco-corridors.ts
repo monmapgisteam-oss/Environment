@@ -233,6 +233,7 @@ async function fetchParcels(): Promise<{
         resultRecordCount: "2000",
         f: "geojson",
       });
+      // eslint-disable-next-line no-restricted-globals -- ArcGIS Online-ийн нээлттэй Parcel_all — порталын токен тэнд хүчингүй
       const res = await fetch(PARCELS, { method: "POST", body });
       if (!res.ok) throw new Error(`Нэгж талбар татагдсангүй (${res.status})`);
       const json = (await res.json()) as {

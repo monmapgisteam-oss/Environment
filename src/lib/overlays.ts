@@ -89,6 +89,7 @@ export async function fetchOverlay(
     maxAllowableOffset: String(def.offset),
   })}`;
 
+  // eslint-disable-next-line no-restricted-globals -- ArcGIS Online-ийн нээлттэй Basemap — порталын токен тэнд хүчингүй
   const res = await fetch(url, { signal });
   if (!res.ok) throw new Error(`ArcGIS ${res.status}`);
   const data = (await res.json()) as GeoJSON.FeatureCollection;

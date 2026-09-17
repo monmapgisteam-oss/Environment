@@ -90,6 +90,7 @@ export type ChemSystem = {
 };
 
 export async function fetchChemSystem(signal?: AbortSignal): Promise<ChemSystem> {
+  // eslint-disable-next-line no-restricted-globals -- өөрийн статик JSON хормын хувилбар — портал биш
   const res = await fetch(asset(SNAPSHOT), signal ? { signal } : undefined);
   if (!res.ok) throw new Error(`Химийн бүртгэл татагдсангүй (${res.status})`);
   return (await res.json()) as ChemSystem;

@@ -212,6 +212,7 @@ function n(v: unknown): number | null {
 }
 
 async function get<T>(path: string, signal?: AbortSignal): Promise<T> {
+  // eslint-disable-next-line no-restricted-globals -- цаг агаарын нээлттэй API — ArcGIS биш, токен хүлээж авдаггүй
   const res = await fetch(`${API}/${path}`, {
     ...(signal ? { signal } : {}),
     ...(KEY ? { headers: { Authorization: KEY } } : {}),

@@ -1706,6 +1706,7 @@ export function WellsMap({
     if (!live) return;
     let alive = true;
 
+    // eslint-disable-next-line no-restricted-globals -- өөрийн статик /api/boundaries — портал биш, токен хэрэггүй
     fetch(asset("/api/boundaries"))
       .then((r) => (r.ok ? r.json() : null))
       .then((b: BoundarySet | null) => {
