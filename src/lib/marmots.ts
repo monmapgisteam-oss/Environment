@@ -161,7 +161,7 @@ async function page(service: string) {
     });
   const json = await arcgisJson<{
     features?: { properties: Props; geometry: GeoJSON.Geometry | null }[];
-  }>(url, "Нутагшуулсан тарвага");
+  }>(url, "Шилжүүлэн нутагшуулсан тарвага");
   return json.features ?? [];
 }
 

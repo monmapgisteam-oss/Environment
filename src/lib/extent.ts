@@ -120,3 +120,60 @@ export function saneGeometry(
   walk((g as { coordinates: unknown }).coordinates);
   return ok;
 }
+
+/* --------------------------------------------------------------------------
+   ЦЭГИЙН КООРДИНАТЫГ НАЙДВАРТАЙ УНШИХ
+   -------------------------------------------------------------------------- */
+
+/**
+ * Түүхий утгыг тоо болгоно — БӨГЛӨГДӨӨГҮЙГ тэг болгохгүй.
+ *
+ * ⚠⚠ `Number(null)` нь **0**, `Number("")` нь мөн **0** бөгөөд
+ * `Number.isFinite(0)` нь `true` тул "тоо мөн үү" гэсэн энгийн шалгалт
+ * бөглөгдөөгүй нүдийг НЭВТРҮҮЛНЭ. (`Number(undefined)` нь `NaN` тул
+ * баригддаг — яг тэр учраас алдаа нь удаан далд үлддэг.)
+ */
+function numberOf(v: unknown): number | null {
+  if (typeof v === "number") return Number.isFinite(v) ? v : null;
+  if (typeof v === "string" && v.trim() !== "") {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  }
+  return null;
+}
+
+/**
+ * ArcGIS-ийн бичлэгээс цэгийн байршлыг гаргана.
+ *
+ * Геометрийг эрхэмлэж, дутсан үед атрибутын өргөрөг, уртрагаас авна.
+ * Аль нь ч олдохгүй бол `null` — дуудагч тал юу хийхээ өөрөө шийднэ
+ * (бичлэгийг алгасах, эсвэл байршилгүйгээр үлдээх).
+ *
+ * ⚠⚠ **ТЭГ, ТЭГ бол БАЙРШИЛ БИШ.** Авран хамгаалсан амьтдын бүртгэлийн 720
+ * мөрийн **23-д** координат нь `null` байсан бөгөөд `Number(null) → 0`
+ * тул тэдгээр нь (0, 0) буюу Гвинейн буланд бөөгнөрч, газрын зураг
+ * дээр Улаанбаатараас 9,000 км зайд "23" гэсэн бөөгнөрөл болж гарч
+ * байв (хэрэглэгч 2026-09-17-нд мэдээлсэн). Платформын хамрах хүрээ
+ * нь Улаанбаатар тул (0, 0) нь хэзээ ч бодит бичлэг байж чадахгүй.
+ */
+export function pointOf(
+  geometry: { x?: unknown; y?: unknown } | null | undefined,
+  lonRaw?: unknown,
+  latRaw?: unknown,
+): { lon: number; lat: number } | null {
+  let lon = numberOf(geometry?.x);
+  let lat = numberOf(geometry?.y);
+
+  if (lon == null || lat == null) {
+    lon = numberOf(lonRaw);
+    lat = numberOf(latRaw);
+  }
+  if (lon == null || lat == null) return null;
+
+  /* Хүрээнээс гадуурх утга нь эвдэрсэн эсвэл проекцлогдсон координат */
+  if (Math.abs(lon) > 180 || Math.abs(lat) > 90) return null;
+  /* Null Island — бөглөгдөөгүйн тэмдэг, байршил биш */
+  if (lon === 0 && lat === 0) return null;
+
+  return { lon, lat };
+}

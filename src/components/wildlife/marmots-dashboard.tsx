@@ -377,6 +377,27 @@ export function MarmotsDashboard() {
         </FilterMenu>
       </FilterBar>
 
+      {/*
+        ⚠ ИНДИКАТОР нь ЗУРГИЙН ДЭЭР, бүтэн өргөнтэй зурвас
+        (хэрэглэгчийн шийдвэр, 2026-09-17). Урьд нь баруун баганад
+        2×2 тор болж, доор нь хоёр диаграмтай хамт шахагдаж байв.
+
+        Цахилгааны шон, экологийн коридортой НЭГ хэв: үзүүлэлт
+        дээрээ, зураг голдоо, задаргаа баруун талдаа.
+      */}
+      <Card className="shrink-0">
+        <div className="grid grid-cols-2 divide-x divide-y divide-line sm:grid-cols-4 sm:divide-y-0">
+          <Stat icon={ArrowRight} label="Шилжүүлэлт" value={num(stats.moves)} />
+          <Stat icon={Rat} label="Нийт тарвага" value={num(stats.total)} />
+          <Stat icon={CalendarRange} label="Хамрах он" value={num(stats.years)} />
+          <Stat
+            icon={Ruler}
+            label="Дундаж зай, км"
+            value={stats.avgKm.toFixed(1)}
+          />
+        </div>
+      </Card>
+
       {/* ---- ДЭЭД МӨР: газрын зураг + задаргаа ---- */}
       <Columns layout="flex" id="marmots" right={300} className="min-h-0 flex-1">
         <Card className="relative min-h-[240px] flex-1 overflow-hidden">
@@ -496,19 +517,6 @@ export function MarmotsDashboard() {
         </Card>
 
         <div className="flex min-h-0 flex-col gap-2.5 xl:w-(--col-r) xl:shrink-0">
-          <Card className="shrink-0">
-            <div className="grid grid-cols-2 divide-x divide-y divide-line">
-              <Stat icon={ArrowRight} label="Шилжүүлэлт" value={num(stats.moves)} />
-              <Stat icon={Rat} label="Нийт тарвага" value={num(stats.total)} />
-              <Stat icon={CalendarRange} label="Хамрах он" value={num(stats.years)} />
-              <Stat
-                icon={Ruler}
-                label="Дундаж зай, км"
-                value={stats.avgKm.toFixed(1)}
-              />
-            </div>
-          </Card>
-
           {/*
             Он бүрийн насны бүрэлдэхүүн. Зурвас бүр 100% — жилүүд өөр
             өөр хэмжээтэй тул шууд харьцуулбал зөвхөн том жил нь
@@ -518,6 +526,33 @@ export function MarmotsDashboard() {
             <Head title="Оны насны бүрэлдэхүүн">
               <span className="text-[10.5px] text-ink-3">хувиар</span>
             </Head>
+            {/*
+              ⚠⚠ ӨНГӨНИЙ ТАЙЛБАР ЗААВАЛ.
+
+              Зурвас нь таван насны ангиллыг `--data`-гийн бүдгэрэх
+              шатлалаар ялгадаг ч аль нь юу болох нь ЗӨВХӨН hover
+              дээр гардаг байв — хэрэглэгч "энэ өнгөнүүд нь ямар
+              учиртай вэ" гэж зүй ёсоор асуув (2026-09-17). Өнгө юу
+              гэсэн үг болохыг таахаар үлдээж болохгүй.
+
+              Тайлбар нь зурвасын ДЭЭР сууна: доор тавибал эхний
+              зурвасыг уншихаас өмнө нүд түүнийг олохгүй.
+            */}
+            <ul className="flex flex-wrap gap-x-2.5 gap-y-1 border-b border-line px-3 py-2">
+              {AGE_CLASSES.map((name, i) => (
+                <li
+                  key={name}
+                  className="flex items-center gap-1 text-[10px] leading-none text-ink-3"
+                >
+                  <span
+                    aria-hidden
+                    className="size-2 shrink-0 rounded-[1px]"
+                    style={{ background: ageTone(i) }}
+                  />
+                  {name}
+                </li>
+              ))}
+            </ul>
             <div className="space-y-2.5 p-3">
               {composition.map((c) => (
                 <button
@@ -548,9 +583,7 @@ export function MarmotsDashboard() {
                           title={`${AGE_CLASSES[i]} · ${num(v)}`}
                           style={{
                             width: `${(v / c.total) * 100}%`,
-                            background: "var(--data)",
-                            /* Эрэмбийн дагуу бүдгэрэх шатлал — өнгө нэмэхгүй */
-                            opacity: 1 - i * 0.17,
+                            background: ageTone(i),
                           }}
                         />
                       ) : null,
@@ -573,7 +606,15 @@ export function MarmotsDashboard() {
               {/* Ангиллын нэр нь эх сурвалжийнх — тайлбарыг эх сурвалж
                   өгөөгүй тул орчуулж таагаагүй. Дээрх бүрэлдэхүүний
                   зурвасын өнгөний шатлалтай ижил дараалалтай. */}
-              <RowChart data={byAge} />
+              {/* ⚠ ШАХСАН мөр: таван ангилал ердийн өндрөөр 347px болж
+                  картаа халин гүйлгүүр гаргадаг байсныг 225px болгов */}
+              <RowChart
+                data={byAge}
+                dense
+                /* ⚠ Дээрх бүрэлдэхүүний зурвастай ИЖИЛ шатлал: нэг
+                   ангилал хоёр картад өөр өнгөтэй харагдах ёсгүй */
+                colorOf={(d) => ageTone(AGE_CLASSES.indexOf(d.key as never))}
+              />
             </div>
           </Card>
         </div>
@@ -698,6 +739,24 @@ function Th({ children, right = false }: { children: React.ReactNode; right?: bo
       {children}
     </th>
   );
+}
+
+/**
+ * НАСНЫ АНГИЛЛЫН ӨНГӨ — эрэмбийн дагуу бүдгэрэх ГАНЦ өнгөний шатлал.
+ *
+ * ⚠ Тав ЯЛГААТАЙ өнгө хэрэглэхгүй: ангиллууд нь нэрлэсэн бүлэг биш
+ * ЭРЭМБЭТЭЙ нас (бурхи → мөндөл) бөгөөд платформын "дата дүрслэлийн
+ * өнгө ганц" дүрэм хүчинтэй. Гэрэлтэлтийн шатлал эрэмбийг өөрөө
+ * хэлнэ.
+ *
+ * ⚠ ХОЁР ДИАГРАМ ҮҮНИЙГ ХУВААЛЦАНА (оны бүрэлдэхүүн, насны ангиллаар)
+ * — нэг ангилал хоёр картад өөр өнгөтэй харагдах ёсгүй. Тиймээс
+ * тунгалагаар биш `color-mix`-ээр бичигдэнэ: `RowChart` нь өнгийг
+ * дүүргэлт болгон авдаг тул `opacity` дамжуулах боломжгүй.
+ */
+function ageTone(i: number): string {
+  const pct = Math.max(0, Math.round(100 - i * 17));
+  return `color-mix(in oklab, var(--data) ${pct}%, transparent)`;
 }
 
 function Card({ className, children }: { className?: string; children: React.ReactNode }) {

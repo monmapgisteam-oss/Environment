@@ -393,6 +393,7 @@ export function AreaChart({
   onSelect,
   formatTick,
   unit = "бүртгэл",
+  labels = false,
 }: {
   data: Datum[];
   height?: number;
@@ -402,6 +403,14 @@ export function AreaChart({
   formatTick?: (d: Datum, i: number) => string;
   /** Hover самбарт гарах хэмжих нэгж */
   unit?: string;
+  /**
+   * Цэг бүрийн дээр УТГЫГ нь бичих эсэх.
+   *
+   * Шугам нь ЧИГ ХАНДЛАГЫГ хэлдэг ч яг хэдийг хэлдэггүй тул утга
+   * уншихын тулд цэг бүр дээр хулгана аваачих шаардлагатай болдог
+   * (`BarChart labels`-тэй ижил үндэслэл).
+   */
+  labels?: boolean;
 }) {
   const gid = React.useId().replace(/:/g, "");
   const [hover, setHover] = React.useState<number | null>(null);
@@ -419,7 +428,14 @@ export function AreaChart({
   }
 
   const W = 100;
-  const pad = 3; // дээд талд зай — оргил тасрахгүй
+  /*
+    Дээд талын зай — оргил тасрахгүй. Шошго асаалттай үед утга нь
+    цэгийнхээ ДЭЭР бичигдэх тул илүү зай хэрэгтэй: `viewBox`-ийн
+    өндөр нь картын пикселийн өндөртэй 1:1 тохирдог
+    (`preserveAspectRatio="none"` нь зөвхөн хэвтээ тэнхлэгийг сунгана)
+    тул энэ тоо шууд пиксель гэсэн үг.
+  */
+  const pad = labels ? 15 : 3;
   const xs = (i: number) => (i / (data.length - 1)) * W;
   const ys = (v: number) => pad + (1 - v / max) * (height - pad);
 
@@ -491,6 +507,53 @@ export function AreaChart({
             />
           ) : null}
         </svg>
+
+        {/*
+          ЦЭГ БҮРИЙН УТГА.
+
+          ⚠ ДАВХЦВАЛ АЛГАСНА, эхний ба сүүлчийнх ҮРГЭЛЖ гарна — цаг
+          агаарын тайлбарын туузтай ижил дүрэм. Долоон жилийн цуваанд
+          бүгд багтана; хорь гаруй жилийн цуваанд шошго нь бөөгнөрч
+          уншигдахаа болих тул сийрэгжинэ.
+
+          ⚠ Ирмэгийн шошго ХАЛИХГҮЙ: эхнийх нь зүүн ирмэгээсээ, сүүлчийнх
+          нь баруун ирмэгээсээ эгнэнэ — голлуулбал картаас хальж
+          тасарна.
+        */}
+        {labels
+          ? (() => {
+              const GAP = 100 / (data.length - 1);
+              /* Хоёр шошгын хооронд үлдэх ХАМГИЙН БАГА зай, хувиар */
+              const MIN = 11;
+              const step = Math.max(1, Math.ceil(MIN / GAP));
+              return data.map((d, i) => {
+                const last = data.length - 1;
+                if (i !== 0 && i !== last && i % step !== 0) return null;
+                /* Сүүлчийнхтэй мөргөлдөх завсрын шошгыг алгасна */
+                if (i !== 0 && i !== last && (last - i) * GAP < MIN) return null;
+                const at = (i / last) * 100;
+                return (
+                  <span
+                    key={d.key}
+                    aria-hidden
+                    className={cn(
+                      "num pointer-events-none absolute text-[10px] leading-none whitespace-nowrap",
+                      active === i ? "text-ink" : "text-ink-2",
+                    )}
+                    style={{
+                      left: `${at}%`,
+                      top: `${(ys(d.value) / height) * 100}%`,
+                      transform: `translate(${
+                        i === 0 ? "0%" : i === last ? "-100%" : "-50%"
+                      }, calc(-100% - 6px))`,
+                    }}
+                  >
+                    {num(d.value)}
+                  </span>
+                );
+              });
+            })()
+          : null}
 
         {/* Цэгүүд — SVG-ийн хэвийн бус масштабаас ангид байлгахын тулд DOM дээр */}
         {data.map((d, i) => (
@@ -695,10 +758,45 @@ function Tooltip({
 
 export function RowChart({
   data, tone = "var(--data)", colorOf, selected, onSelect, max: maxOverride, base = 0, format = num, guide,
+  dense = false, note, clamp = false,
 }: {
   data: Datum[]; tone?: string; colorOf?: (d: Datum) => string; selected?: Selection;
   onSelect?: (key: string | null) => void; max?: number; base?: number;
   format?: (v: number) => string; guide?: number;
+  /**
+   * Мөр бүрийн НЭМЭЛТ утга — нэрийн ард, бүдэг өнгөөр.
+   *
+   * ⚠ Зурвас нь ЗӨВХӨН `value`-г хэмжинэ. Өөр НЭГЖТЭЙ хоёр дахь тоог
+   * (коридорын га ба нэгж талбарын тоо) нэг хуваарьт оруулах
+   * боломжгүй тул энэ нь БИЧВЭР болж гарна — "ижил нэгжтэй хэмжилт л
+   * нэг диаграмд харьцуулагдана" дүрмийг зөрчихгүй.
+   *
+   * {@link PieChart}-ийн `note`-той ижил үүрэг.
+   */
+  note?: (d: Datum) => string;
+  /**
+   * ШАХСАН мөр — ангилал олон үед картдаа багтаах.
+   *
+   * Ердийн мөр ~57px тул ес, арван ангилал 500px гаруй болж гүйлгүүр
+   * гаргадаг. Шахсан үед ~31px: зай нь багасна, БИЧВЭР нь 11.5px
+   * хэвээр (платформын 11–13px мужид).
+   */
+  dense?: boolean;
+  /**
+   * Нэрийг НЭГ ЭГНЭЭНД барих эсэх (халисныг цэгээр тайрна).
+   *
+   * Урт ангиллын нэр хоёр эгнээ болж мөрийн өндрийг тэн хагасаар
+   * нэмэгдүүлдэг. Ангилал олон үед (18 зориулалт) тэр нь картыг
+   * гүйлгүүртэй болгоно — 763px ба 654px.
+   *
+   * ⚠ Бүтэн нэр АЛГА БОЛОХГҮЙ: мөрийн `title`-д хэвээр (хулгана
+   * аваачихад гарна), шүүлтүүрийн мөрийн ХАЙЛТТАЙ цэсэнд ч бүтнээрээ
+   * жагсаана.
+   *
+   * ⚠ `colorOf`-той ХАМТ бүү хэрэглэ: өнгөт цэг нь нэрийн ДОТОР
+   * сууддаг тул нэг эгнээний тайралт түүнийг ч мөн хамарна.
+   */
+  clamp?: boolean;
 }) {
   const max = maxOverride ?? Math.max(...data.map((d) => d.value), 1);
   const span = Math.max(max - base, 1e-9);
@@ -706,13 +804,13 @@ export function RowChart({
   const guideAt = guide != null && guide > base && guide < max ? at(guide) : null;
   if (!data.length) return <div className="chart-empty">Үзүүлэлт байхгүй</div>;
   return (
-    <div className="row-chart">
+    <div className={cn("row-chart", dense && "is-dense", clamp && "is-clamped")}>
       {data.map((d) => {
         const active = nothingPicked(selected) || picked(selected, d.key);
         const isSelected = picked(selected, d.key);
         const color = colorOf ? colorOf(d) : tone;
         return <button key={d.key} type="button" disabled={!onSelect} aria-pressed={onSelect ? isSelected : undefined} title={`${d.label} · ${format(d.value)}`} onClick={() => onSelect?.(clickValue(selected, d.key))} className={cn("row-chart-item", isSelected && "is-selected")} style={{ opacity: active ? 1 : .35 }}>
-          <span className="row-chart-heading"><span className="row-chart-label">{colorOf && <i aria-hidden="true" style={{ background: color }} />}{d.label}</span><strong>{format(d.value)}</strong></span>
+          <span className="row-chart-heading"><span className="row-chart-label">{colorOf && <i aria-hidden="true" style={{ background: color }} />}{d.label}{note ? <em>{note(d)}</em> : null}</span><strong>{format(d.value)}</strong></span>
           <span className="row-chart-track">
             <span className="row-chart-track-inner">
               <span style={{ width: `${guideAt != null ? Math.min(at(d.value), guideAt) : at(d.value)}%`, background: color }} />
@@ -742,10 +840,20 @@ function donutSlice(c: number, R: number, r: number, a0: number, a1: number) {
 
 export function PieChart({
   data, tone = "var(--data)", colorOf, note, format = num, size = 112, selected, onSelect,
+  legend = "side",
 }: {
   data: Datum[]; tone?: string; colorOf?: (d: Datum) => string; note?: (d: Datum) => string;
   format?: (v: number) => string; size?: number; selected?: Selection;
   onSelect?: (key: string | null) => void;
+  /**
+   * Тайлбар ХААНА сууна.
+   *
+   * `"side"` — бөгжний хажууд, нэг багана (анхдагч).
+   * `"below"` — бөгжний ДООР, хоёр багана. Ангилал олон (зургаагаас
+   * дээш) үед хажуугийн багана нарийсаж нэр нь мөрөндөө буудаг, карт
+   * нь ангиллынхаа тоогоор сунадаг тул доор нь хоёр багана болгоно.
+   */
+  legend?: "side" | "below";
 }) {
   const total = data.reduce((sum, d) => sum + d.value, 0);
   if (!data.length || total <= 0) return <div className="chart-empty">Үзүүлэлт байхгүй</div>;
@@ -763,7 +871,7 @@ export function PieChart({
   const singleDatum = data.find((d) => d.value > 0)!;
   const text = format(total);
   return (
-    <div className="donut-chart">
+    <div className={cn("donut-chart", legend === "below" && "is-stacked")}>
       <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="donut-chart-ring" role="img" aria-label={`Нийт ${text}`}>
         <circle cx={c} cy={c} r={(R + r) / 2} fill="none" stroke="var(--paper-hi)" strokeWidth={R - r} />
         {single ? <circle cx={c} cy={c} r={(R + r) / 2} fill="none" stroke={hue(singleDatum)} strokeWidth={R - r} strokeOpacity={nothingPicked(selected) || picked(selected, singleDatum.key) ? .88 : .15} onClick={() => onSelect?.(clickValue(selected, singleDatum.key))} className={onSelect ? "cursor-pointer" : undefined}><title>{`${singleDatum.label} · ${format(singleDatum.value)}`}</title></circle> : slices.filter(({ d }) => d.value > 0).map(({ d, i, a0, a1 }) => <path key={d.key} d={donutSlice(c, R, r, a0, a1)} fill={hue(d)} fillOpacity={nothingPicked(selected) || picked(selected, d.key) ? opacity(i) : .12} stroke="var(--paper-2)" strokeWidth={2} className={onSelect ? "cursor-pointer" : undefined} onClick={() => onSelect?.(clickValue(selected, d.key))}><title>{`${d.label} · ${format(d.value)}`}</title></path>)}

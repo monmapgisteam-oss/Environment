@@ -14,7 +14,6 @@ import {
   Squirrel,
   Sticker,
   Tractor,
-  Turtle,
   Waypoints,
   Zap,
 } from "lucide-react";
@@ -23,7 +22,6 @@ import {
   TabGroups,
   useStoredTab,
 } from "@/components/ui/source-tabs";
-import { WILDLIFE_SOLO } from "@/lib/wildlife-layers";
 
 /*
   Хэлтсийн сэдвүүд. Самбар хооронд сольж харна.
@@ -118,19 +116,6 @@ const BiotechDashboard = dynamic(
   { ssr: false, loading: spinner },
 );
 
-/*
-  Минж — ГУРВАН давхарга НЭГ зурган дээр: судалгааны талбай (хүрээ),
-  явсан маршрут (шугам), олдсон ажиглалт (цэг). "Хаана явж, юу
-  олсон" гэдгийг зөвхөн гуравт нь зэрэг харж ойлгоно.
-*/
-const BeaverDashboard = dynamic(
-  () =>
-    import("@/components/wildlife/beaver-dashboard").then(
-      (m) => m.BeaverDashboard,
-    ),
-  { ssr: false, loading: spinner },
-);
-
 const FloraDashboard = dynamic(
   () =>
     import("@/components/wildlife/flora-dashboard").then(
@@ -140,22 +125,22 @@ const FloraDashboard = dynamic(
 );
 
 /*
-  Порталын давхаргын самбар — ойн хэлтэстэй ХУВААЛЦСАН
-  ([layers/portal-dashboard.tsx](src/components/layers/portal-dashboard.tsx)).
+  МОНИТОРИНГ СУДАЛГААНЫ САН — хоёр судалгааг өөр өөрийн самбараар
+  нээнэ ([monitoring.tsx](src/components/wildlife/monitoring.tsx)).
+
+  ⚠ Минжний самбар, порталын ерөнхий самбар хоёр нь ЭНД биш ТЭНД
+  дуудагдана: хоёулаа зөвхөн сангийн дотор хэрэглэгддэг болсон
+  (2026-09-17).
 
   ⚠ **Бүх давхаргыг нэг зураг дээр нийлүүлсэн "Порталын давхарга" ТАБ
   ХАСАГДСАН** (хэрэглэгчийн шийдвэр, 2026-09-16). Сэдэв бүр өөрийн
   цонхтой болсны дараа тэр таб нь бусдыг ДАВТАХААС өөр юу ч нэмэхгүй
   байв. Дахин бүү нэм.
-
-  Самбар нь харин хэвээр: доорх зургаан сэдэв нэг давхаргатай
-  бүрдлээр (`WILDLIFE_SOLO`) үүнийг дуудна — бүтцээ эх сурвалжаас
-  өөрөө уншдаг тул тэдэнд зориулж тусдаа код бичих шаардлагагүй.
 */
-const PortalLayers = dynamic(
+const MonitoringWorkspace = dynamic(
   () =>
-    import("@/components/layers/portal-dashboard").then(
-      (m) => m.PortalLayersDashboard,
+    import("@/components/wildlife/monitoring").then(
+      (m) => m.MonitoringWorkspace,
     ),
   { ssr: false, loading: spinner },
 );
@@ -173,7 +158,7 @@ const PortalLayers = dynamic(
   `A02` бүлгийн гурав л (хаг, хөвд, мөөг) орно.
 */
 const GROUPS = [
-  { id: "amitan", label: "Амьтан", note: "8 сэдэв", icon: PawPrint },
+  { id: "amitan", label: "Амьтан", note: "7 сэдэв", icon: PawPrint },
   { id: "urgamal", label: "Ургамал", note: "3 сэдэв", icon: Leaf },
 ] as const;
 
@@ -191,7 +176,10 @@ const TABS = [
   {
     id: "rescues",
     group: "amitan",
-    label: "Аврагдсан амьтад",
+    /* Албан ёсны нэр (хэлтэс 2026-09-17-нд өгсөн). Урьд нь
+       "Аврагдсан амьтад" байв — бүртгэлийн агуулга нь зөвхөн
+       аврагдсан явдал биш, авран хамгаалах БҮХ АЖИЛЛАГАА. */
+    label: "Авран хамгаалсан амьтдын бүртгэл",
     note: "720 бичлэг · 2019–2026",
     icon: Squirrel,
   },
@@ -201,14 +189,6 @@ const TABS = [
     `A01_zerleg_amitdiin_sudalgaa` (200 цэг). Нэр нь төстэй ч агуулга
     нь огт таарахгүй — `wildlife-layers.ts`-ийн тайлбарыг үз.
   */
-  {
-    id: "burtgel",
-    group: "amitan",
-    label: "Амьтдын бүртгэл",
-    note: "200 цэг · хээрийн судалгаа",
-    full: "Зэрлэг амьтдын судалгааны цэгүүд",
-    icon: ClipboardList,
-  },
   {
     id: "eco",
     group: "amitan",
@@ -235,7 +215,8 @@ const TABS = [
   {
     id: "marmots",
     group: "amitan",
-    label: "Нутагшуулсан тарвага",
+    /* Хэлтсийн өгсөн нэр (2026-09-17) — самбарын толгойтой ижил */
+    label: "Шилжүүлэн нутагшуулсан тарвага",
     note: "2022–2026 · барьсан, тавьсан",
     full: "Шилжүүлэн нутагшуулсан тарваганы мэдээлэл",
     icon: Rat,
@@ -255,14 +236,6 @@ const TABS = [
     огт цэсгүй үлдсэн байв. "Хаана явж, юу олсон" гэдгийг зөвхөн
     гуравт нь зэрэг харж ойлгоно.
   */
-  {
-    id: "minj",
-    group: "amitan",
-    label: "Минжний судалгаа",
-    note: "424 км маршрут · 120 ажиглалт",
-    full: "Минжний судалгааны талбай, маршрут, ажиглалт",
-    icon: Turtle,
-  },
   {
     id: "lichens",
     group: "urgamal",
@@ -286,6 +259,30 @@ const TABS = [
     note: "55 цэг · 47 зүйл",
     full: "Мөөгний судалгааны цэгүүд",
     icon: Microscope,
+  },
+  /*
+    ⚠⚠ ХАМГИЙН ДООД ТАЛД (хэрэглэгчийн шийдвэр, 2026-09-17:
+    "өгөгдлийн багцийн хамгийн доор Мониторинг судалгааг тавия").
+
+    Энэ нь НЭГ сэдэв биш САН: дээрх багцууд тус бүр нэг бүртгэл,
+    нэг судалгаа бол энэ нь хэд хэдэн мониторинг судалгааг агуулна
+    (Сонгинохайрхан уул, минж). Тиймээс жагсаалтын эцэст, бусад
+    сэдвүүдийн ДАРАА суух нь эрэмбийн хувьд зөв.
+
+    ⚠ МИНЖНИЙ САМБАР ЭНД ШИЛЖСЭН — дээр тусдаа таб байхаа больсон.
+    Хоёр газар давтвал аль нь эрх мэдэлтэй нь ойлгогдохоо болино
+    (нийлмэл "Порталын давхарга" табыг яг энэ шалтгаанаар хассан).
+  */
+  {
+    id: "monitoring",
+    group: "amitan",
+    label: "Мониторинг судалгаа",
+    /* Тоо нь ДАТАТАЙ судалгаанынх: хоёр нь эх сурвалжаа хүлээж
+       байгаа тул "4 судалгаа" гэвэл хоёр нь хоосон гэдэг нь
+       нуугдана */
+    note: "2 судалгаа · 1 хүлээгдэж буй",
+    full: "Мониторинг судалгааны сан",
+    icon: ClipboardList,
   },
 ] as const;
 
@@ -345,13 +342,8 @@ export function WildlifeWorkspace() {
           <FloraDashboard key="moog" kind="moog" />
         ) : tab === "biotechnik" ? (
           <BiotechDashboard />
-        ) : tab === "minj" ? (
-          <BeaverDashboard />
         ) : (
-          <PortalLayers
-            key={WILDLIFE_SOLO.burtgel.key}
-            set={WILDLIFE_SOLO.burtgel}
-          />
+          <MonitoringWorkspace />
         )}
       </div>
     </div>

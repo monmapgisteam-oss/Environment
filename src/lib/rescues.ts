@@ -31,6 +31,7 @@
  */
 
 import { arcgisJson } from "@/lib/arcgis";
+import { pointOf } from "@/lib/extent";
 import { layerService } from "@/lib/portal-layers";
 
 export const RESCUES_SERVICE = `${layerService("A03_zerleg_amitdiin_burtgel")}/0`;
@@ -39,8 +40,21 @@ const PAGE = 2000;
 
 export type Rescue = {
   oid: number;
-  lon: number;
-  lat: number;
+  /**
+   * Байршил — БҮРТГЭГДЭЭГҮЙ бол `null`.
+   *
+   * ⚠⚠ 720 бичлэгийн **23-д** эх сурвалж дээр өргөрөг, уртраг нь
+   * `null` бөгөөд геометр нь ч байхгүй (2026-09-17-нд шалгасан:
+   * 2023 оны 1, 2024 оны 10, 2025 оны 12 бичлэг). Тэдгээр нь
+   * жинхэнэ аврагдсан амьтад тул БҮРТГЭЛД ҮЛДЭНЭ — үзүүлэлт,
+   * зүйлийн задаргаа, жилийн цуваа бүгд 720-оор тоологдоно — харин
+   * ГАЗРЫН ЗУРАГТ гарахгүй.
+   *
+   * Тэднийг Улаанбаатарын төв рүү "нөхөж" тавих нь зохиомол дата
+   * үүсгэх бөгөөд дэлгэц дээр бодит байршил мэт харагдана.
+   */
+  lon: number | null;
+  lat: number | null;
   /** Зүйлийн монгол нэр — харуулах хэлбэр (эхний үсэг том) */
   species: string;
   latin: string;
@@ -200,7 +214,7 @@ export async function fetchRescues(signal?: AbortSignal): Promise<Rescue[]> {
 
     const json = await arcgisJson<{ features?: EsriPointFeature[] }>(
       url,
-      "Аврагдсан амьтдын бүртгэл",
+      "Авран хамгаалсан амьтдын бүртгэл",
       { signal },
     );
     const feats = json.features ?? [];
@@ -209,18 +223,20 @@ export async function fetchRescues(signal?: AbortSignal): Promise<Rescue[]> {
       const a = f.attributes;
       const g = f.geometry;
 
-      /* Геометрийг эрхэмлэнэ, дутсан бол атрибутын координатаас */
-      const lon = g && Number.isFinite(g.x) ? g.x : Number(a[F.lon]);
-      const lat = g && Number.isFinite(g.y) ? g.y : Number(a[F.lat]);
-      if (!Number.isFinite(lon) || !Number.isFinite(lat)) continue;
+      /*
+        Геометрийг эрхэмлэнэ, дутсан бол атрибутын координатаас
+        ({@link pointOf}). Олдохгүй бол бичлэгийг ХАЯХГҮЙ — байршилгүй
+        гэж тэмдэглээд үлдээнэ.
+      */
+      const at = pointOf(g, a[F.lon], a[F.lat]);
 
       const outcomeRaw = str(a[F.outcome]);
       const date = epoch(a[F.date]);
 
       out.push({
         oid: Number(a.objectid),
-        lon,
-        lat,
+        lon: at?.lon ?? null,
+        lat: at?.lat ?? null,
         species: titleCase(a[F.species]) || "Тодорхойгүй",
         latin: str(a[F.latin]),
         rarity: str(a[F.rarity]) || "Тодорхойгүй",
