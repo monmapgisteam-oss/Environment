@@ -14,10 +14,8 @@ import {
   X,
 } from "lucide-react";
 import {
-  GroupedRowChart,
   RowChart,
   type Datum,
-  type DatumGroup,
 } from "@/components/charts";
 import { BasemapGallery } from "@/components/map/basemap-gallery";
 import { MapTip, MapTipRow, useMapTip } from "@/components/map/hover-tip";
@@ -85,7 +83,6 @@ export function EcoDashboard() {
   const [zone, setZone] = React.useState<string | null>(null);
   const [landuse, setLanduse] = React.useState<string | null>(null);
   const [picked, setPicked] = React.useState<number | null>(null);
-  const [hover, setHover] = React.useState<number | null>(null);
   /** Хулгана дагасан хөвөгч тайлбар — байрлалыг өөрөө удирдана */
   const tip = useMapTip();
   /* Нэгж талбарын давхаргыг унтраах боломж: коридорын өөрийн хүрээ,
@@ -231,37 +228,78 @@ export function EcoDashboard() {
     Бүсийг ЭХ ЭРЭМБЭЭР нь (талбайгаар буурсан) байрлуулна — тоогоор
     эрэмбэлбэл шүүлт солиход бүлгүүд байраа солино.
   */
-  const byRight = React.useMemo<DatumGroup[]>(() => {
+  /*
+    КОРИДОР ТУС БҮРИЙН НЭГЖ ТАЛБАР.
+
+    ⚠⚠ Урьд нь энэ нь ЭРХИЙН ТӨРЛӨӨР бүлэглэсэн диаграм байв
+    (`GroupedRowChart`) — гэвч 1,022 нэгж талбарын **1,021 нь
+    "эзэмших"**, ердөө НЭГ нь "ашиглах". Гурван коридорын хоёрт нь
+    хоёр дахь мөр огт байхгүй, гуравт нь 530-ын дэргэд 1 гэсэн
+    үл үзэгдэх зураас гарна. Өөрөөр хэлбэл бүлэглэлт нь тайлбар,
+    хоёр дахь өнгө нэмэхээс өөр юу ч хэлэхгүй байлаа (2026-09-17-нд
+    хэмжсэн).
+
+    Товшилтын зан төлөв ӨӨРЧЛӨГДӨӨГҮЙ: бүлгийн мөр нь өмнө ч
+    коридорыг шүүдэг байсан — эрхийн төрөл нь хэзээ ч шүүлт
+    байгаагүй. Тиймээс энгийн зурвас болгоход алдагдах харилцан
+    үйлдэл алга.
+
+    Эрхийн задаргаа нь картын толгойд ТООГООРОО үлдэнэ ({@link
+    rightNote}) — баримт нь хэвээр, зөвхөн зурагдахаа больсон.
+
+    ⚠ Дүүргээр тусдаа диаграм ГАРГАХГҮЙ: коридорын дүүрэг нь нэгж
+    талбарынхтай ЯГ таарна (БЗД коридор → Баянзүрхийн 531, СХД хоёр
+    коридор → Сонгинохайрханы 491) тул тэр нь энэ диаграмын ХУУЛБАР
+    болно.
+  */
+  const byCorridor = React.useMemo<Datum[]>(() => {
     /* Өөрийнхөө хэмжигдэхүүнийг (бүс) АЛГАСЧ шүүнэ — эс тэгвээс нэг бүс
        сонгомогц бусад нь алга болж, өөр бүс рүү шилжих боломжгүй болно */
     const corridors = (rows ?? []).filter((r) => !district || r.district === district);
     const zoneOf = new Map(corridors.map((r) => [r.oid, r.zone]));
 
-    const zones = new Map<string, Map<string, number>>();
+    const count = new Map<string, number>();
     for (const p of data?.parcels ?? []) {
       const z = zoneOf.get(p.corridor);
       if (!z) continue;
       if (landuse && p.landuse !== landuse) continue;
-      const inner = zones.get(z) ?? new Map<string, number>();
-      inner.set(p.right, (inner.get(p.right) ?? 0) + 1);
-      zones.set(z, inner);
+      count.set(z, (count.get(z) ?? 0) + 1);
     }
 
     return corridors
-      .filter((c) => zones.has(c.zone))
-      .map((c) => {
-        const inner = zones.get(c.zone)!;
-        const rowsOut = [...inner]
-          .map(([k, v]) => ({ key: `${c.zone}|${k}`, label: k, value: v }))
-          .sort((a, b) => b.value - a.value);
-        return {
-          key: c.zone,
-          label: c.zone,
-          total: rowsOut.reduce((s, d) => s + d.value, 0),
-          rows: rowsOut,
-        };
-      });
+      .filter((c) => count.has(c.zone))
+      .map((c) => ({ key: c.zone, label: c.zone, value: count.get(c.zone)! }));
   }, [data, rows, district, landuse]);
+
+  /**
+   * Коридорын ТАЛБАЙ, га — диаграмын мөрд нэмэлт утга болж гарна.
+   *
+   * ⚠⚠ Зурвас нь ЗӨВХӨН нэгж талбарын ТООГ хэмжинэ. Га нь ӨӨР НЭГЖ
+   * тул нэг хуваарьт оруулах боломжгүй — "ижил нэгжтэй хэмжилт л нэг
+   * диаграмд харьцуулагдана" гэсэн дүрмээр бичвэр болж гарна.
+   *
+   * ⚠ Хоёр тоо ЭСРЭГ эрэмбэтэй байж болно: БЗД коридор нь талбайгаараа
+   * хоёрдугаарт (5,926 га) ч НЭГЖ ТАЛБАРААРАА тэргүүлдэг (531). Яг
+   * тэр зөрүү нь энэ самбарын гол мэдээлэл тул хоёуланг зэрэг
+   * харуулах нь зайлшгүй.
+   */
+  const haOfZone = React.useMemo(
+    () => new Map((rows ?? []).map((r) => [r.zone, r.ha])),
+    [rows],
+  );
+
+  /** Эрхийн төрлийн задаргаа — картын толгойд нэг мөрөөр */
+  const rightNote = React.useMemo(() => {
+    const m = new Map<string, number>();
+    for (const p of data?.parcels ?? []) {
+      if (landuse && p.landuse !== landuse) continue;
+      m.set(p.right, (m.get(p.right) ?? 0) + 1);
+    }
+    return [...m]
+      .sort((a, b) => b[1] - a[1])
+      .map(([k, v]) => `${num(v)} ${k}`)
+      .join(" · ");
+  }, [data, landuse]);
 
   const stats = React.useMemo(() => {
     const ha = shownCorridors.reduce((s, r) => s + r.ha, 0);
@@ -272,12 +310,6 @@ export function EcoDashboard() {
       landuses: new Set(shownParcels.map((p) => p.landuse)).size,
     };
   }, [shownCorridors, shownParcels]);
-
-  /* Коридорын эзлэх хувийн суурь — ШҮҮЛТГҮЙ нийт */
-  const totalHa = React.useMemo(
-    () => (rows ?? []).reduce((s, r) => s + r.ha, 0),
-    [rows],
-  );
 
   /* ---------------- Сонголтын хүрээ (zoom action) ---------------- */
   const focus = React.useMemo<Extent | null>(() => {
@@ -329,7 +361,6 @@ export function EcoDashboard() {
   /** Хулгана дээр очсон зүйл — газрын зурагнаас */
   const hovered = React.useMemo(() => resolve(tip.oid), [resolve, tip.oid]);
 
-  /* Тогтмол самбар: товшсон, эсвэл ЖАГСААЛТЫН мөр дээр очсон зүйл */
   /**
    * ТОВШСОН обьект — hover-оос ҮЛ ХАМААРНА.
    *
@@ -345,17 +376,6 @@ export function EcoDashboard() {
     const c = rows?.find((r) => r.oid === picked);
     return c ? ({ kind: "corridor", c } as const) : null;
   }, [data, rows, picked]);
-
-  const active = React.useMemo(() => {
-    const id = hover ?? picked;
-    if (id == null) return null;
-    if (id >= PARCEL_BASE) {
-      const p = data?.parcels.find((x) => x.oid === id - PARCEL_BASE);
-      return p ? ({ kind: "parcel", p } as const) : null;
-    }
-    const c = rows?.find((r) => r.oid === id);
-    return c ? ({ kind: "corridor", c } as const) : null;
-  }, [data, rows, hover, picked]);
 
   function reset() {
     setDistrict(null);
@@ -436,91 +456,38 @@ export function EcoDashboard() {
         </FilterMenu>
       </FilterBar>
 
-      <Columns layout="flex" id="eco" left={290} right={300} className="min-h-0 flex-1">
-        {/* ---- ЗҮҮН: индикатор + коридорын карт ---- */}
-        <div className="flex min-h-0 flex-col gap-2.5 xl:w-(--col-l) xl:shrink-0">
-          <Card className="shrink-0">
-            <div className="grid grid-cols-2 divide-x divide-y divide-line">
-              <Stat icon={Waypoints} label="Коридор" value={num(stats.n)} />
-              <Stat
-                icon={Ruler}
-                label="Коридорын талбай, га"
-                value={num(Math.round(stats.ha))}
-              />
-              {/* Энэ самбарын гол тоо — төлөвлөлтөд зохицуулах шаардлагатай
-                  нэгж талбарын хэмжээ */}
-              <Stat icon={LandPlot} label="Давхцсан нэгж талбар" value={num(stats.parcels)} />
-              <Stat icon={Layers3} label="Зориулалтын төрөл" value={num(stats.landuses)} />
-            </div>
-          </Card>
+      {/*
+        ⚠⚠ КОРИДОРЫН ЖАГСААЛТ УСТГАГДСАН (хэрэглэгчийн шийдвэр,
+        2026-09-17). Баруун баганад "Коридороор" диаграм нэмэгдсний
+        дараа зүүн талын жагсаалт нь ижил гурван коридорыг ДАХИН
+        нэрлэхээс өөр юу ч хэлэхгүй болов: хоёулаа нэр, тоо, эзлэх
+        жинг харуулж, хоёулаа товшилтоор шүүдэг байв.
 
-          {/*
-            Коридор бүрийн бүтэн карт. Гурван мөр тул жагсаалт биш КАРТ:
-            бүс, нэр, дүүрэг, талбай, эзлэх хувь бүгд нэг дор багтана.
-          */}
-          <Card className="min-h-[110px] flex-1">
-            <Head title="Коридорууд">
-              <span className="num text-[11.5px] text-ink-3">{num(shownCorridors.length)}</span>
-            </Head>
-            <div className="min-h-0 flex-1 divide-y divide-line overflow-y-auto">
-              {shownCorridors.map((r) => {
-                const tone = colorOf(r.oid);
-                const share = totalHa > 0 ? (r.ha / totalHa) * 100 : 0;
-                const inside = (data.parcels ?? []).filter(
-                  (p) => p.corridor === r.oid && (!landuse || p.landuse === landuse),
-                ).length;
-                return (
-                  <button
-                    key={r.oid}
-                    onClick={() => setPicked(picked === r.oid ? null : r.oid)}
-                    onMouseEnter={() => setHover(r.oid)}
-                    onMouseLeave={() => setHover(null)}
-                    className={cn(
-                      "block w-full px-3 py-2.5 text-left transition-colors hover:bg-paper-hi",
-                      picked === r.oid && "bg-paper-hi",
-                    )}
-                  >
-                    <div className="flex items-center gap-1.5">
-                      {/* Өнгөт цэг — газрын зурган дээрх хүрээтэй холбоно */}
-                      <span
-                        aria-hidden
-                        className="size-1.5 shrink-0 rounded-full"
-                        style={{ background: tone }}
-                      />
-                      <span className="min-w-0 truncate text-[12px] text-ink">{r.zone}</span>
-                      <span className="num ml-auto shrink-0 text-[11.5px] text-ink">
-                        {num(Math.round(r.ha))} га
-                      </span>
-                    </div>
+        ⚠ Коридор сонгох ГУРВАН зам ХЕВЭЭР: зураг дээрх хүрээг
+        товших, баруун баганын "Коридороор" диаграм, шүүлтүүрийн
+        мөрийн "Бүс" цэс.
 
-                    <div className="mt-1.5 text-[10.5px] leading-snug text-ink-3">
-                      {r.district} · {num(inside)} нэгж талбар
-                    </div>
-
-                    {/* Эзлэх хувь — гурван коридорын жинг зэрэгцүүлнэ */}
-                    <div className="mt-1.5 flex items-center gap-2">
-                      <span className="h-[3px] min-w-0 flex-1 overflow-hidden rounded-[1px] bg-paper-hi">
-                        <span
-                          className="block h-full"
-                          style={{ width: `${share}%`, background: tone }}
-                        />
-                      </span>
-                      <span className="num shrink-0 text-[10px] text-ink-3">
-                        {share.toFixed(0)}%
-                      </span>
-                    </div>
-                  </button>
-                );
-              })}
-              {shownCorridors.length === 0 ? (
-                <div className="py-5 text-center text-[12px] text-ink-3">
-                  Шүүлтүүрт тохирох экологийн коридор байхгүй байна
-                </div>
-              ) : null}
-            </div>
-          </Card>
+        ⚠ ЗҮҮН БАГАНА БҮХЭЛДЭЭ АВАГДСАН — жагсаалтгүй болсон тул
+        ганц индикаторын карт нарийн баганад үлдэж, доороо хоосон
+        талбай үлдээх байв. Индикатор нь зургийн ДЭЭР бүтэн өргөнтэй
+        зурвас болов (порталын самбартай ижил шийдэл).
+      */}
+      <Card className="shrink-0">
+        <div className="grid grid-cols-2 divide-x divide-y divide-line sm:grid-cols-4 sm:divide-y-0">
+          <Stat icon={Waypoints} label="Коридор" value={num(stats.n)} />
+          <Stat
+            icon={Ruler}
+            label="Коридорын талбай, га"
+            value={num(Math.round(stats.ha))}
+          />
+          {/* Энэ самбарын гол тоо — төлөвлөлтөд зохицуулах шаардлагатай
+              нэгж талбарын хэмжээ */}
+          <Stat icon={LandPlot} label="Давхцсан нэгж талбар" value={num(stats.parcels)} />
+          <Stat icon={Layers3} label="Зориулалтын төрөл" value={num(stats.landuses)} />
         </div>
+      </Card>
 
+      <Columns layout="flex" id="eco" right={300} className="min-h-0 flex-1">
         {/* ---- ГОЛ: газрын зураг ---- */}
         <div className="flex min-h-0 flex-1 flex-col gap-2.5">
           <Card className="relative min-h-[300px] flex-1 overflow-hidden">
@@ -710,45 +677,6 @@ export function EcoDashboard() {
                 </div>
               ) : null}
 
-              {active ? (
-                <div className="pointer-events-none absolute top-2.5 left-2.5 z-10 max-w-[280px] rounded-xs border border-line bg-paper/92 px-2.5 py-2 backdrop-blur-md">
-                  {active.kind === "corridor" ? (
-                    <>
-                      <div className="eyebrow mb-1.5">Экологийн коридор</div>
-                      <div className="flex items-center gap-1.5">
-                        <span
-                          aria-hidden
-                          className="size-1.5 shrink-0 rounded-full"
-                          style={{ background: colorOf(active.c.oid) }}
-                        />
-                        <span className="text-[12.5px] leading-snug text-ink">
-                          {active.c.zone}
-                        </span>
-                      </div>
-                      <div className="num mt-1 text-[11.5px] text-ink-2">
-                        {num(Math.round(active.c.ha))} га
-                      </div>
-                      <div className="mt-1 text-[10.5px] leading-snug text-ink-3">
-                        {active.c.name} · {active.c.district} дүүрэг
-                      </div>
-                    </>
-                  ) : (
-                    <>
-                      <div className="eyebrow mb-1.5">Нэгж талбар</div>
-                      <div className="text-[12.5px] leading-snug text-ink">
-                        {active.p.landuse}
-                      </div>
-                      <div className="num mt-1 text-[11.5px] text-ink-2">
-                        {active.p.parcelId} · {active.p.ha.toFixed(2)} га
-                      </div>
-                      <div className="mt-1 text-[10.5px] leading-snug text-ink-3">
-                        Эрх: {active.p.right} · {active.p.district}
-                        {active.p.khoroo ? ` ${active.p.khoroo}` : ""}
-                      </div>
-                    </>
-                  )}
-                </div>
-              ) : null}
             </div>
           </Card>
 
@@ -761,34 +689,79 @@ export function EcoDashboard() {
         {/* ---- БАРУУН: нэгж талбарын задаргаа ---- */}
         <div className="flex min-h-0 flex-col gap-2.5 xl:w-(--col-r) xl:shrink-0">
           {/*
-            Эрхийн төрөл — ердөө хоёр утга тул дээд талд, тогтмол өндөртэй.
-            Бараг бүгд "эзэмших" боловч энэ нь ХООСОН тоо биш: эзэмших
-            эрхтэй газрыг коридорт оруулах нь ашиглах эрхтэйгээс өөр
-            эрх зүйн үр дагавартай.
+            Коридор тус бүрийн нэгж талбар — ердөө гурван мөр тул
+            тогтмол өндөртэй, дээд талд.
+
+            ⚠ Эрхийн задаргаа нь толгойд ТООГООРОО гарна: 1,022-оос
+            1,021 нь "эзэмших" тул түүнийг зурвас болговол үл үзэгдэх
+            зураас нэмэхээс өөр юу ч хэлэхгүй. Баримт нь хэвээр.
           */}
           <Card className="shrink-0">
-            <Head title="Эрхийн төрлөөр">
-              <span className="text-[10.5px] text-ink-3">бүсээр · нэгж талбар</span>
-            </Head>
+            {/*
+              ⚠ Гарчиг нь ЮУГ тоолж байгааг бүтнээр хэлнэ (хэлтсийн
+              өгсөн нэр, 2026-09-17). Урьд нь "Коридороор" байсан нь
+              задаргааны ТЭНХЛЭГИЙГ нэрлэдэг ч ХЭМЖИГДЭХҮҮНИЙГ нь
+              хэлдэггүй байв — 411 гэдэг юуны тоо болох нь гарчигнаас
+              уншигдахгүй.
+
+              ⚠ Эрхийн задаргаа толгойгоос ДООШ шилжив: урт гарчигтай
+              зэрэгцүүлбэл 300px-ийн картад хоёул багтахгүй, гарчиг нь
+              шахагдана.
+            */}
+            <Head title="ЭК-д давхцаж буй нэгж талбар" />
             <div className="p-3">
-              {/* Бүс тус бүр задарсан байдлаар — гурван бүлэг тул
-                  хураах шаардлагагүй */}
-              <GroupedRowChart
-                groups={byRight}
-                selectedGroup={zone}
-                onSelectGroup={setZone}
-                storageKey="eco.right"
+              <RowChart
+                data={byCorridor}
+                selected={zone}
+                onSelect={setZone}
+                dense
+                /* Талбай нь нэрийн ард, бүдэг өнгөөр — зурвас нь нэгж
+                   талбарын тоог хэмжсэн хэвээр */
+                note={(d) => {
+                  const ha = haOfZone.get(d.key);
+                  return ha == null ? "" : `${num(Math.round(ha))} га`;
+                }}
               />
+              {/* Эрхийн задаргаа — 1,022-оос 1,021 нь "эзэмших" тул
+                  зурвас болгох нь утгагүй, харин баримт нь хэвээр */}
+              <p className="num mt-2 text-[10.5px] leading-none text-ink-3">
+                {rightNote}
+              </p>
             </div>
           </Card>
 
-          {/* Мөрийн СҮҮЛД нь уян карт — 18 мөр тул дотроо гүйнэ */}
+          {/*
+            Мөрийн СҮҮЛД нь уян карт — 18 зориулалт.
+
+            ⚠ ШАХСАН мөр: 18-аас 12 нь дөрвөөс цөөн талбартай бөгөөд
+            нийлээд ердөө 2% эзэлнэ. Тэр сүүл нь картыг гүйлгүүртэй
+            болгодог тул мөрийг шахав — ГЭХДЭЭ ХАСААГҮЙ: мөр бүр
+            шүүлтүүр тул хаяхад тэр зориулалтаар шүүх арга алга болно
+            (нарийн сонголт нь шүүлтүүрийн мөрийн хайлттай цэсэнд ч
+            бий).
+          */}
           <Card className="min-h-[140px] flex-1">
-            <Head title="Зориулалтаар">
-              <span className="text-[10.5px] text-ink-3">нэгж талбар</span>
-            </Head>
+            {/*
+              ⚠ Гарчиг нь ЮУНЫ зориулалт болохыг хэлнэ (хэлтсийн өгсөн
+              нэр, 2026-09-17): "Зориулалтаар" гэдэг нь коридорын ч,
+              нэгж талбарын ч зориулалт байж болно.
+            */}
+            <Head title="Давхцаж буй нэгж талбарын зориулалт" />
             <div className="min-h-0 flex-1 overflow-y-auto p-3">
-              <RowChart data={byLanduse} selected={landuse} onSelect={setLanduse} />
+              <RowChart
+                data={byLanduse}
+                selected={landuse}
+                onSelect={setLanduse}
+                dense
+                /*
+                  ⚠ НЭГ ЭГНЭЭНД: арван найман зориулалтын долоо нь хоёр
+                  эгнээ болж, карт 763px хүрч гүйлгүүртэй болдог байв.
+                  Нэг эгнээнд барихад 654px — гүйлгэхгүйгээр багтана.
+                  Бүтэн нэр нь мөрийн `title`-д, шүүлтүүрийн хайлттай
+                  цэсэнд хэвээр.
+                */
+                clamp
+              />
             </div>
           </Card>
         </div>

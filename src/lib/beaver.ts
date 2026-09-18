@@ -23,6 +23,7 @@
  */
 
 import { arcgisJson } from "@/lib/arcgis";
+import { pointOf } from "@/lib/extent";
 import { layerService } from "@/lib/portal-layers";
 
 /** Ажиглалтын нэг цэг */
@@ -126,9 +127,9 @@ export async function fetchBeaver(signal?: AbortSignal): Promise<BeaverData> {
   for (const f of obs.features ?? []) {
     const a = f.attributes;
     const g = f.geometry;
-    const lon = g && Number.isFinite(g.x) ? g.x : Number(a["уртраг__x_"]);
-    const lat = g && Number.isFinite(g.y) ? g.y : Number(a["өргөрөг__y_"]);
-    if (!Number.isFinite(lon) || !Number.isFinite(lat)) continue;
+    const at = pointOf(g, a["уртраг__x_"], a["өргөрөг__y_"]);
+    if (!at) continue;
+    const { lon, lat } = at;
 
     /* Аймаг/хот ба сум/дүүргийг НЭГТГЭНЭ: судалгаа Төв аймаг, нийслэл
        хоёуланд нь явсан тул тусад нь харуулбал хоёр бараг ижил

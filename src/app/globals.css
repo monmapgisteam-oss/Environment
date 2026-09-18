@@ -508,6 +508,34 @@ body {
 .pulse-pin .ring.d {
   animation-delay: calc(var(--pulse-dur) / 2);
 }
+/*
+  СОНГОГДСОН ТЭМДЭГ.
+
+  ⚠⚠ `highlight` цагираг нь ЗУРАГТ (canvas) зурагддаг бол тэмдэглэгээ
+  нь DOM элемент тул түүний ДЭЭГҮҮР сууна — улмаас сонгосон цэг
+  цагирагаа АРДАА нуудаг байв. Тиймээс сонголтыг тэмдэг ӨӨРӨӨ үүрнэ.
+
+  Гурван ялгаа: цөм нь ТОМ, гадуураа дэвсгэрийн өнгөт хүрээтэй (ямар
+  ч суурь зураг дээр ирмэг нь тасарна), дээр нь ТОГТМОЛ цагираг —
+  анивчдаггүй тул цохилтын хоёр цагирагнаас ялгарна.
+*/
+.pulse-pin.is-picked {
+  width: 14px;
+  height: 14px;
+  box-shadow:
+    0 0 0 2px var(--paper),
+    0 0 14px 3px color-mix(in oklab, var(--pin, var(--data)) 90%, transparent);
+  z-index: 2;
+}
+.pulse-pin.is-picked::after {
+  content: "";
+  position: absolute;
+  inset: -6px;
+  border-radius: 999px;
+  border: 2px solid var(--pin, var(--data));
+  pointer-events: none;
+}
+
 .pulse-pin:hover {
   background: var(--ink);
 }

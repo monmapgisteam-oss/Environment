@@ -509,6 +509,7 @@ export function WellsMap({
   clusterLabel = "inside",
   marks,
   pulse = false,
+  pickedMark = null,
   pulseColor,
   onHover,
   firefly,
@@ -568,6 +569,19 @@ export function WellsMap({
    * объектод (жишээ нь нийтийн 17 бие засах газар) зориулав.
    */
   pulse?: boolean;
+  /**
+   * СОНГОГДСОН тэмдэглэгээ — `marks`, `pulse` горимд.
+   *
+   * ⚠⚠ Цэгэн давхаргын `highlight` цагираг нь ЗУРАГТ (canvas) зурагддаг
+   * бол тэмдэглэгээ нь DOM элемент тул түүний ДЭЭГҮҮР сууна. Улмаас
+   * жагсаалтаас нэгийг сонгож зураг ойртоход тэр цагираг тэмдгийн
+   * АРД дарагдаж, аль нь сонгогдсоныг ялгах боломжгүй байв
+   * (хэрэглэгч 2026-09-17-нд мэдээлсэн).
+   *
+   * Тиймээс сонголтыг ТЭМДЭГ ӨӨРӨӨ үүрнэ: `is-picked` анги нь
+   * цөмийг томсгож, тогтмол (анивчдаггүй) тод цагираг нэмнэ.
+   */
+  pickedMark?: number | null;
   /**
    * Дохиоллын тэмдэглэгээний өнгө — `oid` бүрд.
    *
@@ -2222,6 +2236,17 @@ export function WellsMap({
         );
         markerRefs.set(id, new Marker({ element: el }).setLngLat(pos).addTo(live));
       }
+
+      /*
+        Сонголтыг БАЙГАА тэмдгүүд дээр тэмдэглэнэ.
+
+        ⚠ Тэмдгүүд нь дугаараар кэшлэгддэг (анивчихаас сэргийлж
+        зөвхөн шинийг нэмдэг) тул сонголт солигдоход дахин үүсэхгүй —
+        ангийг нь ШУУД солино.
+      */
+      for (const [id, mk] of markerRefs) {
+        mk.getElement().classList.toggle("is-picked", id === pickedMark);
+      }
     };
 
     sync();
@@ -2231,7 +2256,7 @@ export function WellsMap({
       if (!pulse) live.off("idle", sync);
       clear();
     };
-  }, [live, marks, pulse, points, visible]);
+  }, [live, marks, pulse, points, visible, pickedMark]);
 
   /*
     Өндрийг `h-full`-ээр өгнө. `absolute inset-0` ажиллахгүй —

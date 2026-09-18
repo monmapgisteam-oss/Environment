@@ -23,6 +23,7 @@
  */
 
 import { arcgisJson } from "@/lib/arcgis";
+import { pointOf } from "@/lib/extent";
 import { HOSTING } from "@/lib/portal";
 import { mnPointCode } from "@/lib/soil";
 
@@ -116,14 +117,19 @@ export async function fetchNeutralization(): Promise<NeutralPoint[]> {
     "Саармагжуулалт",
   );
 
-  return (json.features ?? []).map((f) => {
+  return (json.features ?? []).flatMap((f) => {
     const a = f.attributes;
-    return {
+    /* Координатгүй цэг зурагт ОРОХГҮЙ: `Number(null)` нь тэг тул
+       шалгахгүй бол бичлэг (0, 0) буюу Гвинейн буланд буудаг
+       ({@link pointOf}) */
+    const at = pointOf(null, a["уртраг"], a["өргөрөг"]);
+    if (!at) return [];
+    return [{
       oid: Number(a.objectid),
       no: Number(a.f_),
       code: mnPointCode(String(a["цэгийн_дугаар"] ?? "")),
-      lon: Number(a["уртраг"]),
-      lat: Number(a["өргөрөг"]),
+      lon: at.lon,
+      lat: at.lat,
       /* Эх сурвалж "Баянзүрх дүүрэг" гэж дагавартай бичдэг ч платформын
          бусад бүх харагдац дагаваргүй — нэг л хэлбэрт оруулна */
       district: String(a["duureg"] ?? "").replace(/\s*дүүрэг\s*$/u, "").trim(),
@@ -131,7 +137,7 @@ export async function fetchNeutralization(): Promise<NeutralPoint[]> {
       khMon: String(a["kh_mon"] ?? "").trim(),
       c: ELEMENTS.map((e) => numOrNull(a[`${e.id}_агууламж__мг_кг`])),
       pi: ELEMENTS.map((e) => numOrNull(a[`${e.id}_бохирдлын_индекс`])),
-    };
+    }];
   });
 }
 

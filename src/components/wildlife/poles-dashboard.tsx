@@ -218,49 +218,33 @@ export function PolesDashboard() {
         ) : null}
       </FilterBar>
 
-      <Columns layout="flex" id="poles" left={290} className="min-h-0 flex-1">
-        {/* ---- ЗҮҮН: индикатор + шугамын дараалал ---- */}
-        <div className="flex min-h-0 flex-col gap-2.5 xl:w-(--col-l) xl:shrink-0">
-          <Card className="shrink-0">
-            <div className="grid grid-cols-2 divide-x divide-y divide-line">
-              <Stat icon={Zap} label="Шонгийн тоо" value={num(stats.n)} />
-              <Stat
-                icon={Ruler}
-                label="Шугамын урт, м"
-                value={num(Math.round(stats.length))}
-              />
-              <Stat icon={Ruler} label="Дундаж зай, м" value={num(Math.round(stats.avg))} />
-              <Stat
-                icon={Ruler}
-                label="Хамгийн урт зай, м"
-                value={num(Math.round(stats.max))}
-              />
-            </div>
-          </Card>
+      {/*
+        ⚠ ИНДИКАТОР нь ЗУРГИЙН ДЭЭР, бүтэн өргөнтэй зурвас
+        (хэрэглэгчийн шийдвэр, 2026-09-17). Урьд нь зүүн баганад
+        2×2 тор болж, доор нь бөгжин диаграмтай хамт сууж байв.
 
-          {/*
-            Байршил бүрийн шонгийн тоо — бөгжөөр.
-
-            Зай өөрөө газрын зураг дээр хэрчим бүр дээрээ бичигдэж
-            байгаа тул энд давтах шаардлагагүй. Үлдэх асуулт нь хоёр
-            шугам тус бүр хэдэн шонтой вэ гэдэг энгийн тоолол.
-          */}
-          <Card className="min-h-[110px] flex-1">
-            <Head title="Байршлаар">
-              <span className="text-[10.5px] text-ink-3">шон</span>
-            </Head>
-            <div className="min-h-0 flex-1 overflow-y-auto p-3">
-              <PieChart
-                data={byPlace}
-                size={96}
-                selected={place}
-                onSelect={setPlace}
-              />
-            </div>
-          </Card>
+        Хэлтсийн бусад самбартай НЭГ хэв болов: үзүүлэлт дээрээ,
+        зураг голдоо, задаргаа баруун талдаа.
+      */}
+      <Card className="shrink-0">
+        <div className="grid grid-cols-2 divide-x divide-y divide-line sm:grid-cols-4 sm:divide-y-0">
+          <Stat icon={Zap} label="Шонгийн тоо" value={num(stats.n)} />
+          <Stat
+            icon={Ruler}
+            label="Шугамын урт, м"
+            value={num(Math.round(stats.length))}
+          />
+          <Stat icon={Ruler} label="Дундаж зай, м" value={num(Math.round(stats.avg))} />
+          <Stat
+            icon={Ruler}
+            label="Хамгийн урт зай, м"
+            value={num(Math.round(stats.max))}
+          />
         </div>
+      </Card>
 
-        {/* ---- БАРУУН: газрын зураг ---- */}
+      <Columns layout="flex" id="poles" right={300} className="min-h-0 flex-1">
+        {/* ---- ГОЛ: газрын зураг ---- */}
         <div className="flex min-h-0 flex-1 flex-col gap-2.5">
           <Card className="relative min-h-[300px] flex-1 overflow-hidden">
             <div className="relative h-full w-full">
@@ -344,6 +328,34 @@ export function PolesDashboard() {
             Суурь зураг: Esri · Дата: ArcGIS · {num(data.rows.length)} шон · зайг
             координатаас тооцов
           </p>
+        </div>
+        {/* ---- БАРУУН: задаргаа ---- */}
+        {/*
+          ⚠ Задаргаа нь зургийн БАРУУН талд (хэрэглэгчийн шийдвэр,
+          2026-09-17: "chart mapiin baruun tald busad shig n").
+          Платформын бусад самбар бүгд ийм эрэмбэтэй.
+        */}
+        <div className="flex min-h-0 flex-col gap-2.5 xl:w-(--col-r) xl:shrink-0">
+          {/*
+            Байршил бүрийн шонгийн тоо — бөгжөөр.
+
+            Зай өөрөө газрын зураг дээр хэрчим бүр дээрээ бичигдэж
+            байгаа тул энд давтах шаардлагагүй. Үлдэх асуулт нь хоёр
+            шугам тус бүр хэдэн шонтой вэ гэдэг энгийн тоолол.
+          */}
+          <Card className="min-h-[110px] flex-1">
+            <Head title="Байршлаар">
+              <span className="text-[10.5px] text-ink-3">шон</span>
+            </Head>
+            <div className="min-h-0 flex-1 overflow-y-auto p-3">
+              <PieChart
+                data={byPlace}
+                size={96}
+                selected={place}
+                onSelect={setPlace}
+              />
+            </div>
+          </Card>
         </div>
       </Columns>
     </div>

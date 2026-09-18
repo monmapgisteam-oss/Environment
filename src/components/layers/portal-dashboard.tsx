@@ -1265,6 +1265,15 @@ export function PortalLayersDashboard({ set }: { set: LayerSet }) {
                       colorOf={
                         palette ? (d) => palette.get(d.key) ?? tone : undefined
                       }
+                      /*
+                        ⚠ ШАХСАН МӨР (хэрэглэгчийн хүсэлт, 2026-09-17).
+                        Задаргаа нь хорин таван утга хүртэл байж болох
+                        (`MAX_VALUES`) тул ердийн 51px-ийн мөр нь карт
+                        бүрийг гүйлгүүртэй болгодог байв. Шахсан үед
+                        мөр ~31px — ес, арван утга гүйлгэхгүйгээр
+                        багтана.
+                      */
+                      dense
                     />
                   )}
                 </CutCard>

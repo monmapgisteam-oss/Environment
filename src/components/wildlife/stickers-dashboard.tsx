@@ -4,7 +4,6 @@ import * as React from "react";
 import dynamic from "next/dynamic";
 import {
   Building2,
-  Check,
   Loader2,
   MapPin,
   Sticker,
@@ -13,8 +12,9 @@ import {
 import { RowChart, type Datum } from "@/components/charts";
 import { BasemapGallery } from "@/components/map/basemap-gallery";
 import { FilterBar, FilterMenu, PickList } from "@/components/wells/filter-bar";
-import { defaultBasemap, type Basemap } from "@/components/wells/map";
+import { defaultBasemap, type Basemap, type Extent } from "@/components/wells/map";
 import { Columns } from "@/components/ui/resizable-columns";
+import { Bounds } from "@/lib/extent";
 import { fetchStickers, type StickerData } from "@/lib/stickers";
 import { cn, num } from "@/lib/utils";
 
@@ -44,7 +44,7 @@ const PointMap = dynamic(
  * стикер наагдсан. Тиймээс самбар нь тэр ЗӨРҮҮГ харуулна — жагсаалт,
  * зураг, задаргаа гурвуулаа стикертэй эсэхийг эхний ээлжинд хэлнэ.
  *
- * ⚠ **ӨНГӨ нь ТӨЛӨВИЙГ хэлнэ**: стикертэй бол `--moss` (хийгдсэн),
+ * ⚠ **ӨНГӨ нь ТӨЛӨВИЙГ хэлнэ**: стикертэй бол `--water` (хийгдсэн),
  * үгүй бол `--ochre` (анхаарах). Энэ нь чимэглэл биш ДОХИО тул
  * "дата дүрслэлийн өнгө ганц" дүрэмд хамаарахгүй — ландфиллийн
  * эрсдэлийн зэрэгтэй ижил үндэслэл. Хуучин самбар бүх цэгийг
@@ -108,7 +108,7 @@ export function StickersDashboard() {
     (oid: number) => {
       const r = data?.rows.find((x) => x.oid === oid);
       if (!r) return undefined;
-      return r.sticker === true ? "var(--moss)" : "var(--ochre)";
+      return r.sticker === true ? "var(--water)" : "var(--ochre)";
     },
     [data],
   );
@@ -160,8 +160,20 @@ export function StickersDashboard() {
     if (!data) return [];
     const total = new Map<string, number>();
     const done = new Map<string, number>();
-    for (const i of shown) {
-      const r = data.rows[i];
+    for (const r of data.rows) {
+      /*
+        ⚠⚠ ХОЁР ХЭМЖИГДЭХҮҮНЭЭ АЛГАСНА.
+
+        1. ДҮҮРЭГ нь энэ диаграмын ТЭНХЛЭГ: шүүвэл сонгосон дүүрэг л
+           үлдэж, өөр рүү шилжих арга алга болно (платформын хөндлөн
+           шүүлтийн дүрэм).
+        2. СТИКЕРИЙН ТӨЛӨВ нь энэ диаграмын ХЭМЖИГДЭХҮҮН: хамралт
+           гэдэг нь наасан ба нааагүйн ХАРЬЦАА тул аль нэгээр нь
+           шүүвэл бүх зурвас 0 эсвэл бүтэн болж, диаграм утгаа алдана.
+
+        Хороо нь харин үлдэнэ — тэр нь өөр тэнхлэг.
+      */
+      if (khoroo && r.khoroo !== khoroo) continue;
       total.set(r.district, (total.get(r.district) ?? 0) + 1);
       if (r.sticker === true)
         done.set(r.district, (done.get(r.district) ?? 0) + 1);
@@ -173,7 +185,7 @@ export function StickersDashboard() {
         label: `${key} · ${num(done.get(key) ?? 0)} / ${num(n)}`,
         value: done.get(key) ?? 0,
       }));
-  }, [data, shown]);
+  }, [data, khoroo]);
 
   const stats = React.useMemo(() => {
     if (!data) return null;
@@ -197,6 +209,45 @@ export function StickersDashboard() {
     if (!data || picked == null) return null;
     return data.rows.find((r) => r.oid === picked) ?? null;
   }, [data, picked]);
+
+  /*
+    ОЙРТОХ ҮЙЛДЭЛ (zoom action).
+
+    ⚠⚠ СОНГОЛТ БҮР зураг дээр ХАРАГДАХ ЁСТОЙ (хэрэглэгчийн хүсэлт,
+    2026-09-17). 78 барилга нийслэлийн хэмжээнд тархсан тул жагсаалтаас
+    нэгийг товшиход зураг хөдлөхгүй бол хаана байгаа нь мэдэгдэхгүй:
+    сонгосон цэг нь тодрох ч дэлгэцийн гадна байж болно.
+
+    Хоёр түвшин:
+      · БАРИЛГА сонговол ЗӨВХӨН түүн рүү (~450 м-ийн зайтай).
+      · Шүүлтүүр (дүүрэг, хороо, стикерийн байдал, хайлт) тавьвал
+        ҮЛДСЭН БҮХ барилгыг багтаана — диаграмаас товшсон ч мөн адил.
+
+    ⚠ Шүүлтгүй, сонголтгүй үед `null`: анхны харагдац нь бүх 78
+    барилгыг багтаасан байдаг тул дахин ойртуулах шаардлагагүй.
+
+    ⚠ `Bounds` нь бөглөгдөөгүй, хүрээнээс гадуурх координатыг өөрөө
+    алгасна.
+  */
+  const focus = React.useMemo<Extent | null>(() => {
+    if (!data) return null;
+
+    if (detail) {
+      const b = new Bounds();
+      b.add(detail.lon, detail.lat);
+      return b.get();
+    }
+
+    const filtered = Boolean(district || khoroo || state || query.trim());
+    if (!filtered || shown.length === 0) return null;
+
+    const b = new Bounds();
+    for (const i of shown) {
+      const r = data.rows[i];
+      b.add(r.lon, r.lat);
+    }
+    return b.get();
+  }, [data, detail, district, khoroo, state, query, shown]);
 
   if (error) {
     return (
@@ -222,7 +273,9 @@ export function StickersDashboard() {
   return (
     <div className="flex h-full min-h-0 flex-col gap-2.5">
       <FilterBar
-        title="Шилэн барилгын судалгаа"
+        /* Хэлтсийн өгсөн нэр (2026-09-17) — табын шошготой ижил.
+           Албан ёсны бүтэн нэр нь табын `full`-д хэвээр. */
+        title="Шилэн барилга"
         activeCount={activeCount}
         onReset={() => {
           setDistrict(null);
@@ -337,25 +390,31 @@ export function StickersDashboard() {
                   )}
                 >
                   {/*
-                    Стикерийн төлөв — зүүн ирмэгийн тэмдэг. Стикертэйд
-                    л дүүргэлт гарна: 78-аас 8 нь тодрох ёстой, эсрэгээр
-                    биш.
+                    Стикерийн төлөв — ЦЭГЭЭР.
+
+                    ⚠⚠ Урьд нь дөрвөлжин ХАЙРЦАГ (стикертэйд нь чагт)
+                    байсныг хэрэглэгч "барилга унтраадаг асаадаг юм"
+                    гэж ойлгосон (2026-09-17) — хайрцаг, чагт хоёр нь
+                    хөтөч дээр УНТРААЛГА гэсэн утгатай дүрс бөгөөд
+                    жагсаалтын мөрд сууж байхад товшигддог мэт
+                    уншигдана. Гэтэл энэ нь ТӨЛӨВ заадаг, удирддаггүй.
+
+                    Цэг нь хэзээ ч удирдлага мэт уншигдахгүй. Өнгө нь
+                    газрын зургийн цэгтэй НЭГ эх сурвалжаас: стикертэй
+                    бол `--water` (хийгдсэн), үгүй бол `--ochre`
+                    (анхаарах), тэмдэглээгүй бол бүдэг.
                   */}
                   <span
                     aria-hidden
                     className={cn(
-                      "mt-[2px] flex size-3.5 shrink-0 items-center justify-center rounded-[2px] border",
+                      "mt-[5px] size-1.5 shrink-0 rounded-full",
                       r.sticker === true
-                        ? "border-transparent bg-moss"
+                        ? "bg-water"
                         : r.sticker === false
-                          ? "border-ochre/60"
-                          : "border-line-2",
+                          ? "bg-ochre"
+                          : "bg-line-2",
                     )}
-                  >
-                    {r.sticker === true ? (
-                      <Check size={10} strokeWidth={3} className="text-paper" />
-                    ) : null}
-                  </span>
+                  />
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-[12px] leading-tight text-ink">
                       {r.name || "—"}
@@ -391,9 +450,17 @@ export function StickersDashboard() {
                 pulse
                 pulseColor={pulseColor}
                 cluster={false}
+                /*
+                  ⚠ Сонголтыг ТЭМДЭГ ӨӨРӨӨ үүрнэ: `highlight` цагираг нь
+                  зурагт (canvas) зурагддаг тул DOM тэмдэглэгээний АРД
+                  дарагдана. Хоёуланг өгсөн нь санаатай — цагираг нь
+                  ойртолтын үед зайнаас ч анзаарагдана.
+                */
+                pickedMark={picked}
                 highlight={detail ? [detail.lon, detail.lat] : null}
                 basemap={basemap}
                 onSelect={(oid) => setPicked(picked === oid ? null : oid)}
+                focus={focus}
               />
               <BasemapGallery value={basemap} onChange={setBasemap} />
 
@@ -429,13 +496,21 @@ export function StickersDashboard() {
         </div>
 
         {/* ---- БАРУУН: хамралт, задаргаа ---- */}
+        {/*
+          ⚠ ГУРВАН ДИАГРАМ БҮГД ШАХСАН МӨРТЭЙ (хэрэглэгчийн хүсэлт,
+          2026-09-17). Ердийн мөр ~51px тул гурван карт нийлээд
+          1,100px болж, багана гүйлгүүртэй болдог байв. Шахсан үед
+          708px — гүйлгэхгүйгээр багтана.
+
+          Мөрийн тоо: стикерийн байдал 2 · дүүрэг 4 · хороо 10.
+        */}
         <div className="flex min-h-0 flex-col gap-2.5 overflow-y-auto xl:w-(--col-r) xl:shrink-0">
           <Card className="shrink-0">
             <Head title="Стикерийн байдал">
               <span className="text-[10.5px] text-ink-3">барилга</span>
             </Head>
             <div className="p-3">
-              <RowChart data={byState} selected={state} onSelect={setState} />
+              <RowChart data={byState} selected={state} onSelect={setState} dense />
             </div>
           </Card>
 
@@ -444,7 +519,12 @@ export function StickersDashboard() {
               <span className="text-[10.5px] text-ink-3">байршуулсан</span>
             </Head>
             <div className="p-3">
-              <RowChart data={coverage} />
+              <RowChart
+                data={coverage}
+                selected={district}
+                onSelect={setDistrict}
+                dense
+              />
             </div>
           </Card>
 
@@ -457,6 +537,7 @@ export function StickersDashboard() {
                 data={byKhoroo}
                 selected={khoroo}
                 onSelect={setKhoroo}
+                dense
               />
             </div>
           </Card>

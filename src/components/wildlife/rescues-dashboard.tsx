@@ -23,6 +23,7 @@ import { FilterBar, FilterMenu, PickList } from "@/components/wells/filter-bar";
 import { defaultBasemap, type Basemap, type Extent } from "@/components/wells/map";
 import { Columns } from "@/components/ui/resizable-columns";
 import { MapPanel, useMapPanel } from "@/components/map/panel";
+import { Bounds } from "@/lib/extent";
 import { fetchRescues, type Rescue } from "@/lib/rescues";
 import { speciesIconSvg } from "@/lib/species-icons";
 import { speciesPhoto } from "@/lib/species-photos";
@@ -43,7 +44,7 @@ const PointMap = dynamic(
 type Skip = "species" | "rarity" | "outcome" | "stage" | "year" | "month";
 
 /**
- * Аврагдсан амьтдын бүртгэл 2019–2026.
+ * Авран хамгаалсан амьтдын бүртгэл 2019–2026.
  *
  * Дуудлагын самбараас ЗОРИУДААР ӨӨР бүтэцтэй — хоёулаа нэг хэлтсийн, нэг
  * сэдвийн самбар тул ялгаагүй харагдвал хүн аль нь болохыг андуурна:
@@ -153,6 +154,8 @@ export function RescuesDashboard() {
       let k = 0;
       for (let j = 0; j < idx.length; j++) {
         const r = rows[idx[j]];
+        /* Байршилгүй бичлэг ямар ч хүрээнд багтахгүй */
+        if (r.lon == null || r.lat == null) continue;
         if (r.lat < s || r.lat > n) continue;
         if (!wide && (w <= e ? r.lon < w || r.lon > e : r.lon < w && r.lon > e)) continue;
         out[k++] = idx[j];
@@ -162,15 +165,39 @@ export function RescuesDashboard() {
     [selectBase, extent, rows],
   );
 
-  const mapIdx = React.useMemo(() => selectBase(), [selectBase]);
+  /*
+    ⚠⚠ ЗУРАГТ ЗӨВХӨН БАЙРШИЛТАЙ бичлэг орно.
+
+    720 бүртгэлийн 23-д эх сурвалж дээр координат нь `null`. Тэдгээр нь
+    жинхэнэ аврагдсан амьтад тул `rows`-д үлдэж, ҮЗҮҮЛЭЛТ, ЗАДАРГАА,
+    ЖИЛИЙН ЦУВААД бүрэн тоологдоно — зөвхөн зурагт гарахгүй.
+
+    Урьд нь `Number(null) → 0` тул тэд (0, 0) буюу Гвинейн буланд
+    бөөгнөрч, Улаанбаатараас 9,000 км зайд "23" гэсэн бөөгнөрөл болж
+    харагдаж байв (2026-09-17).
+  */
+  const mapIdx = React.useMemo(() => {
+    const idx = selectBase();
+    if (!rows) return idx;
+    const out = new Uint32Array(idx.length);
+    let k = 0;
+    for (let j = 0; j < idx.length; j++) {
+      const r = rows[idx[j]];
+      if (r.lon != null && r.lat != null) out[k++] = idx[j];
+    }
+    return out.subarray(0, k);
+  }, [rows, selectBase]);
   const shown = React.useMemo(() => select(), [select]);
 
   const points = React.useMemo(() => {
     const src = rows ?? [];
     return {
       oid: src.map((r) => r.oid),
-      lon: src.map((r) => r.lon),
-      lat: src.map((r) => r.lat),
+      /* Байршилгүй мөрийн нүд `mapIdx`-д ОРОХГҮЙ тул хэзээ ч
+         уншигдахгүй; индексийн эгнээ `rows`-тай таарах ёстой учраас
+         суудлыг нь үлдээнэ */
+      lon: src.map((r) => r.lon ?? NaN),
+      lat: src.map((r) => r.lat ?? NaN),
     };
   }, [rows]);
 
@@ -256,18 +283,14 @@ export function RescuesDashboard() {
     if (!rows || (!stage && !species && !rarity && !outcome && !month)) return null;
     const idx = selectBase();
     if (idx.length === 0) return null;
-    let w = 180;
-    let s = 90;
-    let e = -180;
-    let n = -90;
+    /* `Bounds` нь бөглөгдөөгүй, хүрээнээс гадуурх координатыг өөрөө
+       алгасна — ганц эвдэрсэн утга ойртолтыг сүйтгэх ёсгүй */
+    const b = new Bounds();
     for (let k = 0; k < idx.length; k++) {
       const r = rows[idx[k]];
-      w = Math.min(w, r.lon);
-      e = Math.max(e, r.lon);
-      s = Math.min(s, r.lat);
-      n = Math.max(n, r.lat);
+      if (r.lon != null && r.lat != null) b.add(r.lon, r.lat);
     }
-    return [w, s, e, n];
+    return b.get();
   }, [rows, selectBase, stage, species, rarity, outcome, month]);
 
   /** Хулгана дагасан хөвөгч тайлбар — байрлалыг өөрөө удирдана */
@@ -288,7 +311,10 @@ export function RescuesDashboard() {
 
   /** Тодруулах цэгийн байрлал — зураг дээрх цагираг */
   const highlight = React.useMemo<[number, number] | null>(
-    () => (hovered ? [hovered.lon, hovered.lat] : null),
+    () =>
+      hovered && hovered.lon != null && hovered.lat != null
+        ? [hovered.lon, hovered.lat]
+        : null,
     [hovered],
   );
 
@@ -340,7 +366,7 @@ export function RescuesDashboard() {
         ) : (
           <span className="flex items-center gap-2 text-[13.5px] text-ink-3">
             <Loader2 size={14} className="animate-spin" />
-            Аврагдсан амьтдын бүртгэл татаж байна…
+            Авран хамгаалсан амьтдын бүртгэл татаж байна…
           </span>
         )}
       </div>
@@ -349,7 +375,11 @@ export function RescuesDashboard() {
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-2.5">
-      <FilterBar title="Аврагдсан амьтад" activeCount={activeCount} onReset={reset}>
+      <FilterBar
+        title="Авран хамгаалсан амьтдын бүртгэл"
+        activeCount={activeCount}
+        onReset={reset}
+      >
         {/*
           Хугацаа — хоёр үзүүрт муж. Доорх "Он" нь үүний товчлол: нэг жил
           сонгоход мужийг [он, он] болгож хумина.
@@ -635,32 +665,62 @@ export function RescuesDashboard() {
             <div className="p-3">
               <AreaChart
                 data={yearData}
-                height={78}
+                /* Шошго нь цэгийн дээр 15px зай иднэ — шугамын өндөр
+                   хэвээр үлдэхийн тулд картыг тэр хэмжээгээр өндөрсгөв */
+                height={94}
                 selected={singleYear}
                 onSelect={(k) => setRange(k ? [Number(k), Number(k)] : span)}
                 unit="бүртгэл"
+                /* Долоон жилийн тоог унших нь энэ самбарын гол хэрэгцээ:
+                   хандлагыг шугам, яг хэдийг шошго хэлнэ */
+                labels
               />
             </div>
           </Card>
 
           {/*
-            Хоёрхон ангилалтай тул бөгж: хэсэг бүрийн ЭЗЛЭХ ХУВЬ нь энд гол
-            утга (17 ховор / 680 элбэг). Мөрөн диаграм дээр 2 мөр нь харьцааг
-            биш, зөвхөн хоёр тоог харуулна.
+            БӨГЖ: ховордлын зэрэг бүрийн ЭЗЛЭХ ХУВЬ нь энд гол утга —
+            720 бүртгэлийн 534 нь элбэг зүйл (74%). Мөрөн диаграм дээр
+            тоонууд нь харагдах ч бүхэлд эзлэх хувь нь алдагдана.
+
+            ⚠ ТАЙЛБАР нь БӨГЖНИЙ ДООР, ХОЁР БАГААНААР (хэрэглэгчийн
+            хүсэлт, 2026-09-17). Найман зэрэгтэй тул хажуугийн нэг
+            багана нарийсаж, карт нь наймхан мөрийн өндөрт сунаж байв.
           */}
           <Card className="shrink-0">
             <Head title="Ховордлын зэргээр" />
             <div className="p-3">
-              <PieChart data={rarityData} selected={rarity} onSelect={setRarity} />
+              <PieChart
+                data={rarityData}
+                selected={rarity}
+                onSelect={setRarity}
+                legend="below"
+              />
             </div>
           </Card>
 
+          {/*
+            ⚠ ЕСӨН АНГИЛАЛ ГҮЙЛГЭХГҮЙГЭЭР БАГТАНА (хэрэглэгчийн хүсэлт,
+            2026-09-17). Ердийн мөр ~57px тул ес нь 500px гаруй болж,
+            карт гүйлгүүртэй болдог байв — `dense` нь мөрийг ~31px
+            болгоно.
+
+            ⚠ `overflow-y-auto` нь ХЭВЭЭР: нам дэлгэц дээр эсвэл эх
+            сурвалжид шинэ ангилал нэмэгдвэл агуулга картаасаа халина.
+            Гүйлгүүр гарахгүй бол харагдахгүй — агуулга ТАСРАХААС
+            гүйлгэсэн нь дээр.
+          */}
           <Card className="min-h-[130px] flex-1">
             <Head title="Шийдвэрлэлтээр">
               <span className="text-[11.5px] text-ink-3">бүлэглэсэн ангилал</span>
             </Head>
             <div className="min-h-0 flex-1 overflow-y-auto p-3">
-              <RowChart data={outcomeData} selected={outcome} onSelect={setOutcome} />
+              <RowChart
+                data={outcomeData}
+                selected={outcome}
+                onSelect={setOutcome}
+                dense
+              />
             </div>
           </Card>
         </div>

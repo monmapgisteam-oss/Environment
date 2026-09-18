@@ -19,6 +19,7 @@
  */
 
 import { arcgisJson } from "@/lib/arcgis";
+import { pointOf } from "@/lib/extent";
 import { layerService } from "@/lib/portal-layers";
 
 export const BIOTECH_SERVICE = `${layerService("A07_Biotechnik")}/0`;
@@ -83,9 +84,9 @@ export async function fetchBiotech(
     const g = f.geometry;
 
     /* Геометрийг эрхэмлэнэ, дутсан бол атрибутын координатаас */
-    const lon = g && Number.isFinite(g.x) ? g.x : Number(a["уртраг__x_"]);
-    const lat = g && Number.isFinite(g.y) ? g.y : Number(a["өргөрөг__y_"]);
-    if (!Number.isFinite(lon) || !Number.isFinite(lat)) continue;
+    const at = pointOf(g, a["уртраг__x_"], a["өргөрөг__y_"]);
+    if (!at) continue;
+    const { lon, lat } = at;
 
     const card = tidy(a["мемори_карт"]);
 

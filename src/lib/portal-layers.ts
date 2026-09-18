@@ -142,6 +142,41 @@ export type LayerSet = {
    */
   skipMeasure?: RegExp;
   /**
+   * ДҮРСЛЭЛД ОГТ ОРОХГҮЙ талбар — нэрээр нь.
+   *
+   * {@link skipMeasure} нь зөвхөн хэмжилтийг хасдаг бол энэ нь
+   * талбарыг БҮХЭЛД НЬ (ангилал, нэр, хугацаа) хасна.
+   *
+   * ⚠ Зориулалт нь БИЧЛЭГИЙН ТУХАЙ метадата: ус ашиглагчийн гэрээний
+   * `has_xy` ("Солбицол бүртгэгдсэн эсэх") нь усны тухай ЮУ Ч
+   * ХЭЛЭХГҮЙ — зөвхөн тэр мөрийн координат бөглөгдсөн эсэхийг
+   * хэлнэ. Гэтэл утга нь 113/105 гэж бараг төгс тэнцвэртэй тул
+   * энтропийн оноогоор БҮХ бодит задаргааг түрүүлж, "Ус ашиглах
+   * хэмжээ — Солбицол бүртгэгдсэн эсэх" гэсэн утгагүй диаграм
+   * зурагдаж байв (2026-09-17).
+   *
+   * Ийм талбарыг ерөнхий дүрмээр таних боломжгүй: "… эсэх" гэсэн
+   * бусад талбар (хамгаалалтын бүс тогтоосон эсэх, гэрээг дүгнүүлсэн
+   * эсэх) нь ЖИНХЭНЭ задаргаа. Тиймээс хэлтсийн БҮРТГЭЛД сууна.
+   */
+  skipField?: RegExp;
+  /**
+   * ЛАТИНААР буусан домэйны утгыг харагдах хэлбэрт нь буулгана.
+   *
+   * ⚠ Энэ нь ОРЧУУЛГА БИШ, бичиглэлийн засвар: эх сурвалж монгол үгээ
+   * латинаар бичсэн (`Mundul` → Мөндөл, `Dosh` → Дош) эсвэл англи
+   * нэр томьёо хэрэглэсэн (`Adult`, `Baby`) тохиолдолд л хэрэглэнэ.
+   * Утгын УТГЫГ өөрчлөхгүй — зөвхөн үсгийг нь.
+   *
+   * ⚠ Хэлтсийн БҮРТГЭЛД сууна: аль утга юу гэсэн үг болохыг эх
+   * сурвалжийн эзэн л мэднэ. Хөдөлгүүр таамаглах ёсгүй.
+   *
+   * ⚠ Буулгалт нь ТАТАХ МӨЧИД хийгдэнэ тул диаграм, шүүлтүүр,
+   * бичлэгийн дэлгэрэнгүй ГУРВУУЛАА нэг хэлбэр харуулна — зөвхөн
+   * дэлгэц дээр солибол шүүлтийн түлхүүр нь зөрнө.
+   */
+  values?: Record<string, string>;
+  /**
    * ХЭМЖИЛТЭД ОРОХГҮЙ нэгж — талбарын БҮТЭН НЭР дээр шалгагдана.
    *
    * Бичиглэл нь жигд бус ("м³ нийт", "м3 2023", "куб.м") тул задалсан
@@ -228,7 +263,8 @@ export type LayerInfo = {
  * утгагүй. `Shape__Area`-г харин ТАЛБАЙН эх сурвалж болгон тусад нь
  * хэрэглэнэ.
  */
-const SKIP_FIELDS = /^(OBJECTID|FID|GlobalID|Shape_?_?(Area|Length))$/i;
+const SKIP_FIELDS =
+  /^(OBJECTID|FID|GlobalID|Shape_?_?(Area\w*|Le\w*)(_\d+)?)$/i;
 
 /**
  * Esri-ийн ЗАСВАРЛАГЧ МӨРДӨХ талбарууд.
@@ -309,12 +345,16 @@ async function loadLayerInfo(
 
   const all = meta.fields ?? [];
 
+  const skip = set.skipField;
+
   const fields: LayerField[] = all
     .filter(
       (f) =>
         !SKIP_FIELDS.test(f.name) &&
         !KML_NOISE.test(f.name) &&
-        !EDITOR_FIELDS.test(f.name),
+        !EDITOR_FIELDS.test(f.name) &&
+        !skip?.test(f.name) &&
+        !skip?.test((f.alias ?? "").trim()),
     )
     .map((f) => ({
       name: f.name,
@@ -380,6 +420,39 @@ export type LayerFeatures = {
  * хөнгөн талбайд 4.6 дахин хурдан (хэмжсэн). Тоо хуучирсан бол дүүрэн
  * хуудасны араас дараалан үргэлжлүүлнэ.
  */
+/**
+ * Латинаар буусан утгыг бүртгэлийн толиор солино
+ * ({@link LayerSet.values}).
+ *
+ * ⚠ Олон утгат нүдийг бүтнээр нь ХАЙХГҮЙ, ГИШҮҮН тус бүрээр нь
+ * солино: `нас` талбарт "Adult, Baby" гэсэн ХОС утга байдаг бөгөөд
+ * бүтнээр нь хайвал толинд олдохгүй, англиараа үлдэнэ.
+ */
+function relabel(
+  props: Record<string, unknown>,
+  map: Record<string, string>,
+): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...props };
+  for (const [k, v] of Object.entries(out)) {
+    if (typeof v !== "string") continue;
+    const parts = v.split(SEPARATOR);
+    if (parts.length === 1) {
+      const hit = map[v.trim()];
+      if (hit) out[k] = hit;
+      continue;
+    }
+    /* Аль нэг гишүүн нь толинд байвал л дахин угсарна */
+    let touched = false;
+    const next = parts.map((piece) => {
+      const hit = map[piece.trim()];
+      if (hit) touched = true;
+      return hit ?? piece;
+    });
+    if (touched) out[k] = next.join(", ");
+  }
+  return out;
+}
+
 type Raw = {
   properties: Record<string, unknown>;
   geometry: GeoJSON.Geometry | null;
@@ -431,6 +504,7 @@ async function loadLayerRows(info: LayerInfo): Promise<LayerRows> {
   ];
   const rows: Record<number, Record<string, unknown>> = {};
   const area: Record<number, number> = {};
+  const remap = info.set.values;
   for (const f of await pagesOf(info, {
     outFields: out.join(","),
     returnGeometry: "false",
@@ -438,7 +512,8 @@ async function loadLayerRows(info: LayerInfo): Promise<LayerRows> {
     const p = f.properties ?? {};
     const uid = Number(p[oid]);
     if (!Number.isFinite(uid)) continue;
-    rows[uid] = p;
+    /* Латинаар буусан домэйны утгыг бүртгэлийн толиор солино */
+    rows[uid] = remap ? relabel(p, remap) : p;
     if (info.areaField) {
       const a = Number(p[info.areaField]);
       if (Number.isFinite(a)) area[uid] = a;
@@ -643,6 +718,16 @@ const NUMERIC = /^(Double|Single|Integer|SmallInteger|BigInteger)$/;
 const NOTE_LENGTH = 34;
 
 /**
+ * Хуанлийн багана гэж үзэх УТГЫН ХУВЬ.
+ *
+ * Он, сар, өдрийн баганад бөглөгдөөгүй тэг, бичилтийн алдаа (39 дэх
+ * өдөр) холилдсон байдаг тул "бүх утга мужид багтана" гэсэн шаардлага
+ * бодит датад ажиллахгүй. Дийлэнх нь багтаж байвал хуанли гэж үзнэ —
+ * үлдсэн цөөн утга нь хэмжигдэхүүн болгодог шалтгаан биш.
+ */
+const CALENDAR_SHARE = 0.9;
+
+/**
  * Олон утгыг тусгаарлагч.
  *
  * Эх сурвалж нэг нүдэнд хэд хэдэн утга бичдэг ("Баянзүрх, Налайх
@@ -651,6 +736,34 @@ const NOTE_LENGTH = 34;
  * жагсаалт болно.
  */
 const SEPARATOR = /\s*[;,]\s*/;
+
+/**
+ * ⚠⚠ ЦЭГТЭЙ ТАСЛАЛ ДАВУУ ЭРХТЭЙ.
+ *
+ * Эх сурвалж хоёр түвшний тусгаарлагч хэрэглэдэг: гишүүдээ цэгтэй
+ * таслалаар, гишүүний ДОТОРХ хэсгүүдийг энгийн таслалаар. Ойн дагалт
+ * баялгийн `zuiluud` нь үүний жишээ — "Алирс, нэрс, аньс" ба "Хусны
+ * үйс, хусны шүүс" нь ТУС БҮРДЭЭ НЭГ зүйл бөгөөд эх сурвалж тэдэнд
+ * тус бүрд нь нэг багана (`z_alirsnersans`, `z_husnyuishusnyshuus`)
+ * зориулсан байдаг.
+ *
+ * Хоёуланг нь зэрэг тусгаарлагч болговол нэг зүйл гурав хуваагдана.
+ * Тиймээс нүдэнд цэгтэй таслал БАЙВАЛ зөвхөн түүгээр таслана.
+ *
+ * ✅ **ДҮРМИЙГ ДАТА ӨӨРӨӨ БАТАЛНА**: цэгтэй таслалаар задлахад яг
+ * **18 зүйл** гарах ба давхаргад байгаа `z_*` баганын тоо мөн 18
+ * (2026-09-17-нд шалгасан). Хоёуланг нь хэрэглэвэл 21 гарч байв.
+ *
+ * Энэ нь хөвдний зохиогчийн нэрний дүрэмтэй ({@link src/lib/flora.ts})
+ * нэг зарчим: тусгаарлагчийг ТААМАГЛАХГҮЙ, датаар нь баталгаажуулна.
+ */
+const SEMICOLON = /\s*;\s*/;
+
+/** Тухайн нүдэнд тохирох тусгаарлагч */
+function separatorFor(values: string[]): RegExp | null {
+  if (values.some((v) => SEMICOLON.test(v))) return SEMICOLON;
+  return values.some((v) => SEPARATOR.test(v)) ? SEPARATOR : null;
+}
 
 /**
  * ТАНИГЧ болохын хязгаар.
@@ -668,6 +781,33 @@ const UNIQUE_SHARE = 0.8;
  * давхардалгүй талбарыг л танигч гэж үзнэ.
  */
 const SMALL = 12;
+
+/**
+ * Ангилал болохын БӨГЛӨЛТИЙН доод хувь.
+ *
+ * Үүнээс бага бол диаграм нь "Бүртгэгдээгүй" гэсэн ганц зурвас болж,
+ * задаргааны оронд бөглөлтийн түвшнийг харуулна. {@link candidateOf}.
+ */
+const MIN_FILLED = 0.15;
+
+/**
+ * ХУУЛБАР задаргаа гэж үзэх тааралтын хувь.
+ *
+ * Эх сурвалж нэг зүйлийг хоёр багананд бичихдээ хэдэн мөрд зөрүүтэй
+ * үлдээдэг (хаягаар бичсэн дүүрэг ба геометрээр тодорхойлсон дүүрэг).
+ * Тэр хэдэн мөрөөс болж хоёр диаграм зэрэг гарвал баруун багана
+ * бараг ижил хоёр зурвасын жагсаалтаар дүүрнэ. {@link samePartition}.
+ */
+const DUPLICATE_SHARE = 0.9;
+
+/**
+ * Хугацааны тэнхлэг агуулах ёстой бичлэгийн хувь.
+ *
+ * Үлдсэн хувь нь хоёр үзүүрээс хасагдана: цөөн тооны алдаатай огноо
+ * цувааг хэдэн арван жил рүү сунгаж, бодит хуваарилалтыг уншигдахгүй
+ * болгохоос сэргийлнэ. {@link yearChart}.
+ */
+const TIME_SPAN_SHARE = 0.98;
 
 /**
  * Түүхий утгыг АНГИЛЛЫН ТҮЛХҮҮР болгоно.
@@ -795,6 +935,78 @@ export function officialLabel(alias: string): string {
   const text = out.join(" ");
   return text.charAt(0).toUpperCase() + text.slice(1);
 }
+
+/**
+ * НЭМЭХ НЬ УТГАГҮЙ хэмжигдэхүүн — дунджаар авна.
+ *
+ * ⚠⚠ Тоо бүхэн НЭМЭГДДЭГГҮЙ. Талбай, эзэлхүүн, төлбөр нь бичлэгүүдийн
+ * хооронд ХУРИМТЛАГДАНА (хоёр талбайн га нь нийлээд утгатай), харин
+ * өндөршил, температур, хүчиллэг, агууламж нь бичлэг БҮРИЙН ТӨЛӨВ —
+ * нийлбэр нь физик утгагүй тоо болно.
+ *
+ * Бодит алдаанууд (2026-09-17-нд илрүүлсэн):
+ * - Нийслэлийн худгийн самбарт "м — Баянгол = 363,234" гэж бичигдэж
+ *   байв: 2,000 худгийн далайн түвшнээс дээших өндрийг нэмсэн дүн.
+ * - Гадаргын усны бүртгэлд "pH — Баянзүрх = 284", "Температур, °C —
+ *   Баянзүрх = 325" гэж гарч байв.
+ *
+ * Нэгжээр нь ч, нэрээр нь ч таана: эх сурвалж нэгжээ үргэлж бичдэггүй
+ * (`pH` нь нэгжгүй), бичсэн ч бичиглэл нь жигд бус.
+ */
+const INTENSIVE_UNIT = /^(°?c|°c|c°|ph|мг\/л|мг\/кг|мкг\/л|ppm|м\/с|гпа)$/i;
+
+const INTENSIVE_FIELD =
+  /(^|[_\s])(өндөр\w*|undur|elev\w*|altitude|температур|temp|ph|хүчиллэг|агууламж|эрдэсж\w*|tds|давсж\w*|гүн|depth)([_\s]|$)/i;
+
+/**
+ * ДУГААР болохыг НЭРЭЭР нь таана.
+ *
+ * {@link looksLikeId} нь утгын нягтралаар таньдаг тул зөвхөн
+ * ДАВХАРДАЛГҮЙ дугаарлалтыг барина. Гэтэл эх сурвалж дээр нэг дугаар
+ * олон бичлэгт давтагддаг нь элбэг: ойн хэсэглэлийн `Hes_Num` нь
+ * 7,699 мөрд давтагдан нэмэгдэж "714,874" гэсэн үзүүлэлт болж,
+ * `gid` нь "126,720" болж диаграмын суудлыг бодит хэмжилтээс булааж
+ * байв (2026-09-17).
+ *
+ * ⚠ Монгол хэлний `тоо` нь ТООЛОЛ (жинхэнэ хэмжилт — "зүйлийн тоо",
+ * "айлын тоо") тул ЭНД ОРОХГҮЙ; `дугаар`, `код`, `num`, `id` л
+ * танигч.
+ *
+ * ⚠ ДАГАВАРТАЙ ХУУЛБАРЫГ мөн барина (`objectid_1`): орон зайн
+ * нэгтгэлийн дараа эх давхаргын дугаар хоёр дахь багана болж үлддэг
+ * бөгөөд түүнийг нэмбэл "OBJECTID — 21,155,524" гэсэн үзүүлэлт
+ * гарна. Давхаргын ӨӨРИЙН дугаарын багана нь `SKIP_FIELDS`-ээр
+ * аль хэдийн хасагддаг ч ийм хуулбар нь ердийн талбар мэт ирнэ.
+ */
+const ID_FIELD =
+  /(^|[_\s])(id|gid|fid|oid|uid|objectid|код|code|дугаар|д_д|num|no)(_?\d+)?([_\s]|$)|_id$|^id_/i;
+
+/**
+ * ФАЙЛЫН НЭР — нэр ч биш, ангилал ч биш.
+ *
+ * Мөөгний давхаргын `photo` талбарт зургийн файлын нэр бичигдсэн
+ * (`Fomes_fomentarius.jpg`) боловч зураг нь платформд байдаггүй.
+ * Тэр багана нь бичлэг бүрд өөр, цифргүй, давтагдсан үггүй тул
+ * НЭРИЙН баганын оноогоор бүгдийг түрүүлж, газрын зургийн шошго
+ * `.jpg` болж, "ELEV_M — PHOTO" гэсэн диаграмууд зурагдаж байв
+ * (2026-09-17).
+ */
+const FILE_FIELD = /\.(jpe?g|png|gif|tiff?|bmp|webp|pdf|docx?|xlsx?)$/i;
+
+/**
+ * НЭГЖ ТУТМЫН утга — нэмэхгүй, дунджаар.
+ *
+ * Монгол хэлэнд "нэг X-ийн үнэ/жин/хэмжээ" гэсэн эхлэл нь ҮРГЭЛЖ
+ * нэгж тутмын утгыг заана. Тоолуурын мэдээний "Нэг тоолуурын үнэ"-г
+ * нэмэхэд "33,499,000" гэсэн утгагүй дүн гарч, хажуугийн "Нийт үнэ"
+ * баганатай бараг ижил хэмжээтэй болж хоёулаа нийт өртөг мэт
+ * уншигдаж байв (2026-09-17). Дундажаар авбал салбар хоорондын
+ * нэгжийн үнэ харьцуулагдана.
+ *
+ * ⚠ `нэгж` (нэгж талбар) нь ӨӨР үг тул зайгаар тусгаарлагдсан "нэг"-г
+ * л таана.
+ */
+const PER_UNIT = /^нэг\s/i;
 
 function looksLikeId(values: number[]): boolean {
   if (values.length < 3) return false;
@@ -1002,22 +1214,56 @@ function foldPrefixes(parts: Set<string>): Map<string, string> {
  * Утгын нэрийг БИШ, бичлэгийн ХУВААРИЛАЛТЫГ харьцуулна: нэг талбарын
  * утга нөгөөгийнхөө яг нэг утгад тохирч байвал ижил.
  *
+ * ⚠⚠ ЯГ ТААРАХЫГ ШААРДАХГҮЙ. Урьд нь ганц зөрүүтэй мөр хангалттай
+ * байсан тул орон зайн нэгтгэлийн хуулбарууд (`DUUREG` ба
+ * `DUUREG_GEO`, `HOROO` ба `HOROO_GEO`) давхардал гэж танигдахгүй
+ * байв: хаягаар бичсэн дүүрэг нь геометрээр тодорхойлсноос ердөө
+ * нэг, хоёр бичлэгт зөрдөг. Улмаас шилэн барилгын давхарга дээр
+ * дөрвөн диаграмын суудлыг хоёр хос ХУУЛБАР бүтнээр нь эзэлж,
+ * хэлтсийн ГОЛ АСУУЛТ болох `stiker` (наагдсан эсэх) огт
+ * гарахгүй байлаа (2026-09-17).
+ *
+ * ⚠ Тааралтыг ХОЁР ТИЙШЭЭ шалгана. Нэг тийшээ шалгавал ХАМААРАЛТАЙ
+ * талбарууд ч давхардал болно: хороо бүр яг нэг дүүрэгт харьяалагдах
+ * тул "хороо → дүүрэг" нь төгс таарна — гэвч тэр хоёр нь өөр
+ * нарийвчлалын хоёр өөр задаргаа мөн. Эсрэг чиглэлд (дүүрэг → хороо)
+ * нэг дүүрэг олон хороо руу заах тул тааралт эвдэрнэ.
+ *
  * Олон утгатай талбарыг харьцуулахгүй — тэнд нэг бичлэг хэд хэдэн
  * ангилалд орох тул "нэгээс нэг" гэсэн ойлголт алга.
  */
 function samePartition(a: Candidate, b: Candidate): boolean {
   if (a.multi || b.multi) return false;
-  if (a.values.length !== b.values.length) return false;
 
-  const pair = new Map<string, string>();
-  for (let i = 0; i < a.keys.length; i++) {
-    const ka = a.keys[i][0];
-    const kb = b.keys[i][0];
-    const seen = pair.get(ka);
-    if (seen === undefined) pair.set(ka, kb);
-    else if (seen !== kb) return false;
-  }
-  return true;
+  /** `from` → `to` зураглал хэдэн хувь мөрөнд тогтвортой вэ */
+  const agreement = (from: string[][], to: string[][]): number => {
+    const seen = new Map<string, Map<string, number>>();
+    for (let i = 0; i < from.length; i++) {
+      const k = from[i][0];
+      const v = to[i][0];
+      if (k == null || v == null) continue;
+      const hit = seen.get(k) ?? new Map<string, number>();
+      hit.set(v, (hit.get(v) ?? 0) + 1);
+      seen.set(k, hit);
+    }
+
+    let top = 0;
+    let all = 0;
+    for (const hit of seen.values()) {
+      let best = 0;
+      for (const n of hit.values()) {
+        all += n;
+        if (n > best) best = n;
+      }
+      top += best;
+    }
+    return all ? top / all : 0;
+  };
+
+  return (
+    agreement(a.keys, b.keys) >= DUPLICATE_SHARE &&
+    agreement(b.keys, a.keys) >= DUPLICATE_SHARE
+  );
 }
 
 /** Ангилал болох нэр дэвшигч */
@@ -1088,11 +1334,6 @@ function tally(keys: string[][]): Datum[] {
 function candidateOf(field: LayerField, raw: string[]): Candidate | null {
   if (!raw.length) return null;
 
-  /* Өгүүлбэр нь ангилал биш */
-  const text = raw.filter((v) => v !== "Бүртгэгдээгүй");
-  const avg = text.reduce((s, v) => s + v.length, 0) / (text.length || 1);
-  if (avg > NOTE_LENGTH) return null;
-
   const single = raw.map((v) => [v]);
   const flat = new Set(raw).size;
 
@@ -1102,9 +1343,10 @@ function candidateOf(field: LayerField, raw: string[]): Candidate | null {
      түлхүүр гаргаж чадах ёстой */
   let fold: Map<string, string> | null = null;
 
-  if (raw.some((v) => SEPARATOR.test(v))) {
+  const sep = separatorFor(raw);
+  if (sep) {
     const cut = raw.map((v) =>
-      v === "Бүртгэгдээгүй" ? [v] : v.split(SEPARATOR).filter(Boolean),
+      v === "Бүртгэгдээгүй" ? [v] : v.split(sep).filter(Boolean),
     );
     const rawParts = new Set(cut.flat());
     /*
@@ -1121,7 +1363,33 @@ function candidateOf(field: LayerField, raw: string[]): Candidate | null {
       ]);
 
       const parts = new Set(split.flat()).size;
-      if (parts < flat) {
+
+      /*
+        Задралыг ХЭЗЭЭ хүлээн авах вэ.
+
+        1. Ангиллын тоо ЦӨӨРВӨЛ — таслал нь үнэхээр тусгаарлагч байсан
+           гэсэн үг ("Баянзүрх, Налайх дүүрэг" нь хоёр дүүрэг болно).
+        2. ⚠ Эсвэл УРТ нүд нь БОГИНО гишүүдээс тогтож байвал.
+           Эх сурвалж цөөн хослолыг олон мөрд давтаж бичдэг тохиолдолд
+           эхний шалгуур бүтдэггүй: ойн дагалт баялаг дээр 6,775 мөрд
+           ердөө 13 өөр хослол байсан тул задалсан 18 зүйл нь 13-аас
+           ОЛОН гарч, задрал голдож байв. Улмаас нүд нь дунджаар 73
+           тэмдэгт болохоор "өгүүлбэр" гэж хаягдаж, давхарга НЭГ Ч
+           ДИАГРАМГҮЙ үлдэж байлаа (2026-09-17).
+           Жинхэнэ жагсаалтын шинж нь: нүд нь тэмдэглэлийн уртаас урт
+           атлаа гишүүд нь тус бүрдээ богино.
+      */
+      const partLen =
+        [...new Set(split.flat())].reduce((a, b) => a + b.length, 0) /
+        (parts || 1);
+      const cellLen = raw.reduce((a, b) => a + b.length, 0) / raw.length;
+      const listLike =
+        parts >= MIN_VALUES &&
+        parts <= MAX_VALUES &&
+        cellLen > NOTE_LENGTH &&
+        partLen <= NOTE_LENGTH;
+
+      if (parts < flat || listLike) {
         keys = split;
         multi = true;
         fold = folded;
@@ -1129,8 +1397,60 @@ function candidateOf(field: LayerField, raw: string[]): Candidate | null {
     }
   }
 
+  /*
+    ⚠⚠ ӨГҮҮЛБЭР нь ангилал биш — гэхдээ уртыг нь ЗАДАЛСНЫ ДАРАА хэмжинэ.
+
+    Урьд нь шалгалт нь ТҮҮХИЙ нүдэн дээр ажилладаг байсан тул олон
+    утгат нүд өөрийн уртаараа хаягддаг байв: ойн дагалт баялгийн
+    `zuiluud` нь "Жинхэнэ онгол (Чага); Ойн далбига; Хэврэг чидмэг; …"
+    гэж дунджаар зуу гаруй тэмдэгт болдог ч задалсны дараа хэсэг бүр
+    нь арваад тэмдэгтийн ЦЭВЭР АНГИЛАЛ. Улмаас 6,775 бичлэг, арван
+    найман зүйл бүхий давхарга НЭГ Ч ДИАГРАМГҮЙ үлдэж байлаа
+    (2026-09-17-нд олдсон).
+
+    Задлаагүй талбар дээр хэсэг нь нүд өөрөө тул зан төлөв
+    өөрчлөгдөхгүй.
+  */
+  const text = keys.flat().filter((v) => v !== "Бүртгэгдээгүй");
+  const avg = text.reduce((s, v) => s + v.length, 0) / (text.length || 1);
+  if (avg > NOTE_LENGTH) return null;
+
+  /* Файлын нэр нь ангилал ч биш — {@link FILE_FIELD} */
+  if (text.some((v) => FILE_FIELD.test(v))) return null;
+
   const values = tally(keys);
   if (values.length < MIN_VALUES || values.length > MAX_VALUES) return null;
+
+  /*
+    ⚠⚠ БАРАГ БҮХЭЛДЭЭ ХООСОН талбар нь задаргаа биш БӨГЛӨЛТИЙН ТАЙЛАН.
+
+    Авран хамгаалсан амьтдын `тоо` багана 720 бичлэгийн 699-д хоосон
+    (бөглөсөн нь 2.9%) тул диаграм нь "Бүртгэгдээгүй" гэсэн нэг
+    аварга зурвас, хажуудаа хэдэн үл мэдэгдэх зураасаас бүрдэж
+    байв — тэр нь сэдвийн тухай юу ч хэлэхгүй, зөвхөн уг багана
+    бөглөгддөггүйг л хэлнэ (2026-09-17).
+
+    ⚠ Хязгаарыг НАМ тавьсан нь санаатай: дутуу бөглөлт ӨӨРӨӨ
+    мэдээлэл байх тохиолдол олон бий (зэрлэг амьтдын судалгааны
+    `бүртгэлийн_төрөл` нь 25% бөглөгдсөн ч утгатай задаргаа өгдөг).
+    Зөвхөн диаграм нь уншигдахаа больсон тохиолдлыг хасна.
+  */
+  const blank = values.find((d) => d.key === "Бүртгэгдээгүй")?.value ?? 0;
+  const seen = values.reduce((a, d) => a + d.value, 0);
+  if (seen > 0 && 1 - blank / seen < MIN_FILLED) return null;
+
+  /*
+    ⚠ ГАНЦ бөглөсөн утга нь ангилал биш ТОГТМОЛ.
+
+    Биотехникийн `батерей` багана 14 мөрийн 7-д нь бөглөгдсөн бөгөөд
+    бүгд нь "байхгүй" — диаграм нь "бөглөсөн 7 / бөглөөгүй 7" гэж л
+    хэлэх бөгөөд сэдвийн тухай юу ч хэлэхгүй. Бүгд ижил утгатай
+    талбарыг хасдаг дүрэм аль хэдийн байдаг ч тэр нь хоосон нүдийг
+    тусдаа ангилал болгодог тул энэ тохиолдлыг алгасдаг байв.
+  */
+  if (values.filter((d) => d.key !== "Бүртгэгдээгүй").length < MIN_VALUES) {
+    return null;
+  }
   /* Бараг бичлэг тутамд өөр утга — энэ нь ангилал биш ТАНИГЧ (нэр,
      код). Диаграм болговол бүх зурвас нэг нэгжийн урттай гарна */
   const unique = values.length / raw.length;
@@ -1142,14 +1462,14 @@ function candidateOf(field: LayerField, raw: string[]): Candidate | null {
 
   const name = field.name;
   const keyOf =
-    multi && fold
+    multi && fold && sep
       ? (row: Row) => {
           const v = categoryKey(row[name]);
           if (v === "Бүртгэгдээгүй") return [v];
           return [
             ...new Set(
               v
-                .split(SEPARATOR)
+                .split(sep)
                 .filter(Boolean)
                 .map((k) => fold.get(k) ?? k),
             ),
@@ -1175,15 +1495,32 @@ type Calendar = "year" | "month" | "day";
  * жинхэнэ тоолол ч байж болох тул нэрээс нь БАТАЛГАА нэхнэ.
  */
 function calendarOf(f: LayerField, values: number[]): Calendar | null {
-  if (!values.length || !values.every((v) => Number.isInteger(v))) return null;
+  const whole = values.filter((v) => Number.isInteger(v));
+  if (whole.length < MIN_VALUES) return null;
 
-  const lo = Math.min(...values);
-  const hi = Math.max(...values);
   const named = `${f.alias} ${f.name}`;
 
-  if (lo >= 1900 && hi <= 2100) return "year";
-  if (lo >= 1 && hi <= 12 && /сар|month/i.test(named)) return "month";
-  if (lo >= 1 && hi <= 31 && /өдөр|udur|day/i.test(named)) return "day";
+  /*
+    ⚠⚠ ХАМГИЙН БАГА, ХАМГИЙН ИХ хоёроор нь шүүж БОЛОХГҮЙ.
+
+    Урьд нь БҮХ утга мужид багтахыг шаарддаг байсан тул нэг ч
+    бөглөгдөөгүй нүд бүхэл багануудыг хуанлийн бус болгож, улмаас
+    сар, өдрийн ДУГААР нь хэмжигдэхүүн болж НЭМЭГДДЭГ байв. Гүний
+    худгийн паспорт дээр яг ингэж гарсан (2026-09-17): `сар` нь
+    0–12 (тэг нь бөглөгдөөгүйн тэмдэг), `өдөр` нь 1–39 (бичилтийн
+    алдаа) тул хоёул хэмжигдэхүүн болж "Сар — Дүүрэг = 27,208",
+    "Өдөр — Дүүрэг = 69,000" гэсэн утгагүй диаграм зурагдаж байлаа.
+
+    Оронд нь ДИЙЛЭНХ утга мужид багтаж байвал хуанлийн багана гэж
+    үзнэ: цөөн тооны хог утга баганын утгыг өөрчлөхгүй.
+  */
+  const mostly = (lo: number, hi: number) =>
+    whole.filter((v) => v >= lo && v <= hi).length / whole.length >=
+    CALENDAR_SHARE;
+
+  if (mostly(1900, 2100)) return "year";
+  if (mostly(1, 12) && /сар|month/i.test(named)) return "month";
+  if (mostly(1, 31) && /өдөр|udur|day/i.test(named)) return "day";
   return null;
 }
 
@@ -1204,8 +1541,38 @@ function yearChart(
   const years = rows.map(yearOf).filter((y): y is number => y != null);
   if (years.length < MIN_VALUES) return null;
 
-  const from = Math.min(...years);
-  const to = Math.max(...years);
+  /*
+    ⚠⚠ ТЭНХЛЭГИЙГ ХЭДЭН АЛДААТАЙ ОГНОО СУНГАХ ЁСГҮЙ.
+
+    Авран хамгаалсан амьтдын бүртгэлийн 720 мөрийн ХОЁРТ огноо нь 1905 он
+    гэж бичигдсэн (тэдгээрийн `он` багана нь 2020, 2021 — тиймээс
+    бичилтийн алдаа нь илэрхий). Тэр хоёр мөрөөс болж цуваа 122 жил
+    рүү сунаж, таван жилийн хорин таван бүлэг үүсч, бодит бүртгэл
+    байдаг 2019–2026 он нь эцсийн хоёр баганад шахагдаж байв
+    (2026-09-17).
+
+    Тиймээс тэнхлэгийг бичлэгийн ДИЙЛЭНХ хувийг агуулах мужаар
+    тогтооно — хоёр үзүүрээс нь хамгийн цөөн утгатайг нь ээлжлэн
+    хасна. Энэ нь {@link src/lib/extent.ts}-ийн газрын зургийн
+    хүрээтэй НЭГ зарчим: нэг эвдэрсэн утга бүх дүрслэлийг
+    ашиглагдахгүй болгох ёсгүй.
+
+    ⚠ Хасагдсан мөр нь ЗӨВХӨН тэнхлэгээс хасагдана — бусад бүх
+    диаграм, газрын зураг, бичлэгийн дэлгэрэнгүйд хэвээр байна.
+  */
+  const sorted = [...years].sort((x, y) => x - y);
+  const drop = Math.floor(sorted.length * (1 - TIME_SPAN_SHARE));
+  let lo = 0;
+  let hi = sorted.length - 1;
+  for (let i = 0; i < drop && hi > lo; i++) {
+    /* Хоёр үзүүрийн аль хол нь голдоо ойртохоор хасна */
+    const mid = sorted[Math.floor((lo + hi) / 2)];
+    if (mid - sorted[lo] >= sorted[hi] - mid) lo += 1;
+    else hi -= 1;
+  }
+
+  const from = sorted[lo];
+  const to = sorted[hi];
   if (to <= from) return null;
 
   const step = to - from > 24 ? 5 : 1;
@@ -1214,7 +1581,8 @@ function yearChart(
 
   /* Бүлгийн эхлэх он нь ТҮЛХҮҮР: шүүлт, тэнхлэгийн шошго хоёулаа
      үүнээс гардаг тул бүлэглэлт хаана ч давтагдахгүй */
-  const binOf = (y: number) => base + Math.floor((y - base) / step) * step;
+  const binOf = (y: number) =>
+    base + Math.floor((Math.min(Math.max(y, from), to) - base) / step) * step;
 
   const keyOf = (row: Row) => {
     const y = yearOf(row);
@@ -1330,6 +1698,9 @@ function pickMeasures(
     /* Хороо, дүүргийн ДУГААР нь тоо боловч хэмжигдэхүүн БИШ */
     if (ADMIN_FIELD.test(f.name) || ADMIN_FIELD.test(f.alias)) continue;
 
+    /* Дугаарлалт нь тоо боловч хэмжигдэхүүн БИШ — нэрээр нь ч таана */
+    if (ID_FIELD.test(f.name) || ID_FIELD.test(f.alias)) continue;
+
     const values = rows.map((r) => numberOf(r[f.name]));
     const present = values.filter((v): v is number => v != null);
     if (present.length < MIN_VALUES) continue;
@@ -1343,9 +1714,19 @@ function pickMeasures(
     if (info.set.skipUnit?.test(f.alias)) continue;
 
     const { unit, name } = unitOf(f.alias);
-    /* Хувийг НЭМЭХГҮЙ — дунджаар нь. Хоёр талбайн зөрүүний хувийг
-       нэмбэл утгагүй тоо гарна */
-    const share = unit === "%" || /хувь/i.test(f.alias);
+    /*
+      НЭМЭХГҮЙ, дунджаар авах хоёр төрөл:
+      1. ХУВЬ — хоёр талбайн зөрүүний хувийг нэмбэл утгагүй тоо гарна.
+      2. БИЧЛЭГ БҮРИЙН ТӨЛӨВ (өндөршил, температур, хүчиллэг,
+         агууламж) — {@link INTENSIVE_UNIT}, {@link INTENSIVE_FIELD}.
+    */
+    const share =
+      unit === "%" ||
+      /хувь/i.test(f.alias) ||
+      INTENSIVE_UNIT.test(unit) ||
+      INTENSIVE_FIELD.test(f.name) ||
+      INTENSIVE_FIELD.test(f.alias) ||
+      PER_UNIT.test(f.alias);
 
     out.push({ field: f, unit, name, share, values });
   }
@@ -1400,7 +1781,18 @@ function measureCharts(
   const out: Breakdown[] = [];
   if (!measures.length) return out;
 
-  const usable = measures.filter((m) => rollUp(m, rows, keyOf).length > 0);
+  /*
+    ⚠ ГАНЦ БАГАНАТАЙ диаграм харьцуулалт БИШ.
+
+    Хэмжилт нь ангиллынхаа зөвхөн НЭГД бөглөгдсөн байж болно: зэрлэг
+    амьтдын судалгаанд `тоо` нь "Амьтан" ангилалд л бичигдсэн тул
+    "Тоо — Ангилал" нь ганц зурвас болж, "198" гэсэн тоог өөрөөсөө
+    өөр юмтай ч харьцуулахгүй зурагдаж байв (2026-09-17). Тэр тоо нь
+    бичлэгийн дэлгэрэнгүйд, индикаторт аль хэдийн байдаг.
+  */
+  const usable = measures.filter(
+    (m) => rollUp(m, rows, keyOf).length >= MIN_VALUES,
+  );
   if (!usable.length) return out;
 
   /*
@@ -1526,8 +1918,15 @@ function measureCharts(
  * 1. **Цифр** — нэр үсгээр бичигддэг, хаяг, код тоогоор.
  * 2. **Давтагдсан үг** — хаягийн багананд "хороо", "дүүрэг" гэсэн үг
  *    мөр бүрд давтагдана; нэрийн багананд ийм нийтлэг үг байхгүй.
+ *
+ * ⚠ `weighBoiler` нь ЦӨӨН БИЧЛЭГТЭЙ давхаргад унтарна. Таван мөрөнд
+ * нийтлэг үг байх нь давтагдал биш САНАМСАРГҮЙ ТААРАЛ байж болно:
+ * хязгаарлалтын бүсийн таван нэрний дөрөвт "үүсвэр" орсноос болж
+ * оноо нь 0.16 болж, давхарга нэг ч диаграмгүй үлдэж байв
+ * (2026-09-17). {@link SMALL}-аас цөөн мөрөнд зөвхөн цифрийн шалгуур
+ * үлдэнэ — ангиллын танигчийн дүрэмтэй нэг зарчим.
  */
-function nameScore(values: string[]): number {
+function nameScore(values: string[], weighBoiler = true): number {
   const digits =
     values.reduce((s, v) => s + (/\d/.test(v) ? 1 : 0), 0) / values.length;
 
@@ -1542,7 +1941,9 @@ function nameScore(values: string[]): number {
       seen.set(w, (seen.get(w) ?? 0) + 1);
     }
   }
-  const boiler = Math.max(0, ...seen.values()) / values.length;
+  const boiler = weighBoiler
+    ? Math.max(0, ...seen.values()) / values.length
+    : 0;
 
   return (1 - digits) * (1 - boiler);
 }
@@ -1583,12 +1984,29 @@ function nameField(
       filled.filter((v) => SEPARATOR.test(v)).length / filled.length;
     if (lists > LIST_SHARE) continue;
 
+    /* Файлын нэр нь НЭР БИШ — {@link FILE_FIELD} */
+    if (filled.some((v) => FILE_FIELD.test(v))) continue;
+
     /* Давтагддаг утга нь нэр биш ангилал — тэр нь ангиллын шалгуураар
        аль хэдийн шалгарсан эсвэл хасагдсан */
     const distinct = new Set(values).size;
     if (distinct < rows.length * UNIQUE_SHARE) continue;
 
-    const score = nameScore(filled);
+    /*
+      ⚠ ЦӨӨН БИЧЛЭГТЭЙ давхаргад ДАВТАГДСАН ҮГЭЭР шийтгэхгүй.
+
+      `nameScore` нь хаягийн баганыг ("… дүүрэг, … хороо") нэр гэж
+      үзэхээс сэргийлж давтагдсан үгийг торгодог. Гэвч таван мөртэй
+      давхаргад нийтлэг үг байх нь хэвийн: хязгаарлалтын бүсийн таван
+      нэрний дөрөвт "үүсвэр" гэсэн үг орсон тул оноо нь 0.16 болж,
+      давхарга НЭГ Ч ДИАГРАМГҮЙ үлдэж байв (2026-09-17) — үнэндээ
+      "Дээд", "Гачууртын", "Төв" гэсэн ялгаа нь тодорхой.
+
+      {@link SMALL}-аас цөөн мөрөнд давтагдлыг найдвартай хэмжих
+      боломжгүй тул зөвхөн цифрийн шалгуур үлдэнэ — ангиллын
+      танигчийн дүрэмтэй нэг зарчим.
+    */
+    const score = nameScore(filled, rows.length >= SMALL);
     if (
       !best ||
       score > best.score ||
@@ -1700,10 +2118,26 @@ export function breakdowns(info: LayerInfo, data: LayerFeatures): Breakdown[] {
   /* ---- 3. Үлдсэн ангиллууд ---- */
   for (const c of kept) if (c !== primary) out.push(countOf(c));
 
-  /* ---- 4. Хугацаа ---- */
+  /*
+    ---- 4. Хугацаа ----
+
+    ⚠ ЖИНХЭНЭ ОГНООГ ЭХЭЛЖ уншина. Эх сурвалж нэг л огноог хоёр
+    хэлбэрээр хадгалсан байдаг: `Date` талбар БА түүнийг задалсан
+    он/сар/өдөр багана. Гадаргын усны бүртгэл дээр яг ингэж хоёр
+    ИЖИЛ сарын диаграм зэрэгцэн гарч байв (2026-09-17). `Date`
+    хэлбэр нь эрх мэдэлтэй — задаргаа нь зөвхөн `Date` талбар огт
+    байхгүй давхаргад хэрэгтэй.
+  */
+  const timeFields = [
+    ...info.fields.filter((f) => f.type === "Date"),
+    ...info.fields.filter((f) => f.type !== "Date"),
+  ];
+
   let dates = 0;
-  for (const f of info.fields) {
+  let fromDate = false;
+  for (const f of timeFields) {
     if (dates >= MAX_DATES) break;
+    if (fromDate && f.type !== "Date") continue;
 
     let yearOf: ((row: Row) => number | null) | null = null;
     let monthOf: ((row: Row) => number | null) | null = null;
@@ -1736,7 +2170,10 @@ export function breakdowns(info: LayerInfo, data: LayerFeatures): Breakdown[] {
     const month = monthOf ? monthChart(f, rows, monthOf) : null;
     if (year) out.push(year);
     if (month) out.push(month);
-    if (year || month) dates += 1;
+    if (year || month) {
+      dates += 1;
+      if (f.type === "Date") fromDate = true;
+    }
   }
 
   return out;

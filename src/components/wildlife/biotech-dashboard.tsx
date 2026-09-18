@@ -14,8 +14,8 @@ import {
 } from "lucide-react";
 import { BasemapGallery } from "@/components/map/basemap-gallery";
 import { FilterBar, FilterMenu, PickList } from "@/components/wells/filter-bar";
-import { defaultBasemap, type Basemap } from "@/components/wells/map";
 import { Columns } from "@/components/ui/resizable-columns";
+import { defaultBasemap, type Basemap } from "@/components/wells/map";
 import { fetchBiotech, type BiotechSite } from "@/lib/biotech";
 import { cn, num } from "@/lib/utils";
 
@@ -160,16 +160,19 @@ export function BiotechDashboard() {
       .map(([key, value]) => ({ key, label: key, value }));
   }, [rows, district]);
 
-  /** Багана бүрийн хамгийн их утга — нүдэн доторх хэмжигчийн хуваарь */
-  const peak = React.useMemo(() => {
-    const src = rows ?? [];
-    const max = (of: (r: BiotechSite) => number | null) =>
-      src.reduce((t, r) => Math.max(t, of(r) ?? 0), 0) || 1;
-    return {
-      salt: max((r) => r.salt),
-      hay: max((r) => Math.max(r.haySpring ?? 0, r.hayAutumn ?? 0)),
-      km: max((r) => r.km),
-    };
+  /**
+   * Дүүрэг → өнгөний дугаар.
+   *
+   * ⚠ Цагаан толгойн дарааллаар, БҮХ мөрөөс угсарна — шүүлт
+   * тавьснаас болж дүүргийн өнгө солигдвол хэрэглэгч
+   * өөр зүйл харж байгаа мэт эндүүрнэ (порталын самбарын
+   * "өнгө шүүгдээгүй диаграмаас" дүрэмтэй нэг зарчим).
+   */
+  const districtIndex = React.useMemo(() => {
+    const names = [...new Set((rows ?? []).map((r) => r.district))].sort(
+      (a, b) => a.localeCompare(b, "mn"),
+    );
+    return new Map(names.map((name, i) => [name, i]));
   }, [rows]);
 
   /** Товшсон байршил — хүснэгтийн мөр ба зургийн цэг хоёулаа тавина */
@@ -202,7 +205,10 @@ export function BiotechDashboard() {
   return (
     <div className="flex h-full min-h-0 flex-col gap-2.5">
       <FilterBar
-        title="Биотехникийн арга хэмжээ"
+        /* Хэлтсийн өгсөн нэр (2026-09-17) — табын шошготой ижил.
+           Албан ёсны бүтэн нэр нь табын `full`-д, давхаргын нэр нь
+           эх сурвалжийн хуудсанд хэвээр. */
+        title="Биотехник"
         activeCount={activeCount}
         onReset={() => {
           setDistrict(null);
@@ -251,124 +257,26 @@ export function BiotechDashboard() {
         <Stat icon={Route} label="Явсан зам, км" value={num(stats.km)} />
       </div>
 
+      {/*
+        ЗУРАГ ЗҮҮН ТАЛД, ХҮСНЭГТ БАРУУН ТАЛД (хэрэглэгчийн
+        сонголт, 2026-09-17).
+
+        ⚠ Баруун багана 640px: долоон баганат хүснэгтийн тоон
+        дөрөв нь 286px, дүүрэг 130px тул газрын нэрт ~180px
+        үлдэнэ. Анхны 360px дээр баганууд хоорондоо наалдаж
+        байсан.
+        ⚠ Түлхүүр нь `biotech-2` — `biotech` доор хадгалагдсан хуучин
+        360px анхдагчийг дарах байв.
+      */}
       <Columns
         layout="flex"
-        id="biotech"
-        right={360}
+        id="biotech-2"
+        right={640}
         className="min-h-0 flex-1"
       >
-        {/* ---- ЗҮҮН: бүртгэлийн хүснэгт ---- */}
-        <div className="flex min-h-0 flex-1 flex-col rounded-xs border border-line bg-paper-2">
-          <div className="flex shrink-0 items-center justify-between gap-2 border-b border-line px-3 py-2">
-            <h2 className="display text-[13.5px] leading-none tracking-[0.06em] uppercase">
-              Байршил, тавьсан тэжээл
-            </h2>
-            <span className="num text-[11.5px] text-ink-3">
-              {num(ordered.length)} / {num(rows.length)}
-            </span>
-          </div>
-
-          <div className="min-h-0 flex-1 overflow-auto">
-            <table className="w-full border-collapse text-[11.5px]">
-              <thead className="sticky top-0 z-10 bg-paper-2">
-                <tr className="border-b border-line">
-                  <Th
-                    col="no"
-                    sort={sort}
-                    onSort={setSort}
-                    className="w-[38px]"
-                  >
-                    №
-                  </Th>
-                  <Th col="place" sort={sort} onSort={setSort}>
-                    Газрын нэр
-                  </Th>
-                  <Th
-                    col="district"
-                    sort={sort}
-                    onSort={setSort}
-                    className="w-[120px]"
-                  >
-                    Дүүрэг
-                  </Th>
-                  <Th
-                    col="salt"
-                    sort={sort}
-                    onSort={setSort}
-                    num
-                    className="w-[96px]"
-                  >
-                    Давс, кг
-                  </Th>
-                  <Th
-                    col="spring"
-                    sort={sort}
-                    onSort={setSort}
-                    num
-                    className="w-[92px]"
-                  >
-                    Өвс, хавар
-                  </Th>
-                  <Th
-                    col="autumn"
-                    sort={sort}
-                    onSort={setSort}
-                    num
-                    className="w-[92px]"
-                  >
-                    Өвс, намар
-                  </Th>
-                  <Th
-                    col="km"
-                    sort={sort}
-                    onSort={setSort}
-                    num
-                    className="w-[84px]"
-                  >
-                    Зам, км
-                  </Th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-line">
-                {ordered.map((i) => {
-                  const r = rows[i];
-                  const on = picked === r.oid;
-                  return (
-                    <tr
-                      key={r.oid}
-                      onClick={() => setPicked(on ? null : r.oid)}
-                      className={cn(
-                        "cursor-pointer transition-colors hover:bg-paper-hi",
-                        on && "bg-data/10",
-                      )}
-                    >
-                      <td className="num px-3 py-2 text-ink-3">{r.no}</td>
-                      <td className="px-3 py-2">
-                        <span className="block leading-snug text-ink">
-                          {r.place}
-                        </span>
-                        {r.officer ? (
-                          <span className="mt-0.5 block text-[10px] leading-none text-ink-3">
-                            {r.officer}
-                          </span>
-                        ) : null}
-                      </td>
-                      <td className="px-3 py-2 text-ink-2">{r.district}</td>
-                      <Cell value={r.salt} peak={peak.salt} />
-                      <Cell value={r.haySpring} peak={peak.hay} />
-                      <Cell value={r.hayAutumn} peak={peak.hay} />
-                      <Cell value={r.km} peak={peak.km} />
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        {/* ---- БАРУУН: байршил заагч зураг ---- */}
-        <div className="flex min-h-0 flex-col gap-2.5 xl:w-(--col-r) xl:shrink-0">
-          <div className="relative min-h-[260px] flex-1 overflow-hidden rounded-xs border border-line bg-paper-2">
+        {/* ---- ЗУРАГ: байршил заагч зурвас ---- */}
+        <div className="flex min-h-0 flex-1 flex-col gap-2.5">
+          <div className="relative min-h-[240px] flex-1 overflow-hidden rounded-xs border border-line bg-paper-2">
             <div className="relative h-full w-full">
               <PointMap
                 points={points}
@@ -414,14 +322,22 @@ export function BiotechDashboard() {
                   <dl className="space-y-1.5 px-2.5 py-2">
                     <PopField k="Газар" v={chosen.place} />
                     <PopField k="Дүүрэг" v={chosen.district} />
-                    <PopField k="Давс" v={chosen.salt == null ? "" : `${num(chosen.salt)} кг`} />
-                    <PopField k="Өвс" v={`${chosen.haySpring ?? 0} + ${chosen.hayAutumn ?? 0} боодол`} />
-                    <PopField k="Зам" v={chosen.km == null ? "" : `${num(chosen.km)} км`} />
+                    <PopField
+                      k="Давс"
+                      v={chosen.salt == null ? "" : `${num(chosen.salt)} кг`}
+                    />
+                    <PopField
+                      k="Өвс"
+                      v={`${chosen.haySpring ?? 0} + ${chosen.hayAutumn ?? 0} боодол`}
+                    />
+                    <PopField
+                      k="Зам"
+                      v={chosen.km == null ? "" : `${num(chosen.km)} км`}
+                    />
                     <PopField k="Бүртгэсэн" v={chosen.officer} />
                   </dl>
                 </div>
               ) : null}
-
             </div>
           </div>
 
@@ -429,6 +345,128 @@ export function BiotechDashboard() {
             Суурь зураг: Esri · Дата: ArcGIS Enterprise · {num(stats.districts)}{" "}
             дүүрэг
           </p>
+        </div>
+
+        {/* ---- БАРУУН: бүртгэлийн хүснэгт ---- */}
+        {/*
+          Мөр ердөө 14 тул карт өндрөө АГУУЛГААРАА авна
+          (`shrink-0`) — сүүлчийн мөрийн доор хоосон талбай
+          үлдэхгүй. Нам дэлгэц дээр БАГАНА өөрөө гүйнэ.
+        */}
+        <div className="flex min-h-0 flex-col gap-2.5 overflow-y-auto xl:w-(--col-r) xl:shrink-0">
+          <div className="shrink-0 rounded-xs border border-line bg-paper-2">
+            <div className="flex shrink-0 items-center justify-between gap-2 border-b border-line px-3 py-2">
+              <h2 className="display text-[13.5px] leading-none tracking-[0.06em] uppercase">
+                Байршил, тавьсан тэжээл
+              </h2>
+              <span className="num text-[11.5px] text-ink-3">
+                {num(ordered.length)} / {num(rows.length)}
+              </span>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse text-[11.5px]">
+                <thead>
+                  <tr className="border-b border-line">
+                    <Th
+                      col="no"
+                      sort={sort}
+                      onSort={setSort}
+                      className="w-[38px]"
+                    >
+                      №
+                    </Th>
+                    <Th col="place" sort={sort} onSort={setSort}>
+                      Газрын нэр
+                    </Th>
+                    <Th
+                      col="district"
+                      sort={sort}
+                      onSort={setSort}
+                      className="w-[130px]"
+                    >
+                      Дүүрэг
+                    </Th>
+                    <Th
+                      col="salt"
+                      sort={sort}
+                      onSort={setSort}
+                      num
+                      className="w-[76px]"
+                    >
+                      Давс, кг
+                    </Th>
+                    <Th
+                      col="spring"
+                      sort={sort}
+                      onSort={setSort}
+                      num
+                      className="w-[72px]"
+                    >
+                      Өвс, хавар
+                    </Th>
+                    <Th
+                      col="autumn"
+                      sort={sort}
+                      onSort={setSort}
+                      num
+                      className="w-[72px]"
+                    >
+                      Өвс, намар
+                    </Th>
+                    <Th
+                      col="km"
+                      sort={sort}
+                      onSort={setSort}
+                      num
+                      className="w-[66px]"
+                    >
+                      Зам, км
+                    </Th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-line">
+                  {ordered.map((i) => {
+                    const r = rows[i];
+                    const on = picked === r.oid;
+                    return (
+                      <tr
+                        key={r.oid}
+                        onClick={() => setPicked(on ? null : r.oid)}
+                        style={
+                          {
+                            "--tint": districtTint(
+                              districtIndex.get(r.district),
+                            ),
+                          } as React.CSSProperties
+                        }
+                        className={cn("district-row", on && "is-picked")}
+                      >
+                        <td className="num px-3 py-2 text-ink-3">{r.no}</td>
+                        <td className="px-3 py-2">
+                          <span className="block leading-snug text-ink">
+                            {r.place}
+                          </span>
+                          {r.officer ? (
+                            <span className="mt-0.5 block text-[10px] leading-none text-ink-3">
+                              {r.officer}
+                            </span>
+                          ) : null}
+                        </td>
+                        <td className="px-3 py-2 whitespace-nowrap text-ink-2">
+                          {r.district}
+                        </td>
+                        <Cell value={r.salt} />
+                        <Cell value={r.haySpring} />
+                        <Cell value={r.hayAutumn} />
+                        <Cell value={r.km} />
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
       </Columns>
     </div>
@@ -439,6 +477,36 @@ export function BiotechDashboard() {
 
 type SortKey =
   "no" | "place" | "district" | "salt" | "spring" | "autumn" | "km";
+
+/**
+ * Дүүргийн тунгалаг өнгө — хүснэгтийн мөрийн дэвсгэр
+ * (хэрэглэгчийн хүсэлт, 2026-09-17: "дүүрэг дүүргээр нь
+ * өнгөөр ялгая, өнгө нь маш бүдэг шүү").
+ *
+ * ⚠⚠ ДӨРӨВ ҮНЭХЭЭР ӨӨР ӨНГӨ (хэрэглэгчийн залруулга,
+ * 2026-09-17: "4 өөр өнгөөр"). Эхлээд хэлтсийн гэр бүлийн
+ * дотор (292–202) дөрвөн өнцөг авсан боловч бүгд цэнхэр-
+ * ягаан гэр бүлийнх тул 9%-ийн дүүргэлт дээр ялгагдахгүй
+ * байв. Одоо өнцөг нь дугуйгаар тарав: цэнхэр 255 · ягаан 330 ·
+ * ногоон-цэнхэр 165 · шар 75. Гэрэлтэлт, ханалт нь АДИЛХАН
+ * (L 0.75 / C 0.16) — зөвхөн ӨНЦӨГӨӨРӨӨ ялгаатай гэсэн платформын
+ * дүрэм хүчинтэй.
+ * ⚠ Цэвэр ногоон АВААГҮЙ: ногоон ↔ шар бол дейтеранопийн
+ * сонгодог төөрөгдлийн хос. Ногооны оронд тэр суудалд
+ * ногоон-цэнхэр (165) сууна.
+ * ⚠ Дохионы өнгөтэй (`--moss`, `--ochre`, `--clay`) өнцөг нь
+ * ойртсон ч 9%-ийн дэвсгэр нь ТӨЛӨВ мэт уншигдахгүй:
+ * дохио нь үргэлж бичвэр, цэг, зураас дээр тодоороо гардаг.
+ * ⚠ Тайлбар ХЭРЭГГҮЙ: мөр бүр дүүргийнхээ НЭРИЙГ өөрөө
+ * баганадаа бичиж байгаа тул өнгө нь зөвхөн БҮЛЭГЛЭЛТЫГ
+ * нүдэнд туслана — эрэмбэ солиход нэг дүүргийн мөрүүд
+ * салж байрлахдаа хамт байсан нь харагдана.
+ */
+const DISTRICT_HUES = [255, 330, 165, 75, 205, 300];
+
+function districtTint(i: number | undefined): string {
+  return `oklch(0.75 0.16 ${DISTRICT_HUES[(i ?? 0) % DISTRICT_HUES.length]})`;
+}
 
 function compare(x: BiotechSite, y: BiotechSite, by: SortKey): number {
   switch (by) {
@@ -506,20 +574,27 @@ function Th({
  * Дүүргэлт хэрэглэхгүй — химийн товьёогтой нэг зарчим: 14 мөрийн
  * дүүргэлт нийлээд хүснэгт биш диаграм мэт уншигдана.
  */
-function Cell({ value, peak }: { value: number | null; peak: number }) {
+/**
+ * Тоон нүд.
+ *
+ * ⚠ ХЭМЖИГЧИЙН ЗУРААС ХАСАГДСАН (хэрэглэгчийн шийдвэр,
+ * 2026-09-17). Нүд бүрийн доод ирмэгт 2px зураас татаж,
+ * уртыг нь баганыхаа хамгийн их утгатай харьцуулдаг байв —
+ * гэвч энэ бүртгэлийн тоонууд хоорондоо арваа дахин зөрнө
+ * (давс 150 ↔ 1,900) тул мөрийн ихэнх зураас нь 8%-ийн
+ * үртэй цэг болж, харьцуулахын оронд шуугиан үүсгэж байв
+ * (хэрэглэгч "энэ зурааснууд юу юм" гэж асуусан).
+ * ⚠ ДҮҮРГЭЛТ БАС ТАВИХГҮЙ — 14 мөрийн дүүргэлт нийлээд
+ * хүснэгт биш диаграм мэт уншигдана (химийн товьёогтой нэг
+ * зарчим). Харьцуулах бол баганыг дарж эрэмбэлнэ.
+ */
+function Cell({ value }: { value: number | null }) {
   if (value == null) {
     return <td className="px-3 py-2 text-right text-ink-3">—</td>;
   }
   return (
-    <td className="relative px-3 py-2 text-right">
+    <td className="px-3 py-2 text-right">
       <span className="num text-ink">{num(value)}</span>
-      <span
-        aria-hidden
-        className="absolute bottom-[3px] left-3 h-[2px] bg-data/45"
-        style={{
-          width: `calc((100% - 1.5rem) * ${Math.min(1, value / peak)})`,
-        }}
-      />
     </td>
   );
 }
@@ -559,7 +634,9 @@ function PopField({ k, v }: { k: string; v: string }) {
       <dt className="w-[74px] shrink-0 text-[10px] tracking-[0.06em] text-ink-3 uppercase">
         {k}
       </dt>
-      <dd className="min-w-0 flex-1 text-[11.5px] leading-snug text-ink-2">{v}</dd>
+      <dd className="min-w-0 flex-1 text-[11.5px] leading-snug text-ink-2">
+        {v}
+      </dd>
     </div>
   );
 }

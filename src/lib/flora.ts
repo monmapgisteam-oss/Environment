@@ -47,6 +47,7 @@
  */
 
 import { arcgisJson } from "@/lib/arcgis";
+import { pointOf } from "@/lib/extent";
 import { layerService } from "@/lib/portal-layers";
 
 /** Аль судалгаа вэ */
@@ -158,9 +159,9 @@ export async function fetchFlora(
     const g = f.geometry;
 
     /* Геометрийг эрхэмлэнэ, дутсан бол атрибутын координатаас */
-    const lon = g && Number.isFinite(g.x) ? g.x : Number(a.lon);
-    const lat = g && Number.isFinite(g.y) ? g.y : Number(a.lat);
-    if (!Number.isFinite(lon) || !Number.isFinite(lat)) continue;
+    const at = pointOf(g, a.lon, a.lat);
+    if (!at) continue;
+    const { lon, lat } = at;
 
     const raw = tidy(a.species);
     const species = raw
