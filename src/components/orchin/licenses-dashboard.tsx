@@ -284,7 +284,7 @@ export function LicensesDashboard() {
   return (
     <div className="flex h-full min-h-0 flex-col gap-2.5">
       <FilterBar
-        title="Ашигт малтмалын тусгай зөвшөөрөл"
+        title="АШИГТ МАЛТМАЛЫН ТУСГАЙ ЗӨВШӨӨРӨЛ"
         activeCount={activeCount}
         onReset={reset}
       >
@@ -397,75 +397,10 @@ export function LicensesDashboard() {
             </div>
           </Card>
 
-          <Card className="relative min-h-[280px] flex-1 overflow-hidden">
-            <div className="relative h-full w-full">
-              <PointMap
-                points={NO_POINTS}
-                visible={NO_INDEX}
-                shapes={{ data: shapes, selected: picked, labelZoom: 11 }}
-                basemap={basemap}
-                onSelect={setPicked}
-                onHover={tip.onHover}
-                focus={focus}
-                cluster={false}
-              />
-              <BasemapGallery value={basemap} onChange={setBasemap} />
-
-              {/*
-                ХӨВӨГЧ ТАЙЛБАР. Энэ самбарын гол асуулт нь "хаана" биш
-                ХЭЗЭЭ тул хугацаа нь тайлбарын дээд мөрөнд, кодын хажууд
-                гарна.
-              */}
-              {hovered ? (
-                <MapTip state={tip} width={238}>
-                  <div className="flex items-baseline justify-between gap-2 px-2.5 pt-2 pb-1">
-                    <span className="num text-[11px] leading-none font-medium text-data">
-                      {hovered.code}
-                    </span>
-                    <span className="num text-[11px] leading-none text-ink-3">
-                      {hovered.granted ?? "—"} → {hovered.expires ?? "—"}
-                    </span>
-                  </div>
-                  <div className="px-2.5 pb-2 text-[12.5px] leading-snug font-medium text-ink">
-                    {hovered.holder}
-                  </div>
-
-                  <div className="space-y-1.5 border-t border-line px-2.5 py-2">
-                    <MapTipRow icon={Mountain} text={hovered.mineral} />
-                    <MapTipRow icon={Ruler} num text={`${hovered.ha} га`} />
-                    <MapTipRow
-                      icon={MapPin}
-                      text={`${hovered.district} ${hovered.khoroo}`}
-                    />
-                  </div>
-
-                  <div className="flex items-center justify-end border-t border-line px-2.5 py-1.5">
-                    <MousePointerClick size={11} className="shrink-0 text-ink-3" />
-                  </div>
-                </MapTip>
-              ) : null}
-
-              {active ? (
-                <div className="pointer-events-none absolute top-2.5 left-2.5 z-10 max-w-[270px] rounded-xs border border-line bg-paper/92 px-2.5 py-2 backdrop-blur-md">
-                  <div className="eyebrow mb-1.5">{active.code}</div>
-                  <div className="text-[12.5px] leading-snug text-ink">{active.holder}</div>
-                  <div className="num mt-1 text-[11.5px] text-ink-2">
-                    {active.ha} га · {active.mineral}
-                  </div>
-                  <div className="num mt-1 text-[10.5px] text-ink-3">
-                    {active.granted ?? "—"} → {active.expires ?? "—"} ·{" "}
-                    {active.district} {active.khoroo}
-                  </div>
-                </div>
-              ) : null}
-            </div>
-          </Card>
-
-          {/* ---- БАРУУН: индикатор + задаргаа ---- */}
-          <div className="flex min-h-0 flex-col gap-2.5 xl:w-(--col-r) xl:shrink-0">
-            {/* Дөрвөн индикатор — хоёр багана, хоёр мөр */}
+          <div className="flex min-h-0 flex-1 flex-col gap-2.5">
+            {/* Индикатор ЗӨВХӨН газрын зургийн дээр — хажуугийн баганад ч, бүтэн өргөнөөр ч биш (хэрэглэгчийн шийдвэр, 2026-09-17) */}
             <Card className="shrink-0">
-              <div className="grid grid-cols-2 divide-x divide-y divide-line">
+              <div className="grid grid-cols-2 divide-x divide-y divide-line sm:grid-cols-[repeat(4,minmax(max-content,1fr))] sm:divide-y-0">
                 <Stat icon={Pickaxe} label="Зөвшөөрөл" value={num(stats.n)} />
                 <Stat icon={Building2} label="Эзэмшигч" value={num(stats.holders)} />
                 <Stat
@@ -481,6 +416,74 @@ export function LicensesDashboard() {
                 />
               </div>
             </Card>
+
+            <Card className="relative min-h-[280px] flex-1 overflow-hidden">
+              <div className="relative h-full w-full">
+                <PointMap
+                  points={NO_POINTS}
+                  visible={NO_INDEX}
+                  shapes={{ data: shapes, selected: picked, labelZoom: 11 }}
+                  basemap={basemap}
+                  onSelect={setPicked}
+                  onHover={tip.onHover}
+                  focus={focus}
+                  cluster={false}
+                />
+                <BasemapGallery value={basemap} onChange={setBasemap} />
+            
+                {/*
+                  ХӨВӨГЧ ТАЙЛБАР. Энэ самбарын гол асуулт нь "хаана" биш
+                  ХЭЗЭЭ тул хугацаа нь тайлбарын дээд мөрөнд, кодын хажууд
+                  гарна.
+                */}
+                {hovered ? (
+                  <MapTip state={tip} width={238}>
+                    <div className="flex items-baseline justify-between gap-2 px-2.5 pt-2 pb-1">
+                      <span className="num text-[11px] leading-none font-medium text-data">
+                        {hovered.code}
+                      </span>
+                      <span className="num text-[11px] leading-none text-ink-3">
+                        {hovered.granted ?? "—"} → {hovered.expires ?? "—"}
+                      </span>
+                    </div>
+                    <div className="px-2.5 pb-2 text-[12.5px] leading-snug font-medium text-ink">
+                      {hovered.holder}
+                    </div>
+            
+                    <div className="space-y-1.5 border-t border-line px-2.5 py-2">
+                      <MapTipRow icon={Mountain} text={hovered.mineral} />
+                      <MapTipRow icon={Ruler} num text={`${hovered.ha} га`} />
+                      <MapTipRow
+                        icon={MapPin}
+                        text={`${hovered.district} ${hovered.khoroo}`}
+                      />
+                    </div>
+            
+                    <div className="flex items-center justify-end border-t border-line px-2.5 py-1.5">
+                      <MousePointerClick size={11} className="shrink-0 text-ink-3" />
+                    </div>
+                  </MapTip>
+                ) : null}
+            
+                {active ? (
+                  <div className="pointer-events-none absolute top-2.5 left-2.5 z-10 max-w-[270px] rounded-xs border border-line bg-paper/92 px-2.5 py-2 backdrop-blur-md">
+                    <div className="eyebrow mb-1.5">{active.code}</div>
+                    <div className="text-[12.5px] leading-snug text-ink">{active.holder}</div>
+                    <div className="num mt-1 text-[11.5px] text-ink-2">
+                      {active.ha} га · {active.mineral}
+                    </div>
+                    <div className="num mt-1 text-[10.5px] text-ink-3">
+                      {active.granted ?? "—"} → {active.expires ?? "—"} ·{" "}
+                      {active.district} {active.khoroo}
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            </Card>
+          </div>
+
+          {/* ---- БАРУУН: индикатор + задаргаа ---- */}
+          <div className="flex min-h-0 flex-col gap-2.5 xl:w-(--col-r) xl:shrink-0">
 
             {/* Энэ самбарын гол диаграм — хэзээ дуусах вэ */}
             <Card className="shrink-0">
@@ -558,14 +561,14 @@ function Stat({
   icon: typeof Pickaxe;
 }) {
   return (
-    <div className="px-3 py-2.5">
-      <span className="eyebrow block min-h-[28px] leading-[1.25]">{label}</span>
-      <span className="mt-1.5 flex items-center gap-1.5">
-        <Icon size={20} strokeWidth={1.6} className="shrink-0 text-ink-3" />
-        <span className="num truncate text-[16px] leading-none font-medium text-ink">
+    <div className="flex items-center justify-center gap-2 px-2.5 py-2">
+      <Icon size={32} strokeWidth={1.3} className="shrink-0 text-(--tone)" />
+      <div className="flex min-w-0 flex-col gap-0.5">
+        <span className="eyebrow text-[11px] leading-[1.25] whitespace-nowrap">{label}</span>
+        <span className="num truncate text-[18px] leading-none font-medium text-ink">
           {value}
         </span>
-      </span>
+      </div>
     </div>
   );
 }

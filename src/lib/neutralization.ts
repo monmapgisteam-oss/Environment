@@ -24,6 +24,7 @@
 
 import { arcgisJson } from "@/lib/arcgis";
 import { HOSTING } from "@/lib/portal";
+import { mnPointCode } from "@/lib/soil";
 
 export const NEUTRALIZATION_SERVICE = `${HOSTING}/Hosted/X09_Saarmagjuulalt/FeatureServer/2`;
 
@@ -66,6 +67,8 @@ export type NeutralPoint = {
   */
   district: string;
   khoroo: number;
+  /** Хорооны монгол нэр (`kh_mon`) — газрын зургийн шошго энэ талбараас (хэрэглэгчийн шийдвэр, 2026-09-17) */
+  khMon: string;
   /** Элемент тус бүрийн агууламж, мг/кг — {@link ELEMENTS}-ийн дарааллаар */
   c: (number | null)[];
   /** Элемент тус бүрийн бохирдлын индекс — нэгжгүй, дэвсгэр түвшинд харьцуулсан */
@@ -118,13 +121,14 @@ export async function fetchNeutralization(): Promise<NeutralPoint[]> {
     return {
       oid: Number(a.objectid),
       no: Number(a.f_),
-      code: String(a["цэгийн_дугаар"] ?? ""),
+      code: mnPointCode(String(a["цэгийн_дугаар"] ?? "")),
       lon: Number(a["уртраг"]),
       lat: Number(a["өргөрөг"]),
       /* Эх сурвалж "Баянзүрх дүүрэг" гэж дагавартай бичдэг ч платформын
          бусад бүх харагдац дагаваргүй — нэг л хэлбэрт оруулна */
       district: String(a["duureg"] ?? "").replace(/\s*дүүрэг\s*$/u, "").trim(),
       khoroo: Number(a["khorooid"]),
+      khMon: String(a["kh_mon"] ?? "").trim(),
       c: ELEMENTS.map((e) => numOrNull(a[`${e.id}_агууламж__мг_кг`])),
       pi: ELEMENTS.map((e) => numOrNull(a[`${e.id}_бохирдлын_индекс`])),
     };

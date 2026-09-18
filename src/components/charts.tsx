@@ -788,6 +788,10 @@ export type DatumGroup = {
   label: string;
   total: number;
   rows: Datum[];
+  /** Бүлгийн хоёр дахь тэмдэглэл (жишээ нь дүүргийн дундаж PLI) — толгойд, нийт тооны ард */
+  hint?: string;
+  /** `hint`-ийн өнгө — эрэмбэтэй хэмжигдэхүүнд л */
+  color?: string;
 };
 
 export function GroupedRowChart({
@@ -833,6 +837,30 @@ export function GroupedRowChart({
     дотор `storage` үйл явдал өдөөдөггүй тул давхарлаж барина.
   */
   const [open, setOpen] = React.useState<Set<string> | null>(null);
+
+  /*
+    ХӨВӨГЧ ТАЙЛБАР (хэрэглэгчийн хүсэлт, 2026-09-17: "hover панелийн
+    дизайныг гоё болгоё"). Урьд нь хөтчийн `title` — саарал систем
+    цонх. Одоо платформын хөвөгч тайлбартай ижил харагдац: дээд ирмэгт
+    мөрийн өнгөний зураас, нэр, доор нь тоо / бүлэгт эзлэх хувь /
+    тэмдэглэл гэсэн жижиг хүснэгт.
+    ⚠ Байрлалыг React төлөвөөр БҮҮ бари — хулгана хөдлөх бүрд 111
+    мөртэй жагсаалт дахин зурагдана. Хулганы байрлалыг шууд DOM-д
+    бичнэ (`map/hover-tip.tsx`-тэй нэг зарчим); төлөвд зөвхөн АЛЬ мөр
+    гэдгийг (мөр солигдоход л дахин зурагдана). `position: fixed` тул
+    картын `overflow` таслахгүй; баруун, доод ирмэгээс халихгүй.
+  */
+  const [tip, setTip] = React.useState<{ g: DatumGroup; d: Datum } | null>(null);
+  const tipRef = React.useRef<HTMLDivElement>(null);
+  const placeTip = React.useCallback((x: number, y: number) => {
+    const el = tipRef.current;
+    if (!el) return;
+    const w = el.offsetWidth || 220;
+    const h = el.offsetHeight || 90;
+    const left = x + 14 + w > window.innerWidth ? x - 14 - w : x + 14;
+    const top = y + 14 + h > window.innerHeight ? y - 14 - h : y + 14;
+    el.style.transform = `translate(${Math.max(4, left)}px, ${Math.max(4, top)}px)`;
+  }, []);
   const stored = useStored(storageKey ?? "");
 
   const openByDefault = React.useCallback(
@@ -888,9 +916,39 @@ export function GroupedRowChart({
 
   return (
     <div className={locationDetail ? "space-y-1" : "space-y-3"}>
+      {tip && (
+        <div
+          ref={tipRef}
+          className="tip-in pointer-events-none fixed top-0 left-0 z-50 w-[220px] overflow-hidden rounded-xs border border-line-2 bg-paper/95 backdrop-blur-md"
+        >
+          <div className="h-[2px] w-full" style={{ background: tip.d.color ?? "var(--data)" }} />
+          <div className="px-2.5 py-2">
+            <div className="flex items-center gap-1.5">
+              <span className="size-2 shrink-0 rounded-full" style={{ background: tip.d.color ?? "var(--data)" }} />
+              <span className="truncate text-[12px] font-medium text-ink">{tip.d.label}</span>
+            </div>
+            <div className="mt-1.5 grid grid-cols-[1fr_auto] gap-x-3 gap-y-1 text-[11px]">
+              <span className="text-ink-3">{tip.g.label}</span>
+              <span className="num text-right text-ink-2">{num(tip.g.total)}</span>
+              <span className="text-ink-3">Тоо</span>
+              <span className="num text-right font-medium text-ink">{num(tip.d.value)}</span>
+              <span className="text-ink-3">Бүлэгт эзлэх хувь</span>
+              <span className="num text-right text-ink-2">{tip.g.total > 0 ? ((tip.d.value / tip.g.total) * 100).toFixed(1) : "0.0"}%</span>
+              {tip.d.hint && (
+                <>
+                  <span className="text-ink-3">{tip.d.hint.replace(/\s[\d.,]+$/, "")}</span>
+                  <span className="num text-right font-medium" style={{ color: tip.d.color ?? "var(--ink)" }}>{tip.d.hint.replace(/^.*?\s(?=[\d.,]+$)/, "")}</span>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
       {groups.map((g, i) => {
         const shown = isOpen(g.key, i);
         const rowMax = locationDetail ? Math.max(...g.rows.map((r) => r.value), 1) : max;
+        /* Бүлгийн зурвас — бүх бүлгийн нийлбэрт эзлэх хувь (бүсийн зурвастай нэг хэмжүүр) */
+        const grand = groups.reduce((s, x) => s + x.total, 0) || 1;
         return (
           <div key={g.key}>
             {/*
@@ -898,7 +956,7 @@ export function GroupedRowChart({
             шүүх. Нэг товч дээр хоёуланг нь ачаалбал "би шүүх гэсэн юм,
             яагаад хураачихав" гэсэн эргэлзээ төрнө.
           */}
-            <div className={cn("mb-1.5 flex items-center gap-1.5 border-b border-line pb-1", locationDetail && "sticky top-0 z-10 rounded-md border bg-paper-2 px-1.5 py-1.5 shadow-sm", locationDetail && g.label === "Тодорхойгүй" && "text-ink-3")}>
+            <div className={cn("mb-1.5 flex flex-wrap items-center gap-1.5 border-b border-line pb-1", locationDetail && "sticky top-0 z-10 rounded-md border bg-paper-2 px-1.5 py-1.5 shadow-sm", locationDetail && g.label === "Тодорхойгүй" && "text-ink-3")}>
               <button
                 type="button"
                 onClick={() => toggle(g.key)}
@@ -937,10 +995,33 @@ export function GroupedRowChart({
                 <span className="num shrink-0 text-[11.5px] text-ink-2">
                   {num(g.total)}
                 </span>
+                {g.hint && (
+                  <span
+                    className="num shrink-0 text-[10.5px] font-medium"
+                    style={g.color ? { color: g.color } : undefined}
+                  >
+                    {g.hint}
+                  </span>
+                )}
               </button>
+              {/* Дүүргийн зурвас — нэрийн доор, бүсийн зурвастай ижил
+                  хэлбэр: урт нь нийтэд эзлэх хувь, өнгө нь дундаж PLI
+                  (хэрэглэгчийн хүсэлт, 2026-09-17) */}
+              {locationDetail && g.color && (
+                /* Зүүн ирмэг нь дүүргийн НЭРТЭЙ нэг шугамд: сумны товч (12px
+                   икон + 4px×2 зай) ба 6px завсрыг алгасна */
+                <span className="mt-0.5 block basis-full pl-[26px]">
+                  <span className="block h-1.5 overflow-hidden rounded-full bg-paper-hi">
+                    <span
+                      className="block h-full rounded-full transition-[width]"
+                      style={{ width: `${(g.total / grand) * 100}%`, background: g.color }}
+                    />
+                  </span>
+                </span>
+              )}
             </div>
 
-            <div className={cn("space-y-1 pl-2", locationDetail && "ml-3 border-l border-line pl-3", !shown && "hidden")}>
+            <div className={cn(locationDetail ? "space-y-0 pl-2" : "space-y-1 pl-2", locationDetail && "ml-3 border-l border-line pl-3", !shown && "hidden")}>
               {g.rows.map((d) => {
                 const on = nothingPicked(selected) || picked(selected, d.key);
                 const share = g.total > 0 ? (d.value / g.total * 100).toFixed(1) : "0.0";
@@ -950,14 +1031,16 @@ export function GroupedRowChart({
                     type="button"
                     disabled={locationDetail && !onSelect}
                     aria-pressed={onSelect ? picked(selected, d.key) : undefined}
-                    title={locationDetail ? `${d.label}: ${num(d.value)} · дүүргийн нийт ${num(g.total)}-ийн ${share}%${d.hint ? ` · ${d.hint}` : ""}` : undefined}
+                    onMouseEnter={locationDetail ? () => setTip({ g, d }) : undefined}
+                    onMouseMove={locationDetail ? (e) => placeTip(e.clientX, e.clientY) : undefined}
+                    onMouseLeave={locationDetail ? () => setTip(null) : undefined}
                     onClick={() => onSelect?.(clickValue(selected, d.key))}
-                    className={cn("group block w-full text-left", locationDetail && "rounded-md px-1 py-2 focus-visible:outline-2 focus-visible:outline-(--data)", locationDetail && onSelect && "cursor-pointer hover:bg-paper-hi", locationDetail && picked(selected, d.key) && "bg-paper-hi ring-1 ring-(--data)")}
+                    className={cn("group block w-full text-left", locationDetail && "rounded-md px-1 py-1 focus-visible:outline-2 focus-visible:outline-(--data)", locationDetail && onSelect && "cursor-pointer hover:bg-paper-hi", locationDetail && picked(selected, d.key) && "bg-paper-hi ring-1 ring-(--data)")}
                   >
                     <div className="flex items-baseline justify-between gap-2">
                       <span
                         className={cn(
-                          "min-w-0 truncate text-[12px] transition-colors",
+                          locationDetail ? "min-w-0 truncate text-[11px] transition-colors" : "min-w-0 truncate text-[12px] transition-colors",
                           picked(selected, d.key)
                             ? "font-medium text-ink"
                             : "text-ink-2",
@@ -977,7 +1060,7 @@ export function GroupedRowChart({
                         {locationDetail && <span className="ml-2 inline-block min-w-10 text-right text-[10px] text-ink-3">{d.hint ?? `${share}%`}</span>}
                       </span>
                     </div>
-                    <div className="mt-2 h-[6px] w-full overflow-hidden rounded-full bg-paper-hi">
+                    <div className={cn("w-full overflow-hidden rounded-full bg-paper-hi", locationDetail ? "mt-1 h-1" : "mt-2 h-[6px]")}>
                       <div
                         className="h-full transition-[width,opacity]"
                         style={{

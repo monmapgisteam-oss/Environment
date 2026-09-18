@@ -37,7 +37,10 @@ export const RECLAMATION_SERVICES = [
 export const FUNDING = [
   /* ⚠ `index` нь 0 БИШ: шинэ портал дээр бүх үйлчилгээ нэг дараалалтай
      нийтлэгдсэн тул давхарга бүр өөрийн дугаартай */
-  { id: "aan" as const, label: "Аж ахуйн нэгжийн хөрөнгөөр", layer: "X07_Nuhun_sergeelt_aan_hurungu", index: 6 },
+  /* ⚠ "ААН" товчлол ХЭВЭЭР (хэрэглэгчийн шийдвэр, 2026-09-17: "ААН
+     хөрөнгөөр болго") — "товчлол задална" дүрмийн зориудын үл хамаарах
+     зүйл: баганын толгойд бүтэн нэр багтахгүй. */
+  { id: "aan" as const, label: "ААН хөрөнгөөр", layer: "X07_Nuhun_sergeelt_aan_hurungu", index: 6 },
   { id: "tusuw" as const, label: "Нийслэлийн төсвөөр", layer: "X07_Nuhun_sergeelt_niisleliin_tusuw", index: 5 },
 ];
 
@@ -69,12 +72,71 @@ export type ReclamationSite = {
 
 type Row = {
   f_?: string;
-  он?: number;
+  он?: number | string;
   дүүрэг_хороо?: string;
   талбайн_хэмжээ_га?: number;
   төсөвт_өртөг_мян_төг?: number;
   гүйцэтгэсэн_аан?: string;
+  [key: string]: unknown;
 };
+
+/**
+ * Бичлэгийн ОН — талбарын нэрийг нэг л хэлбэрээр таамаглахгүй.
+ *
+ * ⚠ Хоёр давхарга нэг төслөөс нийтлэгдсэн ч оны багана нь ижил нэртэй
+ * гэсэн баталгаа байхгүй: портал хүснэгтийн толгойг жижигрүүлж,
+ * тусгай тэмдэгтийг `_` болгодог ("№" → `f_`) тул "Он " гэсэн
+ * сүүлчийн зайтай толгой `он_` болж бууна. ААН-ийн давхарга дээр
+ * "Оноор" диаграм хоосон гарсан (хэрэглэгч 2026-09-17: "ААН он гэсэн
+ * талбартай шүү дээ") — `он` гэж хатуу уншсан тул он 0 болж байв.
+ *
+ * Тиймээс: нэр нь `он` гэж ЭХЭЛСЭН (үсэг, тоо, `_`-аас бусдыг хассан)
+ * богино түлхүүр бүрийг үзэж, тоо (1900–2100), "2019 он" гэсэн бичвэр,
+ * эсвэл ArcGIS-ийн миллисекунд огноо гэсэн гурван хэлбэрийг уншина.
+ * Олдохгүй бол 0 — таамаглаж бөглөхгүй.
+ */
+/**
+ * Талбарыг НЭРИЙН ЭХЛЭЛЭЭР нь олно — оны нэгэн адил шалтгаанаар: хоёр
+ * давхаргын толгой ижил гэсэн баталгаа байхгүй ("Талбайн хэмжээ (га)"
+ * → `талбайн_хэмжээ__га_`, "Талбайн хэмжээ, га" → `талбайн_хэмжээ_га`).
+ * Нэрийг зөвхөн үсэг болгож (`_`, тоо, хаалт хасаж) харьцуулна.
+ */
+function pick(a: Row, ...prefixes: string[]): unknown {
+  const norm = (k: string) => k.toLowerCase().replace(/[^a-zа-яөүё]/g, "");
+  const want = prefixes.map(norm);
+  const keys = Object.keys(a).sort((x, y) => x.length - y.length);
+  for (const k of keys) {
+    const n = norm(k);
+    if (want.some((w) => n.startsWith(w))) return a[k];
+  }
+  return undefined;
+}
+
+const str = (v: unknown) => (v == null ? "" : String(v));
+const numOf = (v: unknown) => {
+  if (typeof v === "number") return Number.isFinite(v) ? v : 0;
+  if (typeof v === "string") return Number(v.replace(",", ".")) || 0;
+  return 0;
+};
+
+function yearOf(a: Row): number {
+  const keys = Object.keys(a)
+    .filter((k) => /^он[\d_]*$/i.test(k) || /^(year|on)[\d_]*$/i.test(k))
+    .sort((x, y) => x.length - y.length);
+  for (const k of keys) {
+    const v = a[k];
+    if (typeof v === "number" && Number.isFinite(v)) {
+      if (v >= 1900 && v <= 2100) return v;
+      /* Миллисекунд огноо — 1990 оноос хойшхи */
+      if (v > 6e11) return new Date(v).getUTCFullYear();
+    }
+    if (typeof v === "string") {
+      const m = v.match(/(19|20)\d{2}/);
+      if (m) return Number(m[0]);
+    }
+  }
+  return 0;
+}
 
 /**
  * "Багануур 1-р хороо" → дүүрэг ба хороо.
@@ -112,7 +174,12 @@ async function fetchOne(f: (typeof FUNDING)[number], base: number): Promise<Recl
     const g = feat.geometry;
     if (!g || !Number.isFinite(g.x) || !Number.isFinite(g.y)) continue;
     const a = feat.attributes;
-    const key = [a.f_, a.он, a.дүүрэг_хороо, a.талбайн_хэмжээ_га].join("|");
+    const key = [
+      str(a.f_ ?? pick(a, "д_д", "дугаар", "no")),
+      yearOf(a),
+      str(a.дүүрэг_хороо ?? pick(a, "дүүрэг", "байршил")),
+      numOf(a.талбайн_хэмжээ_га ?? pick(a, "талбайн_хэмжээ", "талбай", "га")),
+    ].join("|");
     const hit = groups.get(key) ?? { row: a, pts: [] };
     hit.pts.push([g.x, g.y]);
     groups.set(key, hit);
@@ -121,19 +188,23 @@ async function fetchOne(f: (typeof FUNDING)[number], base: number): Promise<Recl
   const out: ReclamationSite[] = [];
   let i = 0;
   for (const { row, pts } of groups.values()) {
-    const place = row.дүүрэг_хороо ?? "Тодорхойгүй";
+    const place = str(row.дүүрэг_хороо ?? pick(row, "дүүрэг", "байршил")).trim() || "Тодорхойгүй";
     const { district, khoroo } = splitPlace(place);
+    const contractor = str(row.гүйцэтгэсэн_аан ?? pick(row, "гүйцэтгэсэн", "гүйцэтгэгч", "аан"))
+      .replace(/["“”]/g, "")
+      .trim();
+    const costRaw = row.төсөвт_өртөг_мян_төг ?? pick(row, "төсөвт_өртөг", "өртөг", "төсөв");
     out.push({
       oid: base + i++,
       funding: f.id,
-      no: String(row.f_ ?? ""),
-      year: Number(row.он) || 0,
+      no: str(row.f_ ?? pick(row, "д_д", "дугаар", "no")),
+      year: yearOf(row),
       place,
       district,
       khoroo,
-      ha: Number(row.талбайн_хэмжээ_га) || 0,
-      contractor: row.гүйцэтгэсэн_аан?.replace(/["“”]/g, "").trim() || null,
-      cost: typeof row.төсөвт_өртөг_мян_төг === "number" ? row.төсөвт_өртөг_мян_төг : null,
+      ha: numOf(row.талбайн_хэмжээ_га ?? pick(row, "талбайн_хэмжээ", "талбай", "га")),
+      contractor: contractor || null,
+      cost: costRaw == null ? null : numOf(costRaw) || null,
       lon: pts.reduce((s, p) => s + p[0], 0) / pts.length,
       lat: pts.reduce((s, p) => s + p[1], 0) / pts.length,
       rings: buildRings(pts),

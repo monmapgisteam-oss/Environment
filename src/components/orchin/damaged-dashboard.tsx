@@ -184,10 +184,6 @@ export function DamagedDashboard() {
     }));
   }, [sites, keep]);
 
-  /* Зурвас тус бүрийн хуваарь — нэгж нь харьцуулшгүй тул тусад нь */
-  const maxCount = Math.max(...bySize.map((d) => d.value), 1);
-  const maxHa = Math.max(...bySize.map((d) => d.ha), 1);
-
   const stats = React.useMemo(() => {
     let ha = 0;
     let biggest = 0;
@@ -264,7 +260,7 @@ export function DamagedDashboard() {
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-2.5">
-      <FilterBar title="Эвдэрсэн газар" activeCount={activeCount} onReset={reset}>
+      <FilterBar title="ЭВДЭРСЭН ГАЗАР" activeCount={activeCount} onReset={reset}>
         <FilterMenu
           label="Сум, дүүрэг"
           icon={Building2}
@@ -298,10 +294,11 @@ export function DamagedDashboard() {
             яг тэдгээр тооны дэлгэрэнгүй тул нэг баганад цуварна.
             xl-ээс доош унавал мөр нь багана болно.
           */}
-          <Columns layout="flex" id="damaged-list" left={300} className="min-h-0 flex-1">
-            <div className="flex min-h-0 flex-col gap-2.5 xl:w-(--col-l) xl:shrink-0">
+          <div className="flex min-h-0 flex-1 flex-col gap-2.5">
+            <div className="flex min-h-0 flex-1 flex-col gap-2.5">
+              {/* Индикатор ЗӨВХӨН газрын зургийн дээр — хажуугийн баганад ч, бүтэн өргөнөөр ч биш (хэрэглэгчийн шийдвэр, 2026-09-17) */}
               <Card className="shrink-0">
-                <div className="grid grid-cols-2 divide-x divide-y divide-line">
+                <div className="grid grid-cols-2 divide-x divide-y divide-line sm:grid-cols-[repeat(4,minmax(max-content,1fr))] sm:divide-y-0">
                   <Stat icon={Ruler} label="Нийт талбай, га" value={num(Math.round(stats.ha))} />
                   <Stat icon={Shovel} label="Талбайн тоо" value={num(stats.n)} />
                   <Stat icon={Building2} label="Сум, дүүрэг" value={num(stats.places)} />
@@ -317,110 +314,73 @@ export function DamagedDashboard() {
                 </div>
               </Card>
 
-              {/*
-                Сум цөөхөн (4) тул бөгжөөр. Нийт нь 0.1 га ч хүрэхгүй —
-                голын тоог 2 орны нарийвчлалтай бичихгүй бол `num()` нь
-                бүхэл болгож "0" гаргана.
-              */}
-              {byPlace.soums.length > 0 ? (
-                <Card className="shrink-0">
-                  <Head title="Сумаар">
-                    <span className="text-[10.5px] text-ink-3">га</span>
-                  </Head>
-                  <div className="p-3">
-                    <PieChart
-                      data={byPlace.soums}
-                      size={84}
-                      selected={place}
-                      onSelect={setPlace}
-                      format={(v) => v.toFixed(2)}
-                    />
-                  </div>
-                </Card>
-              ) : null}
-
-              {/* Баганын СҮҮЛД нь уян карт — үлдсэн зайг энэ эзэлнэ */}
-              <Card className="min-h-0 flex-1">
-                <Head title="Дүүргээр">
-                  <span className="text-[10.5px] text-ink-3">га</span>
-                </Head>
-                <div className="min-h-0 flex-1 overflow-y-auto p-3">
-                  <RowChart
-                    data={byPlace.districts}
-                    selected={place}
-                    onSelect={setPlace}
-                    format={(v) => (v >= 10 ? num(Math.round(v)) : v.toFixed(2))}
+              <Card className="relative min-h-[280px] flex-1 overflow-hidden">
+                <div className="relative h-full w-full">
+                  {/*
+                    ЗӨВХӨН олон өнцөгт: эвдэрсэн газрын утга нь байршилд
+                    биш хэмжээнд байгаа тул төлөөлөх цэг нь мэдээлэл нэмэхгүй,
+                    харин ч жижиг талбайг байгаагаас том мэт харуулна.
+                  */}
+                  <PointMap
+                    points={NO_POINTS}
+                    visible={NO_INDEX}
+                    /* Талбай маш жижиг (дунджаар 37м) тул шошго нь хамгийн
+                       ойрын түвшинд л гарна */
+                    shapes={{ data: shapes, selected: picked, labelZoom: 14 }}
+                    basemap={basemap}
+                    onSelect={setPicked}
+                    onHover={tip.onHover}
+                    focus={focus}
+                    overlays={overlays}
+                    cluster={false}
                   />
+                  <BasemapGallery value={basemap} onChange={setBasemap} />
+                  <OverlayControl value={overlays} onChange={setOverlays} />
+              
+                  {/*
+                    ХӨВӨГЧ ТАЙЛБАР — хулганы хажууд. Энэ самбарын бүх
+                    үзүүлэлт ГА-гаар хэмжигддэг (тоолол нь хэмжээний хэт
+                    хазайлтаас болж төөрөгдүүлнэ) тул тайлбарын гол тоо
+                    нь ч талбай.
+                  */}
+                  {hovered ? (
+                    <MapTip state={tip} width={224}>
+                      <div className="flex items-baseline justify-between gap-2 px-2.5 pt-2 pb-1.5">
+                        <span className="num text-[15px] leading-none font-medium text-data">
+                          {hovered.ha >= 1 ? hovered.ha.toFixed(1) : hovered.ha.toFixed(3)}
+                        </span>
+                        <span className="text-[10.5px] leading-none text-ink-3">га</span>
+                      </div>
+              
+                      <div className="space-y-1.5 border-t border-line px-2.5 py-2">
+                        <MapTipRow icon={MapPin} text={hovered.place} />
+                        {hovered.aimag !== "Улаанбаатар" ? (
+                          <MapTipRow icon={Building2} text={hovered.aimag} />
+                        ) : null}
+                      </div>
+              
+                      <div className="flex items-center justify-end border-t border-line px-2.5 py-1.5">
+                        <MousePointerClick size={11} className="shrink-0 text-ink-3" />
+                      </div>
+                    </MapTip>
+                  ) : null}
+              
+                  {active ? (
+                    <div className="pointer-events-none absolute top-2.5 left-2.5 z-10 max-w-[240px] rounded-xs border border-line bg-paper/92 px-2.5 py-2 backdrop-blur-md">
+                      <div className="eyebrow mb-1.5">Эвдэрсэн талбай</div>
+                      <div className="num text-[13px] leading-none font-medium text-ink">
+                        {active.ha >= 1 ? active.ha.toFixed(1) : active.ha.toFixed(3)} га
+                      </div>
+                      <div className="mt-1.5 text-[11.5px] leading-snug text-ink-2">
+                        {active.place}
+                        {active.aimag !== "Улаанбаатар" ? ` · ${active.aimag}` : ""}
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
               </Card>
             </div>
-
-            <Card className="relative min-h-[280px] flex-1 overflow-hidden">
-              <div className="relative h-full w-full">
-                {/*
-                  ЗӨВХӨН олон өнцөгт: эвдэрсэн газрын утга нь байршилд
-                  биш хэмжээнд байгаа тул төлөөлөх цэг нь мэдээлэл нэмэхгүй,
-                  харин ч жижиг талбайг байгаагаас том мэт харуулна.
-                */}
-                <PointMap
-                  points={NO_POINTS}
-                  visible={NO_INDEX}
-                  /* Талбай маш жижиг (дунджаар 37м) тул шошго нь хамгийн
-                     ойрын түвшинд л гарна */
-                  shapes={{ data: shapes, selected: picked, labelZoom: 14 }}
-                  basemap={basemap}
-                  onSelect={setPicked}
-                  onHover={tip.onHover}
-                  focus={focus}
-                  overlays={overlays}
-                  cluster={false}
-                />
-                <BasemapGallery value={basemap} onChange={setBasemap} />
-                <OverlayControl value={overlays} onChange={setOverlays} />
-
-                {/*
-                  ХӨВӨГЧ ТАЙЛБАР — хулганы хажууд. Энэ самбарын бүх
-                  үзүүлэлт ГА-гаар хэмжигддэг (тоолол нь хэмжээний хэт
-                  хазайлтаас болж төөрөгдүүлнэ) тул тайлбарын гол тоо
-                  нь ч талбай.
-                */}
-                {hovered ? (
-                  <MapTip state={tip} width={224}>
-                    <div className="flex items-baseline justify-between gap-2 px-2.5 pt-2 pb-1.5">
-                      <span className="num text-[15px] leading-none font-medium text-data">
-                        {hovered.ha >= 1 ? hovered.ha.toFixed(1) : hovered.ha.toFixed(3)}
-                      </span>
-                      <span className="text-[10.5px] leading-none text-ink-3">га</span>
-                    </div>
-
-                    <div className="space-y-1.5 border-t border-line px-2.5 py-2">
-                      <MapTipRow icon={MapPin} text={hovered.place} />
-                      {hovered.aimag !== "Улаанбаатар" ? (
-                        <MapTipRow icon={Building2} text={hovered.aimag} />
-                      ) : null}
-                    </div>
-
-                    <div className="flex items-center justify-end border-t border-line px-2.5 py-1.5">
-                      <MousePointerClick size={11} className="shrink-0 text-ink-3" />
-                    </div>
-                  </MapTip>
-                ) : null}
-
-                {active ? (
-                  <div className="pointer-events-none absolute top-2.5 left-2.5 z-10 max-w-[240px] rounded-xs border border-line bg-paper/92 px-2.5 py-2 backdrop-blur-md">
-                    <div className="eyebrow mb-1.5">Эвдэрсэн талбай</div>
-                    <div className="num text-[13px] leading-none font-medium text-ink">
-                      {active.ha >= 1 ? active.ha.toFixed(1) : active.ha.toFixed(3)} га
-                    </div>
-                    <div className="mt-1.5 text-[11.5px] leading-snug text-ink-2">
-                      {active.place}
-                      {active.aimag !== "Улаанбаатар" ? ` · ${active.aimag}` : ""}
-                    </div>
-                  </div>
-                ) : null}
-              </div>
-            </Card>
-          </Columns>
+          </div>
 
           <p className="shrink-0 px-0.5 text-[10.5px] leading-none text-ink-3">
             Суурь зураг: Esri · Дата: ArcGIS · {num(data.sites.length)} талбай ·
@@ -430,61 +390,46 @@ export function DamagedDashboard() {
 
         <div className="flex min-h-0 flex-col gap-2.5">
           {/*
-            Хэмжээний тархалт — энэ самбарын гол диаграм.
-
-            Мөр бүрд ХОЁР зурвас: эзлэх ГА (тод) ба талбайн ТОО (бүдэг).
-            Хоёр нь ЭСРЭГ дүр зурагтай бөгөөд тэр нь өөрөө энэ датаны
-            гол баримт: 0.1 га-аас бага 1,185 талбай нь тооны зурвасаа
-            бүтнээр дүүргэдэг мөртлөө нийт эвдрэлийн 0.2% нь ч хүрэхгүй;
-            эсрэгээрээ 56 талбай 21 мянган га эзэлнэ. Ганц зурвас
-            (өмнө нь тоо байсан) нь энэ хоёрын аль нэгийг л хэлдэг тул
-            төөрөгдүүлж байв.
-
-            Зурвас тус бүр ӨӨРИЙН дээд утгаараа хэмжигдэнэ — га ба
-            ширхэг харьцуулшгүй нэгж. Тиймээс тоог нь хажууд нь үргэлж
-            бичнэ, зурвас нь зөвхөн эрэмбийг хэлнэ.
+            БАЙРШЛЫН ЗАДАРГАА БАРУУН БАГАНАД (хэрэглэгчийн шийдвэр,
+            2026-09-17: "зүүн панелийн 2 chart-ийг баруун панел руу").
+            Зүүн багана бүхэлдээ хасагдаж, зураг индикаторынхоо хамт
+            үлдсэн өргөнийг эзэлнэ. Хэмжээний ангиллын диаграм мөн
+            хасагдсан — ангилал нь шүүлтүүрийн мөрөнд хэвээр.
           */}
-          {/* Таван мөр тогтмол тул уян байх шаардлагагүй — уян бол доор
-              нь хоосон зай үлдээнэ */}
-          <Card className="shrink-0">
-            <Head title="Эвдэрсэн газар талбайн хэмжээгээр" />
-            <div className="p-3">
-              <div className="space-y-3">
-                {bySize.map((d) => {
-                  const on = size == null || size === d.key;
-                  return (
-                    <button
-                      key={d.key}
-                      onClick={() => setSize(size === d.key ? null : d.key)}
-                      className="block w-full text-left"
-                    >
-                      <div
-                        className={cn(
-                          "text-[12px] transition-colors",
-                          size === d.key ? "font-medium text-ink" : "text-ink-2",
-                          !on && "opacity-40",
-                        )}
-                      >
-                        {d.label}
-                      </div>
-                      {/* ГА нь тэргүүлэх хэмжигдэхүүн — зузаан, тод */}
-                      <Measure
-                        label="га"
-                        value={d.ha >= 10 ? num(Math.round(d.ha)) : d.ha.toFixed(2)}
-                        share={d.ha / maxHa}
-                        on={on}
-                        lead
-                      />
-                      <Measure
-                        label="талбайн тоо"
-                        value={num(d.value)}
-                        share={d.value / maxCount}
-                        on={on}
-                      />
-                    </button>
-                  );
-                })}
+
+          {/*
+            Сум цөөхөн (4) тул бөгжөөр. Нийт нь 0.1 га ч хүрэхгүй —
+            голын тоог 2 орны нарийвчлалтай бичихгүй бол `num()` нь
+            бүхэл болгож "0" гаргана.
+          */}
+          {byPlace.soums.length > 0 ? (
+            <Card className="shrink-0">
+              <Head title="Сумаар">
+                <span className="text-[10.5px] text-ink-3">га</span>
+              </Head>
+              <div className="p-3">
+                <PieChart
+                  data={byPlace.soums}
+                  size={84}
+                  selected={place}
+                  onSelect={setPlace}
+                  format={(v) => v.toFixed(2)}
+                />
               </div>
+            </Card>
+          ) : null}
+
+          <Card className="shrink-0">
+            <Head title="Дүүргээр">
+              <span className="text-[10.5px] text-ink-3">га</span>
+            </Head>
+            <div className="max-h-[260px] overflow-y-auto p-3">
+              <RowChart
+                data={byPlace.districts}
+                selected={place}
+                onSelect={setPlace}
+                format={(v) => (v >= 10 ? num(Math.round(v)) : v.toFixed(2))}
+              />
             </div>
           </Card>
 
@@ -522,57 +467,6 @@ export function DamagedDashboard() {
 
 /* -------------------------------------------------------------------------- */
 
-/**
- * Хэмжээний ангилал доторх НЭГ хэмжигдэхүүний мөр: нэр · тоо · зурвас.
- *
- * `lead` нь тэргүүлэх хэмжигдэхүүн (га) — зузаан, тод. Нөгөө нь (талбайн
- * тоо) нимгэн, бүдэг. Хоёрыг ӨНГӨӨР ялгаагүй: дата дүрслэлийн өнгө ганц
- * бөгөөд хоёр хэмжигдэхүүн нь ангилал биш, шатлал юм.
- */
-function Measure({
-  label,
-  value,
-  share,
-  on,
-  lead = false,
-}: {
-  label: string;
-  value: string;
-  share: number;
-  on: boolean;
-  lead?: boolean;
-}) {
-  return (
-    <div className={cn("flex items-center gap-2", lead ? "mt-1.5" : "mt-1")}>
-      <span className="w-[38px] shrink-0 text-[10px] text-ink-3">{label}</span>
-      <span
-        className={cn(
-          "num w-[52px] shrink-0 text-right text-[11px]",
-          lead ? "text-ink-2" : "text-ink-3",
-        )}
-      >
-        {value}
-      </span>
-      <span
-        className={cn(
-          "min-w-0 flex-1 overflow-hidden rounded-[1px] bg-paper-hi",
-          lead ? "h-[3px]" : "h-[2px]",
-        )}
-      >
-        <span
-          className="block h-full"
-          style={{
-            /* Тэг биш боловч маш бага утга огт харагдахгүй байвал "энд
-               юу ч алга" гэсэн худал дохио болно */
-            width: `${Math.max(share * 100, share > 0 ? 0.8 : 0)}%`,
-            background: "var(--data)",
-            opacity: on ? (lead ? 1 : 0.45) : 0.2,
-          }}
-        />
-      </span>
-    </div>
-  );
-}
 
 function Card({ className, children }: { className?: string; children: React.ReactNode }) {
   return (
@@ -603,14 +497,14 @@ function Stat({
   icon: typeof Shovel;
 }) {
   return (
-    <div className="px-3 py-2.5">
-      <span className="eyebrow block min-h-[28px] leading-[1.25]">{label}</span>
-      <span className="mt-1.5 flex items-center gap-1.5">
-        <Icon size={20} strokeWidth={1.6} className="shrink-0 text-ink-3" />
-        <span className="num truncate text-[16px] leading-none font-medium text-ink">
+    <div className="flex items-center justify-center gap-2 px-2.5 py-2">
+      <Icon size={32} strokeWidth={1.3} className="shrink-0 text-(--tone)" />
+      <div className="flex min-w-0 flex-col gap-0.5">
+        <span className="eyebrow text-[11px] leading-[1.25] whitespace-nowrap">{label}</span>
+        <span className="num truncate text-[18px] leading-none font-medium text-ink">
           {value}
         </span>
-      </span>
+      </div>
     </div>
   );
 }

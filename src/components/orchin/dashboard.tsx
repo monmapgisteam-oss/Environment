@@ -3,6 +3,7 @@
 import * as React from "react";
 import dynamic from "next/dynamic";
 import {
+  AlertTriangle,
   Building2,
   Droplets,
   Gauge,
@@ -40,7 +41,7 @@ import {
   type ToiletPoints,
   type ToiletsPayload,
 } from "@/lib/toilets";
-import { pliColor } from "@/lib/soil";
+import { pliColor, readableText } from "@/lib/soil";
 import { Bounds } from "@/lib/extent";
 import { cn, num } from "@/lib/utils";
 
@@ -383,6 +384,10 @@ export function OrchinDashboard() {
    */
   const khorooGroups = React.useMemo<DatumGroup[]>(() => {
     const byDistrict = new Map<string, Datum[]>();
+    /* Дүүргийн жигнэсэн дундаж PLI — хороодынхоо (дундаж × тоо)-г нэмж
+       нийт тоонд хуваана (хэрэглэгчийн хүсэлт, 2026-09-17: "аль дүүрэг
+       хэр зэргийн бохирдолтойг харна") */
+    const dPli = new Map<string, { sum: number; n: number }>();
 
     if (pit) {
       if (!data) return [];
@@ -407,6 +412,10 @@ export function OrchinDashboard() {
           hint: `PLI ${avg.toFixed(2)}`,
         };
         byDistrict.set(dName, [...(byDistrict.get(dName) ?? []), row]);
+        const acc = dPli.get(dName) ?? { sum: 0, n: 0 };
+        acc.sum += avg * n;
+        acc.n += n;
+        dPli.set(dName, acc);
       }
     } else {
       for (const c of city) {
@@ -432,12 +441,18 @@ export function OrchinDashboard() {
          жагсаалтад байршилгүй мөр юу ч хэлэхгүй. Бичлэг өөрөө тоонд,
          зурагт хэвээр; зөвхөн энэ жагсаалтаас нуугдана. */
       .filter(([label]) => label !== "Тодорхойгүй")
-      .map(([label, rows]) => ({
-        key: label,
-        label,
-        total: rows.reduce((s, r) => s + r.value, 0),
-        rows: rows.sort((a, b) => b.value - a.value),
-      }))
+      .map(([label, rows]) => {
+        const a = dPli.get(label);
+        const avg = a && a.n ? a.sum / a.n : null;
+        return {
+          key: label,
+          label,
+          total: rows.reduce((s, r) => s + r.value, 0),
+          rows: rows.sort((a, b) => b.value - a.value),
+          hint: avg != null ? `PLI ${avg.toFixed(2)}` : undefined,
+          color: avg != null ? pliColor(avg) : undefined,
+        };
+      })
       .sort((a, b) => b.total - a.total);
   }, [pit, data, dIdx, city, district, avgPli]);
 
@@ -476,11 +491,65 @@ export function OrchinDashboard() {
       sum += avg * n;
       cnt += n;
     }
-    if (khoroo && pit) {
-      const ki = data.khoroos.indexOf(khoroo);
-      const selectedPli = ki >= 0 ? avgPli(data.khZonePli, ki) : { avg: 0, n: 0 };
+    const ki = khoroo && pit ? data.khoroos.indexOf(khoroo) : -1;
+    if (ki >= 0) {
+      const selectedPli = avgPli(data.khZonePli, ki);
       sum = selectedPli.avg * selectedPli.n;
       cnt = selectedPli.n;
+    }
+
+    /*
+      НИЙТ дундаж — шүүлтгүй, бүх бүс. Шүүлт тавьсан үед сонгосон хэсэг
+      нийтээс хэр зөрснийг хэлэхэд суурь болно (хэрэглэгчийн санал,
+      2026-09-17: "Сонгинохайрхан сонгоход дунджаас муу гэдэг нь шууд
+      харагдана").
+    */
+    let oSum = 0;
+    let oCnt = 0;
+    for (let d = 0; d < data.districts.length; d++) {
+      const { avg, n } = avgPli(data.distZonePli, d, true);
+      oSum += avg * n;
+      oCnt += n;
+    }
+
+    /*
+      PLI 3-ААС ДЭЭШ — хамгийн өндөр PLI-тэй жорлонгийн тоо. Дундаж нь
+      145 мянган жорлонгийн дундах хамгийн муу хэсгийг нуудаг; хяналтад
+      "хэдэн жорлон дээд түвшинд байна" гэдэг нь дундажаас илүү хэрэгтэй.
+      Босго 3 нь датаны 31 алхмаас (1.0 … 4.0) — нэршил нь тоон муж,
+      ангиллын нэр мэргэжилтнүүдийн тодруулгаас хойш.
+    */
+    const HIGH_B = Math.round((3 - PLI_MIN) / PLI_STEP);
+    const highOf = (table: number[], unit: number) => {
+      let n = 0;
+      for (let z = 0; z < 4; z++) {
+        if (zIdx >= 0 && z !== zIdx) continue;
+        for (let b = HIGH_B; b < PLI_BUCKETS; b++) n += table[(unit * 4 + z) * PLI_BUCKETS + b];
+      }
+      return n;
+    };
+    let high = 0;
+    let highTop: { label: string; n: number } | null = null;
+    if (ki >= 0) {
+      high = highOf(data.khZonePli, ki);
+    } else if (dIdx >= 0) {
+      /* Нэг дүүрэг сонгосон — хамгийн олонтой ХОРООГ нь нэрлэнэ */
+      for (let k = 0; k < data.khoroos.length; k++) {
+        if (data.khDistrict[k] !== dIdx) continue;
+        const n = highOf(data.khZonePli, k);
+        high += n;
+        if (n > (highTop?.n ?? 0)) {
+          const numPart = data.khoroos[k].split("_")[1];
+          highTop = { label: numPart ? `${numPart}-р хороо` : data.khoroos[k], n };
+        }
+      }
+    } else {
+      /* Бүх дүүрэг — хамгийн олонтой ДҮҮРГИЙГ нэрлэнэ */
+      for (let d = 0; d < data.districts.length; d++) {
+        const n = highOf(data.distZonePli, d);
+        high += n;
+        if (n > (highTop?.n ?? 0) && data.districts[d] !== "Тодорхойгүй") highTop = { label: data.districts[d], n };
+      }
     }
 
     return {
@@ -488,8 +557,12 @@ export function OrchinDashboard() {
       districts: pit ? district || khoroo ? (total > 0 ? 1 : 0) : districtData.length : new Set(cityRows.map((r) => r.district)).size,
       khoroos: pit ? khoroo ? (total > 0 ? 1 : 0) : khorooData.length : new Set(cityRows.map(khorooKey)).size,
       pli: cnt ? sum / cnt : 0,
+      overall: oCnt ? oSum / oCnt : 0,
+      high,
+      highShare: cnt ? high / cnt : 0,
+      highTop,
     };
-  }, [pit, data, districtData, khorooData, cityRows, dIdx, avgPli, mapPoints, khoroo, district]);
+  }, [pit, data, districtData, khorooData, cityRows, dIdx, zIdx, avgPli, mapPoints, khoroo, district]);
 
   /** Бүсийн шүүлтүүр нь зөвхөн нүхэн жорлонд утгатай */
   const activeCount =
@@ -541,7 +614,7 @@ export function OrchinDashboard() {
   return (
     <div className="flex h-full min-h-0 flex-col gap-2.5">
       <FilterBar
-        title="Ариун цэврийн байгууламж"
+        title="АРИУН ЦЭВРИЙН БАЙГУУЛАМЖ"
         activeCount={activeCount}
         onReset={reset}
         leading={
@@ -614,23 +687,54 @@ export function OrchinDashboard() {
         {/* ---- ЗҮҮН: индикатор + нягтралын зураг ---- */}
         <div className="flex min-h-0 flex-col gap-2.5">
           <Card className="shrink-0">
-            {/* Индикатор нь эх сурвалжийг дагана: PLI зөвхөн нүхэн жорлонд бий */}
-            <div
-              className={cn(
-                "grid grid-cols-2 divide-x divide-y divide-line sm:grid-cols-3 xl:divide-y-0",
-                pit ? "xl:grid-cols-4" : "xl:grid-cols-3",
-              )}
-            >
+            {/*
+              Индикатор нь эх сурвалжийг дагана. Нүхэн жорлонд ГУРВАН хайрцаг
+              (хэрэглэгчийн шийдвэр, 2026-09-17): "Дүүрэг 8", "Хороо 111"
+              гэсэн бараг тогтмол хоёр тоо тусдаа хайрцаг эзлэхээ болиод
+              эхнийхийн доор нэг мөр болов; чөлөөлөгдсөн зайд гол
+              үзүүлэлт PLI хуваарьтайгаа, шинэ "PLI 3-аас дээш" орлоо.
+            */}
+            <div className="grid grid-cols-1 divide-y divide-line sm:grid-cols-[repeat(3,minmax(max-content,1fr))] sm:divide-x sm:divide-y-0">
               <Stat
                 icon={pit ? Toilet : Droplets}
                 label={pit ? "Нүхэн жорлон" : "Нийтийн ариун цэврийн байгууламж"}
                 value={!pit && cityStatus !== "ready" ? "—" : num(stats.total)}
+                sub={`${num(stats.districts)} дүүрэг · ${num(stats.khoroos)} хороо`}
               />
-              <Stat icon={Building2} label="Дүүрэг" value={num(stats.districts)} />
-              <Stat icon={LandPlot} label="Хороо" value={num(stats.khoroos)} />
               {pit ? (
-                <Stat icon={Gauge} label="Дундаж PLI" value={stats.total ? stats.pli.toFixed(2) : "—"} description="PLI — бохирдлын ачааллын индекс" />
-              ) : null}
+                <>
+                  <Stat
+                    icon={Gauge}
+                    label="Дундаж PLI"
+                    value={stats.total ? stats.pli.toFixed(2) : "—"}
+                    valueColor={stats.total ? readableText(pliColor(stats.pli)) : undefined}
+                    description="PLI — бохирдлын ачааллын индекс"
+                    sub={
+                      !stats.total
+                        ? undefined
+                        : activeCount
+                          ? `${stats.pli - stats.overall >= 0 ? "+" : "−"}${Math.abs(stats.pli - stats.overall).toFixed(2)} нийт дундажаас (${stats.overall.toFixed(2)})`
+                          : "Нийт дундаж"
+                    }
+                  />
+                  <Stat
+                    icon={AlertTriangle}
+                    iconClass="text-(--ochre)"
+                    label="PLI 3-аас дээш"
+                    value={stats.total ? num(stats.high) : "—"}
+                    sub={
+                      !stats.total
+                        ? undefined
+                        : `${(stats.highShare * 100).toFixed(1)}%${stats.highTop ? ` · ${stats.highTop.label} ${num(stats.highTop.n)}` : ""}`
+                    }
+                  />
+                </>
+              ) : (
+                <>
+                  <Stat icon={Building2} label="Дүүрэг" value={num(stats.districts)} />
+                  <Stat icon={LandPlot} label="Хороо" value={num(stats.khoroos)} />
+                </>
+              )}
             </div>
           </Card>
 
@@ -739,7 +843,6 @@ export function OrchinDashboard() {
             {/* Дүүрэг + хороо хоёр шатлалыг агуулдаг тул нэр нь "хороогоор" биш */}
             <Head title="Байршлын мэдээлэл">
               {pit && <PliKey />}
-              <span className="num text-[11.5px] text-ink-3">{khorooData.length} хороо</span>
             </Head>
             <div className="min-h-0 flex-1 overflow-y-auto p-3">
               {/*
@@ -807,7 +910,6 @@ function ZoneBars({ data, selected, onSelect }: { data: Datum[]; selected: strin
   const total = data.reduce((sum, row) => sum + row.value, 0);
   if (!total) return <p className="py-3 text-[12px] text-ink-3">Бүсийн бүртгэл байхгүй</p>;
   return <div>
-    <div className="mb-2 flex items-center justify-between text-[11px] text-ink-3"><span>Бүсээр ангилсан бүртгэл</span><span className="num font-medium text-ink">{num(total)}</span></div>
     <div className="space-y-1">{data.map((row) => {
       const share = row.value / total * 100;
       const active = selected === row.key;
@@ -834,22 +936,44 @@ function Stat({
   label,
   value,
   icon: Icon,
+  iconClass,
   description,
+  valueColor,
+  sub,
+  children,
 }: {
   label: string;
   value: string;
   icon: typeof Toilet;
+  iconClass?: string;
   description?: string;
+  /** Утгын өнгө — зөвхөн эрэмбэтэй хэмжигдэхүүнд (PLI) */
+  valueColor?: string;
+  /** Утгын доорх нэг мөр тайлбар — хамрах хүрээ, зөрүү, хамгийн олонтой нэгж */
+  sub?: string;
+  children?: React.ReactNode;
 }) {
   return (
-    <div className="flex flex-col px-3 py-2">
-      <span className="eyebrow flex min-h-[28px] items-start gap-1.5 leading-[1.25]">{label}{description && <Help text={description} />}</span>
-      <div className="mt-auto flex items-center gap-1.5">
-        <Icon size={20} strokeWidth={1.6} className="shrink-0 text-ink-3" />
-        <span className="num truncate text-[16px] leading-none font-medium text-ink">
+    /*
+      Икон нь хайрцгийн ГОЛ элемент (хэрэглэгчийн хүсэлт, 2026-09-17:
+      "надад икон илүү хүчтэй зүйл"): зүүн талд 35px, хэлтсийн өнгөөр,
+      дэвсгэргүй (өнгөт дөрвөлжинг хэрэглэгч хасуулав); баруун талд
+      шошго → тоо → тайлбар босоо.
+    */
+    <div className="flex items-center justify-center gap-2 px-2.5 py-2">
+      <Icon size={32} strokeWidth={1.3} className={cn("shrink-0", iconClass ?? "text-(--tone)")} />
+      <div className="flex min-w-0 flex-col gap-0.5">
+        <span className="eyebrow flex items-start gap-1.5 text-[11px] leading-[1.25] whitespace-nowrap">{label}{description && <Help text={description} />}</span>
+        <span
+          className="num truncate text-[18px] leading-none font-medium text-ink"
+          style={valueColor ? { color: valueColor } : undefined}
+        >
           {value}
         </span>
+        {children}
+        {sub && <span className="num truncate text-[10.5px] leading-tight text-ink-3">{sub}</span>}
       </div>
     </div>
   );
 }
+

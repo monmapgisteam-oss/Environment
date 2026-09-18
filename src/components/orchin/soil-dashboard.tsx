@@ -13,7 +13,7 @@ import {
   TriangleAlert,
   X,
 } from "lucide-react";
-import { PieChart, RowChart, type Datum } from "@/components/charts";
+import { GroupedRowChart, PieChart, RowChart, type Datum, type DatumGroup } from "@/components/charts";
 import { BasemapGallery } from "@/components/map/basemap-gallery";
 import { MapTip, MapTipRow, useMapTip } from "@/components/map/hover-tip";
 import { OverlayControl } from "@/components/map/overlay-control";
@@ -38,6 +38,7 @@ import {
   type SoilData,
   type SoilMetric,
   type SoilYear,
+  readableText,
 } from "@/lib/soil";
 import { Bounds } from "@/lib/extent";
 import { cn, num } from "@/lib/utils";
@@ -99,6 +100,8 @@ export function SoilDashboard() {
   const [failed, setFailed] = React.useState<{ year: SoilYear; message: string } | null>(null);
 
   const [district, setDistrict] = React.useState<string | null>(null);
+  /** Хороо — байршлын жагсаалтын мөрөөс сонгогдоно; дүүрэг солиход цэвэрлэгдэнэ */
+  const [khoroo, setKhoroo] = React.useState<string | null>(null);
   const [grade, setGrade] = React.useState<string | null>(null);
   const [picked, setPicked] = React.useState<number | null>(null);
   /** Хулгана дагасан хөвөгч тайлбар — байрлалыг өөрөө удирдана */
@@ -166,13 +169,14 @@ export function SoilDashboard() {
      Диаграм бүр ӨӨРИЙНХӨӨ хэмжигдэхүүнийг алгасаж шүүгддэг: эс тэгвээс
      нэгийг сонгосны дараа бусад мөр алга болж, харьцуулах юм үлдэхгүй. */
   const keep = React.useCallback(
-    (i: number, skip?: "district" | "grade") => {
+    (i: number, skip?: "district" | "khoroo" | "grade") => {
       const p = points![i];
       if (skip !== "district" && district && p.district !== district) return false;
+      if (skip !== "khoroo" && khoroo && p.khoroo !== khoroo) return false;
       if (skip !== "grade" && grade && String(pliClass(p.pli)) !== grade) return false;
       return true;
     },
-    [points, district, grade],
+    [points, district, khoroo, grade],
   );
 
   const visible = React.useMemo(() => {
@@ -211,14 +215,52 @@ export function SoilDashboard() {
       .sort((a, b) => b.mean - a.mean);
   }, [points, keep]);
 
-  /* Дүүрэг — дундаж PLI-аар эрэмбэлсэн мөрөн диаграм */
-  const districtData = React.useMemo<Datum[]>(
-    () =>
-      districtRows
-        .filter((d) => !isSoum(d.key))
-        .map((d) => ({ key: d.key, label: d.label, value: d.mean })),
-    [districtRows],
-  );
+  /*
+    Дүүрэг → хороо — ариун цэврийн самбарын "Байршлын мэдээлэл"-тэй НЭГ
+    бүтэц (хэрэглэгчийн хүсэлт, 2026-09-17). Бүлэг бүр: цэгийн тоо ·
+    (дундаж PLI, зурвасгүй — хэрэглэгч хасуулав); мөр бүр хороо: цэгийн
+    тоо · дундаж PLI · PLI-ийн өнгөтэй зурвас. Сум
+    (Төв аймгийн) энд орохгүй — тэд бөгжөөр тусдаа.
+    Хорооны шүүлтийг ӨӨРӨӨ алгасна (cross-filter); дүүргийн шүүлтийг
+    дагана — ариун цэвэртэй ижил.
+  */
+  const districtGroups = React.useMemo<DatumGroup[]>(() => {
+    if (!points) return [];
+    type Acc = { n: number; pli: number };
+    const byDistrict = new Map<string, Map<string, Acc>>();
+    for (let i = 0; i < points.length; i++) {
+      if (!keep(i, "khoroo")) continue;
+      const p = points[i];
+      if (isSoum(p.district)) continue;
+      const rows = byDistrict.get(p.district) ?? new Map<string, Acc>();
+      const hit = rows.get(p.khoroo) ?? { n: 0, pli: 0 };
+      hit.n++;
+      hit.pli += p.pli;
+      rows.set(p.khoroo, hit);
+      byDistrict.set(p.district, rows);
+    }
+    return [...byDistrict]
+      .map(([dName, rows]) => {
+        let n = 0;
+        let pli = 0;
+        const list: Datum[] = [...rows].map(([kName, a]) => {
+          n += a.n;
+          pli += a.pli;
+          const avg = a.pli / a.n;
+          return { key: kName, label: kName, value: a.n, color: pliColor(avg), hint: `PLI ${avg.toFixed(2)}` };
+        });
+        /* Дүүргийн мөрөнд PLI дундаж, өнгөт зурвас ГАРАХГҮЙ (хэрэглэгчийн
+           шийдвэр, 2026-09-17) — энд хороо бүрийнх хангалттай */
+        void pli;
+        return {
+          key: dName,
+          label: dName,
+          total: n,
+          rows: list.sort((a, b) => b.value - a.value),
+        };
+      })
+      .sort((a, b) => b.total - a.total);
+  }, [points, keep]);
 
   /*
     Сум — гурав л байдаг тул бөгжөөр. Зүсмийн ХЭМЖЭЭ нь цэгийн тоо
@@ -345,8 +387,14 @@ export function SoilDashboard() {
     [hovered],
   );
 
+  function pickDistrict(value: string | null) {
+    setDistrict(value);
+    setKhoroo(null);
+  }
+
   function reset() {
     setDistrict(null);
+    setKhoroo(null);
     setGrade(null);
     setPicked(null);
   }
@@ -375,7 +423,7 @@ export function SoilDashboard() {
     );
   }
 
-  const activeCount = (district ? 1 : 0) + (grade ? 1 : 0);
+  const activeCount = (district ? 1 : 0) + (khoroo ? 1 : 0) + (grade ? 1 : 0);
 
   /** "Бохирдлын индекс (PI)" · "Агууламж, мг/кг" */
   const metricTitle = (m: SoilMetric) => (m.unit ? `${m.label}, ${m.unit}` : m.label);
@@ -383,7 +431,7 @@ export function SoilDashboard() {
   return (
     <div className="flex h-full min-h-0 flex-col gap-2.5">
       <FilterBar
-        title="Хөрсний мониторинг"
+        title="ХӨРСНИЙ МОНИТОРИНГ"
         activeCount={activeCount}
         onReset={reset}
         leading={
@@ -415,14 +463,14 @@ export function SoilDashboard() {
           icon={Building2}
           value={district}
           active={Boolean(district)}
-          onClear={() => setDistrict(null)}
+          onClear={() => pickDistrict(null)}
           width={240}
         >
           {/* Жагсаалтад дундаж биш ЦЭГИЙН ТОО — сонголтын хэмжээг хэлнэ */}
           <PickList
             items={districtRows.map((d) => ({ key: d.key, label: d.label, value: d.n }))}
             selected={district}
-            onPick={setDistrict}
+            onPick={pickDistrict}
           />
         </FilterMenu>
 
@@ -445,19 +493,6 @@ export function SoilDashboard() {
         нэг өндөрт эхлэх ёстой.
       */}
       <div className="flex min-h-0 flex-1 flex-col gap-2.5">
-        <Card className="shrink-0">
-          <div className="grid grid-cols-2 divide-x divide-y divide-line sm:grid-cols-3 xl:grid-cols-5 xl:divide-y-0">
-            <Stat icon={MapPin} label="Хяналтын цэг" value={num(stats.n)} />
-            <Stat icon={Building2} label="Дүүрэг" value={num(stats.districts)} />
-            <Stat icon={Trees} label="Сум" value={num(stats.soums)} />
-            <Stat icon={Gauge} label="Дундаж PLI" value={stats.pli.toFixed(2)} />
-            <Stat
-              icon={TriangleAlert}
-              label="PLI ≥ 1"
-              value={`${stats.overPct.toFixed(0)}%`}
-            />
-          </div>
-        </Card>
 
         {/*
           Индикаторын доор нэг МӨР, гурван хэсэг: зүүнд элементийн
@@ -477,6 +512,27 @@ export function SoilDashboard() {
             Igeo-гоор бага байх нь мэдээлэл юм.
           */}
           <div className="flex min-h-0 flex-col gap-2.5 xl:w-(--col-l) xl:shrink-0">
+            {/*
+              2023 онд ганц хэмжигдэхүүн (мг/кг) тул зүүн баганад зай бий —
+              "PLI зэргээр" картыг элементийн дундажийн ДЭЭР тавина
+              (хэрэглэгчийн хүсэлт, 2026-09-17). 2024 онд хоёр хэмжигдэхүүн
+              (PI, Igeo) баганыг дүүргэдэг тул карт баруун талдаа хэвээр.
+            */}
+            {year === 2023 && (
+              <Card className="shrink-0">
+                <Head title="PLI зэргээр">
+                  <span className="num text-[11.5px] text-ink-3">{num(stats.n)}</span>
+                </Head>
+                <div className="p-3">
+                  <RowChart
+                    data={gradeData}
+                    selected={grade}
+                    onSelect={setGrade}
+                    colorOf={(d) => CLASS_COLOR[Number(d.key)]}
+                  />
+                </div>
+              </Card>
+            )}
             {data.metrics.map((m, mi) => {
               /* Цэг сонгогдвол карт бүр ТЭР ЦЭГИЙН утгыг харуулна —
                  нэгтгэсэн дундажаас тухайн цэг рүү шилжих нь энэ
@@ -525,7 +581,7 @@ export function SoilDashboard() {
                             className="num rounded-xs px-1.5 py-0.5 text-[11px] leading-none"
                             style={{
                               background: `${pliColor(selected.pli)}22`,
-                              color: pliColor(selected.pli),
+                              color: readableText(pliColor(selected.pli)),
                             }}
                           >
                             PLI {selected.pli.toFixed(2)}
@@ -580,98 +636,126 @@ export function SoilDashboard() {
             })}
           </div>
 
-          <Card className="relative min-h-[280px] flex-1 overflow-hidden">
-            <div className="relative h-full w-full">
-              {/*
-                Зургийг жил бүрд дахин үүсгэнэ (`key`): зэрэглэлийн өнгө,
-                бөөгнөрөл зэрэг нь эх сурвалж үүсгэх мөчид л уншигддаг.
-              */}
-              <PointMap
-                key={year}
-                points={geo}
-                visible={visible}
-                labels={labels}
-                grades={{ values: geo.pli, stops: PLI_RAMP, heat: true }}
-                basemap={basemap}
-                onSelect={setPicked}
-                onHover={tip.onHover}
-                highlight={highlight}
-                focus={focus}
-                overlays={overlays}
-                cluster={false}
-              />
-              <BasemapGallery value={basemap} onChange={setBasemap} />
-              <OverlayControl value={overlays} onChange={setOverlays} />
-
-              {/*
-                ХӨВӨГЧ ТАЙЛБАР — хулганы хажууд. Цэг дээр очиход хамгийн
-                чухал гурван зүйл шууд гарна: аль цэг, ямар түвшин, хаана.
-                Товшилт нь бүтэн профайл нээдэг тул энд элемент бүрийг
-                жагсаахгүй — хоёулаа ижил зүйл харуулбал товшилтын утга
-                алдагдана.
-              */}
-              {hovered ? (
-                <MapTip state={tip} width={228}>
-                  <div className="flex items-baseline justify-between gap-2 px-2.5 pt-2 pb-1.5">
-                    <span className="num text-[12.5px] leading-none font-medium text-ink">
-                      {hovered.code}
-                    </span>
-                    {/* PLI-ийн өнгө нь цэгийн өнгөтэй ижил шатлалаас —
-                        тайлбар, зураг хоёр нэг хуваарь уншина */}
-                    <span
-                      className="num rounded-xs px-1.5 py-0.5 text-[10.5px] leading-none"
-                      style={{
-                        background: `${pliColor(hovered.pli)}22`,
-                        color: pliColor(hovered.pli),
-                      }}
-                    >
-                      PLI {hovered.pli.toFixed(2)}
-                    </span>
-                  </div>
-
-                  <div className="space-y-1.5 border-t border-line px-2.5 py-2">
-                    <MapTipRow
-                      icon={MapPin}
-                      text={`${hovered.district} · ${hovered.khoroo}`}
-                    />
-                  </div>
-
-                  <div className="flex items-center justify-between gap-2 border-t border-line px-2.5 py-1.5">
-                    <span className="num text-[10px] leading-none text-ink-3">
-                      {hovered.lat.toFixed(5)}° {hovered.lon.toFixed(5)}°
-                    </span>
-                    <MousePointerClick size={11} className="shrink-0 text-ink-3" />
-                  </div>
-                </MapTip>
-              ) : null}
-
-              {/*
-                Тайлбар нь ЗУРВАС — өнгө нь тасралтгүй тул шаталсан
-                жагсаалт худал ангилал үүсгэнэ.
-
-                Хайрцаггүй, шууд зураг дээр суудаг тул уншигдац нь зөвхөн
-                сүүдрээс хамаарна: хиймэл дагуулын цайвар талбай дээр
-                `text-ink-3` дангаараа алга болно. Суурь зургийн товчтой
-                ижил `drop-shadow` хэрэглэв.
-              */}
-              <div
-                className="pointer-events-none absolute right-2.5 bottom-2.5 z-10 w-[164px]"
-                style={{ filter: "drop-shadow(0 1px 2px rgba(0,0,0,.75))" }}
-              >
-                <div className="eyebrow mb-1.5">PLI</div>
-                <div
-                  className="h-2 w-full rounded-[1px]"
-                  style={{ background: RAMP_CSS }}
-                  aria-hidden
+          <div className="flex min-h-0 flex-1 flex-col gap-2.5">
+            {/* Индикатор ЗӨВХӨН газрын зургийн дээр — хажуугийн баганад ч, бүтэн өргөнөөр ч биш (хэрэглэгчийн шийдвэр, 2026-09-17) */}
+            <Card className="shrink-0">
+              <div className="grid grid-cols-2 divide-x divide-y divide-line sm:grid-cols-[repeat(5,minmax(max-content,1fr))] sm:divide-y-0">
+                <Stat icon={MapPin} label="Хяналтын цэг" value={num(stats.n)} />
+                <Stat icon={Building2} label="Дүүрэг" value={num(stats.districts)} />
+                <Stat icon={Trees} label="Сум" value={num(stats.soums)} />
+                <Stat icon={Gauge} label="Дундаж PLI" value={stats.pli.toFixed(2)} />
+                <Stat
+                  icon={TriangleAlert}
+                  label="PLI ≥ 1"
+                  value={`${stats.overPct.toFixed(0)}%`}
                 />
-                <div className="num mt-1 flex justify-between text-[9.5px] leading-none text-ink-3">
-                  {[0.4, 1, 2, 4].map((v) => (
-                    <span key={v}>{v === 4 ? "4+" : v}</span>
-                  ))}
+              </div>
+            </Card>
+
+            <Card className="relative min-h-[280px] flex-1 overflow-hidden">
+              <div className="relative h-full w-full">
+                {/*
+                  Зургийг жил бүрд дахин үүсгэнэ (`key`): зэрэглэлийн өнгө,
+                  бөөгнөрөл зэрэг нь эх сурвалж үүсгэх мөчид л уншигддаг.
+                */}
+                {/*
+                  ⚠ ДУЛААНЫ ГАДАРГУУ (`heat`) ЭНД ХЭРЭГЛЭХГҮЙ (хэрэглэгч
+                  2026-09-17-нд анзаарсан алдаа). Тэр давхарга кернелүүдээ
+                  НЭМДЭГ тул цэг ОЛОН газар улаан болдог — хотын төв 507
+                  цэгийн дийлэнхийг агуулдаг учир "бүхэлдээ бохирдолтой"
+                  мэт харагдаж байв, гэтэл өндөр утга цөөн хэдэн цэг дээр л
+                  бий. Цэг бүр ӨӨРИЙН PLI-ийн өнгөөр — өндөр цэг тус
+                  тусдаа ялгарна, нягтрал утгыг орлохгүй.
+                  Цэг нь ОЛОН ӨНГӨТ firefly (Esri-ийн загвар, хэрэглэгчийн
+                  хүсэлт): PLI өнгөөрөө гэрэлтэнэ, цөм нь мөн тэр өнгө.
+                */}
+                <PointMap
+                  key={year}
+                  points={geo}
+                  visible={visible}
+                  labels={labels}
+                  grades={{ values: geo.pli, stops: PLI_RAMP, firefly: "graded" }}
+                  basemap={basemap}
+                  onSelect={setPicked}
+                  onHover={tip.onHover}
+                  highlight={highlight}
+                  focus={focus}
+                  overlays={overlays}
+                  cluster={false}
+                />
+                <BasemapGallery value={basemap} onChange={setBasemap} />
+                <OverlayControl value={overlays} onChange={setOverlays} />
+            
+                {/*
+                  ХӨВӨГЧ ТАЙЛБАР — хулганы хажууд. Цэг дээр очиход хамгийн
+                  чухал гурван зүйл шууд гарна: аль цэг, ямар түвшин, хаана.
+                  Товшилт нь бүтэн профайл нээдэг тул энд элемент бүрийг
+                  жагсаахгүй — хоёулаа ижил зүйл харуулбал товшилтын утга
+                  алдагдана.
+                */}
+                {hovered ? (
+                  <MapTip state={tip} width={228}>
+                    <div className="flex items-baseline justify-between gap-2 px-2.5 pt-2 pb-1.5">
+                      <span className="num text-[12.5px] leading-none font-medium text-ink">
+                        {hovered.code}
+                      </span>
+                      {/* PLI-ийн өнгө нь цэгийн өнгөтэй ижил шатлалаас —
+                          тайлбар, зураг хоёр нэг хуваарь уншина */}
+                      <span
+                        className="num rounded-xs px-1.5 py-0.5 text-[10.5px] leading-none"
+                        style={{
+                          background: `${pliColor(hovered.pli)}22`,
+                          color: readableText(pliColor(hovered.pli)),
+                        }}
+                      >
+                        PLI {hovered.pli.toFixed(2)}
+                      </span>
+                    </div>
+            
+                    <div className="space-y-1.5 border-t border-line px-2.5 py-2">
+                      <MapTipRow
+                        icon={MapPin}
+                        text={`${hovered.district} · ${hovered.khoroo}`}
+                      />
+                    </div>
+            
+                    <div className="flex items-center justify-between gap-2 border-t border-line px-2.5 py-1.5">
+                      <span className="num text-[10px] leading-none text-ink-3">
+                        {hovered.lat.toFixed(5)}° {hovered.lon.toFixed(5)}°
+                      </span>
+                      <MousePointerClick size={11} className="shrink-0 text-ink-3" />
+                    </div>
+                  </MapTip>
+                ) : null}
+            
+                {/*
+                  Тайлбар нь ЗУРВАС — өнгө нь тасралтгүй тул шаталсан
+                  жагсаалт худал ангилал үүсгэнэ.
+            
+                  Хайрцаггүй, шууд зураг дээр суудаг тул уншигдац нь зөвхөн
+                  сүүдрээс хамаарна: хиймэл дагуулын цайвар талбай дээр
+                  `text-ink-3` дангаараа алга болно. Суурь зургийн товчтой
+                  ижил `drop-shadow` хэрэглэв.
+                */}
+                <div
+                  className="pointer-events-none absolute right-2.5 bottom-2.5 z-10 w-[164px]"
+                  style={{ filter: "drop-shadow(0 1px 2px rgba(0,0,0,.75))" }}
+                >
+                  <div className="eyebrow mb-1.5">PLI</div>
+                  <div
+                    className="h-2 w-full rounded-[1px]"
+                    style={{ background: RAMP_CSS }}
+                    aria-hidden
+                  />
+                  <div className="num mt-1 flex justify-between text-[9.5px] leading-none text-ink-3">
+                    {[0.4, 1, 2, 4].map((v) => (
+                      <span key={v}>{v === 4 ? "4+" : v}</span>
+                    ))}
+                  </div>
                 </div>
               </div>
-            </div>
-          </Card>
+            </Card>
+          </div>
 
           {/* ---- БАРУУН: задаргаа ---- */}
           <div className="flex min-h-0 flex-col gap-2.5 xl:w-(--col-r) xl:shrink-0">
@@ -698,19 +782,21 @@ export function SoilDashboard() {
               </Card>
             ) : null}
 
-            <Card className="shrink-0">
-              <Head title="PLI зэргээр">
-                <span className="num text-[11.5px] text-ink-3">{num(stats.n)}</span>
-              </Head>
-              <div className="p-3">
-                <RowChart
-                  data={gradeData}
-                  selected={grade}
-                  onSelect={setGrade}
-                  colorOf={(d) => CLASS_COLOR[Number(d.key)]}
-                />
-              </div>
-            </Card>
+            {year !== 2023 && (
+              <Card className="shrink-0">
+                <Head title="PLI зэргээр">
+                  <span className="num text-[11.5px] text-ink-3">{num(stats.n)}</span>
+                </Head>
+                <div className="p-3">
+                  <RowChart
+                    data={gradeData}
+                    selected={grade}
+                    onSelect={setGrade}
+                    colorOf={(d) => CLASS_COLOR[Number(d.key)]}
+                  />
+                </div>
+              </Card>
+            )}
 
             {/*
               Баганын СҮҮЛД нь уян карт: дээрх хоёр нь тогтмол өндөртэй
@@ -718,16 +804,17 @@ export function SoilDashboard() {
               бүтнээрээ багтдаг ч намхан дэлгэцэнд дотроо гүйнэ.
             */}
             <Card className="min-h-0 flex-1">
-              {/* Тоо биш ДУНДАЖ: "хаана хэдэн цэг байна" биш "хаана өндөр байна" */}
-              <Head title="Дүүргээр">
-                <span className="text-[10.5px] text-ink-3">дундаж PLI</span>
-              </Head>
+              <Head title="Дүүргээр" />
               <div className="min-h-0 flex-1 overflow-y-auto p-3">
-                <RowChart
-                  data={districtData}
-                  selected={district}
-                  onSelect={setDistrict}
-                  format={(v) => v.toFixed(2)}
+                <GroupedRowChart
+                  locationDetail
+                  groups={districtGroups}
+                  selected={khoroo}
+                  onSelect={setKhoroo}
+                  selectedGroup={district}
+                  onSelectGroup={pickDistrict}
+                  defaultOpen="first"
+                  storageKey="orchin.soil.groups"
                 />
               </div>
             </Card>
@@ -779,14 +866,14 @@ function Stat({
   icon: typeof FlaskConical;
 }) {
   return (
-    <div className="px-3 py-2.5">
-      <span className="eyebrow block min-h-[28px] leading-[1.25]">{label}</span>
-      <span className="mt-1.5 flex items-center gap-1.5">
-        <Icon size={20} strokeWidth={1.6} className="shrink-0 text-ink-3" />
-        <span className="num truncate text-[16px] leading-none font-medium text-ink">
+    <div className="flex items-center justify-center gap-2 px-2.5 py-2">
+      <Icon size={32} strokeWidth={1.3} className="shrink-0 text-(--tone)" />
+      <div className="flex min-w-0 flex-col gap-0.5">
+        <span className="eyebrow text-[11px] leading-[1.25] whitespace-nowrap">{label}</span>
+        <span className="num truncate text-[18px] leading-none font-medium text-ink">
           {value}
         </span>
-      </span>
+      </div>
     </div>
   );
 }

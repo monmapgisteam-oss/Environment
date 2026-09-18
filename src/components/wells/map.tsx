@@ -692,6 +692,12 @@ export function WellsMap({
    * ойртох тусам цэг рүү шилжинэ. Гадаргуу нь цэгүүдийн хоорондох
    * утгыг мужлан харуулна — тохиромжтой байдлын үнэлгээний зурагтай
    * ижил уншигдана.
+   * ⚠⚠ **УТГЫН ЗУРАГТ ХЭРЭГЛЭХГҮЙ.** MapLibre-ийн heatmap нь кернелүүдээ
+   * НЭМДЭГ — жинг утгаар өгсөн ч үр дүн нь нягтрал × утга: цэг олон
+   * газар улаан, цөөн газар ногоон. Хөрсний PLI дээр хотын төв
+   * "бүхэлдээ бохирдолтой" мэт харагдаж байсан (2026-09-17, хэрэглэгч
+   * анзаарсан). Утга харуулах бол зэрэглэсэн ЦЭГ (`heat` унтраалттай);
+   * `heat` нь зөвхөн "хаана олон байна" гэсэн асуултад л зөв.
    */
   grades?: {
     values: ArrayLike<number>;
@@ -711,8 +717,14 @@ export function WellsMap({
      * пропоос ирэх бөгөөд `stops`-ийн ӨНГИЙГ АШИГЛАХГҮЙ — тиймээс
      * ЗӨВХӨН нэг өнгөт шатлалд тавь. Радиус нь хэвээрээ утгаасаа
      * хамаарна.
+     *
+     * `"graded"` — ОЛОН ӨНГӨТ гэрэлтэлт (Esri-ийн firefly загвар,
+     * хэрэглэгчийн хүсэлт 2026-09-17): сарнисан гэрэл ба бие нь цэг
+     * бүрийн ӨӨРИЙН шатлалын өнгөөр, цөм нь мөн тэр өнгө (цагаан
+     * биш — хэрэглэгчийн шийдвэр). Олон өнгөт шатлалд (PLI) хэрэглэнэ — ангилал өнгөөрөө,
+     * гэрэлтэлт нь платформын бусад зурагтай ижил хэлээр уншигдана.
      */
-    firefly?: boolean;
+    firefly?: boolean | "graded";
   };
   /**
    * Цэг бүрийн ЖИН (`points`-той ижил урттай). Өгвөл зураг НЯГТРАЛЫН
@@ -772,6 +784,7 @@ export function WellsMap({
     graded: grades?.stops,
     gradedHeat: Boolean(grades?.heat),
     gradedFire: Boolean(grades?.firefly),
+    gradedFireColor: grades?.firefly === "graded",
     shaped: Boolean(shapes),
     shapeGlow: Boolean(shapes?.glow),
     shapeColor: shapes?.color,
@@ -1357,6 +1370,14 @@ export function WellsMap({
           харьцааг давтана: сарнисан гэрэл ≈ 4.2, бие ≈ 2.2, цөм ≈ 0.95.
         */
         const fire = modeRef.current.gradedFire;
+        /* Олон өнгөт гэрэлтэлт: өнгө шатлалаас, цөм нь цайвар хувилбар */
+        const multi = modeRef.current.gradedFireColor;
+        const glowColor = multi ? gradeColor(stops) : modeRef.current.fire.glow;
+        const midColor = multi ? gradeColor(stops) : modeRef.current.fire.mid;
+        /* Цөм нь биетэйгээ НЭГ өнгө (хэрэглэгч 2026-09-17: "улаан бол цөм нь
+           улаан") — цайвар/цагаан цөм ХЭРЭГЛЭХГҮЙ; гэрэлтэлт нь давхаргын
+           тунгалагийн ялгаанаас гарна */
+        const coreColor = multi ? gradeColor(stops) : modeRef.current.fire.core;
 
         /*
           ⚠ БӨӨГНӨРЛИЙГ ШҮҮНЭ. Зэрэглэсэн цэг нь бөөгнөрсөн обьект дээр
@@ -1374,8 +1395,8 @@ export function WellsMap({
           filter: single,
           ...(heat ? { minzoom: 11.5 } : {}),
           paint: {
-            "circle-radius": gradedRadius(stops, fire ? 4.2 : 2.4),
-            "circle-color": fire ? modeRef.current.fire.glow : gradeColor(stops),
+            "circle-radius": gradedRadius(stops, fire ? (multi ? 3.0 : 4.2) : 2.4),
+            "circle-color": fire ? glowColor : gradeColor(stops),
             "circle-blur": 1,
             "circle-opacity": heat ? fade(fire ? 0.38 : 0.32) : fire ? 0.38 : 0.32,
           },
@@ -1385,6 +1406,36 @@ export function WellsMap({
            цөмийн хооронд шилжилт үүсгэнэ; үүнгүй бол цөм нь манан дээр
            наалдсан мэт харагдана */
         if (fire) {
+          /*
+            ⚠ Олон өнгөт шатлалд БАРААН ЦАГИРАГ биеийн доор. Шатлалын
+            ногоон үзүүр (PLI < 1) хиймэл дагуулын ногоон ургамалтай
+            нэг өнгө тул цэг газартаа уусаж алга болж байв (хэрэглэгч
+            2026-09-17: "цэгүүд сайн харагдахгүй"). Нэг өнгөт firefly-д
+            энэ асуудал байхгүй — цэнхэр нь газрын өнгөнд байдаггүй.
+            Цагираг нь биеийн ГАДНА, гэрлийн ДОТОР сууна: гэрэлтэлтийг
+            таслахгүй, харин биеийг дэвсгэрээс ялгана. Тунгалаг дүүргэлт,
+            зөвхөн ирмэг — бүтэн бараан дугуй бол цэгийн өнгийг нь
+            бараанжуулна.
+            ⚠ Горимоос ҮЛ ХАМААРНА: газрын зураг гэрэл/харанхуйд ЯГ ИЖИЛ
+            зурагдана (хэрэглэгчийн шийдвэр, 2026-09-17) — суурь зураг нь
+            өөрөө хиймэл дагуул тул платформын токен энд орох ёсгүй.
+          */
+          if (multi) {
+            m.addLayer({
+              id: "wells-ring",
+              type: "circle",
+              source: "wells",
+              filter: single,
+              ...(heat ? { minzoom: 11.5 } : {}),
+              paint: {
+                "circle-radius": gradedRadius(stops, 1.6),
+                "circle-opacity": 0,
+                "circle-stroke-width": 1.1,
+                "circle-stroke-color": "rgba(8,14,20,.7)",
+                "circle-stroke-opacity": heat ? fade(1) : 1,
+              },
+            });
+          }
           m.addLayer({
             id: "wells-halo",
             type: "circle",
@@ -1392,10 +1443,12 @@ export function WellsMap({
             filter: single,
             ...(heat ? { minzoom: 11.5 } : {}),
             paint: {
-              "circle-radius": gradedRadius(stops, 2.2),
-              "circle-color": modeRef.current.fire.mid,
-              "circle-blur": 0.6,
-              "circle-opacity": heat ? fade(0.6) : 0.6,
+              "circle-radius": gradedRadius(stops, multi ? 1.6 : 2.2),
+              "circle-color": midColor,
+              "circle-blur": multi ? 0.3 : 0.6,
+              /* Олон өнгөт: цөм нь биетэйгээ нэг өнгө тул бие нь өөрөө
+                 гол дүрс — бүдэг байвал цагираг дотроо хоосон харагдана */
+              "circle-opacity": heat ? fade(multi ? 0.85 : 0.6) : multi ? 0.85 : 0.6,
             },
           });
         }
@@ -1407,8 +1460,8 @@ export function WellsMap({
           filter: single,
           ...(heat ? { minzoom: 11.5 } : {}),
           paint: {
-            "circle-radius": gradedRadius(stops, fire ? 0.95 : 1),
-            "circle-color": fire ? modeRef.current.fire.core : gradeColor(stops),
+            "circle-radius": gradedRadius(stops, fire ? (multi ? 0.7 : 0.95) : 1),
+            "circle-color": fire ? coreColor : gradeColor(stops),
             "circle-opacity": heat ? fade(fire ? 0.95 : 0.92) : fire ? 0.95 : 0.92,
             /*
               Нимгэн бараан ирмэг — цайвар суурь зураг дээр цэг арилахаас

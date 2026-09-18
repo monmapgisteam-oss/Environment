@@ -240,9 +240,11 @@ export function PortalLayersDashboard({ set }: { set: LayerSet }) {
   const [ready, setReady] = React.useState(false);
 
   /* Асаалттай давхаргууд. Эхлэх төлөвийг бүртгэл шийднэ
-     ({@link LayerSet.openAll}) — давхаргын тоо БИШ */
+     ({@link LayerSet.openAll}, {@link LayerSet.open}) — давхаргын тоо БИШ */
   const [on, setOn] = React.useState<string[]>(() =>
-    set.openAll ? [...set.layers] : [],
+    set.openAll
+      ? [...set.layers]
+      : (set.open ?? []).filter((id) => set.layers.includes(id)),
   );
 
   /*
@@ -1080,16 +1082,18 @@ export function PortalLayersDashboard({ set }: { set: LayerSet }) {
               ) : null}
 
               {/*
-              Заавар — зургийн ДЭЭР хөвнө, түүнийг орлохгүй.
-              `pointer-events-none` тул доорх зургийг чирэх, ойртуулахад
-              саад болохгүй.
+              ⚠ "Зүүн талын жагсаалтаас давхарга сонгоно уу" гэсэн заавар
+              ХАСАГДСАН (хэрэглэгчийн шийдвэр, 2026-09-17, үнэлгээний
+              хэлтэс дээр: "ийм бичиг гарахгүй шүү"). Давхарга сонгоогүй
+              үед суурь зураг л харагдана — зүүн талын жагсаалт өөрөө
+              хангалттай тайлбар. Зөвхөн БҮХ давхарга нээлттэй байх ёстой
+              (`openAll`) цонхонд юу ч уншигдаагүй бол алдааг ил хэлнэ:
+              тэнд хоосон зураг нь техникийн гэмтэл.
             */}
-              {on.length === 0 ? (
+              {on.length === 0 && !picker ? (
                 <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
                   <p className="elevated max-w-[300px] rounded-xs border border-line bg-paper/92 px-4 py-3 text-center text-[12.5px] leading-relaxed text-ink-2 backdrop-blur-md">
-                    {picker
-                      ? "Зүүн талын жагсаалтаас давхарга сонгоно уу."
-                      : "Давхарга уншигдсангүй."}
+                    Давхарга уншигдсангүй.
                   </p>
                 </div>
               ) : null}

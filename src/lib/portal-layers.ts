@@ -110,6 +110,17 @@ export type LayerSet = {
    */
   openAll?: boolean;
   /**
+   * ЭХЭНД АСААЛТТАЙ давхаргууд — сонгох жагсаалт ХЭВЭЭР үлдэнэ.
+   *
+   * `openAll`-аас ялгаатай: тэр нь жагсаалтыг бүхэлд нь авдаг бол энэ
+   * нь олон давхаргатай цонхыг хоосон биш, зарим давхаргатай нээнэ
+   * (хэрэглэгчийн шийдвэр, 2026-09-17, үнэлгээний хэлтэс: "анхнаасаа
+   * аль нь check байя"). Хоосон зураг дээр заавар бичихийн оронд
+   * хамгийн төлөөлөх давхаргыг шууд харуулна; бусдыг нь хэрэглэгч
+   * нэмнэ. `openAll` өгөгдсөн бол энэ талбар үл тоомсорлогдоно.
+   */
+  open?: readonly string[];
+  /**
    * Газрын зургийн ШОШГО нээхэд нь шууд асах эсэх.
    *
    * Ойн хэлтэс дээр шошго АНХНААСАА унтраалттай: тэнд найман давхарга
@@ -307,7 +318,7 @@ async function loadLayerInfo(
     )
     .map((f) => ({
       name: f.name,
-      alias: (f.alias ?? "").trim() || f.name,
+      alias: officialLabel((f.alias ?? "").trim() || f.name),
       type: f.type.replace("esriFieldType", ""),
     }));
 
@@ -724,6 +735,66 @@ function dateOf(raw: unknown): Date | null {
  */
 const COORD_FIELD =
   /(^|[_\s])(lat|lon|lng|latitude|longitude|x|y|өргөрөг|уртраг|координат)([_\s]|$)/i;
+
+/**
+ * Засаг захиргааны нэгжийн ДУГААР нь тоо боловч хэмжигдэхүүн БИШ.
+ *
+ * Хорооны дугаар (1–32) бүхэл тоон талбар тул "Khoroo — Duureg: 89"
+ * гэж НИЙЛБЭРЛЭГДЭЖ диаграм болж байв (хэрэглэгч 2026-09-17,
+ * оршуулгын газрын давхарга) — 89 гэдэг нь юуны ч тоо биш. Нэрээр нь
+ * таана: хороо, дүүрэг, аймаг, сум, баг — кирилл ба галигласан хоёр
+ * хэлбэрээр.
+ */
+const ADMIN_FIELD =
+  /(^|[_\s])(khoroo|horoo|хороо|duureg|duureg_id|дүүрэг|aimag|аймаг|sum|soum|сум|bag|баг)([_\s]|$)/i;
+
+/**
+ * ГАЛИГЛАСАН талбарын нэрийг АЛБАН ЁСНЫ кирилл нэр болгоно.
+ *
+ * Хэлтсүүд давхаргаа латин нэртэй талбараар нийтэлдэг бөгөөд alias
+ * нь ч мөн латин ("Duureg", "Khoroo") байх нь элбэг — тэр чигээрээ
+ * диаграмын гарчиг болж "Duureg — бичлэгийн тоо" гэж гарч байв
+ * (хэрэглэгч 2026-09-17: "галигласан үг хэллэг ашиглахгүй, албан
+ * ёсны нэр ашигла"). Нэрийг `_`, зайгаар үг болгон задалж, ТАНИЛ
+ * галиг бүрийг толиор орлуулна; танихгүй үг ХЭВЭЭР үлдэнэ —
+ * таамаглаж орчуулахгүй. Кирилл aguulsan alias хөндөгдөхгүй.
+ */
+const LATIN_WORDS: Record<string, string> = {
+  duureg: "дүүрэг", duureg_id: "дүүрэг", district: "дүүрэг",
+  khoroo: "хороо", horoo: "хороо", khoroo_id: "хороо",
+  aimag: "аймаг", sum: "сум", soum: "сум", bag: "баг",
+  ner: "нэр", name: "нэр", on: "он", year: "он", sar: "сар", month: "сар",
+  ognoo: "огноо", date: "огноо", too: "тоо", count: "тоо",
+  talbai: "талбай", area: "талбай", urt: "урт", length: "урт",
+  hemjee: "хэмжээ", turul: "төрөл", type: "төрөл", angilal: "ангилал",
+  code: "код", kod: "код", dugaar: "дугаар", hayag: "хаяг", address: "хаяг",
+  bus: "бүс", zone: "бүс", gazar: "газар", zam: "зам", barilga: "барилга",
+  ail: "айл", urh: "өрх", ersdel: "эрсдэл", tseg: "цэг", tsegiin: "цэгийн",
+  uyr: "үер", us: "ус", nogoon: "ногоон", baiguulamj: "байгууламж",
+  tailbar: "тайлбар", note: "тайлбар", tuluv: "төлөв", status: "төлөв",
+  eh: "эх", survalj: "сурвалж", source: "эх сурвалж", owner: "эзэмшигч",
+  ezemshigch: "эзэмшигч", gerchilgee: "гэрчилгээ", huchin: "хүчин", chadal: "чадал",
+  hemjilt: "хэмжилт", undur: "өндөр", height: "өндөр", urgun: "өргөн", width: "өргөн",
+  ga: "га", km: "км", m: "м",
+};
+
+export function officialLabel(alias: string): string {
+  if (/[а-яөүё]/i.test(alias)) return alias;
+  const words = alias.split(/[_\s]+/).filter(Boolean);
+  if (!words.length) return alias;
+  let hit = false;
+  const out = words.map((w) => {
+    const k = w.toLowerCase();
+    if (LATIN_WORDS[k]) {
+      hit = true;
+      return LATIN_WORDS[k];
+    }
+    return w;
+  });
+  if (!hit) return alias;
+  const text = out.join(" ");
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
 
 function looksLikeId(values: number[]): boolean {
   if (values.length < 3) return false;
@@ -1256,6 +1327,8 @@ function pickMeasures(
     if (skip?.test(f.alias) || skip?.test(f.name)) continue;
     /* Координат нь тоо боловч хэмжигдэхүүн БИШ — геометрийн хуулбар */
     if (COORD_FIELD.test(f.name) || COORD_FIELD.test(f.alias)) continue;
+    /* Хороо, дүүргийн ДУГААР нь тоо боловч хэмжигдэхүүн БИШ */
+    if (ADMIN_FIELD.test(f.name) || ADMIN_FIELD.test(f.alias)) continue;
 
     const values = rows.map((r) => numberOf(r[f.name]));
     const present = values.filter((v): v is number => v != null);

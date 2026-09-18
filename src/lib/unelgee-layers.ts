@@ -53,6 +53,10 @@ export const FLOOD: LayerSet = {
   key: "unelgee-flood",
   title: "Үерийн эрсдэлийн давхарга",
   layers: Object.keys(FLOOD_NAMES),
+  /* Эхэнд ЭРСДЭЛТ ТАЛБАЙ асаалттай — долоон давхаргын хамгийн
+     ерөнхий нь; бусад нь түүний дэлгэрэнгүй (хэрэглэгчийн шийдвэр,
+     2026-09-17: "анхнаасаа аль нь check байя") */
+  open: ["B06_uyr_ersdelt_talbai"],
   names: FLOOD_NAMES,
   hues: HUES,
 };
@@ -69,6 +73,7 @@ export const GREEN: LayerSet = {
   key: "unelgee-green",
   title: "Ногоон байгууламжийн давхарга",
   layers: Object.keys(GREEN_NAMES),
+  open: ["B11_nogoon_baiguulamj"],
   names: GREEN_NAMES,
   hues: HUES,
 };
@@ -98,6 +103,8 @@ export const ECO: LayerSet = {
   key: "unelgee-eco",
   title: "Эко-инфраструктурын давхарга",
   layers: Object.keys(ECO_NAMES),
+  /* Хамгийн сүүлийн оны бичил цэцэрлэг — найман давхаргын эхнийх */
+  open: ["B13_2024_он_bichilgarden"],
   names: ECO_NAMES,
   hues: HUES,
 };
@@ -118,6 +125,7 @@ export const WASTE: LayerSet = {
   key: "unelgee-waste",
   title: "Хогийн цэгийн давхарга",
   layers: Object.keys(WASTE_NAMES),
+  open: ["B12_hogiin_tseg_point"],
   names: WASTE_NAMES,
   hues: HUES,
 };
@@ -133,6 +141,7 @@ export const GAS: LayerSet = {
   key: "unelgee-gas",
   title: "Хийн төхөөрөмжийн давхарга",
   layers: Object.keys(GAS_NAMES),
+  open: ["B07_gas_tuhuurumj"],
   names: GAS_NAMES,
   hues: HUES,
 };

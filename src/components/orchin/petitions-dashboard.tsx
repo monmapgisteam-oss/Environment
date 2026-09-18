@@ -224,7 +224,7 @@ export function PetitionsDashboard() {
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-2.5">
-      <FilterBar title="Өргөдлийн бүртгэл" activeCount={activeCount} onReset={reset}>
+      <FilterBar title="ӨРГӨДЛИЙН БҮРТГЭЛ" activeCount={activeCount} onReset={reset}>
         <FilterMenu
           label="Анхан шатны шүүлт"
           icon={Filter}
@@ -266,18 +266,6 @@ export function PetitionsDashboard() {
         нэг өндөрт эхлэх ёстой.
       */}
       <div className="flex min-h-0 flex-1 flex-col gap-2.5">
-        <Card className="shrink-0">
-          <div className="grid grid-cols-2 divide-x divide-y divide-line sm:grid-cols-4 xl:divide-y-0">
-            <Stat icon={FileText} label="Өргөдөл" value={num(stats.n)} />
-            <Stat icon={Building2} label="Аж ахуйн нэгж" value={num(stats.companies)} />
-            <Stat icon={Ruler} label="Нийт талбай, га" value={num(Math.round(stats.ha))} />
-            <Stat
-              icon={CheckCircle2}
-              label="Дараагийн шатанд"
-              value={`${stats.passPct.toFixed(0)}%`}
-            />
-          </div>
-        </Card>
 
         {/*
           Индикаторын доор нэг МӨР, гурван хэсэг: зүүнд өргөдлийн
@@ -357,68 +345,84 @@ export function PetitionsDashboard() {
             )}
           </div>
 
-          <Card className="relative min-h-[280px] flex-1 overflow-hidden">
-            <div className="relative h-full w-full">
-              <PointMap
-                points={NO_POINTS}
-                visible={NO_INDEX}
-                shapes={{ data: shapes, selected: picked, labelZoom: 12 }}
-                basemap={basemap}
-                onSelect={setPicked}
-                onHover={tip.onHover}
-                focus={focus}
-                cluster={false}
-              />
-              <BasemapGallery value={basemap} onChange={setBasemap} />
+          <div className="flex min-h-0 flex-1 flex-col gap-2.5">
+            {/* Индикатор ЗӨВХӨН газрын зургийн дээр — хажуугийн баганад ч, бүтэн өргөнөөр ч биш (хэрэглэгчийн шийдвэр, 2026-09-17) */}
+            <Card className="shrink-0">
+              <div className="grid grid-cols-2 divide-x divide-y divide-line sm:grid-cols-[repeat(4,minmax(max-content,1fr))] sm:divide-y-0">
+                <Stat icon={FileText} label="Өргөдөл" value={num(stats.n)} />
+                <Stat icon={Building2} label="Аж ахуйн нэгж" value={num(stats.companies)} />
+                <Stat icon={Ruler} label="Нийт талбай, га" value={num(Math.round(stats.ha))} />
+                <Stat
+                  icon={CheckCircle2}
+                  label="Дараагийн шатанд"
+                  value={`${stats.passPct.toFixed(0)}%`}
+                />
+              </div>
+            </Card>
 
-              {/*
-                ХӨВӨГЧ ТАЙЛБАР. Анхан шатны шүүлт нь энэ самбарын гол
-                хэмжигдэхүүн тул тайлбарын доод мөрөнд бүлэглэсэн
-                нэрээрээ гарна — эх бичвэр нь сонгосон өргөдлийн
-                дэлгэрэнгүйд бүтнээрээ үлдэнэ.
-              */}
-              {hovered ? (
-                <MapTip state={tip} width={236}>
-                  <div className="px-2.5 pt-2 pb-1">
-                    <span className="num text-[11px] leading-none font-medium text-data">
-                      {hovered.reg}
-                    </span>
+            <Card className="relative min-h-[280px] flex-1 overflow-hidden">
+              <div className="relative h-full w-full">
+                <PointMap
+                  points={NO_POINTS}
+                  visible={NO_INDEX}
+                  shapes={{ data: shapes, selected: picked, labelZoom: 12 }}
+                  basemap={basemap}
+                  onSelect={setPicked}
+                  onHover={tip.onHover}
+                  focus={focus}
+                  cluster={false}
+                />
+                <BasemapGallery value={basemap} onChange={setBasemap} />
+            
+                {/*
+                  ХӨВӨГЧ ТАЙЛБАР. Анхан шатны шүүлт нь энэ самбарын гол
+                  хэмжигдэхүүн тул тайлбарын доод мөрөнд бүлэглэсэн
+                  нэрээрээ гарна — эх бичвэр нь сонгосон өргөдлийн
+                  дэлгэрэнгүйд бүтнээрээ үлдэнэ.
+                */}
+                {hovered ? (
+                  <MapTip state={tip} width={236}>
+                    <div className="px-2.5 pt-2 pb-1">
+                      <span className="num text-[11px] leading-none font-medium text-data">
+                        {hovered.reg}
+                      </span>
+                    </div>
+                    <div className="px-2.5 pb-2 text-[12.5px] leading-snug font-medium text-ink">
+                      {hovered.company}
+                    </div>
+            
+                    <div className="space-y-1.5 border-t border-line px-2.5 py-2">
+                      <MapTipRow icon={Ruler} num text={`${hovered.ha} га`} />
+                      <MapTipRow
+                        icon={MapPin}
+                        text={`${hovered.district} ${hovered.khoroo}`}
+                      />
+                    </div>
+            
+                    <div className="flex items-center justify-between gap-2 border-t border-line px-2.5 py-1.5">
+                      <span className="min-w-0 flex-1 truncate text-[10px] leading-none text-ink-3">
+                        {SCREENINGS.find((x) => x.id === hovered.screening)?.label}
+                      </span>
+                      <MousePointerClick size={11} className="shrink-0 text-ink-3" />
+                    </div>
+                  </MapTip>
+                ) : null}
+            
+                {active ? (
+                  <div className="pointer-events-none absolute top-2.5 left-2.5 z-10 max-w-[270px] rounded-xs border border-line bg-paper/92 px-2.5 py-2 backdrop-blur-md">
+                    <div className="eyebrow mb-1.5">{active.reg}</div>
+                    <div className="text-[12.5px] leading-snug text-ink">{active.company}</div>
+                    <div className="num mt-1 text-[11.5px] text-ink-2">
+                      {active.ha} га · {active.district} {active.khoroo}
+                    </div>
+                    <div className="mt-1.5 text-[10.5px] leading-snug text-ink-3">
+                      {SCREENINGS.find((s) => s.id === active.screening)?.label}
+                    </div>
                   </div>
-                  <div className="px-2.5 pb-2 text-[12.5px] leading-snug font-medium text-ink">
-                    {hovered.company}
-                  </div>
-
-                  <div className="space-y-1.5 border-t border-line px-2.5 py-2">
-                    <MapTipRow icon={Ruler} num text={`${hovered.ha} га`} />
-                    <MapTipRow
-                      icon={MapPin}
-                      text={`${hovered.district} ${hovered.khoroo}`}
-                    />
-                  </div>
-
-                  <div className="flex items-center justify-between gap-2 border-t border-line px-2.5 py-1.5">
-                    <span className="min-w-0 flex-1 truncate text-[10px] leading-none text-ink-3">
-                      {SCREENINGS.find((x) => x.id === hovered.screening)?.label}
-                    </span>
-                    <MousePointerClick size={11} className="shrink-0 text-ink-3" />
-                  </div>
-                </MapTip>
-              ) : null}
-
-              {active ? (
-                <div className="pointer-events-none absolute top-2.5 left-2.5 z-10 max-w-[270px] rounded-xs border border-line bg-paper/92 px-2.5 py-2 backdrop-blur-md">
-                  <div className="eyebrow mb-1.5">{active.reg}</div>
-                  <div className="text-[12.5px] leading-snug text-ink">{active.company}</div>
-                  <div className="num mt-1 text-[11.5px] text-ink-2">
-                    {active.ha} га · {active.district} {active.khoroo}
-                  </div>
-                  <div className="mt-1.5 text-[10.5px] leading-snug text-ink-3">
-                    {SCREENINGS.find((s) => s.id === active.screening)?.label}
-                  </div>
-                </div>
-              ) : null}
-            </div>
-          </Card>
+                ) : null}
+              </div>
+            </Card>
+          </div>
 
           {/* ---- БАРУУН: задаргаа ---- */}
           <div className="flex min-h-0 flex-col gap-2.5 xl:w-(--col-r) xl:shrink-0">
@@ -483,14 +487,14 @@ function Stat({
   icon: typeof FileText;
 }) {
   return (
-    <div className="px-3 py-2.5">
-      <span className="eyebrow block min-h-[28px] leading-[1.25]">{label}</span>
-      <span className="mt-1.5 flex items-center gap-1.5">
-        <Icon size={20} strokeWidth={1.6} className="shrink-0 text-ink-3" />
-        <span className="num truncate text-[16px] leading-none font-medium text-ink">
+    <div className="flex items-center justify-center gap-2 px-2.5 py-2">
+      <Icon size={32} strokeWidth={1.3} className="shrink-0 text-(--tone)" />
+      <div className="flex min-w-0 flex-col gap-0.5">
+        <span className="eyebrow text-[11px] leading-[1.25] whitespace-nowrap">{label}</span>
+        <span className="num truncate text-[18px] leading-none font-medium text-ink">
           {value}
         </span>
-      </span>
+      </div>
     </div>
   );
 }
