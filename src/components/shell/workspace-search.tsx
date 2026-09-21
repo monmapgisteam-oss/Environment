@@ -9,7 +9,6 @@ import { SOURCES } from "@/lib/sources";
 export function WorkspaceSearch() {
   const dialog = useRef<HTMLDialogElement>(null);
   const [query, setQuery] = useState("");
-  function show() { setQuery(""); dialog.current?.showModal(); }
   function close() { dialog.current?.close(); }
   useEffect(() => {
     const shortcut = (e: KeyboardEvent) => {
@@ -25,11 +24,15 @@ export function WorkspaceSearch() {
   const normalized = query.trim().toLocaleLowerCase("mn");
   const departments = DEPARTMENTS.filter((d) => d.name.toLocaleLowerCase("mn").includes(normalized));
   const sources = normalized ? SOURCES.filter((s) => s.name.toLocaleLowerCase("mn").includes(normalized)).slice(0, 12) : [];
+  /*
+    ⚠⚠ ТОЛГОЙН ХАЙХ ТОВЧ ХАСАГДСАН (хэрэглэгчийн шийдвэр, 2026-09-21).
+    Хайлт нь ӨӨРӨӨ үлдсэн — Ctrl K товчлуураар нээгдэнэ. Товчны оронд
+    цэс, зам заагч хоёр толгойн өргөнийг бүтнээр эзэлнэ.
+    ⚠ Ctrl K нь одоо ЦОРЫН ГАНЦ зам тул хайлтыг бүрмөсөн хасах бол
+    энэ бүрэлдэхүүнийг `header.tsx`-ээс мөн авна.
+  */
   return (
     <>
-      <button type="button" onClick={show} className="workspace-search-trigger" aria-label="Хэлтэс, мэдээлэл хайх">
-        <Search size={17} /><span className="hidden md:inline">Хэлтэс, мэдээлэл хайх</span><kbd className="hidden xl:inline">Ctrl K</kbd>
-      </button>
       <dialog ref={dialog} aria-labelledby="workspace-search-title" className="workspace-search-dialog" onClick={(e) => { if (e.target === dialog.current) close(); }}>
         <div className="search-dialog-body">
           <div className="flex items-center gap-3 border-b border-line p-5">

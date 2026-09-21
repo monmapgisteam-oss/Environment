@@ -13,6 +13,7 @@ import {
   Route,
 } from "lucide-react";
 import { SourceTabs, useStoredTab } from "@/components/ui/source-tabs";
+import "./workspace.css";
 import type { LayerSet } from "@/lib/portal-layers";
 import { ECO, FLOOD, GAS, GREEN, WASTE } from "@/lib/unelgee-layers";
 
@@ -72,7 +73,7 @@ function group(set: LayerSet) {
       ),
     { ssr: false, loading: spinner },
   );
-  const G = () => <D set={set} />;
+  const G = () => <D set={set} presentation="environment" />;
   G.displayName = `LayerGroup(${set.key})`;
   return G;
 }
@@ -86,13 +87,13 @@ const EcoDashboard = group(ECO);
 const TABS = [
   {
     id: "unelgee",
-    label: "Байгаль орчны ерөнхий үнэлгээ",
-    note: "2025 онд 305 · 2026 онд 254 нэгж талбар",
+    label: "Байгаль орчны нөлөөллийн ерөнхий үнэлгээ",
+    note: "2025, 2026 оны үнэлгээний бүртгэл",
     icon: FileCheck2,
   },
   {
     id: "bomt",
-    label: "Менежментийн төлөвлөгөө",
+    label: "Байгаль орчны менежментийн төлөвлөгөө",
     note: "2026 оны нэгтгэл · мод тарих үүрэг",
     full: "Байгаль орчны менежментийн төлөвлөгөөний 2026 оны нэгтгэл",
     icon: TreePine,
@@ -106,7 +107,7 @@ const TABS = [
   {
     id: "green",
     label: "Ногоон байгууламж",
-    note: "4,972 байгууламж · 41 цэцэрлэгт хүрээлэн",
+    note: "Ногоон байгууламж, цэцэрлэгт хүрээлэн",
     icon: Leaf,
   },
   {
@@ -117,19 +118,19 @@ const TABS = [
   },
   {
     id: "waste",
-    label: "Хогийн цэг",
-    note: "Талбай ба цэгээр",
+    label: "Хог хаягдлын цэг",
+    note: "Байршил, талбайн бүртгэл",
     icon: Trash2,
   },
   {
     id: "gas",
-    label: "Хийн төхөөрөмж",
-    note: "2,895 төхөөрөмж",
+    label: "Хийн тоног төхөөрөмж",
+    note: "Байршил, тоног төхөөрөмжийн бүртгэл",
     icon: Flame,
   },
   {
     id: "weather",
-    label: "Цаг агаар",
+    label: "Цаг агаарын ажиглалт",
     note: "Ажиглалтын сүлжээ · таван хоногийн урьдчилсан мэдээ",
     full: "Ус цаг уур, орчны шинжилгээний газрын ажиглалтын сүлжээ",
     icon: CloudSun,
@@ -146,10 +147,10 @@ export function UnelgeeWorkspace() {
   const [tab, pick] = useStoredTab<TabId>("unelgee.tab", IDS, "unelgee");
 
   return (
-    <div className="department-workspace">
+    <div className="department-workspace ue-workspace">
       <SourceTabs tabs={TABS} value={tab} onChange={pick} label="Сэдэв" />
 
-      <div className="department-workspace-content">
+      <div id="ue-topic-panel" className="department-workspace-content" role="region" aria-label={TABS.find((topic) => topic.id === tab)?.label}>
         {tab === "unelgee" ? <UnelgeeDashboard /> : null}
         {tab === "bomt" ? <BomtDashboard /> : null}
         {tab === "flood" ? <FloodDashboard /> : null}

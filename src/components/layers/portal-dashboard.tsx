@@ -46,6 +46,7 @@ import {
   type LayerInfo,
 } from "@/lib/portal-layers";
 import { cn, num } from "@/lib/utils";
+import { TopicBreakdown, TopicMapLegend, TOPIC_NOTES, recordUnit, topicChartTitle } from "@/components/unelgee/layer-presentation";
 
 const LayerMap = dynamic(
   () => import("@/components/wells/map").then((m) => m.WellsMap),
@@ -232,7 +233,8 @@ function labelFor(hit: Loaded, oid: number): string {
  * мегабайт дэмий явна. Нэг удаа татсаныг санах ойд үлдээнэ — дахин
  * асаахад шууд гарна.
  */
-export function PortalLayersDashboard({ set }: { set: LayerSet }) {
+export function PortalLayersDashboard({ set, presentation }: { set: LayerSet; presentation?: "environment" }) {
+  const environment = presentation === "environment";
   const [showCharts, setShowCharts] = React.useState(true);
   /** Давхарга бүрийн тодорхойлолт — эхэнд бүгдийг НЭГ удаа уншина */
   const [infos, setInfos] = React.useState<Record<string, LayerInfo>>({});
@@ -589,6 +591,7 @@ export function PortalLayersDashboard({ set }: { set: LayerSet }) {
   const colorField = React.useCallback(
     (id: string): string | null => {
       if (id in colorBy) return colorBy[id];
+      if (environment) return null;
       /* Олон утгатай задаргаа өнгө жолоодохгүй: нэг дүрс хоёр
          ангилалд харьяалагдвал аль өнгийг нь өгөх вэ гэдэг хариултгүй */
       const first = loaded[id]?.charts.find(
@@ -598,7 +601,7 @@ export function PortalLayersDashboard({ set }: { set: LayerSet }) {
         ? first.field
         : null;
     },
-    [colorBy, loaded],
+    [colorBy, loaded, environment],
   );
 
   /**
@@ -783,7 +786,7 @@ export function PortalLayersDashboard({ set }: { set: LayerSet }) {
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-2.5">
+    <div className={cn("flex h-full min-h-0 flex-col gap-2.5", environment && "ue-layer-dashboard")}>
       {/*
         ---- ШҮҮЛТҮҮРИЙН МӨР ----
 
@@ -886,18 +889,21 @@ export function PortalLayersDashboard({ set }: { set: LayerSet }) {
         })}
       </FilterBar>
 
+      {environment ? <p className="ue-topic-note">{TOPIC_NOTES[set.key]}</p> : null}
+
       <div className="analytics-overview" aria-label="Өгөгдлийн тойм">
         <Stat icon={Layers3} label="Идэвхтэй давхарга" value={num(stats.layers)} />
-        <Stat icon={Shapes} label="Шүүлтэд тохирох бичлэг" value={num(stats.records)} />
-        <Stat icon={Ruler} label="Талбай, га" value={stats.ha > 0 ? num(Math.round(stats.ha)) : "—"} />
+        <Stat icon={Shapes} label={environment ? "Сонгосон давхаргын бүртгэл" : "Шүүлтэд тохирох бичлэг"} value={environment && on.some((id) => !loaded[id] && !failed[id]) ? "…" : num(stats.records)} />
+        <Stat icon={Ruler} label={environment ? "Дүрсүүдийн талбайн нийлбэр, га" : "Талбай, га"} value={stats.ha > 0 ? (environment ? new Intl.NumberFormat("mn-MN", { maximumFractionDigits: 2 }).format(stats.ha) : num(Math.round(stats.ha))) : "—"} />
       </div>
+      {environment && on.length > 1 ? <p className="ue-chart-note">Давхаргуудын бүртгэл болон талбай давхцаж болно. Нийлбэр нь давхардлыг хассан нийт хэмжээ биш.</p> : null}
 
       <Columns
         id={`layers-${set.key}`}
-        left={picker ? 286 : undefined}
+        left={picker ? (environment ? 228 : 286) : undefined}
         /* Бүлэглэсэн багана энд сууна — 300px дээр гурван оны
          харьцуулалт зураас болно. Хэрэглэгч чирж өөрчилнө */
-        right={showCharts ? 350 : undefined}
+        right={showCharts ? (environment ? 370 : 350) : undefined}
         className="min-h-0 flex-1"
       >
         {/* ---- ЗҮҮН: давхаргын жагсаалт (зөвхөн сонголттой үед) ---- */}
@@ -920,6 +926,8 @@ export function PortalLayersDashboard({ set }: { set: LayerSet }) {
                   return (
                     <button
                       key={id}
+                      type="button"
+                      aria-pressed={isOn}
                       onClick={() => (info ? toggle(id) : retry(id))}
                       className={cn(
                         "flex w-full items-start gap-2 px-3 py-2.5 text-left transition-colors hover:bg-paper-hi",
@@ -942,7 +950,7 @@ export function PortalLayersDashboard({ set }: { set: LayerSet }) {
                       <span className="min-w-0 flex-1">
                         <span
                           className={cn(
-                            "block truncate text-[12px] leading-tight",
+                            environment ? "block text-[12px] leading-relaxed" : "block truncate text-[12px] leading-tight",
                             isOn ? "text-ink" : "text-ink-2",
                           )}
                         >
@@ -1012,6 +1020,16 @@ export function PortalLayersDashboard({ set }: { set: LayerSet }) {
                 cluster={false}
               />
               <BasemapGallery value={basemap} onChange={setBasemap} />
+              {environment ? <TopicMapLegend groups={views.map(({ id, hit, rows }) => {
+                const field = colorField(id);
+                const breakdown = hit.charts.find((b) => b.field === field && b.kind === "count");
+                const counts = new Map<string, number>();
+                if (breakdown) for (const row of rows) for (const key of breakdown.keyOf(row)) counts.set(key, (counts.get(key) ?? 0) + 1);
+                return {
+                  id, name: hit.info.name, geometry: hit.info.geometry, field: breakdown?.label,
+                  items: breakdown ? breakdown.values.map((d) => ({ key: d.key, label: d.label, color: palettes[id]?.get(d.key) ?? toneOf(id), count: counts.get(d.key) ?? 0 })) : [{ key: id, label: GEOMETRY_LABEL[hit.info.geometry] ?? "Бүртгэл", color: toneOf(id), count: rows.length }],
+                };
+              })} /> : null}
 
               {/* Шошгын унтраалга — суурь зургийн товчны хажууд */}
               <button
@@ -1108,12 +1126,16 @@ export function PortalLayersDashboard({ set }: { set: LayerSet }) {
 
         {/* ---- БАРУУН: ангиллын задаргаа ---- */}
         {showCharts && <div className="flex min-h-0 flex-col gap-2.5 overflow-y-auto">
-          {views.length === 0 ? (
+          {(views.length === 0 || (environment && views.every((view) => !view.charts.length))) ? (
             <Card className="min-h-[120px] flex-1">
               <Head title="Задаргаа" />
               <div className="hatch flex flex-1 items-center justify-center px-4">
                 <p className="text-center text-[12px] leading-relaxed text-ink-3">
-                  {picker
+                  {environment && on.some((id) => !loaded[id] && !failed[id])
+                    ? "Сонгосон давхаргын мэдээллийг ачаалж байна…"
+                    : environment && views.length
+                    ? "Ангиллаар харьцуулах мэдээлэл байхгүй. Газрын зураг дээрх бүртгэлээс дэлгэрэнгүйг үзнэ үү."
+                    : picker
                     ? "Давхарга асаахад задаргаа нь энд гарна."
                     : "Задаргаа гарахуйц талбар олдсонгүй."}
                 </p>
@@ -1182,12 +1204,15 @@ export function PortalLayersDashboard({ set }: { set: LayerSet }) {
               return (
                 <CutCard
                   key={`${id}:${b.id}`}
-                  title={chartTitle(b)}
+                  title={environment ? topicChartTitle(b, id) : chartTitle(b)}
                   tone={tone}
                   first={i === 0}
                   action={
                     driver ? (
                       <button
+                        type="button"
+                        aria-pressed={lit}
+                        disabled={environment && b.values.length > MAX_COLOR_VALUES}
                         onClick={() =>
                           setColorBy((c) => ({
                             ...c,
@@ -1209,12 +1234,14 @@ export function PortalLayersDashboard({ set }: { set: LayerSet }) {
                         )}
                         style={lit ? { background: tone } : undefined}
                       >
-                        <Palette size={11} strokeWidth={1.8} />
+                        {environment ? <span className="ue-color-action"><Palette size={12} />{lit ? "Өнгө асаалттай" : "Зурагт өнгөөр ялгах"}</span> : <Palette size={11} strokeWidth={1.8} />}
                       </button>
                     ) : null
                   }
                 >
-                  {b.kind === "compare" && b.groups ? (
+                  {environment && !isTime(b) && b.kind !== "compare" ? (
+                    <TopicBreakdown breakdown={b} tone={tone} palette={palette} selected={chosen} onSelect={onPick} unit={recordUnit(id)} />
+                  ) : b.kind === "compare" && b.groups ? (
                     /*
                       ХЭВТЭЭ багана: ангилал нь дүүрэг, аж ахуйн нэгж
                       зэрэг УРТ нэртэй бөгөөд олон байдаг тул босоо

@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import dynamic from "next/dynamic";
-import { Boxes, FlaskConical, Loader2, Trash2, Workflow, Wrench } from "lucide-react";
+import { Boxes, FlaskConical, Loader2, Workflow, Wrench } from "lucide-react";
 import { SourceTabs, useStoredTab } from "@/components/ui/source-tabs";
 
 /*
@@ -37,10 +37,6 @@ const InspectionScheme = dynamic(
   { ssr: false, loading: spinner },
 );
 
-const LandfillDashboard = dynamic(
-  () => import("@/components/hyanalt/landfill-dashboard").then((m) => m.LandfillDashboard),
-  { ssr: false, loading: spinner },
-);
 
 const ChemSystemDashboard = dynamic(
   () =>
@@ -88,21 +84,19 @@ const TABS = [
     note: "2026 оны үйл ажиллагааны журам",
     icon: Workflow,
   },
-  {
-    /*
-      ⚠ САНУУЛГА: энэ табын дата нь ЗАГВАР — бүх мөр зохиомол жишээ.
-      Дэлгэц дээр тусгай анхааруулга ГАРГАХГҮЙ; дэлгэрэнгүйг
-      `@/lib/landfill`-ийн толгойн тайлбараас үзнэ.
+/*
+  ⚠⚠ "УСТГАЛ, ЛАНДФИЛЛ" ТАБ ХАСАГДСАН (хэрэглэгчийн шийдвэр,
+  2026-09-21). Тэр нь ЗАГВАР дата байсан — бүх мөр зохиомол жишээ
+  (`ЖИШЭЭ-У01`, `ЖИШЭЭ-Л01`), платформын "зохиомол дата
+  хэрэглэхгүй" дүрмийн цорын ганц үл хамаарах зүйл. Түүнийг
+  харуулахын өмнө хэрэглэгчээр тэмдэглүүлдэг (`checkable`) байсан ч
+  жагсаалтад сууж байсаар байв.
 
-      `checkable`: тиймээс энэ таб нь өөрөө нээгдэхгүй — тэмдэглэсэн
-      үед л агуулга нь гарна.
-    */
-    id: "landfill",
-    label: "Устгал, ландфилл",
-    note: "10 байгууламж · 25 хогийн цэг",
-    icon: Trash2,
-    checkable: true,
-  },
+  ⚠ Самбар ба дата УСТГААГҮЙ: `hyanalt/landfill-dashboard.tsx`,
+  `lib/landfill.ts` хоёулаа хэвээр. Бодит мэдээлэл ирэхэд энэ
+  бүртгэлд табыг буцааж нэмнэ — `DISPOSAL`, `LANDFILL` массивуудыг
+  л солино.
+*/
 ] as const;
 
 type TabId = (typeof TABS)[number]["id"];
@@ -167,8 +161,6 @@ export function HyanaltWorkspace() {
           <ChemSystemDashboard />
         ) : open === "repair" ? (
           <RepairMap />
-        ) : open === "landfill" ? (
-          <LandfillDashboard />
         ) : open === "scheme" ? (
           <InspectionScheme />
         ) : open === "chemicals" ? (

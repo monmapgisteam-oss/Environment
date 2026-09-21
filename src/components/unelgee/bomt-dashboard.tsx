@@ -15,7 +15,7 @@ import {
   Users,
   Wrench,
 } from "lucide-react";
-import { RowChart, type Datum } from "@/components/charts";
+import type { Datum } from "@/components/charts";
 import { BasemapGallery } from "@/components/map/basemap-gallery";
 import { MapTip, MapTipRow, useMapTip } from "@/components/map/hover-tip";
 import { FilterBar, FilterMenu, PickList } from "@/components/wells/filter-bar";
@@ -38,7 +38,11 @@ import {
   type BomtData,
   type BomtRow,
 } from "@/lib/bomt";
-import { cn, num } from "@/lib/utils";
+import { spreadRamp } from "@/lib/tone-ramp";
+import { num } from "@/lib/utils";
+import { Card, Field, Head, MapLegend, Pending, Stat, type LegendItem } from "./ui";
+import { Composition, Segments, Table, type Column, type Key } from "./viz";
+import { StackedComparison } from "./subject-charts";
 
 const PolygonMap = dynamic(
   () => import("@/components/wells/map").then((m) => m.WellsMap),
@@ -55,20 +59,45 @@ const PolygonMap = dynamic(
 const NO_POINTS: MapPoints = { oid: [], lon: [], lat: [] };
 const NO_INDEX = new Uint32Array(0);
 
-type Skip = "planting" | "activity" | "district" | "landuse" | "implementer";
+type Dim = "planting" | "activity" | "district" | "landuse" | "implementer";
+
+/* Мод тарих байршлын ӨНГӨ — бүртгэлийн ТОГТМОЛ дарааллаар (`PLANTING`) */
+const PLANTING_COLOR = new Map<string, string>(
+  PLANTING.map((p, i) => [p.id, spreadRamp(PLANTING.length)[i]] as [string, string]),
+);
+const FALLBACK = "#67d7e4";
+
+/** Хүснэгтийн МӨРИЙН хэмжээс — багана нь үргэлж мод тарих байршил */
+const ROW_DIMS = [
+  { id: "district", label: "Дүүрэг" },
+  { id: "activity", label: "Үйл ажиллагааны чиглэл" },
+  { id: "landuse", label: "Газрын зориулалт" },
+] as const;
+type RowDim = (typeof ROW_DIMS)[number]["id"];
+
+type ImplementerRow = {
+  name: string;
+  n: number;
+  ha: number;
+  site: number;
+  nbog: number;
+};
 
 /* --------------------------------------------------------------------------
-   Байгаль орчны менежментийн төлөвлөгөө — 2026 оны нэгтгэл
+   Байгаль орчны менежментийн төлөвлөгөө — 2026 оны нэгтгэл.
+   2026-09-18-нд ШИНЭЭР бичигдсэн (хэрэглэгч: "бүтэц, диаграм нэг хэвийн").
 
-   Энэ датаны гол асуулт нь "хаана" ч биш, "хэзээ" ч биш — ХААНА МОД
-   ТАРИХ вэ. Төсөл бүр төлөвлөгөөгөөрөө мод тарих үүрэг хүлээдэг бөгөөд
-   түүнийг өөрийн талбайдаа хийх үү, эсвэл НБОГ-т шилжүүлэх үү гэдэг нь
-   165 бичлэгийн 159-ийг хоёр талд хуваадаг. Тэр диаграм нь зүүн баганын
-   ёроолд, өөрийнхөө зайг л эзэлж суудаг.
+   Гол асуулт нь ХААНА МОД ТАРИХ вэ — төсөл бүр төлөвлөгөөгөөрөө мод
+   тарих үүрэг хүлээдэг бөгөөд өөрийн талбайдаа хийх үү, НБОГ-т
+   шилжүүлэх үү гэдэг нь 165-ын 159-ийг хоёр талд хуваадаг.
 
-   Хэлтсийн нөгөө самбар (ерөнхий үнэлгээ) нь ХҮСНЭГТ төвтэй, бичлэг
-   бүрийг документ мэтээр уншуулдаг. Энэ нь эсрэгээрээ: ганц үүргийн
-   биелэлтийг олонлог дээр хардаг.
+   Бүтэц (ерөнхий үнэлгээний толин тусгал — зураг ЗҮҮНД):
+     шүүлтүүрийн мөр → үзүүлэлтийн зурвас
+     → бүтэн өргөнөөр МОД ТАРИХ БАЙРШЛЫН ЗУРВАС (100%-ийн харьцаа)
+     → ЗҮҮН: газрын зураг, байршлаар өнгөлсөн, тайлбартай
+     → БАРУУН: мод тарих байршил × (дүүрэг | чиглэл | зориулалт)
+       хүснэгт · төсөл хэрэгжүүлэгчийн хүснэгт (тоо, талбай, задаргаа).
+   Мөрөн диаграм БАЙХГҮЙ.
    -------------------------------------------------------------------------- */
 
 export function BomtDashboard() {
@@ -81,9 +110,9 @@ export function BomtDashboard() {
   const [landuse, setLanduse] = React.useState<string | null>(null);
   const [implementer, setImplementer] = React.useState<string | null>(null);
   const [picked, setPicked] = React.useState<number | null>(null);
+  const [rowDim, setRowDim] = React.useState<RowDim>("district");
   const [basemap, setBasemap] = React.useState<Basemap>(() => defaultBasemap());
 
-  /** Хулгана дагасан хөвөгч тайлбар — байрлалыг өөрөө удирдана */
   const tip = useMapTip();
   const panel = useMapPanel("right");
 
@@ -97,115 +126,172 @@ export function BomtDashboard() {
 
   const rows = data?.rows;
 
-  /**
-   * Шүүлтүүр давсан бичлэгүүд. `skip`-д заасан хэмжигдэхүүнийг алгасна —
-   * ингэснээр диаграм бүр өөрийнхөө шүүлтээс бусдаар шүүгдэж, сонгосны
-   * дараа ч бусад мөрүүд харагдсаар үлдэнэ (cross-filter).
-   */
-  const keep = React.useCallback(
-    (r: BomtRow, skip?: Skip) => {
-      if (skip !== "planting" && planting && r.planting !== planting) return false;
-      if (skip !== "activity" && activity && r.activity !== activity) return false;
-      if (skip !== "district" && district && r.district !== district) return false;
-      if (skip !== "landuse" && landuse && r.landuse !== landuse) return false;
-      if (skip !== "implementer" && implementer && r.implementer !== implementer) {
-        return false;
-      }
+  const dimOf = React.useCallback((r: BomtRow, d: Dim): string => r[d], []);
+  const labelOf = React.useCallback((d: Dim, k: string): string => {
+    if (d === "activity") return ACTIVITY_LABEL.get(k) ?? k;
+    if (d === "planting") return PLANTING_LABEL.get(k) ?? k;
+    return k;
+  }, []);
+
+  const passes = React.useCallback(
+    (r: BomtRow, ...skips: Dim[]) => {
+      const s = new Set<Dim>(skips);
+      if (!s.has("planting") && planting && r.planting !== planting) return false;
+      if (!s.has("activity") && activity && r.activity !== activity) return false;
+      if (!s.has("district") && district && r.district !== district) return false;
+      if (!s.has("landuse") && landuse && r.landuse !== landuse) return false;
+      if (!s.has("implementer") && implementer && r.implementer !== implementer) return false;
       return true;
     },
     [planting, activity, district, landuse, implementer],
   );
 
-  const shown = React.useMemo(
-    () => (rows ?? []).filter((r) => keep(r)),
-    [rows, keep],
-  );
+  const shown = React.useMemo(() => (rows ?? []).filter((r) => passes(r)), [rows, passes]);
 
-  /** Тоолж бүлэглэх туслах */
-  const tally = React.useCallback(
-    (field: "district" | "landuse" | "implementer", skip: Skip): Datum[] => {
+  const count = React.useCallback(
+    (d: Dim, ...skips: Dim[]) => {
       const m = new Map<string, number>();
       for (const r of rows ?? []) {
-        if (!keep(r, skip)) continue;
-        m.set(r[field], (m.get(r[field]) ?? 0) + 1);
+        if (!passes(r, ...skips)) continue;
+        const k = dimOf(r, d);
+        m.set(k, (m.get(k) ?? 0) + 1);
       }
-      return [...m]
-        .map(([k, v]) => ({ key: k, label: k, value: v }))
-        .sort((a, b) => b.value - a.value);
+      return m;
     },
-    [rows, keep],
+    [rows, passes, dimOf],
   );
 
-  /*
-    Мод тарих байршлын хуваарилалт. Дараалал нь ТОГТМОЛ (`PLANTING`) —
-    тоогоор эрэмбэлбэл шүүлт солих бүрд зурвасын хэсгүүд байраа солино.
-  */
   const plantingData = React.useMemo<Datum[]>(() => {
-    const m = new Map<string, number>();
-    for (const r of rows ?? []) {
-      if (!keep(r, "planting")) continue;
-      m.set(r.planting, (m.get(r.planting) ?? 0) + 1);
-    }
+    const m = count("planting", "planting");
     return PLANTING.filter((p) => m.has(p.id)).map((p) => ({
       key: p.id,
       label: p.label,
       value: m.get(p.id) ?? 0,
     }));
-  }, [rows, keep]);
+  }, [count]);
 
-  const activityData = React.useMemo<Datum[]>(() => {
-    const m = new Map<string, number>();
-    for (const r of rows ?? []) {
-      if (!keep(r, "activity")) continue;
-      m.set(r.activity, (m.get(r.activity) ?? 0) + 1);
+  const menu = React.useCallback(
+    (d: Dim): Datum[] => {
+      const m = count(d, d);
+      const out = [...m].map(([k, v]) => ({ key: k, label: labelOf(d, k), value: v }));
+      if (d === "activity") {
+        const order = new Map<string, number>(ACTIVITIES.map((a, i) => [a.id, i]));
+        return out.sort((a, b) => (order.get(a.key) ?? 99) - (order.get(b.key) ?? 99));
+      }
+      return out.sort((a, b) => b.value - a.value);
+    },
+    [count, labelOf],
+  );
+  const activityMenu = React.useMemo(() => menu("activity"), [menu]);
+  const districtMenu = React.useMemo(() => menu("district"), [menu]);
+  const landuseMenu = React.useMemo(() => menu("landuse"), [menu]);
+  const implementerMenu = React.useMemo(() => menu("implementer"), [menu]);
+
+  /* ---------------- Хүснэгт: мөрийн хэмжээс × мод тарих байршил ---------------- */
+  const matrix = React.useMemo(() => {
+    const base = (rows ?? []).filter((r) => passes(r, rowDim, "planting"));
+    const rowTotal = new Map<string, number>();
+    const cells = new Map<string, number>();
+    const seenPlanting = new Set<string>();
+    for (const r of base) {
+      const rk = dimOf(r, rowDim);
+      rowTotal.set(rk, (rowTotal.get(rk) ?? 0) + 1);
+      seenPlanting.add(r.planting);
+      const ck = `${rk}\u001f${r.planting}`;
+      cells.set(ck, (cells.get(ck) ?? 0) + 1);
     }
-    return ACTIVITIES.filter((a) => m.has(a.id))
-      .map((a) => ({ key: a.id, label: a.label, value: m.get(a.id) ?? 0 }))
-      .sort((a, b) => b.value - a.value);
-  }, [rows, keep]);
+    let rowKeys: Key[];
+    if (rowDim === "activity") {
+      rowKeys = ACTIVITIES.filter((a) => rowTotal.has(a.id)).map((a) => ({ key: a.id, label: a.label }));
+    } else {
+      rowKeys = [...rowTotal]
+        .sort((a, b) => b[1] - a[1])
+        .map(([k]) => ({ key: k, label: k }));
+    }
+    const colKeys: Key[] = PLANTING.filter((p) => seenPlanting.has(p.id)).map((p) => ({
+      key: p.id,
+      label: p.label,
+    }));
+    return { rowKeys, colKeys, cell: (r: string, c: string) => cells.get(`${r}\u001f${c}`) ?? 0 };
+  }, [rows, passes, rowDim, dimOf]);
 
-  const districtData = React.useMemo(() => tally("district", "district"), [tally]);
-  const landuseData = React.useMemo(() => tally("landuse", "landuse"), [tally]);
-  const implementerData = React.useMemo(
-    () => tally("implementer", "implementer"),
-    [tally],
+  const rowSel = rowDim === "district" ? district : rowDim === "activity" ? activity : landuse;
+  const setRowSel = (k: string | null) => {
+    if (rowDim === "district") setDistrict(k);
+    else if (rowDim === "activity") setActivity(k);
+    else setLanduse(k);
+  };
+
+  /* ---------------- Төсөл хэрэгжүүлэгчийн хүснэгт ---------------- */
+  const implementers = React.useMemo<ImplementerRow[]>(() => {
+    const m = new Map<string, ImplementerRow>();
+    for (const r of rows ?? []) {
+      if (!passes(r, "implementer")) continue;
+      const hit = m.get(r.implementer) ?? { name: r.implementer, n: 0, ha: 0, site: 0, nbog: 0 };
+      hit.n += 1;
+      hit.ha += r.m2 / 10_000;
+      if (r.planting === "site") hit.site += 1;
+      if (r.planting === "nbog") hit.nbog += 1;
+      m.set(r.implementer, hit);
+    }
+    return [...m.values()].sort((a, b) => b.n - a.n || b.ha - a.ha);
+  }, [rows, passes]);
+
+  const columns = React.useMemo<Column<ImplementerRow>[]>(
+    () => [
+      { key: "name", label: "Төсөл хэрэгжүүлэгч", render: (r) => <span className="line-clamp-2">{r.name}</span> },
+      { key: "n", label: "Төлөвлөгөө", num: true, render: (r) => num(r.n), meter: (r) => r.n, className: "w-[76px]" },
+      { key: "ha", label: "Талбай, га", num: true, render: (r) => r.ha.toFixed(2), meter: (r) => r.ha, className: "w-[84px]" },
+      { key: "site", label: "Төслийн талбайд", num: true, render: (r) => (r.site ? num(r.site) : "·"), className: "w-[70px]" },
+      { key: "nbog", label: "НБОГ", num: true, render: (r) => (r.nbog ? num(r.nbog) : "·"), className: "w-[52px]" },
+    ],
+    [],
   );
 
-  /** Газрын зурагт үлдэх талбайнууд */
+  /** Газрын зурагт үлдэх талбайнууд — өнгө нь мод тарих байршлаас */
   const shapes = React.useMemo<GeoJSON.FeatureCollection>(() => {
     if (!data) return { type: "FeatureCollection", features: [] };
-    const on = new Set(shown.map((r) => r.oid));
-    return {
-      type: "FeatureCollection",
-      features: data.shapes.features.filter((f) => on.has(Number(f.id))),
-    };
+    const on = new Map(shown.map((r) => [r.oid, r]));
+    const features: GeoJSON.Feature[] = [];
+    for (const f of data.shapes.features) {
+      const r = on.get(Number(f.id));
+      if (!r) continue;
+      features.push({ ...f, properties: { oid: r.oid, c: PLANTING_COLOR.get(r.planting) ?? FALLBACK } });
+    }
+    return { type: "FeatureCollection", features };
   }, [data, shown]);
 
-  /* ---------------- Индикатор ---------------- */
+  const legend = React.useMemo<LegendItem[]>(
+    () =>
+      plantingData.map((d) => ({
+        key: d.key,
+        label: d.label,
+        color: PLANTING_COLOR.get(d.key) ?? FALLBACK,
+        count: d.value,
+      })),
+    [plantingData],
+  );
+
   const stats = React.useMemo(() => {
     const m2 = shown.reduce((s, r) => s + r.m2, 0);
     const site = shown.filter((r) => r.planting === "site").length;
+    const nbog = shown.filter((r) => r.planting === "nbog").length;
     return {
       n: shown.length,
       implementers: new Set(shown.map((r) => r.implementer)).size,
       ha: m2 / 10_000,
       site,
+      nbog,
     };
   }, [shown]);
 
-  /* ---------------- Сонголтын хүрээ (zoom action) ---------------- */
   const anyFilter = Boolean(planting || activity || district || landuse || implementer);
-
   const focus = React.useMemo<Extent | null>(() => {
     if (!data) return null;
     if (picked == null && !anyFilter) return null;
-    const on =
-      picked != null ? new Set([picked]) : new Set(shown.map((r) => r.oid));
+    const on = picked != null ? new Set([picked]) : new Set(shown.map((r) => r.oid));
     const b = new Bounds();
-    for (const f of data.shapes.features) {
-      if (on.has(Number(f.id))) b.addGeometry(f.geometry);
-    }
-    /* Нэгж талбар жижиг байж болно — хамгийн багадаа ~250м хүрээ өгнө */
+    for (const f of data.shapes.features) if (on.has(Number(f.id))) b.addGeometry(f.geometry);
     return b.get(0.0022);
   }, [data, shown, picked, anyFilter]);
 
@@ -213,18 +299,10 @@ export function BomtDashboard() {
     () => (picked == null ? null : (rows?.find((r) => r.oid === picked) ?? null)),
     [rows, picked],
   );
-
   const hovered = React.useMemo(
     () => (tip.oid == null ? null : (rows?.find((r) => r.oid === tip.oid) ?? null)),
     [rows, tip.oid],
   );
-
-  const activeCount =
-    (planting ? 1 : 0) +
-    (activity ? 1 : 0) +
-    (district ? 1 : 0) +
-    (landuse ? 1 : 0) +
-    (implementer ? 1 : 0);
 
   function reset() {
     setPlanting(null);
@@ -236,33 +314,19 @@ export function BomtDashboard() {
   }
 
   if (error || !data) {
-    return (
-      <div className="flex h-full items-center justify-center rounded-xs border border-line bg-paper-2">
-        {error ? (
-          <div className="text-center">
-            <p className="text-[14px] font-medium">
-              Эх сурвалжийн мэдээллийг татаж чадсангүй
-            </p>
-            <p className="num mt-2 text-[12px] text-ink-3">{error}</p>
-          </div>
-        ) : (
-          <span className="flex items-center gap-2 text-[13.5px] text-ink-3">
-            <Loader2 size={14} className="animate-spin" />
-            Менежментийн төлөвлөгөө татаж байна…
-          </span>
-        )}
-      </div>
-    );
+    return <Pending error={error} text="Менежментийн төлөвлөгөөний нэгтгэл татаж байна…" />;
   }
 
+  const activeCount =
+    (planting ? 1 : 0) + (activity ? 1 : 0) + (district ? 1 : 0) + (landuse ? 1 : 0) + (implementer ? 1 : 0);
+  const pct = (v: number) => (stats.n ? `${((v / stats.n) * 100).toFixed(0)}%` : "—");
+
   return (
-    <div className="flex h-full min-h-0 flex-col gap-2.5">
-      {/* ============ ШҮҮЛТҮҮРИЙН МӨР ============ */}
-      <FilterBar
-        title="Байгаль орчны менежментийн төлөвлөгөө"
-        activeCount={activeCount}
-        onReset={reset}
-      >
+    <div
+      className="flex h-full min-h-0 flex-col gap-2.5"
+      style={{ "--tone": "var(--d-unelgee)" } as React.CSSProperties}
+    >
+      <FilterBar title="БАЙГАЛЬ ОРЧНЫ МЕНЕЖМЕНТИЙН ТӨЛӨВЛӨГӨӨ" activeCount={activeCount} onReset={reset}>
         <FilterMenu
           label="Мод тарих байршил"
           icon={TreePine}
@@ -273,18 +337,16 @@ export function BomtDashboard() {
         >
           <PickList items={plantingData} selected={planting} onPick={setPlanting} />
         </FilterMenu>
-
         <FilterMenu
-          label="Чиглэл"
+          label="Үйл ажиллагааны чиглэл"
           icon={Wrench}
           value={activity ? (ACTIVITY_LABEL.get(activity) ?? activity) : null}
           active={Boolean(activity)}
           onClear={() => setActivity(null)}
           width={246}
         >
-          <PickList items={activityData} selected={activity} onPick={setActivity} />
+          <PickList items={activityMenu} selected={activity} onPick={setActivity} />
         </FilterMenu>
-
         <FilterMenu
           label="Дүүрэг"
           icon={Building2}
@@ -293,95 +355,61 @@ export function BomtDashboard() {
           onClear={() => setDistrict(null)}
           width={230}
         >
-          <PickList items={districtData} selected={district} onPick={setDistrict} />
+          <PickList items={districtMenu} selected={district} onPick={setDistrict} />
         </FilterMenu>
-
         <FilterMenu
-          label="Зориулалт"
+          label="Газрын зориулалт"
           icon={Layers3}
           value={landuse}
           active={Boolean(landuse)}
           onClear={() => setLanduse(null)}
           width={300}
         >
-          <PickList items={landuseData} selected={landuse} onPick={setLanduse} />
+          <PickList items={landuseMenu} selected={landuse} onPick={setLanduse} />
         </FilterMenu>
-
         <FilterMenu
-          label="Хэрэгжүүлэгч"
+          label="Төсөл хэрэгжүүлэгч"
           icon={Users}
           value={implementer}
           active={Boolean(implementer)}
           onClear={() => setImplementer(null)}
           width={300}
         >
-          <PickList
-            items={implementerData}
-            selected={implementer}
-            onPick={setImplementer}
-            searchable
-          />
+          <PickList items={implementerMenu} selected={implementer} onPick={setImplementer} searchable />
         </FilterMenu>
       </FilterBar>
 
-      {/* ============ ИНДИКАТОР ============ */}
+      {/* ============ ҮЗҮҮЛЭЛТИЙН ЗУРВАС ============ */}
       <Card className="shrink-0">
-        <div className="grid grid-cols-2 divide-x divide-y divide-line sm:grid-cols-4 xl:divide-y-0">
-          <Stat icon={ScrollText} label="Төлөвлөгөө" value={num(stats.n)} />
+        <div className="grid grid-cols-2 divide-x divide-y divide-line sm:grid-cols-3 lg:grid-cols-5 lg:divide-y-0">
+          <Stat icon={ScrollText} label="Менежментийн төлөвлөгөө" value={num(stats.n)} sub="2026 оны нэгтгэл" />
           <Stat icon={Users} label="Төсөл хэрэгжүүлэгч" value={num(stats.implementers)} />
           <Stat icon={Ruler} label="Нийт талбай, га" value={stats.ha.toFixed(1)} />
-          {/*
-            "Өөрийн талбайд" гэдгийг НИЙТЭД харьцуулж бичнэ: 66 гэсэн тоо
-            дангаараа их үү, бага уу гэдгийг хэлэхгүй.
-          */}
-          <Stat
-            icon={Sprout}
-            label="Төслийн талбайд мод тарих"
-            value={`${stats.site} / ${stats.n}`}
+          <Stat icon={Sprout} label="Төслийн талбайд мод тарих" value={num(stats.site)} sub={`${pct(stats.site)} · ${num(stats.n)}-аас`} />
+          <Stat icon={TreePine} label="Мод тарих байршил: НБОГ" value={num(stats.nbog)} sub={`${pct(stats.nbog)} · ${num(stats.n)} төлөвлөгөөнөөс`} />
+        </div>
+      </Card>
+
+      {/* ============ МОД ТАРИХ БАЙРШИЛ — бүтэн өргөн ============ */}
+      <Card className="shrink-0">
+        <Head title="Мод тарих байршил">
+          <span className="text-[10.5px] text-ink-3">төлөвлөгөөний тоо ба хувь</span>
+        </Head>
+        <div className="px-3 py-2.5">
+          <Composition
+            data={plantingData}
+            colorOf={(k) => PLANTING_COLOR.get(k) ?? FALLBACK}
+            selected={planting}
+            onSelect={setPlanting}
+            unit="төлөвлөгөө"
           />
         </div>
       </Card>
 
-      {/* ============ ГОЛ СҮЛЖЭЭ ============ */}
-      <Columns id="bomt" left={262} right={282} className="min-h-0 flex-1">
-        {/* ---- ЗҮҮН: юуны төлөө, хаана ---- */}
-        <div className="flex min-h-0 flex-col gap-2.5">
-          <Panel
-            title="Чиглэлээр"
-            note="бүлэглэсэн ангилал"
-            data={activityData}
-            selected={activity}
-            onSelect={setActivity}
-            grow
-          />
-          <Panel
-            title="Дүүргээр"
-            data={districtData}
-            selected={district}
-            onSelect={setDistrict}
-            grow
-          />
-          {/*
-            Мод тарих байршил — дөрөвхөн мөртэй тул өөрийнхөө зайг л эзэлж,
-            баганын ёроолд суудаг. Дээрх хоёр диаграм үлдсэн зайг хуваана.
-          */}
-          <Panel
-            title="Мод тарих байршил"
-            note="төлөвлөгөөний тоо"
-            data={plantingData}
-            selected={planting}
-            onSelect={setPlanting}
-          />
-        </div>
-
-        {/* ---- ТӨВ: газрын зураг ---- */}
-        <Card className="relative min-h-[300px] overflow-hidden">
+      {/* ============ ГОЛ СҮЛЖЭЭ: зүүнд зураг, баруунд хүснэгтүүд ============ */}
+      <Columns layout="flex" id="bomt-3" left={540} className="min-h-0 flex-1">
+        <Card className="relative min-h-[320px] overflow-hidden xl:w-(--col-l) xl:shrink-0">
           <div className="relative h-full w-full">
-            {/*
-              ЗӨВХӨН олон өнцөгт: нэгж талбарын хэлбэр, хэмжээ нь өөрөө
-              мэдээлэл. Талбай 19.7 м²-аас 25 га хүртэл тул төлөөлөх цэг
-              нь жижгийг нь байгаагаас хамаагүй том мэт харуулна.
-            */}
             <PolygonMap
               points={NO_POINTS}
               visible={NO_INDEX}
@@ -393,103 +421,60 @@ export function BomtDashboard() {
               cluster={false}
             />
             <BasemapGallery value={basemap} onChange={setBasemap} />
+            <MapLegend title="Мод тарих байршил" items={legend} selected={planting} onSelect={setPlanting} />
 
             {hovered ? (
-              <MapTip state={tip} width={244}>
+              <MapTip state={tip} width={248}>
                 <div className="px-2.5 pt-2 pb-1">
                   <span className="text-[10px] leading-none tracking-[0.08em] text-data uppercase">
-                    {PLANTING_LABEL.get(hovered.planting)}
+                    Мод тарих: {PLANTING_LABEL.get(hovered.planting)}
                   </span>
                 </div>
-                <div className="px-2.5 pb-2 text-[12.5px] leading-snug font-medium text-ink">
-                  {hovered.implementer}
-                </div>
-
+                <div className="px-2.5 pb-2 text-[12.5px] leading-snug font-medium text-ink">{hovered.implementer}</div>
                 <div className="space-y-1.5 border-t border-line px-2.5 py-2">
-                  <MapTipRow
-                    icon={Wrench}
-                    text={ACTIVITY_LABEL.get(hovered.activity) ?? "—"}
-                  />
+                  <MapTipRow icon={Wrench} text={ACTIVITY_LABEL.get(hovered.activity) ?? "—"} />
                   <MapTipRow icon={Ruler} num text={areaText(hovered.m2)} />
                   <MapTipRow
                     icon={MapPin}
-                    text={`${hovered.district}${
-                      hovered.khoroo ? `, ${hovered.khoroo}-р хороо` : ""
-                    }`}
+                    text={`${hovered.district} дүүрэг${hovered.khoroo ? `, ${hovered.khoroo}-р хороо` : ""}`}
                   />
                 </div>
-
                 <div className="flex items-center justify-between gap-2 border-t border-line px-2.5 py-1.5">
                   <span className="num min-w-0 flex-1 truncate text-[10px] leading-none text-ink-3">
-                    {hovered.parcel || "—"}
+                    {hovered.parcel ? `Нэгж талбар ${hovered.parcel}` : "—"}
                   </span>
                   <MousePointerClick size={11} className="shrink-0 text-ink-3" />
                 </div>
               </MapTip>
             ) : null}
 
-            {/*
-              Сонгосон төлөвлөгөө — зүүн дээд буланд бүтэн бичилт.
-              Хөвөгч тайлбартай зэрэг харагдаж болно: тэр нь хулганы
-              доорхыг, энэ нь тогтоосон сонголтыг хэлнэ.
-            */}
             {selected ? (
               <MapPanel
                 state={panel}
                 title="Менежментийн төлөвлөгөө"
                 onClose={() => setPicked(null)}
-                className="top-2.5 left-2.5 max-h-[calc(100%-1.25rem)] w-[272px]"
+                className="top-2.5 left-2.5 max-h-[calc(100%-1.25rem)] w-[292px]"
               >
                 <div className="min-h-0 flex-1 overflow-y-auto px-2.5 py-2">
-                  <div className="text-[12.5px] leading-snug font-medium text-ink">
-                    {selected.implementer}
-                  </div>
-
+                  <div className="text-[12.5px] leading-snug font-medium text-ink">{selected.implementer}</div>
                   <dl className="mt-2.5 space-y-1.5">
-                    {/*
-                      Мод тарих байршил нь эхний мөрөнд: энэ самбарын гол
-                      хэмжигдэхүүн. Бүлэглэсэн ангилал БА эх бичвэр
-                      хоёулаа — бүлэглэлт нь бүртгэсэн үгийг нуухгүй.
-                    */}
-                    <Field
-                      k="Мод тарих"
-                      v={PLANTING_LABEL.get(selected.planting) ?? "—"}
-                    />
+                    <Field k="Мод тарих байршил" v={PLANTING_LABEL.get(selected.planting) ?? "—"} />
                     {selected.plantingRaw ? (
-                      <Field
-                        k="Бүртгэсэн"
-                        v={<span className="text-ink-2">{selected.plantingRaw}</span>}
-                      />
+                      <Field k="Бүртгэсэн байршил" v={<span className="text-ink-2">{selected.plantingRaw}</span>} />
                     ) : null}
-                    <Field
-                      k="Чиглэл"
-                      v={ACTIVITY_LABEL.get(selected.activity) ?? "—"}
-                    />
+                    <Field k="Үйл ажиллагааны чиглэл" v={ACTIVITY_LABEL.get(selected.activity) ?? "—"} />
                     {selected.activityRaw ? (
-                      <Field
-                        k="Бүртгэсэн"
-                        v={<span className="text-ink-2">{selected.activityRaw}</span>}
-                      />
+                      <Field k="Бүртгэсэн чиглэл" v={<span className="text-ink-2">{selected.activityRaw}</span>} />
                     ) : null}
-                    <Field k="Зориулалт" v={selected.landuse} />
+                    <Field k="Газрын зориулалт" v={selected.landuse} />
                     <Field k="Эрхийн хэлбэр" v={selected.right} />
                     <Field
                       k="Байршил"
-                      v={`${selected.district}${
-                        selected.khoroo ? `, ${selected.khoroo}-р хороо` : ""
-                      }`}
+                      v={`${selected.district} дүүрэг${selected.khoroo ? `, ${selected.khoroo}-р хороо` : ""}`}
                     />
-                    {selected.address ? (
-                      <Field k="Хаяг" v={selected.address} />
-                    ) : null}
-                    <Field
-                      k="Нэгж талбар"
-                      v={<span className="num">{selected.parcel || "—"}</span>}
-                    />
-                    <Field
-                      k="Талбай"
-                      v={<span className="num">{areaText(selected.m2)}</span>}
-                    />
+                    {selected.address ? <Field k="Хаяг" v={selected.address} /> : null}
+                    <Field k="Нэгж талбарын дугаар" v={<span className="num">{selected.parcel || "—"}</span>} />
+                    <Field k="Талбайн хэмжээ" v={<span className="num">{areaText(selected.m2)}</span>} />
                   </dl>
                 </div>
               </MapPanel>
@@ -497,112 +482,43 @@ export function BomtDashboard() {
           </div>
         </Card>
 
-        {/* ---- БАРУУН: хэн, ямар зориулалтаар ---- */}
-        <div className="flex min-h-0 flex-col gap-2.5">
-          <Panel
-            title="Хэрэгжүүлэгчээр"
-            note="эхний 20"
-            data={implementerData.slice(0, 20)}
-            selected={implementer}
-            onSelect={setImplementer}
-            grow
-          />
-          <Panel
-            title="Зориулалтаар"
-            note="эх сурвалжийн ангилал"
-            data={landuseData}
-            selected={landuse}
-            onSelect={setLanduse}
-            grow
-          />
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2.5">
+          <Card className="min-h-[150px] flex-1">
+            <Head title="Мод тарих байршлаар задаргаа">
+              <Segments options={ROW_DIMS} value={rowDim} onChange={setRowDim} />
+            </Head>
+            <StackedComparison
+              rows={matrix.rowKeys}
+              cols={matrix.colKeys}
+              cell={matrix.cell}
+              selectedRow={rowSel}
+              selectedCol={planting}
+              onSelect={(r, c) => {
+                setRowSel(r);
+                setPlanting(c);
+              }}
+              colorOf={(key) => PLANTING_COLOR.get(key) ?? FALLBACK}
+            />
+          </Card>
+
+          <Card className="min-h-[150px] flex-1">
+            <Head title="Төсөл хэрэгжүүлэгчээр">
+              <span className="num text-[10.5px] text-ink-3">{num(implementers.length)} хэрэгжүүлэгч</span>
+            </Head>
+            <Table
+              rows={implementers}
+              columns={columns}
+              keyOf={(r) => r.name}
+              selected={implementer}
+              onSelect={setImplementer}
+            />
+          </Card>
         </div>
       </Columns>
 
       <p className="shrink-0 px-0.5 text-[10.5px] leading-none text-ink-3">
-        Суурь зураг: Esri · Дата: нийслэлийн байгаль орчны GIS сервер ·{" "}
-        {num(data.rows.length)} нэгж талбар · {data.fetchedAt}-нд хуулсан хувилбар
+        Суурь зураг: Esri · Дата: ArcGIS Enterprise · {num(data.rows.length)} нэгж талбар · 2026 он
       </p>
-    </div>
-  );
-}
-
-/* -------------------------------------------------------------------------- */
-
-function Panel({
-  title,
-  note,
-  data,
-  selected,
-  onSelect,
-  grow,
-}: {
-  title: string;
-  note?: string;
-  data: Datum[];
-  selected: string | null;
-  onSelect: (k: string | null) => void;
-  grow?: boolean;
-}) {
-  return (
-    <Card className={grow ? "min-h-[120px] flex-1" : "shrink-0"}>
-      <Head title={title}>
-        {note ? <span className="text-[10.5px] text-ink-3">{note}</span> : null}
-      </Head>
-      <div className="min-h-0 flex-1 overflow-y-auto p-3">
-        <RowChart data={data} selected={selected} onSelect={onSelect} />
-      </div>
-    </Card>
-  );
-}
-
-function Card({ className, children }: { className?: string; children: React.ReactNode }) {
-  return (
-    <div className={cn("flex flex-col rounded-xs border border-line bg-paper-2", className)}>
-      {children}
-    </div>
-  );
-}
-
-function Head({ title, children }: { title: string; children?: React.ReactNode }) {
-  return (
-    <div className="flex shrink-0 items-center justify-between gap-2 border-b border-line px-3 py-2">
-      <h2 className="display text-[13.5px] leading-none tracking-[0.06em] uppercase">
-        {title}
-      </h2>
-      {children}
-    </div>
-  );
-}
-
-function Stat({
-  label,
-  value,
-  icon: Icon,
-}: {
-  label: string;
-  value: string;
-  icon: typeof ScrollText;
-}) {
-  return (
-    <div className="px-3 py-2.5">
-      <span className="eyebrow block min-h-[28px] leading-[1.25]">{label}</span>
-      <span className="mt-1.5 flex items-center gap-1.5">
-        <Icon size={20} strokeWidth={1.6} className="shrink-0 text-ink-3" />
-        <span className="num truncate text-[16px] leading-none font-medium text-ink">
-          {value}
-        </span>
-      </span>
-    </div>
-  );
-}
-
-function Field({ k, v }: { k: string; v: React.ReactNode }) {
-  return (
-    <div className="flex gap-2">
-      <dt className="w-[78px] shrink-0 text-[10.5px] tracking-[0.08em] text-ink-3 uppercase">
-        {k}
-      </dt>
-      <dd className="min-w-0 flex-1 text-[12px] leading-snug text-ink">{v}</dd>
     </div>
   );
 }

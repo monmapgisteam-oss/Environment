@@ -1,0 +1,85 @@
+.ue-workspace button:focus-visible, .ue-workspace summary:focus-visible { outline: 2px solid var(--tone); outline-offset: 3px; }
+.ue-topic-note { color: var(--ink-3); font-size: 12px; line-height: 1.5; padding-inline: 3px; }
+.ue-card { border-radius: 12px; }
+.ue-card-head { min-height: 43px; flex-wrap: wrap; gap: 8px; padding: 10px 14px; }
+.ue-card-head h2 { font-size: 12px; line-height: 1.5; font-weight: 600; letter-spacing: 0; text-transform: none; }
+.ue-stat { justify-content: flex-start; padding: 15px; gap: 12px; }
+.ue-stat > svg { width: 28px; }
+.ue-stat-label { font-size: 11px; line-height: 1.5; letter-spacing: 0; text-transform: none; }
+.ue-stat-value { font-size: 25px; line-height: 1.2; }
+.ue-layer-dashboard .analytics-chart-head { flex-wrap: wrap; align-items: flex-start; gap: 8px; }
+.ue-layer-dashboard .analytics-chart-head h2 { white-space: normal; line-height: 1.5; }
+.ue-color-action { display: inline-flex; align-items: center; gap: 5px; padding: 3px; font-size: 10px; }
+.ue-chart-caption { display: flex; justify-content: space-between; gap: 10px; color: var(--ink-3); font-size: 10px; line-height: 1.5; padding-bottom: 9px; }
+.ue-chart-rows { display: flex; flex-direction: column; gap: 4px; }
+.ue-chart-row { width: 100%; text-align: left; border-radius: 6px; padding: 6px; }
+.ue-chart-row:hover, .ue-chart-row[aria-pressed="true"] { background: var(--paper-hi); }
+.ue-chart-row-label { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; font-size: 12px; line-height: 1.5; color: var(--ink-2); }
+.ue-chart-row-label strong { flex-shrink: 0; font-variant-numeric: tabular-nums; color: var(--ink); }
+.ue-category-swatch { display: inline-block; width: 8px; height: 8px; margin-right: 6px; border-radius: 2px; }
+.ue-chart-row-label small { display: inline-block; width: 49px; text-align: right; color: var(--ink-3); font-weight: 400; font-size: 10px; }
+.ue-chart-track { display: block; height: 7px; margin-top: 7px; border-radius: 3px; background: var(--paper-hi); overflow: hidden; }
+.ue-chart-track i { display: block; height: 100%; border-radius: inherit; min-width: 0; }
+.ue-chart-note { color: var(--ink-3); font-size: 10px; line-height: 1.6; padding-top: 6px; }
+.ue-composition { display: flex; height: 22px; gap: 2px; overflow: hidden; border-radius: 5px; margin-bottom: 8px; }
+.ue-map-legend { position: absolute; z-index: 10; bottom: 32px; left: 12px; width: min(275px, calc(100% - 65px)); border: 1px solid var(--line-2); border-radius: 10px; background: color-mix(in oklab, var(--paper) 96%, transparent); box-shadow: 0 4px 18px #0003; }
+.ue-map-legend summary { cursor: pointer; padding: 10px 12px; font-size: 11px; font-weight: 600; color: var(--ink); }
+.ue-map-legend-body { max-height: 210px; overflow-y: auto; border-top: 1px solid var(--line); padding: 10px 12px; }
+.ue-map-legend section + section { border-top: 1px solid var(--line); margin-top: 10px; padding-top: 10px; }
+.ue-map-legend h3 { font-size: 11px; font-weight: 600; line-height: 1.5; }
+.ue-map-legend p { font-size: 10px; color: var(--ink-3); line-height: 1.5; margin-top: 5px; }
+.ue-legend-row { display: flex; align-items: center; gap: 8px; padding-top: 7px; font-size: 11px; color: var(--ink-2); }
+.ue-legend-row > span:nth-child(2) { flex: 1; }
+.ue-legend-row strong { font-size: 11px; font-variant-numeric: tabular-nums; font-weight: 500; }
+.ue-map-symbol { width: 16px; height: 12px; flex-shrink: 0; border: 2px solid currentColor; background: color-mix(in srgb, currentColor 30%, transparent); border-radius: 2px; }
+.ue-map-symbol.is-point { width: 12px; height: 12px; margin-inline: 2px; border-radius: 50%; background: currentColor; }
+.ue-map-symbol.is-line { height: 0; background: none; border-width: 2px 0 0; }
+.ue-matrix-help { padding: 8px 12px; color: var(--ink-3); font-size: 10px; line-height: 1.6; border-bottom: 1px solid var(--line); }
+.ue-workspace .ue-matrix { min-width: 620px; }
+.ue-chart-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 14px; color: var(--ink-3); font-size: 10px; }
+.ue-chart-toolbar > div { display: flex; gap: 3px; }
+.ue-chart-toolbar button { padding: 4px 7px; border: 1px solid var(--line); border-radius: 5px; }
+.ue-chart-toolbar button[aria-pressed="true"] { color: var(--ink); background: var(--paper-hi); border-color: var(--tone); }
+.ue-column-scroll { overflow-x: auto; padding-top: 10px; }
+.ue-columns { position: relative; display: flex; gap: 10px; padding-left: 27px; }
+.ue-column { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: stretch; }
+.ue-column-plot { position: relative; display: block; height: 140px; margin: 10px 8px 0; }
+.ue-column-plot > i { position: absolute; width: 100%; left: 0; border-radius: 5px 5px 0 0; }
+.ue-column-plot > b { position: absolute; left: 50%; transform: translate(-50%, -4px); color: var(--ink); font-size: 11px; font-variant-numeric: tabular-nums; }
+.ue-zero { position: absolute; left: -8px; right: -8px; height: 1px; background: var(--line-2); }
+.ue-column-label { display: block; margin-top: 9px; font-size: 10px; line-height: 1.5; overflow-wrap: anywhere; color: var(--ink-2); text-align: center; }
+.ue-column-guides { position: absolute; top: 10px; left: 0; height: 140px; display: flex; flex-direction: column; justify-content: space-between; color: var(--ink-3); font-size: 9px; }
+.ue-column[aria-pressed="true"] .ue-column-label { color: var(--tone); font-weight: 700; }
+.ue-dot-axis { display: flex; justify-content: space-between; margin: 0 57px 6px 40%; color: var(--ink-3); font-size: 9px; }
+.ue-dot-row { display: grid; grid-template-columns: minmax(80px, 40%) minmax(55px, 1fr) 45px; align-items: center; gap: 12px; width: 100%; padding: 10px 4px; border-bottom: 1px solid var(--line); text-align: left; font-size: 11px; color: var(--ink-2); }
+.ue-dot-row strong { text-align: right; font-variant-numeric: tabular-nums; font-size: 11px; color: var(--ink); }
+.ue-dot-track { position: relative; height: 1px; background: var(--line-2); }
+.ue-dot-track i { position: absolute; height: 13px; top: -6px; width: 1px; background: var(--line-2); }
+.ue-dot-track b { position: absolute; top: -5px; width: 11px; height: 11px; transform: translateX(-50%); border-radius: 50%; box-shadow: 0 0 0 3px var(--paper-2); }
+.ue-dot-row[aria-pressed="true"] { background: var(--paper-hi); }
+.ue-share-total { display: flex; align-items: baseline; gap: 10px; margin-bottom: 14px; }
+.ue-share-total strong { font-size: 29px; font-variant-numeric: tabular-nums; color: var(--ink); }
+.ue-share-total span { font-size: 10px; color: var(--ink-3); }
+.ue-share-strip { display: flex; gap: 2px; height: 37px; overflow: hidden; border-radius: 6px; }
+.ue-share-strip button { min-width: 0; overflow: hidden; font-size: 11px; font-weight: 700; color: #102023; }
+.ue-share-key { display: flex; flex-direction: column; margin-top: 12px; gap: 9px; }
+.ue-share-key button { display: flex; align-items: center; gap: 8px; text-align: left; font-size: 11px; color: var(--ink-2); }
+.ue-share-key i, .ue-stack-key i { width: 9px; height: 9px; border-radius: 2px; flex-shrink: 0; }
+.ue-share-key span { flex: 1; }
+.ue-share-key small { width: 40px; text-align: right; font-size: 10px; color: var(--ink-3); }
+.ue-trend svg { width: 100%; min-width: 390px; display: block; }
+.ue-trend { overflow-x: auto; }
+.ue-trend-labels { display: flex; justify-content: space-between; min-width: 390px; padding: 0 3% 8px; }
+.ue-trend-labels button { flex: 1; font-size: 10px; padding: 3px; color: var(--ink-3); }
+.ue-trend-labels button[aria-pressed="true"] { color: var(--ink); background: var(--paper-hi); border-radius: 4px; }
+.ue-stacked-comparison { padding: 12px 14px; overflow: auto; }
+.ue-stack-key { display: flex; flex-wrap: wrap; gap: 10px; }
+.ue-stack-key button { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--ink-2); }
+.ue-stack-key button[aria-pressed="true"] { text-decoration: underline; }
+.ue-stack-row { margin-top: 16px; }
+.ue-stack-row > button { display: flex; width: 100%; justify-content: space-between; gap: 12px; font-size: 11px; color: var(--ink-2); text-align: left; margin-bottom: 7px; }
+.ue-stack-row > button strong { font-variant-numeric: tabular-nums; }
+.ue-stack-track { background: var(--paper-hi); border-radius: 4px; }
+.ue-stack-track > div { display: flex; height: 24px; gap: 1px; overflow: hidden; border-radius: 4px; }
+.ue-stack-track button { min-width: 0; font-size: 10px; color: #102023; font-weight: 600; }
+@media (max-width: 639px) { .ue-stat { padding: 10px; } .ue-stat-value { font-size: 21px; } }

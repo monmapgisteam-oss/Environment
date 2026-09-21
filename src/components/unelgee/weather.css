@@ -1,0 +1,122 @@
+.weather-workspace { gap: 12px; }
+.weather-nav { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 3px; border: 1px solid var(--line); border-radius: 10px; background: var(--paper-2); }
+/* ⚠ Өндөр нь багассан (хэрэглэгчийн хүсэлт, 2026-09-21): 11px-ийн
+   босоо зай нь зурвасыг 46px болгож, доорх заалтын картуудаас илүү
+   жин авдаг байв. Харагдац сонгох нь хуудасны хамгийн жижиг шийдвэр */
+.weather-nav button { padding: 6px 11px; border-radius: 6px; font-size: 11.5px; font-weight: 500; }
+.weather-nav button[aria-pressed="true"] { background: var(--tone); border-color: var(--tone); color: var(--paper); }
+.weather-nav .weather-action { flex: none; margin-left: auto; padding: 5px 9px; font-size: 11px; }
+.weather-live, .weather-archive { gap: 10px; }
+.weather-live > section, .weather-stations, .weather-picker, .weather-map { border-radius: 10px; }
+.weather-action { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 7px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--paper-2); color: var(--ink-2); font-size: 11px; cursor: pointer; }
+.weather-action:hover { background: var(--paper-hi); color: var(--ink); }
+.weather-action:disabled { opacity: .5; cursor: wait; }
+.weather-picker button { min-height: 35px; }
+.weather-stations li button { padding: 10px 12px; }
+.weather-map { min-height: 340px; }
+.weather-archive .ue-stat-value { font-size: 20px; overflow-wrap: anywhere; }
+.weather-archive .ue-stat { padding: 12px; }
+.weather-filter { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; padding: 12px; }
+.weather-filter label { display: flex; gap: 8px; align-items: center; font-size: 11px; color: var(--ink-2); }
+.weather-filter input, .weather-filter select { padding: 7px 9px; min-width: 0; border: 1px solid var(--line); border-radius: 6px; background: var(--paper); color: var(--ink); font-size: 12px; }
+.weather-workspace :is(button,input,select):focus-visible { outline: 2px solid var(--tone); outline-offset: 3px; }
+.observation-header { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; padding: 8px 12px; border-bottom: 1px solid var(--line); background: var(--paper-2); }
+.observation-station-icon { display: flex; align-items: center; justify-content: center; width: 16px; height: 18px; flex-shrink: 0; color: var(--tone); }
+.observation-station-icon svg { width: 16px; height: 16px; }
+.observation-heading { display: flex; flex-wrap: wrap; align-items: baseline; gap: 3px 10px; min-width: 0; flex: 1; }
+.observation-heading p { margin: 0; font-size: 10px; color: var(--ink-3); }
+/* ⚠ ТОМ ҮСГЭЭР (хэрэглэгчийн хүсэлт, 2026-09-21) — платформын
+   хэсгийн тэмдэглэгээтэй нэг хэлбэр. Өргөн зай нь том үсгийн
+   эгнээг уншигдахуйц байлгана */
+.observation-heading h2 { font-size: 12.5px; font-weight: 600; line-height: 1.3; letter-spacing: .06em; text-transform: uppercase; color: var(--ink); overflow-wrap: anywhere; }
+.observation-place { display: flex; align-items: center; gap: 6px; color: var(--ink-3); font-size: 11px; }
+.observation-time { display: flex; align-items: center; gap: 6px; padding-left: 10px; border-left: 1px solid var(--line); color: var(--ink-2); }
+.observation-time > span { display: flex; flex-wrap: wrap; align-items: baseline; gap: 3px 8px; }
+.observation-time > svg { color: var(--tone); }
+.observation-time strong, .observation-time small { display: block; font-weight: 400; font-size: 11px; line-height: 1.5; }
+.observation-time small { color: var(--ink-3); font-size: 10px; }
+.observation-time.is-stale, .observation-time.is-stale > svg, .observation-time.is-stale small { color: var(--ochre); }
+.observation-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; padding: 7px; }
+/* ⚠ Картын өндөр 72-оос 64px (хэрэглэгчийн хүсэлт, 2026-09-21).
+   Босоо зай нь 8-аас 6px, шошгын мөрийн өндөр 1.3-аас 1.22 болов.
+   ⚠ Шошгын ХОЁР МӨРИЙН доод өндрийг (29px) ХАСАХГҮЙ — тэр нь
+   зургаан тоог нэг шугамд эгнүүлдэг цорын ганц зүйл */
+/* ⚠ ЗҮҮН ТАЛЫН ЗАЙ 10-аас 14px (хэрэглэгчийн хүсэлт, 2026-09-21).
+   Богино нэртэй гурван карт дээр (даралт, үүлшил, салхи) агуулга
+   зүүн ирмэгт наалдаж, баруун тал нь хоосон үлддэг байв.
+   ⚠ Зайг ЗУРГУУЛАНД нэмнэ — гуравт нь л нэмбэл тэмдгүүд эгнэхээ
+   болино. Тэмдгийн зайг 9-өөс 8 болгож, шошгын өргөнөөс ердөө
+   3px л хасав */
+.observation-metric { display: flex; align-items: center; gap: 8px; padding: 6px 10px 6px 14px; min-height: 64px; border: 1px solid var(--line); border-radius: 5px; background: var(--paper-2); }
+.observation-metric > svg:first-child { width: 24px; height: 24px; flex-shrink: 0; }
+.observation-metric > div { display: flex; flex: 1; min-width: 0; flex-direction: column; }
+/* ⚠ ТОМ ҮСГЭЭР, 12px (хэрэглэгчийн хүсэлт, 2026-09-21: "нэрүүдийг
+   uppercase, size 1px томруул"). Өргөн зай нь 0.03em — том үсгийн
+   эгнээг уншигдахуйц байлгах хамгийн бага хэмжээ; илүү өгвөл урт
+   нэртэй хоёр карт нэг мөрөнд багтахаа болино */
+.observation-metric > div > div:first-child { font-size: 12px; font-weight: 600; line-height: 1.22; letter-spacing: .03em; text-transform: uppercase; min-height: 29px; color: var(--ink-3); }
+.observation-metric > div > div:last-child { margin-top: 3px; gap: 4px; white-space: nowrap; }
+/* ⚠ Шошго том үсэг болж жин нэмсэн тул тоог 23-аас 21px болгов
+   (хэрэглэгчийн хүсэлт, 2026-09-21) */
+.observation-metric > div > div:last-child > span:first-child { font-size: 21px; font-weight: 500; line-height: 1; letter-spacing: -.025em; }
+.observation-metric > div > div:last-child > span:last-child { color: var(--ink-3); font-size: 11px; }
+.observation-metric.is-wind { gap: 7px; }
+.observation-metric.is-wind > svg:first-child { width: 21px; height: 21px; }
+/* ⚠ Луужин 46-аас 54px (хэрэглэгчийн хүсэлт, 2026-09-21).
+   Картын дотор талын өндөр 57px тул энэ нь ДЭЭД хязгаарт ойр —
+   үүнээс томсговол карт өөрөө өндөрсөж, эгнээ зөрнө */
+.observation-metric.is-wind > svg:last-child { width: 54px; height: 54px; flex-shrink: 0; }
+/* ⚠ Багана бүр шошгынхоо уртаар жинтэй: том үсэгт шилжсэний дараа
+   урт нэртэй хоёр нь илүү өргөн шаардана */
+/* ⚠ Гурав дахь багана ГАНЦААРАА арай өргөн (хэрэглэгчийн хүсэлт,
+   2026-09-21): "Агаарын харьцангуй чийг" нь зургаагийн хамгийн урт
+   нэр бөгөөд хоёр дахь мөр нь ("ХАРЬЦАНГУЙ ЧИЙГ") картын ирмэгт
+   бараг хүрч байв. Бусад тав нь ТЭНЦҮҮ хэвээр */
+@media (min-width: 1280px) { .observation-grid { grid-template-columns: 1fr 1fr 1.13fr 1fr 1fr 1fr; } }
+@media (max-width: 639px) {
+  .observation-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; padding: 7px; }
+  .observation-header { gap: 6px 8px; padding: 8px 10px; }
+  .observation-heading { flex-basis: calc(100% - 24px); }
+  .observation-place { padding-left: 24px; font-size: 10px; }
+  .observation-time { border: 0; padding-left: 24px; }
+  .observation-metric { padding: 6px; gap: 7px; }
+  .observation-metric.is-wind > svg:first-child { display: none; }
+}
+/* ⚠ Урьдчилсан мэдээний картын өндөр багасав (хэрэглэгчийн хүсэлт,
+   2026-09-21). Босоо зай, температурын хэмжээ, хоосон суудлуудыг
+   татсан — багана, өдөр шөнийн бүтэц ХӨНДӨӨГҮЙ */
+.forecast-grid { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(190px, 1fr); gap: 10px; padding: 9px; overflow-x: auto; background: var(--paper); scroll-snap-type: x proximity; }
+.forecast-day { display: flex; flex-direction: column; min-width: 0; overflow: hidden; border: 1px solid var(--line); border-radius: 10px; background: var(--paper-2); scroll-snap-align: start; }
+.forecast-date { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; padding: 7px 12px; border-bottom: 1px solid var(--line); font-size: 12px; font-weight: 600; }
+.forecast-date time { color: var(--ink-3); font-size: 11px; font-weight: 400; }
+.forecast-periods { padding: 0 12px; }
+.forecast-period { display: grid; grid-template-columns: 1fr 1fr; align-items: start; column-gap: 8px; padding: 9px 0 7px; }
+.forecast-reading { display: flex; flex-direction: column; gap: 5px; }
+.forecast-period-label { display: flex; align-items: center; gap: 4px; color: var(--ink-3); font-size: 10px; }
+.forecast-period:not(.is-night) .forecast-period-label svg { color: var(--ochre); }
+.forecast-temperature { font-size: 27px; line-height: 1; font-weight: 600; letter-spacing: -.05em; color: var(--ink); }
+.forecast-temperature small { margin-left: 4px; font-size: 12px; font-weight: 400; letter-spacing: 0; color: var(--ink-3); }
+.forecast-condition { display: flex; flex-direction: column; align-items: flex-end; gap: 5px; text-align: right; color: var(--ink-2); font-size: 10px; line-height: 1.4; }
+.forecast-condition > span:first-child { align-self: flex-end; width: 32px; }
+.forecast-condition > span:last-child { min-height: 24px; }
+.forecast-condition svg { width: 32px; height: 32px; color: var(--ochre); stroke-width: 1.4; }
+.forecast-feels { grid-column: 1 / -1; margin-top: 4px; color: var(--ink-3); font-size: 10px; }
+.forecast-period.is-night { border-top: 1px dashed var(--line); padding-top: 7px; }
+.forecast-period.is-night .forecast-reading { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 8px; }
+.forecast-period.is-night .forecast-temperature { font-size: 19px; color: var(--water); letter-spacing: -.02em; }
+.forecast-period.is-night .forecast-condition { min-height: 34px; flex-direction: row; justify-content: flex-end; align-items: center; }
+.forecast-period.is-night .forecast-condition > span:first-child { width: 21px; align-self: center; }
+.forecast-period.is-night .forecast-condition svg { width: 21px; height: 21px; color: var(--water); }
+.forecast-details { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 12px; margin-top: auto; border-top: 1px solid var(--line); padding: 7px 12px; background: color-mix(in srgb, var(--paper-3) 45%, var(--paper-2)); }
+.forecast-details > span { display: flex; align-items: center; gap: 4px; font-size: 10px; color: var(--ink-3); }
+.forecast-details strong { color: var(--ink-2); font-weight: 500; }
+.forecast-details svg { color: var(--water); }
+@media (max-width: 1279px), (max-height: 850px) {
+  .weather-workspace { overflow-y: auto; }
+  .weather-live, .weather-archive { height: auto; flex: 1 0 auto; }
+}
+@media (max-width: 639px) {
+  .weather-nav button { flex: 1; padding: 6px 6px; font-size: 11px; }
+  .weather-filter label { width: 100%; justify-content: space-between; }
+  .weather-filter select { max-width: 70%; }
+}

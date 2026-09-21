@@ -20,6 +20,11 @@
 
 import type { LayerSet } from "@/lib/portal-layers";
 
+/* Шүүлтүүрийн мөрийн гарчиг ТОМ ҮСГЭЭР — хэлтсийн бусад самбартай нэг
+   хэв (хэрэглэгчийн шийдвэр, 2026-09-18). "…-ын давхарга" гэсэн
+   дагаварыг хасав: гарчиг нь сэдвийг нэрлэнэ, давхарга гэдэг нь
+   зүүн талын жагсаалтаас өөрөө харагдана. */
+
 /* --------------------------------------------------------------------------
    ӨНГӨ
 
@@ -27,7 +32,7 @@ import type { LayerSet } from "@/lib/portal-layers";
    дээр нийлдэг тул ялгарах ёстой ч хэлтсийнхээ өнгөний гэр бүлээс
    салах ёсгүй.
    -------------------------------------------------------------------------- */
-const HUES = [212, 205, 198, 191, 184, 219, 226, 233];
+const HUES = [230, 35, 165, 285, 85, 15, 325, 195];
 
 /* --------------------------------------------------------------------------
    B06 — ҮЕРИЙН ЭРСДЭЛ
@@ -40,18 +45,18 @@ const HUES = [212, 205, 198, 191, 184, 219, 226, 233];
    нээгдэхэд эхлээд хүрээ, дараа нь дотоод нарийвчлал харагдана.
    -------------------------------------------------------------------------- */
 const FLOOD_NAMES: Record<string, string> = {
-  B06_uyr_ersdelt_talbai: "Үерийн эрсдэлт талбай",
-  B06_uyr_ersdelt_tseg: "Үерийн эрсдэлт цэг",
+  B06_uyr_ersdelt_talbai: "Үерийн эрсдэлтэй талбай",
+  B06_uyr_ersdelt_tseg: "Үерийн эрсдэлтэй цэг",
   B06_uyrt_urtseun_negj_talbai: "Үерт өртсөн нэгж талбар",
-  B06_us_halisan_talbai_2024: "Ус халисан талбай, 2024",
-  B06_khoroo_ersdel: "Хорооны эрсдэл",
-  B06_barilga_ih_ersdel: "Их эрсдэлт барилга",
-  B06_ail_urh_ersdel: "Эрсдэлт айл өрх",
+  B06_us_halisan_talbai_2024: "Ус халисан талбай (2024 он)",
+  B06_khoroo_ersdel: "Хорооны үерийн эрсдэл",
+  B06_barilga_ih_ersdel: "Үерийн өндөр эрсдэлтэй барилга",
+  B06_ail_urh_ersdel: "Үерийн эрсдэлтэй өрх",
 };
 
 export const FLOOD: LayerSet = {
   key: "unelgee-flood",
-  title: "Үерийн эрсдэлийн давхарга",
+  title: "ҮЕРИЙН ЭРСДЭЛ",
   layers: Object.keys(FLOOD_NAMES),
   /* Эхэнд ЭРСДЭЛТ ТАЛБАЙ асаалттай — долоон давхаргын хамгийн
      ерөнхий нь; бусад нь түүний дэлгэрэнгүй (хэрэглэгчийн шийдвэр,
@@ -71,7 +76,7 @@ const GREEN_NAMES: Record<string, string> = {
 
 export const GREEN: LayerSet = {
   key: "unelgee-green",
-  title: "Ногоон байгууламжийн давхарга",
+  title: "НОГООН БАЙГУУЛАМЖ",
   layers: Object.keys(GREEN_NAMES),
   open: ["B11_nogoon_baiguulamj"],
   names: GREEN_NAMES,
@@ -89,10 +94,10 @@ export const GREEN: LayerSet = {
    биш — хоёуланг нь үлдээв.
    -------------------------------------------------------------------------- */
 const ECO_NAMES: Record<string, string> = {
-  "B13_2024_он_bichilgarden": "Бичил цэцэрлэг, 2024",
-  "B13_2023_он_bichilgarden": "Бичил цэцэрлэг, 2023",
+  "B13_2024_он_bichilgarden": "Бичил цэцэрлэг (2024 он)",
+  "B13_2023_он_bichilgarden": "Бичил цэцэрлэг (2023 он)",
   B13_Duguin_Zam_line: "Дугуйн зам",
-  B13_Yavgan_Zam_line: "Явган зам",
+  B13_Yavgan_Zam_line: "Явган хүний зам",
   B13_Orshuulga_polygon: "Оршуулгын газрын талбай",
   B13_Orshuulga_point: "Оршуулгын газар",
   B13_Tsergiin_angi_polygon: "Цэргийн ангийн талбай",
@@ -101,7 +106,7 @@ const ECO_NAMES: Record<string, string> = {
 
 export const ECO: LayerSet = {
   key: "unelgee-eco",
-  title: "Эко-инфраструктурын давхарга",
+  title: "ЭКО-ИНФРАСТРУКТУР",
   layers: Object.keys(ECO_NAMES),
   /* Хамгийн сүүлийн оны бичил цэцэрлэг — найман давхаргын эхнийх */
   open: ["B13_2024_он_bichilgarden"],
@@ -117,13 +122,13 @@ export const ECO: LayerSet = {
    хоёуланг нь үлдээв; давхарга нээгдэхэд өөрөө өөрийгөө тайлбарлана.
    -------------------------------------------------------------------------- */
 const WASTE_NAMES: Record<string, string> = {
-  B12_hogiin_tseg_polygon: "Хогийн цэгийн талбай",
-  B12_hogiin_tseg_point: "Хогийн цэг",
+  B12_hogiin_tseg_polygon: "Хог хаягдлын цэгийн талбай",
+  B12_hogiin_tseg_point: "Хог хаягдлын цэгийн байршил",
 };
 
 export const WASTE: LayerSet = {
   key: "unelgee-waste",
-  title: "Хогийн цэгийн давхарга",
+  title: "ХОГ ХАЯГДЛЫН ЦЭГ",
   layers: Object.keys(WASTE_NAMES),
   open: ["B12_hogiin_tseg_point"],
   names: WASTE_NAMES,
@@ -134,12 +139,12 @@ export const WASTE: LayerSet = {
    B07 — ХИЙН ТӨХӨӨРӨМЖ
    -------------------------------------------------------------------------- */
 const GAS_NAMES: Record<string, string> = {
-  B07_gas_tuhuurumj: "Хийн төхөөрөмж",
+  B07_gas_tuhuurumj: "Хийн тоног төхөөрөмж",
 };
 
 export const GAS: LayerSet = {
   key: "unelgee-gas",
-  title: "Хийн төхөөрөмжийн давхарга",
+  title: "ХИЙН ТОНОГ ТӨХӨӨРӨМЖ",
   layers: Object.keys(GAS_NAMES),
   open: ["B07_gas_tuhuurumj"],
   names: GAS_NAMES,

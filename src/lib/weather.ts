@@ -142,6 +142,18 @@ export type ForecastDay = {
   nightFeels: number | null;
   dayPheno: string;
   nightPheno: string;
+  /**
+   * Үзэгдлийн ДУГААР (`phenoIdDay` / `phenoIdNight`).
+   *
+   * Эх сурвалж үзэгдэл бүрийг нэрээс нь гадна дугаараар өгдөг тул
+   * дэлгэцийн тэмдгийг ТЭКСТЭЭР таахын оронд дугаараар тааруулна:
+   * нэр нь бичиглэлээрээ өөрчлөгдөж болох ч дугаар нь тогтвортой.
+   * ⚠ Дугаар нь олон улсын SYNOP код БИШ, эх сурвалжийн ӨӨРИЙН
+   * хуваарь (3 нь "Үүлэрхэг", 60 нь "Бага зэргийн бороо") тул
+   * гаднаас утга оноож БОЛОХГҮЙ.
+   */
+  dayPhenoId: number | null;
+  nightPhenoId: number | null;
   /** Тунадас орох магадлал, хувь */
   dayPrecip: number | null;
   nightPrecip: number | null;
@@ -199,6 +211,8 @@ type RawForecast = {
     temperatureNight_feel: number | null;
     phenoDay: string | null;
     phenoNight: string | null;
+    phenoIdDay: number | null;
+    phenoIdNight: number | null;
     Percentage_Precipitation_Day: number | null;
     Percentage_Precipitation_Night: number | null;
     windDay: number | null;
@@ -290,6 +304,8 @@ export async function fetchWeather(signal?: AbortSignal): Promise<WeatherData> {
         nightFeels: n(d.temperatureNight_feel),
         dayPheno: d.phenoDay ?? "",
         nightPheno: d.phenoNight ?? "",
+        dayPhenoId: n(d.phenoIdDay),
+        nightPhenoId: n(d.phenoIdNight),
         dayPrecip: n(d.Percentage_Precipitation_Day),
         nightPrecip: n(d.Percentage_Precipitation_Night),
         dayWind: n(d.windDay),
@@ -498,8 +514,41 @@ export function measureOf(id: MeasureId): Measure {
   return MEASURES.find((m) => m.id === id) ?? MEASURES[0];
 }
 
-/** Утгыг шатлалаас нь өнгө болгоно — жагсаалт ба зураг нэг эх сурвалжтай */
+/**
+ * БИЧВЭРТ зориулсан өнгө — гэрэлтэлтийг горимд тохируулна.
+ *
+ * `Measure.stops` нь ГАЗРЫН ЗУРАГТ зориулагдсан: хиймэл дагуулын
+ * бараан дэвсгэр дээр гэрэлтэхээр цайвар сонгогдсон. Тэр өнгөөр
+ * цагаан карт дээр тоо бичихэд уншигдахгүй болдог.
+ *
+ * `oklch(from … var(--value-l) calc(c * var(--value-c)) h)` нь ӨНЦГИЙГ
+ * хэвээр үлдээж гэрэлтэлт, ханалтыг горимд тохируулна — гэрэлд
+ * бараан, харанхуйд цайвар болох тул хоёр горимд ЗЭРЭГ уншигдана.
+ * `color-mix`-ээр хар/цагаан руу холивол ханалт хамт унаж өнгө
+ * шавартана (нэг удаа ингэж хийгээд буцаагдсан).
+ *
+ * ⚠ Ханалтын үржүүлэгч нь ЗААВАЛ: гэрэлтэлтийг шахахад өнгө цайж,
+ * харанхуйд тоонууд бараг цагаан болж ялгарлаа алддаг. Утгыг
+ * `globals.css`-д хэмжилтээр сонгосон — тэндхийн тайлбарыг үз.
+ *
+ * ⚠ ЗӨВХӨН бичвэрт. Газрын зургийн цэг, дулааны зурвасын нүд, багана
+ * зэрэг ДҮҮРГЭЛТ нь шатлалын эх өнгөө хэвээр хэрэглэнэ — тэдгээр нь
+ * бараан суурин дээр сууж, өөр хоорондоо ялгарах ёстой.
+ *
+ * ⚠ Хөтөч `oklch(from …)`-г танихгүй бол мөр хүчингүй болж өнгө
+ * УДАМШИНА — дуудагч тал үргэлж `text-ink` суурьтай байх ёстой.
+ */
+export function readable(hex: string): string {
+  return `oklch(from ${hex} var(--value-l, 0.6) calc(c * var(--value-c, 1)) h)`;
+}
+
+/** Утгыг шатлалаас нь БИЧВЭРИЙН өнгө болгоно — жагсаалт, хэрэгсэл, хүснэгт */
 export function colorOf(m: Measure, v: number | null): string {
+  return readable(stopHex(m, v));
+}
+
+/** Шатлалын хамгийн ойрын шатны эх өнгө — ДҮҮРГЭЛТЭД */
+export function stopHex(m: Measure, v: number | null): string {
   if (v == null) return INK;
   const s = m.stops;
   if (v <= s[0][0]) return s[0][1];

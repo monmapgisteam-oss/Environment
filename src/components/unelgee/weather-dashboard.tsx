@@ -3,14 +3,31 @@
 import * as React from "react";
 import dynamic from "next/dynamic";
 import {
-  Check,
+  ChevronDown,
+  RefreshCw,
   Clock,
+  Cloud,
+  CloudDrizzle,
+  CloudFog,
+  CloudLightning,
+  CloudRain,
+  CloudSnow,
+  CloudSun,
+  CloudMoon,
+  Cloudy,
+  Droplets,
+  Gauge as GaugeIcon,
+  History,
   Loader2,
   MapPin,
   Mountain,
-  Navigation,
-  Search,
+  Moon,
+  Radio,
+  Snowflake,
+  Sun,
   Thermometer,
+  Wind,
+  type LucideIcon,
 } from "lucide-react";
 import { BasemapGallery } from "@/components/map/basemap-gallery";
 import { MapTip, MapTipRow, useMapTip } from "@/components/map/hover-tip";
@@ -24,6 +41,7 @@ import {
 import {
   CAPITAL,
   FRESH_HOURS,
+  MEASURES,
   ageHours,
   ageText,
   colorOf,
@@ -31,14 +49,16 @@ import {
   fetchWeather,
   localTime,
   measureOf,
+  stopHex,
   windName,
-  type Measure,
   type MeasureId,
   type Obs,
   type Station,
   type WeatherData,
 } from "@/lib/weather";
 import { cn, num } from "@/lib/utils";
+import { WeatherArchive } from "./weather-archive";
+import "./weather.css";
 
 const PointMap = dynamic(
   () => import("@/components/wells/map").then((m) => m.WellsMap),
@@ -92,35 +112,139 @@ const PointMap = dynamic(
 const MAIN_SID = 292;
 
 /*
-  Хэмжигдэхүүний ХОЁР БҮЛЭГ, зураг тус бүрд нэг.
+  ⚠⚠ НЭГ ГАЗРЫН ЗУРАГ (хэрэглэгчийн шийдвэр, 2026-09-21: "2 биш 1 map
+  болгоод mapiin баруун талд мапын дээрх 5 button оруул").
 
-  Хуваалт нь агуулгаараа: зүүн талд АГААРЫН ТӨЛӨВ (температур, чийг,
-  даралт) — эдгээр нь мэдрэгчийн шууд заалт бөгөөд хоорондоо
-  физикээр холбоотой; баруун талд ТЭНГЭР, САЛХИ (үүлшил, салхины
-  хурд) — ажиглалтын өөр төрлийн хэмжүүр.
+  Урьд нь хэмжигдэхүүнийг хоёр бүлэгт хувааж (агаарын төлөв / тэнгэр,
+  салхи) хоёр зураг зэрэгцүүлдэг байв. Хоёр зураг тус бүр хагас
+  өргөнтэй болж, нийслэлийн долоон станц бие бие дээрээ шахагддаг
+  байлаа. Одоо нэг зураг бүтэн өргөнөө эзэлж, таван хэмжигдэхүүн нь
+  зургийн БАРУУН ДЭЭД буланд босоо жагсаалт болов.
+
+  ⚠ Баруун ИРМЭГИЙН ДУНД ойртуулах товч, 2D/3D сэлгэгч сууна;
+  зүүн дээд буланд суурь зургийн сонголт. Тиймээс хэмжигдэхүүний
+  жагсаалт баруун ДЭЭД буланд л багтана.
 */
-const GROUP_A: MeasureId[] = ["temp", "humidity", "pressure"];
-const GROUP_B: MeasureId[] = ["cloud", "wind"];
+const MEASURE_ICONS: Record<MeasureId, LucideIcon> = {
+  temp: Thermometer,
+  humidity: Droplets,
+  wind: Wind,
+  pressure: GaugeIcon,
+  cloud: Cloud,
+};
+
+/* --------------------------------------------------------------------------
+   ХОЁР ХАРАГДАЦ — БОДИТ ЦАГ ба АРХИВ (хэрэглэгчийн шийдвэр, 2026-09-21)
+
+   Нэг сэдвийн ХОЁР ӨӨР асуулт тул нэг дэлгэцэнд нийлүүлээгүй:
+
+     · **Бодит цаг** — мэдрэгч ОДОО юу хэлж байна вэ. Хугацааны тэнхлэг
+       огт байхгүй (эх сурвалжийн API түүх өгдөггүй), газрын зураг
+       давамгайлна.
+     · **Архив** — ТҮҮХ. `Tsag_agaar_arhiv` давхаргаас уншина; газрын
+       зураг байхгүй, оронд нь хугацааны тэнхлэг давамгайлна.
+
+   Хоёуланг нэг хуудсанд тавибал дэлгэц хоёр дахин уртсаж, аль нь
+   одоогийнх, аль нь өнгөрсний тоо болох нь холилдоно.
+
+   ⚠ Сонгоогүй харагдац УНТРААНА (`unmount`): доторх MapLibre зураг нь
+   нуугдсан контейнерт хэмжээгээ алддаг. Архивын дата нь модулийн
+   кэштэй тул буцаж ирэхэд дахин татагдахгүй; бодит цагийнх харин
+   ДАХИН татагдана — "одоо" гэдэг нь хуучирдаг утга.
+   -------------------------------------------------------------------------- */
+
+const VIEWS = [
+  { id: "live", label: "Бодит цагийн ажиглалт", icon: Radio },
+  { id: "archive", label: "Ажиглалтын архив", icon: History },
+] as const;
+
+type ViewId = (typeof VIEWS)[number]["id"];
 
 export function WeatherDashboard() {
+  const [view, setView] = React.useState<ViewId>("live");
+  const [refresh, setRefresh] = React.useState(0);
+  const [refreshing, setRefreshing] = React.useState(true);
+
+  return (
+    <div className="weather-workspace flex h-full min-h-0 flex-col">
+      <div
+        className="weather-nav shrink-0"
+        role="group"
+        aria-label="Ажиглалтын харагдац"
+      >
+        {VIEWS.map((v) => {
+          const on = v.id === view;
+          const Icon = v.icon;
+          return (
+            <button
+              key={v.id}
+              type="button"
+              onClick={() => setView(v.id)}
+              aria-pressed={on}
+              className={cn(
+                "flex items-center gap-1.5 rounded-xs border px-2.5 py-1.5 text-[11.5px] leading-none transition-colors",
+                on
+                  ? "border-(--tone)/45 bg-(--tone)/10 text-(--tone)"
+                  : "border-line text-ink-2 hover:border-line-2 hover:text-ink",
+              )}
+            >
+              <Icon size={13} strokeWidth={1.8} className="shrink-0" />
+              {v.label}
+            </button>
+          );
+        })}
+        {view === "live" ? (
+          <button
+            type="button"
+            className="weather-action ml-auto"
+            disabled={refreshing}
+            onClick={() => setRefresh((v) => v + 1)}
+          >
+            <RefreshCw size={12} className={refreshing ? "animate-spin" : ""} />
+            Шинэчлэх
+          </button>
+        ) : null}
+      </div>
+
+      <div className="flex min-h-0 flex-1 flex-col">
+        {view === "live" ? (
+          <LiveWeather
+            refresh={refresh}
+            setRefresh={setRefresh}
+            refreshing={refreshing}
+            setRefreshing={setRefreshing}
+          />
+        ) : (
+          <WeatherArchive />
+        )}
+      </div>
+    </div>
+  );
+}
+
+function LiveWeather({
+  refresh,
+  setRefresh,
+  refreshing,
+  setRefreshing,
+}: {
+  refresh: number;
+  setRefresh: React.Dispatch<React.SetStateAction<number>>;
+  refreshing: boolean;
+  setRefreshing: React.Dispatch<React.SetStateAction<boolean>>;
+}) {
   const [data, setData] = React.useState<WeatherData | null>(null);
   const [error, setError] = React.useState<string | null>(null);
+  const [showForecast, setShowForecast] = React.useState(false);
+  const [now, setNow] = React.useState(() => Date.now());
 
   /* Хэрэглэгчийн өгсөн зам нь 292 — Улаанбаатар. Тэр нь анхны станц */
   const [sid, setSid] = React.useState(292);
-  /*
-    ХОЁР ЗУРАГ, тус бүр өөрийн хэмжигдэхүүнтэй. Таван хэмжигдэхүүнийг
-    нэг зураг дээр сэлгэж байсныг хуваав: агаарын төлөв (температур,
-    чийг, даралт) нэг талд, тэнгэрийн байдал (үүлшил, салхи) нөгөө
-    талд. Ингэснээр хоёр өөр төрлийн заалтыг ЗЭРЭГ харна — сэлгэж
-    үзэхэд санах ойд хадгалах шаардлагатай байв.
-  */
+  /* НЭГ зураг, нэг хэмжигдэхүүн. Сонголт нь зургийн баруун дээд
+     буланд (`MeasurePicker`) */
   const [measureA, setMeasureA] = React.useState<MeasureId>("temp");
-  const [measureB, setMeasureB] = React.useState<MeasureId>("cloud");
-  const [query, setQuery] = React.useState("");
   /* Хуучирсан заалт анхнаасаа нуугдана — "одоогийн байдал" гэдэг нь
      долоо хоногийн өмнөх тоог агуулах ёсгүй */
-  const [freshOnly, setFreshOnly] = React.useState(true);
 
   const [basemap, setBasemap] = React.useState<Basemap>(defaultBasemap);
   /*
@@ -135,21 +259,51 @@ export function WeatherDashboard() {
      бүх станцыг багтаана — нэн даруй нэг станц руу ойртвол бусад зургаа
      нь харагдахгүй, сүлжээ мэт уншигдахаа болино */
   const [touched, setTouched] = React.useState(false);
+  const [overview, setOverview] = React.useState(0);
 
   const pickStation = React.useCallback((id: number) => {
     setSid(id);
     setTouched(true);
+    setOverview((v) => v + 1);
   }, []);
 
   const mA = measureOf(measureA);
 
   React.useEffect(() => {
     const ac = new AbortController();
-    fetchWeather(ac.signal)
-      .then(setData)
-      .catch((e: Error) => e.name !== "AbortError" && setError(e.message));
-    return () => ac.abort();
-  }, []);
+    let busy = false;
+    const update = async () => {
+      if (busy) return;
+      busy = true;
+      setRefreshing(true);
+      try {
+        const result = await fetchWeather(ac.signal);
+        if (!ac.signal.aborted) {
+          setData(result);
+          setError(null);
+          setNow(Date.now());
+        }
+      } catch (e) {
+        if (!ac.signal.aborted)
+          setError(
+            e instanceof Error ? e.message : "Мэдээлэл татахад алдаа гарлаа",
+          );
+      } finally {
+        busy = false;
+        if (!ac.signal.aborted) setRefreshing(false);
+      }
+    };
+    void update();
+    const poll = window.setInterval(() => {
+      if (!document.hidden) void update();
+    }, 300_000);
+    const tick = window.setInterval(() => setNow(Date.now()), 60_000);
+    return () => {
+      ac.abort();
+      window.clearInterval(poll);
+      window.clearInterval(tick);
+    };
+  }, [refresh, setRefreshing]);
 
   /**
    * Ажиглалттай станцууд, заалтын настай нь хамт.
@@ -164,7 +318,7 @@ export function WeatherDashboard() {
       if (st.aimag !== CAPITAL) continue;
       const obs = data.obs.get(st.sid);
       if (!obs) continue;
-      out.push({ st, obs, age: ageHours(obs.at, data.fetched) });
+      out.push({ st, obs, age: ageHours(obs.at, now) });
     }
     /* Хотын төв станц түрүүлнэ, бусад нь цагаан толгойн дарааллаар */
     return out.sort(
@@ -172,7 +326,7 @@ export function WeatherDashboard() {
         Number(b.st.sid === MAIN_SID) - Number(a.st.sid === MAIN_SID) ||
         a.st.name.localeCompare(b.st.name, "mn"),
     );
-  }, [data]);
+  }, [data, now]);
 
   /*
     Жагсаалтын хамрах хүрээ. ХЭМЖИГДЭХҮҮНЭЭС ХАМААРАХГҮЙ: хоёр зураг
@@ -180,16 +334,19 @@ export function WeatherDashboard() {
     дагуу хумивал нөгөө зураг дээр харагдаж буй станц жагсаалтад
     байхгүй болно. Хэмжигдэхүүнгүй станцыг зураг бүр ӨӨРӨӨ хасна.
   */
-  const shown = React.useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return rows.filter((r) => {
-      if (freshOnly && (r.age == null || r.age > FRESH_HOURS)) return false;
-      if (!q) return true;
-      return (
-        r.st.name.toLowerCase().includes(q) || r.st.place.toLowerCase().includes(q)
-      );
-    });
-  }, [rows, query, freshOnly]);
+  /*
+    ⚠⚠ ЖАГСААЛТАД ШҮҮЛТ БАЙХГҮЙ (хэрэглэгчийн шийдвэр, 2026-09-21:
+    хайлтын мөр ба "Сүүлийн 12 цагийн заалт" шүүлтийг хоёуланг нь
+    хасуулсан). Нийслэлд долоон станц байдаг тул долоон мөрөөс хайх
+    зүйл алга; шинэлгийн шүүлт нь ч практикт нэгийг ч хасдаггүй байв
+    (хамгийн ховор мэдээлдэг хоёр станц 6 цаг тутам заалт өгдөг).
+
+    ⚠ ХУУЧИРСАН ЗААЛТЫГ НУУХГҮЙ, харин НАСЫГ НЬ ил хэлнэ: мөр бүр
+    "12 минутын өмнө" гэж бичигдэх ба сонгосон станцын заалт
+    хуучирсан бол толгойд нь анхааруулгын зурвас гарна. Нуусан шүүлт
+    нь станцыг чимээгүй алга болгох тул түүнээс дээр.
+  */
+  const shown = rows;
 
   const current = React.useMemo(
     () => rows.find((r) => r.st.sid === sid) ?? null,
@@ -197,23 +354,40 @@ export function WeatherDashboard() {
   );
 
   const forecast = data?.forecast.get(sid) ?? [];
-
+  const selectedLon = current?.st.lon;
+  const selectedLat = current?.st.lat;
+  const west = Math.min(...rows.map((r) => r.st.lon));
+  const south = Math.min(...rows.map((r) => r.st.lat));
+  const east = Math.max(...rows.map((r) => r.st.lon));
+  const north = Math.max(...rows.map((r) => r.st.lat));
 
   /* Станц сонгоход зураг тийш нь ойртоно */
   const focus = React.useMemo<Extent | null>(() => {
-    const st = current?.st;
-    if (!touched || !st) return null;
+    if (!touched || selectedLon == null || selectedLat == null) {
+      if (!overview || !Number.isFinite(west)) return null;
+      return [west - 0.05, south - 0.05, east + 0.05, north + 0.05];
+    }
     const d = 0.12;
-    return [st.lon - d, st.lat - d, st.lon + d, st.lat + d];
-  }, [current, touched]);
+    return [selectedLon - d, selectedLat - d, selectedLon + d, selectedLat + d];
+  }, [selectedLon, selectedLat, touched, overview, west, south, east, north]);
 
-  if (error || !data) {
+  if (!data) {
     return (
       <div className="flex h-full items-center justify-center rounded-xs border border-line bg-paper-2">
         {error ? (
           <div className="text-center">
-            <p className="text-[14px] font-medium">Цаг агаарын мэдээ татагдсангүй</p>
+            <p className="text-[14px] font-medium">
+              Цаг агаарын мэдээ татагдсангүй
+            </p>
             <p className="num mt-2 text-[12px] text-ink-3">{error}</p>
+            <button
+              className="weather-action mt-3"
+              disabled={refreshing}
+              onClick={() => setRefresh((v) => v + 1)}
+            >
+              <RefreshCw size={12} />
+              Дахин оролдох
+            </button>
           </div>
         ) : (
           <span className="flex items-center gap-2 text-[13.5px] text-ink-3">
@@ -226,163 +400,300 @@ export function WeatherDashboard() {
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-2">
-      {/* ---------------- 1. Сонгосон станцын заалт ---------------- */}
-      <section className="shrink-0 overflow-hidden rounded-xs border border-line bg-paper-2">
-        <header className="flex flex-wrap items-baseline gap-x-3 gap-y-1 border-b border-line px-3 py-1.5">
-          <div className="eyebrow shrink-0">Одоогийн ажиглалт</div>
-          <h2 className="min-w-0 flex-1 truncate text-[14px] leading-none font-medium text-ink">
-            {current ? current.st.name : "Станц сонгогдоогүй"}
-          </h2>
-          {current ? (
-            <>
-              <span className="num shrink-0 text-[10.5px] text-ink-3">
-                {current.st.place} · {num(current.st.elev)} м
-              </span>
-              <span
-                className={cn(
-                  "num shrink-0 text-[10.5px]",
-                  current.age != null && current.age > FRESH_HOURS
-                    ? "text-ochre"
-                    : "text-ink-3",
-                )}
-              >
-                {localTime(current.obs.at)} · {ageText(current.obs.at, data.fetched)}
-              </span>
-            </>
+    <div className="weather-live flex h-full min-h-0 flex-col">
+      {error ? (
+        <p role="status" className="text-[11px] text-ochre">
+          Шинэчилж чадсангүй. Өмнөх таталтын заалтыг харуулж байна. {error}
+        </p>
+      ) : null}
+      {/* ---------------- 1. Сонгосон станцын заалт ----------------
+
+          ⚠⚠ ЗААЛТ БҮР ТУСДАА КАРТ (хэрэглэгчийн шийдвэр, 2026-09-21,
+          жишээ зургийг заан: "картууд салгаад байна"). Платформын
+          нягт сүлжээний дүрэм нь хоосон зайгаар биш ЗУРААСААР
+          тусгаарлахыг заадаг ч энэ эгнээ нь жагсаалт биш ХЭМЖИХ
+          ХЭРЭГСЛИЙН САМБАР: заалт бүр бие даасан мэдрэгчийнх тул
+          тусад нь харагдах нь зөв.
+
+          ⚠ Гүнийг СҮҮДРЭЭР биш ДАВХАРГААР гаргана (платформын нэгдүгээр
+          дүрэм): хэсгийн дэвсгэр нь `paper` (canvas), карт нь `paper-2`
+          тул картууд өөрсдөө тодорч, сүүдэр шаардахгүй.
+          ⚠ Булан нь `rounded-xs` хэвээр — жишээ зурагт илүү дугуй ч
+          булангийн радиус нь платформын таних тэмдэг бөгөөд энэ нэг
+          эгнээг бусад хорин таван самбараас салгах болно. */}
+      {/*
+        ⚠⚠ ЗААЛТ БА УРЬДЧИЛСАН МЭДЭЭ ЭЭЛЖЛЭН харагдана (хэрэглэгчийн
+        хүсэлт, 2026-09-21: "5 хоногийн урьдчилсан мэдээг нээвэл энэ
+        хэсэг автоматаар hide, харин хаавал эргээд хуучин хэвэнд").
+
+        Шалтгаан нь хуудасны өндөр: энэ самбар нэг дэлгэцэнд багтах
+        ёстой (`shrink-0` + доорх зураг `flex-1`). Урьдчилсан мэдээ
+        нээгдэхэд ~150px нэмэгдэж, зураг тэр хэмжээгээр хумигдана.
+        Хоёр давхарга нь НЭГ станцын тухай, ХОЁР өөр хугацааны асуулт
+        (одоо ба ирээдүй) тул зэрэг харах шаардлага бага — ээлжлэхэд
+        зураг бүтэн өндрөө хадгална.
+      */}
+      {showForecast ? null : (
+        <section className="observation-panel shrink-0 overflow-hidden border border-line bg-paper">
+          <header className="observation-header">
+            <span className="observation-station-icon">
+              <MapPin size={20} strokeWidth={1.6} aria-hidden />
+            </span>
+            <div className="observation-heading">
+              <h2>
+                {current
+                  ? `${current.st.name} станцын сүүлийн ажиглалт`
+                  : "Станц сонгогдоогүй"}
+              </h2>
+            </div>
+            {current ? (
+              <>
+                {/* ⚠ Байршлыг ЗӨВХӨН станцын нэрээс ЯЛГААТАЙ үед бичнэ
+                  (хэрэглэгчийн шийдвэр, 2026-09-21): Улаанбаатар станцын
+                  `place` нь мөн "Улаанбаатар" тул толгойд нэг нэр хоёр
+                  удаа гардаг байв. Буянт-Ухаа зэрэг станцын дүүрэг нь
+                  ялгаатай тул хэвээр гарна */}
+                <span className="observation-place num">
+                  <Mountain size={13} aria-hidden />
+                  {current.st.place === current.st.name
+                    ? `${num(current.st.elev)} м`
+                    : `${current.st.place} · ${num(current.st.elev)} м`}
+                </span>
+                <span
+                  className={cn(
+                    "observation-time num",
+                    (current.age == null || current.age > FRESH_HOURS) &&
+                      "is-stale",
+                  )}
+                >
+                  <Clock size={14} aria-hidden />
+                  <span>
+                    <strong>{localTime(current.obs.at)}</strong>
+                    <small>{ageText(current.obs.at, now)}</small>
+                  </span>
+                </span>
+              </>
+            ) : null}
+          </header>
+          {current && (current.age == null || current.age > FRESH_HOURS) ? (
+            <p
+              role="status"
+              className="border-b border-line bg-ochre/10 px-3 py-2 text-[11px] text-ochre"
+            >
+              {current.age == null
+                ? "Ажиглалтын хугацаа тодорхойгүй."
+                : "Энэ станцын заалт хуучирсан."}{" "}
+              Доорх утгууд нь хамгийн сүүлд ирсэн ажиглалт.
+            </p>
           ) : null}
-        </header>
 
-        {current ? (
-          <div className="grid grid-cols-2 divide-x divide-y divide-line sm:grid-cols-3 xl:grid-cols-6 xl:divide-y-0">
-            <Gauge
-              label="Агаарын температур"
-              value={current.obs.temp}
-              unit="°C"
-              digits={1}
-              big
-              tone={colorOf(measureOf("temp"), current.obs.temp)}
-            />
-            <Gauge
-              label="Мэдрэгдэх температур"
-              value={current.obs.feels}
-              unit="°C"
-              digits={1}
-            />
-            <Gauge
-              label="Агаарын харьцангуй чийг"
-              value={current.obs.humidity}
-              unit="%"
-              digits={0}
-            />
-            <Gauge
-              label="Агаарын даралт"
-              value={current.obs.pressure}
-              unit="гПа"
-              digits={1}
-            />
-            <Gauge label="Нийт үүлшил" value={current.obs.cloud} unit="балл" digits={0} />
-            <WindGauge obs={current.obs} />
+          {/*
+          ⚠⚠ КАРТУУД ТЭНЦҮҮ ӨРГӨНТЭЙ БИШ (хэрэглэгчийн шийдвэр,
+          2026-09-21: "картын өргөнг нэмэх нь зөв байсан бололтой,
+          Агаарын даралт, Нийт үүлшил, Салхи эний 3-ийн картын өргөн
+          бага байсан ч болно шүү дээ").
 
-            {/*
+          Зургаан баганыг тэнцүү хуваахад урт нэртэй хоёр карт
+          ("Мэдрэгдэх температур" 140px, "Агаарын харьцангуй чийг"
+          158px) шошгоо нэг мөрөнд багтаахгүй байв. Богино нэртэй
+          гурав ("Агаарын даралт", "Нийт үүлшил", "Салхи") харин
+          илүү зайтай байсан.
+
+          Доорх жин нь ХЭМЖСЭН хэрэгцээ: шошгоо нэг мөрөнд багтаахад
+          шаардагдах өргөн дээр тэмдэг (28), зай (6), доторх зай (12)
+          нэмсэн дүн. `fr` нэгж тул дэлгэц өөрчлөгдөхөд харьцаа нь
+          хэвээр хуваагдана.
+        */}
+          {current ? (
+            <div className="observation-grid">
+              <Gauge
+                label="Агаарын температур"
+                value={current.obs.temp}
+                unit="°C"
+                digits={1}
+                icon={Thermometer}
+                tone={colorOf(measureOf("temp"), current.obs.temp)}
+                accent
+              />
+              {/* Мэдрэгдэх температур нь ИЖИЛ хэмжигдэхүүн, ижил нэгж тул
+                ижил тэмдэгтэй — өнгө нь утгаараа өөрөө ялгарна */}
+              <Gauge
+                label="Мэдрэгдэх температур"
+                value={current.obs.feels}
+                unit="°C"
+                digits={1}
+                icon={Thermometer}
+                tone={colorOf(measureOf("temp"), current.obs.feels)}
+              />
+              <Gauge
+                label="Агаарын харьцангуй чийг"
+                value={current.obs.humidity}
+                unit="%"
+                digits={0}
+                icon={Droplets}
+                tone={colorOf(measureOf("humidity"), current.obs.humidity)}
+              />
+              <Gauge
+                label="Агаарын даралт"
+                value={current.obs.pressure}
+                unit="гПа"
+                digits={1}
+                icon={GaugeIcon}
+                tone={colorOf(measureOf("pressure"), current.obs.pressure)}
+              />
+              <Gauge
+                label="Нийт үүлшил"
+                value={current.obs.cloud}
+                unit="балл"
+                digits={0}
+                icon={Cloud}
+                tone={colorOf(measureOf("cloud"), current.obs.cloud)}
+              />
+              <WindGauge obs={current.obs} />
+
+              {/*
               Эх сурвалжийн албан жагсаалтад байгаа ч ажиглалт бүрд
               ирдэггүй талбарууд. Цасны зузаан нь улирлын, температурын
               их/бага нь тодорхой цагийн ажиглалтынх — ирсэн үед нь л
               нүд нэмэгдэнэ. Хоосон нүд гаргавал самбар нь хэмжигдээгүй
               зүйлийг хэмжсэн мэт харагдана.
             */}
-            {current.obs.tmin != null ? (
-              <Gauge
-                label="Хамгийн бага температур"
-                value={current.obs.tmin}
-                unit="°C"
-                digits={1}
-              />
-            ) : null}
-            {current.obs.tmax != null ? (
-              <Gauge
-                label="Хамгийн их температур"
-                value={current.obs.tmax}
-                unit="°C"
-                digits={1}
-              />
-            ) : null}
-            {current.obs.snowDepth != null ? (
-              <Gauge
-                label="Цасны зузаан"
-                value={current.obs.snowDepth}
-                unit="см"
-                digits={0}
-              />
-            ) : null}
-            {current.obs.precip != null ? (
-              <Gauge
-                label="Хур тунадас"
-                value={current.obs.precip}
-                unit="мм"
-                digits={1}
-              />
-            ) : null}
-          </div>
-        ) : (
-          <Empty text="Сонгосон станц ажиглалт илгээгээгүй байна" />
-        )}
-      </section>
+              {current.obs.tmin != null ? (
+                <Gauge
+                  label="Хамгийн бага температур"
+                  value={current.obs.tmin}
+                  unit="°C"
+                  digits={1}
+                  icon={Thermometer}
+                  tone={colorOf(measureOf("temp"), current.obs.tmin)}
+                />
+              ) : null}
+              {current.obs.tmax != null ? (
+                <Gauge
+                  label="Хамгийн их температур"
+                  value={current.obs.tmax}
+                  unit="°C"
+                  digits={1}
+                  icon={Thermometer}
+                  tone={colorOf(measureOf("temp"), current.obs.tmax)}
+                />
+              ) : null}
+              {/* Цас, тунадас хоёрт шатлал БАЙХГҮЙ тул тэмдэг нь өнгөгүй —
+                таамгаар өнгө өгвөл утга заасан мэт уншигдана */}
+              {current.obs.snowDepth != null ? (
+                <Gauge
+                  label="Цасны зузаан"
+                  value={current.obs.snowDepth}
+                  unit="см"
+                  digits={0}
+                  icon={Snowflake}
+                />
+              ) : null}
+              {current.obs.precip != null ? (
+                <Gauge
+                  label="Хур тунадас"
+                  value={current.obs.precip}
+                  unit="мм"
+                  digits={1}
+                  icon={CloudRain}
+                />
+              ) : null}
+            </div>
+          ) : (
+            <Empty text="Сонгосон станц ажиглалт илгээгээгүй байна" />
+          )}
+        </section>
+      )}
 
       {/* ---------------- 2. Урьдчилсан мэдээ ---------------- */}
       <section className="shrink-0 overflow-hidden rounded-xs border border-line bg-paper-2">
-        <header className="flex items-baseline gap-3 border-b border-line px-3.5 py-1.5">
-          <span className="eyebrow shrink-0">Таван хоногийн урьдчилсан мэдээ</span>
-          <span className="min-w-0 flex-1 truncate text-[10.5px] text-ink-3">
-            {current?.st.name ?? ""}
+        <button
+          type="button"
+          aria-expanded={showForecast}
+          aria-controls="weather-forecast"
+          onClick={() => setShowForecast((v) => !v)}
+          className="flex w-full items-center gap-3 px-3.5 py-2.5 text-left"
+        >
+          <span className="eyebrow shrink-0">
+            Таван хоногийн урьдчилсан мэдээ
           </span>
-        </header>
+          <span className="min-w-0 flex-1" />
+          <ChevronDown
+            size={14}
+            className={cn(
+              "text-ink-3 transition-transform",
+              showForecast && "rotate-180",
+            )}
+          />
+        </button>
 
-        {forecast.length ? (
-          <div
-            className="grid gap-px bg-line"
-            style={{ gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))" }}
-          >
-            {forecast.map((d) => {
-              const l = dayLabel(d.date);
-              return (
-                <div key={d.date} className="bg-paper-2 px-3 py-2">
-                  <div className="flex items-baseline gap-1.5">
-                    <span className="num text-[11.5px] text-ink">{l.day}</span>
-                    <span className="text-[10px] text-ink-3">{l.weekday}</span>
-                  </div>
+        {showForecast ? (
+          <div id="weather-forecast" className="border-t border-line">
+            {forecast.length ? (
+              <div
+                className="forecast-grid"
+                role="list"
+                aria-label="Таван хоногийн урьдчилсан мэдээ"
+              >
+                {forecast.map((d) => {
+                  const l = dayLabel(d.date);
+                  return (
+                    <article
+                      key={d.date}
+                      className="forecast-day"
+                      role="listitem"
+                      aria-label={`${l.day}, ${l.weekday}`}
+                    >
+                      <header className="forecast-date">
+                        <span>{l.weekday}</span>
+                        <time dateTime={d.date} className="num">
+                          {l.day.replace("-", ".")}
+                        </time>
+                      </header>
 
-                  {/* Өдөр, шөнийн температур — хоёр мөр, нэг хуваарь */}
-                  <div className="mt-1.5 space-y-1">
-                    <TempRow
-                      label="Өдөр"
-                      value={d.dayTemp}
-                      feels={d.dayFeels}
-                      pheno={d.dayPheno}
-                    />
-                    <TempRow
-                      label="Шөнө"
-                      value={d.nightTemp}
-                      feels={d.nightFeels}
-                      pheno={d.nightPheno}
-                    />
-                  </div>
+                      {/* Өдөр, шөнийн температур — хоёр мөр, нэг хуваарь */}
+                      <div className="forecast-periods">
+                        <TempRow
+                          label="Өдөр"
+                          value={d.dayTemp}
+                          feels={d.dayFeels}
+                          pheno={d.dayPheno}
+                          phenoId={d.dayPhenoId}
+                        />
+                        <TempRow
+                          label="Шөнө"
+                          value={d.nightTemp}
+                          feels={d.nightFeels}
+                          pheno={d.nightPheno}
+                          phenoId={d.nightPhenoId}
+                        />
+                      </div>
 
-                  <div className="num mt-1.5 flex items-baseline gap-2.5 border-t border-line pt-1 text-[10px] text-ink-3">
-                    <span>
-                      Тунадас {d.dayPrecip == null ? "—" : `${num(d.dayPrecip)}%`}
-                    </span>
-                    <span>
-                      Салхи {d.dayWind == null ? "—" : `${num(d.dayWind)} м/с`}
-                    </span>
-                  </div>
-                </div>
-              );
-            })}
+                      <footer className="forecast-details">
+                        <span title="Өдрийн хур тунадас орох магадлал">
+                          <Droplets size={13} aria-hidden />
+                          <span>Тунадас</span>
+                          <strong className="num">
+                            {d.dayPrecip == null ? "—" : `${num(d.dayPrecip)}%`}
+                          </strong>
+                        </span>
+                        <span title="Өдрийн салхины хурд">
+                          <Wind size={13} aria-hidden />
+                          <span>Салхи</span>
+                          <strong className="num">
+                            {d.dayWind == null ? "—" : `${num(d.dayWind)} м/с`}
+                          </strong>
+                        </span>
+                      </footer>
+                    </article>
+                  );
+                })}
+              </div>
+            ) : (
+              <Empty text="Энэ станцад урьдчилсан мэдээ бүртгэгдээгүй байна" />
+            )}
           </div>
-        ) : (
-          <Empty text="Энэ станцад урьдчилсан мэдээ бүртгэгдээгүй байна" />
-        )}
+        ) : null}
       </section>
 
       {/* ---------------- 3. Сүлжээ ---------------- */}
@@ -390,130 +701,81 @@ export function WeatherDashboard() {
           мэдээ хоёр нь дээрээ нимгэн зурвас болж суух ба сүлжээний
           зураг доор нь бүтэн өндрөөр дэлгэгдэнэ */}
       <Columns id="weather" left={272} className="min-h-0 flex-1">
-        {/* Станцын жагсаалт */}
-        <div className="flex min-h-0 flex-col overflow-hidden rounded-xs border border-line bg-paper-2 max-xl:min-h-[280px]">
-          <div className="flex items-center gap-2 border-b border-line px-2.5 py-1.5">
-            <Search size={12} className="shrink-0 text-ink-3" />
-            <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Станц, дүүрэг хайх"
-              className="min-w-0 flex-1 bg-transparent text-[11.5px] text-ink outline-none placeholder:text-ink-3"
-            />
-            <span className="num shrink-0 text-[10px] text-ink-3">
-              {num(shown.length)}
-            </span>
-          </div>
+        {/* Зүүн багана — хэмжигдэхүүний сонголт дээр, станцын
+            жагсаалт доор нь */}
+        <div className="flex min-h-0 flex-col gap-2">
+          <MeasurePicker value={measureA} onChange={setMeasureA} />
 
-          {/* Шинэлгийн шүүлт нь ЖАГСААЛТЫНХ: хоёр зураг хоёулаа үүнд
-              захирагддаг тул аль нэг зургийн толгойд тавьбал нөгөөд нь
-              ч нөлөөлж байгаа нь ойлгомжгүй болно */}
-          <button
-            onClick={() => setFreshOnly((v) => !v)}
-            aria-pressed={freshOnly}
-            className={cn(
-              "flex shrink-0 items-center gap-1.5 border-b border-line px-2.5 py-1.5 text-left text-[11px] leading-none transition-colors",
-              freshOnly ? "text-(--tone)" : "text-ink-2 hover:text-ink",
-            )}
-          >
-            <span
-              aria-hidden
-              className={cn(
-                "flex size-3 shrink-0 items-center justify-center rounded-[2px] border transition-colors",
-                freshOnly ? "border-(--tone) bg-(--tone)" : "border-line-2",
-              )}
-            >
-              {freshOnly ? <Check size={8} strokeWidth={3} className="text-paper" /> : null}
-            </span>
-            Сүүлийн {FRESH_HOURS} цагийн заалт
-          </button>
-
-          <ul className="min-h-0 flex-1 divide-y divide-line overflow-y-auto">
-            {shown.map((r) => {
-              /* Жагсаалтад ЗҮҮН зургийн хэмжигдэхүүн гарна — хоёуланг
+          {/* Станцын жагсаалт */}
+          <div className="weather-stations flex min-h-0 flex-1 flex-col overflow-hidden border border-line bg-paper-2 max-xl:min-h-[280px]">
+            <ul className="min-h-0 flex-1 divide-y divide-line overflow-y-auto">
+              {shown.map((r) => {
+                /* Жагсаалтад ЗҮҮН зургийн хэмжигдэхүүн гарна — хоёуланг
                  нь бичвэл мөр хэт нягт болно */
-              const v = mA.of(r.obs);
-              const on = r.st.sid === sid;
-              return (
-                <li key={r.st.sid}>
-                  <button
-                    onClick={() => pickStation(r.st.sid)}
-                    onMouseEnter={() => setListHover(r.st.sid)}
-                    onMouseLeave={() => setListHover(null)}
-                    className={cn(
-                      "relative block w-full px-2.5 py-1.5 text-left transition-colors",
-                      on ? "bg-(--tone)/10" : "hover:bg-paper-hi",
-                    )}
-                  >
-                    {on ? (
-                      <span
-                        aria-hidden
-                        className="absolute inset-y-0 left-0 w-[2px] bg-(--tone)"
-                      />
-                    ) : null}
-                    <div className="flex items-baseline gap-2">
-                      <span
-                        className={cn(
-                          "min-w-0 flex-1 truncate text-[11.5px] leading-snug",
-                          on ? "font-medium text-ink" : "text-ink-2",
-                        )}
-                      >
-                        {r.st.name}
-                      </span>
-                      <span
-                        className="num shrink-0 text-[11.5px] leading-none"
-                        style={{ color: colorOf(mA, v) }}
-                      >
-                        {v == null ? "—" : num(v, mA.digits)}
-                      </span>
-                    </div>
-                    <div className="mt-0.5 truncate text-[10px] leading-snug text-ink-3">
-                      {r.st.place}
-                      {r.age != null && r.age > FRESH_HOURS
-                        ? ` · ${ageText(r.obs.at, data.fetched)}`
-                        : ""}
-                    </div>
-                  </button>
+                const v = mA.of(r.obs);
+                const on = r.st.sid === sid;
+                return (
+                  <li key={r.st.sid}>
+                    <button
+                      aria-pressed={on}
+                      onClick={() => pickStation(r.st.sid)}
+                      onMouseEnter={() => setListHover(r.st.sid)}
+                      onMouseLeave={() => setListHover(null)}
+                      className={cn(
+                        "relative block w-full px-2.5 py-1.5 text-left transition-colors",
+                        on ? "bg-(--tone)/10" : "hover:bg-paper-hi",
+                      )}
+                    >
+                      {on ? (
+                        <span
+                          aria-hidden
+                          className="absolute inset-y-0 left-0 w-[2px] bg-(--tone)"
+                        />
+                      ) : null}
+                      <div className="flex items-baseline gap-2">
+                        <span
+                          className={cn(
+                            "min-w-0 flex-1 truncate text-[11.5px] leading-snug",
+                            on ? "font-medium text-ink" : "text-ink-2",
+                          )}
+                        >
+                          {r.st.name}
+                        </span>
+                        <span
+                          className="num shrink-0 text-[12px] leading-none font-semibold text-ink"
+                          style={{ color: colorOf(mA, v) }}
+                        >
+                          {v == null ? "—" : `${num(v, mA.digits)} ${mA.unit}`}
+                        </span>
+                      </div>
+                      <div className="mt-0.5 truncate text-[10.5px] leading-snug text-ink-2">
+                        {r.st.place}
+                        {` · ${ageText(r.obs.at, now)}`}
+                      </div>
+                    </button>
+                  </li>
+                );
+              })}
+              {shown.length === 0 ? (
+                <li>
+                  <Empty text="Тохирох станц олдсонгүй" />
                 </li>
-              );
-            })}
-            {shown.length === 0 ? (
-              <li>
-                <Empty text="Тохирох станц олдсонгүй" />
-              </li>
-            ) : null}
-          </ul>
+              ) : null}
+            </ul>
+          </div>
         </div>
 
-        {/* Хоёр газрын зураг — өргөн дэлгэцэнд зэрэгцэж, нарийн дээр
-            дээр доор нь эвхэгдэнэ */}
-        <div className="grid min-h-0 grid-rows-2 gap-2 max-xl:min-h-[560px] xl:grid-cols-2 xl:grid-rows-1">
-          <StationMap
-            rows={shown}
-            choices={GROUP_A}
-            measure={measureA}
-            onMeasure={setMeasureA}
-            onPick={pickStation}
-            spotSid={listHover}
-            focus={focus}
-            basemap={basemap}
-            onBasemap={setBasemap}
-            gallery
-            fetched={data.fetched}
-          />
-          <StationMap
-            rows={shown}
-            choices={GROUP_B}
-            measure={measureB}
-            onMeasure={setMeasureB}
-            onPick={pickStation}
-            spotSid={listHover}
-            focus={focus}
-            basemap={basemap}
-            onBasemap={setBasemap}
-            fetched={data.fetched}
-          />
-        </div>
+        <StationMap
+          rows={shown}
+          measure={measureA}
+          selectedSid={sid}
+          onPick={pickStation}
+          spotSid={listHover}
+          focus={focus}
+          basemap={basemap}
+          onBasemap={setBasemap}
+          fetched={now}
+        />
       </Columns>
 
       <p className="shrink-0 px-0.5 text-[10.5px] leading-none text-ink-3">
@@ -542,29 +804,24 @@ export function WeatherDashboard() {
 
 function StationMap({
   rows,
-  choices,
   measure,
-  onMeasure,
   onPick,
   spotSid,
   focus,
   basemap,
   onBasemap,
-  gallery,
   fetched,
+  selectedSid,
 }: {
+  selectedSid: number;
   rows: { st: Station; obs: Obs; age: number | null }[];
-  choices: MeasureId[];
   measure: MeasureId;
-  onMeasure: (id: MeasureId) => void;
   onPick: (id: number) => void;
   /** Жагсаалтаас чиглэсэн тодруулга */
   spotSid: number | null;
   focus: Extent | null;
   basemap: Basemap;
   onBasemap: (b: Basemap) => void;
-  /** Суурь зургийн сонголтыг харуулах эсэх — зөвхөн эхний зурагт */
-  gallery?: boolean;
   fetched: number;
 }) {
   const tip = useMapTip();
@@ -591,8 +848,35 @@ function StationMap({
     [shown],
   );
 
-  const grades = React.useMemo(
-    () => ({ values: shown.map((r) => m.of(r.obs) ?? 0), stops: m.stops }),
+  /*
+    ЦЭГИЙН ОРОНД ЗААЛТ.
+
+    ⚠⚠ Олон улсын цаг уурын зургийн жишиг (WMO-гийн station model,
+    Windy, Ventusky): станцын байрлалд тоо нь ӨӨРӨӨ бичигдэнэ.
+    Хэрэглэгч цэг бүр дээр товшиж үзэхгүйгээр долоон станцын заалтыг
+    нэг харцаар уншина.
+
+    ⚠ НЭГЖ нь тоотойгоо ХАМТ бичигдэнэ (хэрэглэгчийн шийдвэр,
+    2026-09-21: "нэгжийг бич"). Станцын сонгодог моделид нэгж
+    бичигддэггүй — тэнд суудал нь юу болохыг хэлдэг. Бидний зурагт
+    суудал нэг тул нэгжгүй тоо нь "18.4" гэж ганцаараа үлдэж, юуны
+    тоо болох нь зөвхөн толгойгоос уншигдана.
+    ⚠ Нэгж нэмэгдсэнээр бичвэр уртсаж, давхцал нэмэгдэнэ — MapLibre
+    өөрөө цөөрүүлдэг тул алсаас зарим станц нуугдаж болно.
+
+    ⚠ Өнгө нь `stopHex` — шатлалын ТҮҮХИЙ hex. `colorOf` нь гэрэл,
+    харанхуйд өөр утга буцаадаг тул зурагт ОРОХГҮЙ (газрын зураг хоёр
+    горимд ижил байх дүрэм).
+  */
+  const values = React.useMemo(
+    () => ({
+      text: shown.map((r) => {
+        const v = m.of(r.obs);
+        return v == null ? "" : `${num(v, m.digits)} ${m.unit}`;
+      }),
+      color: shown.map((r) => stopHex(m, m.of(r.obs))),
+      maxzoom: 24,
+    }),
     [shown, m],
   );
 
@@ -603,57 +887,45 @@ function StationMap({
   );
 
   const hovered = React.useMemo(
-    () => (tip.oid == null ? null : (rows.find((r) => r.st.sid === tip.oid) ?? null)),
+    () =>
+      tip.oid == null ? null : (rows.find((r) => r.st.sid === tip.oid) ?? null),
     [rows, tip.oid],
   );
 
   const spot = React.useMemo(() => {
-    const id = tip.oid ?? spotSid;
+    const id = tip.oid ?? spotSid ?? selectedSid;
     return id == null ? null : (shown.find((r) => r.st.sid === id) ?? null);
-  }, [shown, tip.oid, spotSid]);
+  }, [shown, tip.oid, spotSid, selectedSid]);
 
   return (
-    <div className="flex min-h-0 flex-col overflow-hidden rounded-xs border border-line bg-paper-2">
-      <div className="flex flex-wrap items-center gap-1 border-b border-line px-2 py-1.5">
-        {choices.map((id) => {
-          const x = measureOf(id);
-          return (
-            <button
-              key={id}
-              onClick={() => onMeasure(id)}
-              aria-pressed={id === measure}
-              className={cn(
-                "rounded-xs border px-2 py-1 text-[11px] leading-none transition-colors",
-                id === measure
-                  ? "border-(--tone)/45 bg-(--tone)/10 text-(--tone)"
-                  : "border-line text-ink-2 hover:border-line-2 hover:text-ink",
-              )}
-            >
-              {x.label}
-            </button>
-          );
-        })}
-      </div>
-
+    <div className="weather-map flex min-h-0 flex-col overflow-hidden border border-line bg-paper-2 max-xl:min-h-[420px]">
       <div className="relative min-h-0 flex-1">
         <PointMap
-          key={measure}
           points={points}
           visible={visible}
           labels={labels}
+          values={values}
+          /* Анхны харагдац ҮРГЭЛЖ 1:900 000 (хэрэглэгчийн шийдвэр,
+             2026-09-21) — станцын тархалтаас хамаарч өөрчлөгдөхгүй */
+          scale={900_000}
           basemap={basemap}
           onSelect={onPick}
           onHover={tip.onHover}
           focus={focus}
           cluster={false}
           highlight={spot ? [spot.st.lon, spot.st.lat] : null}
-          grades={grades}
         />
-        {gallery ? (
-          <BasemapGallery value={basemap} onChange={onBasemap} placement="top-left" />
+        <BasemapGallery
+          value={basemap}
+          onChange={onBasemap}
+          placement="top-left"
+        />
+        {!shown.length ? (
+          <div className="absolute inset-x-12 top-20 rounded-lg border border-line bg-paper-2 p-4 text-center text-[12px] text-ink-2">
+            Энэ хэмжигдэхүүнд тохирох заалт алга. Станцын хайлт, хугацааны
+            шүүлтүүрээ өөрчилнө үү.
+          </div>
         ) : null}
-
-        <Legend measure={m} />
 
         {hovered ? (
           <MapTip state={tip}>
@@ -668,8 +940,16 @@ function StationMap({
                 }`}
                 num
               />
-              <MapTipRow icon={Mountain} text={`${num(hovered.st.elev)} м`} num />
-              <MapTipRow icon={Clock} text={ageText(hovered.obs.at, fetched)} num />
+              <MapTipRow
+                icon={Mountain}
+                text={`${num(hovered.st.elev)} м`}
+                num
+              />
+              <MapTipRow
+                icon={Clock}
+                text={ageText(hovered.obs.at, fetched)}
+                num
+              />
             </div>
           </MapTip>
         ) : null}
@@ -679,112 +959,98 @@ function StationMap({
 }
 
 /* --------------------------------------------------------------------------
-   ГАЗРЫН ЗУРГИЙН ТАЙЛБАР
+   ХЭМЖИГДЭХҮҮНИЙ СОНГОГЧ
 
-   Зураг нь шатлалыг ТАСРАЛТГҮЙ холино (`interpolate linear`) тул тайлбар
-   нь ч тасралтгүй туузан байх ёстой — салангид дугуйнууд нь шатлалыг
-   тасалсан ангилал мэт уншуулна.
+   ⚠⚠ ЗҮҮН БАГАНЫН ДЭЭД КАРТ, станцын жагсаалтын дээр (хэрэглэгчийн
+   шийдвэр, 2026-09-21). Богино хугацаанд зургийн баруун дээд буланд
+   хөвөгч жагсаалт байсан ч зураг дээр хөвөх нь газрын зургийн
+   талбайг иддэг бөгөөд сонголтын хэрэгслүүд хоёр тийш (зүүнд
+   станц, зурган дээр хэмжигдэхүүн) тарж байв. Одоо сонгох бүх зүйл
+   НЭГ баганад: юугаар өнгөлөх вэ → аль станц вэ.
 
-   Тууз дээрх өнгө бүр ӨӨРИЙН УТГЫН байрлалд суана, тэнцүү зайтай биш:
-   температурын шатлал -30-аас 32 хүртэл ч дунд нь 0 нь голд биш 48%-д
-   байдаг. Тэнцүү хуваавал тайлбар нь зурагтай зөрнө.
+   ⚠ ХАРИЛЦАН ҮГҮЙСГЭХ сонголт тул унтраалга биш РАДИО мөр: нэг цэгэн
+   давхарга нэг л өнгөний хуваарь үүрч чадна.
 
-   ХОЁР ДАХЬ СУВАГ: цэгийн радиус мөн ижил утгыг үүрдэг (доод шатнаас
-   дээд шат руу 1.9 дахин). Өнгө ялгах чадвар султай хүн зургийг зөвхөн
-   хэмжээгээр нь уншиж чадах ёстой тул тайлбарт хоёулаа гарна.
-
-   Уншигдацыг дэвсгэр биш `backdrop-blur` ба бичвэрийн сүүдэр барина —
-   доод ирмэгийн харьцааны заалттай ижил арга.
+   ⚠ Товчнууд ТЭМДЭГТЭЙ ч нэр нь ХАСАГДААГҮЙ — зөвхөн тэмдгээр
+   үлдээвэл дэлгэц дээр товчлол гаргахгүй дүрэм зөрчигдөж, аль нь
+   юу болохыг таамаглахад хүрнэ.
    -------------------------------------------------------------------------- */
 
-/** Хиймэл дагуулын цайвар талбай дээр бичвэр дангаараа алга болно */
-const SHADOW = { filter: "drop-shadow(0 1px 2px rgba(0,0,0,.75))" } as const;
-
-function Legend({ measure }: { measure: Measure }) {
-  const stops = measure.stops;
-  const lo = stops[0][0];
-  const hi = stops[stops.length - 1][0];
-  const span = hi - lo || 1;
-  const at = (v: number) => ((v - lo) / span) * 100;
-
-  const gradient = `linear-gradient(to right, ${stops
-    .map(([v, c]) => `${c} ${at(v).toFixed(1)}%`)
-    .join(", ")})`;
-
-  /*
-    Шошго давхцвал алгасна. Эхний ба сүүлчийн шат нь ҮРГЭЛЖ гарна —
-    тэд хоёр нь мужийн хязгаарыг зарладаг; дундахуудаас зөвхөн
-    өмнөхөөсөө хангалттай хол зогсох нь үлдэнэ.
-  */
-  const marks: { pos: number; value: number }[] = [];
-  stops.forEach(([v], i) => {
-    const pos = at(v);
-    const last = marks[marks.length - 1];
-    const far = !last || pos - last.pos >= 15;
-    if (i === 0 || far) marks.push({ pos, value: v });
-    else if (i === stops.length - 1) {
-      /* Сүүлчийнх ойрхон бол өмнөхийг нь хаяна, өөрөө үлдэнэ */
-      if (marks.length > 1) marks.pop();
-      marks.push({ pos, value: v });
-    }
-  });
-
+function MeasurePicker({
+  value,
+  onChange,
+}: {
+  value: MeasureId;
+  onChange: (id: MeasureId) => void;
+}) {
   return (
-    <div className="pointer-events-none absolute bottom-6 left-2.5 z-10 w-[204px] rounded-xs bg-paper/10 px-2 py-1.5 backdrop-blur-md">
-      <div className="eyebrow" style={SHADOW}>
-        {measure.label}, {measure.unit}
-      </div>
-
-      {/* Тасралтгүй тууз — зургийн холилттой яг ижил */}
+    <section className="weather-picker shrink-0 overflow-hidden border border-line bg-paper-2">
+      <header className="border-b border-line px-2.5 py-1.5">
+        <div className="eyebrow">Цаг уурын элемент</div>
+      </header>
       <div
-        className="relative mt-1.5 h-[7px] w-full rounded-[1px]"
-        style={{ ...SHADOW, background: gradient }}
+        role="group"
+        aria-label="Газрын зурагт харуулах цаг уурын элемент"
+        className="divide-y divide-line"
       >
-        {stops.slice(1, -1).map(([v]) => (
-          <span
-            key={v}
-            aria-hidden
-            className="absolute top-0 h-full w-px bg-paper/45"
-            style={{ left: `${at(v)}%` }}
-          />
-        ))}
+        {MEASURES.map((x) => {
+          const Icon = MEASURE_ICONS[x.id];
+          const on = x.id === value;
+          return (
+            <button
+              key={x.id}
+              type="button"
+              aria-pressed={on}
+              onClick={() => onChange(x.id)}
+              className={cn(
+                "relative flex w-full items-center gap-2 px-2.5 py-1.5 text-left transition-colors",
+                on ? "bg-(--tone)/10" : "hover:bg-paper-hi",
+              )}
+            >
+              {on ? (
+                <span
+                  aria-hidden
+                  className="absolute inset-y-0 left-0 w-[2px] bg-(--tone)"
+                />
+              ) : null}
+              <Icon
+                size={15}
+                strokeWidth={1.7}
+                aria-hidden
+                className={cn("shrink-0", on ? "text-(--tone)" : "text-ink-3")}
+              />
+              <span
+                className={cn(
+                  "min-w-0 flex-1 text-[11px] leading-tight",
+                  on ? "font-medium text-ink" : "text-ink-2",
+                )}
+              >
+                {x.label}
+              </span>
+              <span className="num text-[10px] text-ink-3">{x.unit}</span>
+            </button>
+          );
+        })}
       </div>
-
-      <div className="relative mt-1 h-[11px]">
-        {marks.map((k) => (
-          <span
-            key={k.value}
-            className="num absolute top-0 text-[9.5px] leading-none text-ink-2"
-            style={{
-              ...SHADOW,
-              left: `${k.pos}%`,
-              transform:
-                k.pos <= 0
-                  ? "none"
-                  : k.pos >= 100
-                    ? "translateX(-100%)"
-                    : "translateX(-50%)",
-            }}
-          >
-            {num(k.value, 0)}
-          </span>
-        ))}
-      </div>
-
-      {/* Хоёр дахь суваг — цэгийн хэмжээ мөн ижил утгыг заана */}
-      <div className="mt-1.5 flex items-center gap-1.5">
-        <span aria-hidden className="flex items-center gap-1" style={SHADOW}>
-          <span className="block size-[4px] rounded-full bg-ink-2" />
-          <span className="block size-[6px] rounded-full bg-ink-2" />
-          <span className="block size-[8px] rounded-full bg-ink-2" />
-        </span>
-        <span className="text-[9.5px] leading-none text-ink-2" style={SHADOW}>
-          Цэгийн хэмжээ
-        </span>
-      </div>
-    </div>
+    </section>
   );
 }
+
+/* --------------------------------------------------------------------------
+   Өнгөний тайлбар нь зургийн гадна, хэмжигдэхүүний сонгогчид байрлана.
+   ГАЗРЫН ЗУРАГ ДЭЭРХ ӨНГӨНИЙ ТАЙЛБАР УСТГАГДСАН (хэрэглэгчийн шийдвэр,
+   2026-09-21: "map дээр байгаа legend-ийг ав").
+
+   Дүрслэл өөрчлөгдсөн нь шалтгаан: цэгийн оронд заалт нь ТООГООРОО,
+   НЭГЖТЭЙГЭЭ бичигддэг болсон тул өнгө нь гол суваг байхаа больж,
+   халуун хүйтнийг сануулах нэмэлт болов. Хэмжигдэхүүний нэр, нэгж нь
+   зургийн толгойд бий.
+
+   Тайлбар нь зургийн зүүн доод булангийн нэлээдийг эзэлж, хариуд нь
+   тооноос давсан мэдээлэл өгөхөө больсон. Дахин хэрэгтэй болбол git
+   түүхээс сэргээнэ (`Legend` — тасралтгүй тууз, шатлалын шошго,
+   цэгийн хэмжээний хоёр дахь суваг).
+   -------------------------------------------------------------------------- */
 
 /* --------------------------------------------------------------------------
    ХЭМЖИХ ХЭРЭГСЛҮҮД
@@ -795,83 +1061,429 @@ function Gauge({
   value,
   unit,
   digits,
-  big,
+  icon: Icon,
   tone,
+  accent,
 }: {
   label: string;
   value: number | null;
   unit: string;
   digits: number;
-  /** Гол заалт — үлдсэнээс том */
-  big?: boolean;
+  icon: LucideIcon;
+  /** Заалтын шатлалын өнгө (`colorOf`) — тэмдэг үүгээр будагдана */
   tone?: string;
+  /** Тоог мөн будах эсэх. Зөвхөн ТЭРГҮҮЛЭХ заалт дээр */
+  accent?: boolean;
 }) {
   return (
-    <div className="px-3 py-1.5">
-      <div className="eyebrow truncate">{label}</div>
-      <div className="mt-1 flex items-baseline gap-1">
-        <span
-          className={cn(
-            "num leading-none font-medium",
-            big ? "text-[22px]" : "text-[16px]",
-            tone ? "" : "text-ink",
-          )}
-          style={tone && value != null ? { color: tone } : undefined}
-        >
-          {value == null ? "—" : num(value, digits)}
-        </span>
-        <span className="text-[10.5px] text-ink-3">{unit}</span>
+    <div
+      className={cn("observation-metric", accent && "is-primary")}
+      style={
+        {
+          "--metric-tone": value != null && tone ? tone : "var(--ink-3)",
+        } as React.CSSProperties
+      }
+    >
+      {/*
+        ⚠ ТЭМДГИЙН ӨНГӨ нь ЗААЛТЫНХАА УТГААС гарна (`colorOf`), хэмжих
+        зүйлээсээ БИШ. Хэмжигдэхүүн тус бүрд нэг тогтмол өнгө өгвөл тэр
+        нь чимэглэл болж "өнгө = утга" дүрмийг зөрчинө; утгаар будахад
+        тэмдэг нь газрын зургийн цэг, жагсаалтын тоотой НЭГ эх
+        сурвалжаас (`colorOf`) өнгөө авах тул хоорондоо зөрөхгүй.
+      */}
+      <Icon
+        size={28}
+        strokeWidth={1.6}
+        aria-hidden
+        className="shrink-0 text-ink-3"
+        style={tone && value != null ? { color: tone } : undefined}
+      />
+      {/*
+        ⚠⚠ ТОО нь ШОШГЫНХОО ЯГ ДООР суана. Баганы жин хэрэгцээгээр нь
+        хуваарилагдсан тул шошго бүр НЭГ МӨР — тоонууд өөрсдөө эгнэнэ.
+        Шошго дахин хоёр мөр болвол баганы жинг нэмэх нь зөв засвар.
+      */}
+      <div className="flex min-w-0 flex-1 flex-col">
+        {/*
+          ⚠ `.eyebrow` БИШ, түүний жижигрүүлсэн хувилбар: 11px, өргөн
+          зай 0.05em. Зургаан карт нэг эгнээнд багтахад шошго нэг
+          мөрөнд орох ГОЛ нөөц нь өргөн зай.
+          ⚠ 10px-ээс доош БАГАСГАХГҮЙ — `ink-3`-ийн контрастын хязгаар.
+        */}
+        <div className="text-[11px] leading-tight font-semibold tracking-[0.05em] text-ink-3 uppercase">
+          {label}
+        </div>
+        <div className="mt-1 flex items-baseline gap-1">
+          <span
+            /* `text-ink` ҮРГЭЛЖ суурь: өнгөт утга нь inline загвараар
+               дээрээс нь бичигдэнэ. Хөтөч `oklch(from …)`-г танихгүй бол
+               мөр хүчингүй болж ЭНЭ өнгө үлдэнэ — уншигдахгүй болохгүй */
+            className="num text-[19px] leading-none font-semibold text-ink"
+            style={
+              accent && tone && value != null ? { color: tone } : undefined
+            }
+          >
+            {value == null ? "—" : num(value, digits)}
+          </span>
+          <span className="text-[11px] text-ink-2">{unit}</span>
+        </div>
       </div>
     </div>
   );
 }
 
-/**
- * Салхины хэрэгсэл.
- *
- * Зүг нь ХААНААС үлээж байгааг заана (цаг уурын жишиг) тул хуваарийн
- * зураас тэр тал руу харна, сум зурахгүй — сум нь "хаашаа" гэж
- * уншигдаж, эсрэг утга өгнө. Зүгийн нэрийг бүтнээр бичнэ.
- */
+/** Салхины нүд — хурд нь тоогоор, зүг нь луужингаар */
 function WindGauge({ obs }: { obs: Obs }) {
   const deg = obs.windDir;
   return (
-    <div className="flex items-start gap-2 px-3 py-1.5">
-      <div className="min-w-0 flex-1">
-        <div className="eyebrow truncate">Салхи</div>
+    <div
+      className="observation-metric is-wind"
+      style={
+        {
+          "--metric-tone":
+            obs.wind == null
+              ? "var(--ink-3)"
+              : colorOf(measureOf("wind"), obs.wind),
+        } as React.CSSProperties
+      }
+    >
+      <Wind
+        size={28}
+        strokeWidth={1.6}
+        aria-hidden
+        className="shrink-0 text-ink-3"
+        style={
+          obs.wind == null
+            ? undefined
+            : { color: colorOf(measureOf("wind"), obs.wind) }
+        }
+      />
+      <div className="flex min-w-0 flex-1 flex-col">
+        <div className="text-[11px] leading-tight font-semibold tracking-[0.05em] text-ink-3 uppercase">
+          Салхи
+        </div>
         <div className="mt-1 flex items-baseline gap-1">
-          <span className="num text-[16px] leading-none font-medium text-ink">
+          <span className="num text-[19px] leading-none font-semibold text-ink">
             {obs.wind == null ? "—" : num(obs.wind, 1)}
           </span>
-          <span className="text-[10.5px] text-ink-3">м/с</span>
-        </div>
-        <div className="mt-1 truncate text-[10px] leading-none text-ink-3">
-          {windName(deg)}
+          <span className="text-[11px] text-ink-2">м/с</span>
         </div>
       </div>
 
-      <span
-        aria-hidden
-        className="relative mt-0.5 size-7 shrink-0 rounded-full border border-line-2"
-      >
-        {deg == null ? (
-          <Navigation size={11} className="absolute inset-0 m-auto text-ink-3" />
-        ) : (
-          <>
-            {/* Хойд зүгийн тэмдэглэгээ */}
-            <span className="absolute top-[2px] left-1/2 h-[3px] w-px -translate-x-1/2 bg-line-2" />
-            {/* Салхи ирж буй тал */}
-            <span
-              className="absolute inset-0"
-              style={{ transform: `rotate(${deg}deg)` }}
-            >
-              <span className="absolute top-[3px] left-1/2 h-[9px] w-[2px] -translate-x-1/2 rounded-full bg-data" />
-            </span>
-            <span className="absolute inset-0 m-auto size-1 rounded-full bg-ink-3" />
-          </>
-        )}
-      </span>
+      <WindRose deg={deg} tone={colorOf(measureOf("wind"), obs.wind)} />
     </div>
+  );
+}
+
+/* --------------------------------------------------------------------------
+   ҮЗЭГДЛИЙН ТЭМДЭГ
+
+   ⚠⚠ ДУГААРААР тааруулна, БИЧВЭРЭЭР биш. Эх сурвалж үзэгдэл бүрийг
+   нэрээс нь гадна дугаараар өгдөг (`phenoIdDay` / `phenoIdNight`) тул
+   нэрийн бичиглэл өөрчлөгдөхөд тэмдэг алдагдахгүй.
+
+   ⚠ Доорх хүснэгт нь ТААМАГ БИШ: 2026-09-21-нд улсын 316 станцын таван
+   хоногийн мэдээг бүтнээр нь татаж, гарсан БҮХ дугаар, нэрийн хослолыг
+   тоолж бичсэн. Тэр өдөр ердөө арван нэгэн дугаар тохиолдсон:
+
+     3  Үүлэрхэг · 5, 7  Багавтар үүлтэй · 9, 10  Үүлшинэ ·
+     20  Үүл багасна · 27, 28  Ялимгүй хур тунадас ·
+     60  Бага зэргийн бороо · 61  Бороо · 65  Хур тунадас
+
+   285 бичлэгт үзэгдэл огт байгаагүй.
+
+   ⚠ Дугаар нь олон улсын SYNOP код БИШ, эх сурвалжийн ӨӨРИЙН хуваарь
+   тул жагсаалтад БАЙХГҮЙ дугаарт утга оноохгүй — оронд нь нэрнээс нь
+   түлхүүр үгээр хайж, тэр ч олдохгүй бол тэмдэггүй үлдээнэ. Өвлийн
+   үзэгдлүүд (цас, цасан шуурга, манан) энэ татацад ороогүй тул
+   түлхүүр үгийн давхарга ЗААВАЛ хэрэгтэй.
+
+   ⚠ Тэмдэг нь ӨНГӨГҮЙ (`ink-2`). Дээрх заалтын эгнээнд тэмдгийн өнгө
+   нь УТГААС гардаг ч үзэгдэл бол хэмжсэн утга биш НЭРЛЭСЭН ангилал —
+   нар шар, үүл саарал гэж будвал тэр нь чимэглэл болж "өнгө = утга"
+   дүрмийг зөрчинө. Ялгааг нь ДҮРС өөрөө хэлнэ.
+   -------------------------------------------------------------------------- */
+
+const PHENO_BY_ID: Record<number, LucideIcon> = {
+  3: Cloudy,
+  5: CloudSun,
+  7: CloudSun,
+  9: Cloud,
+  10: Cloud,
+  20: CloudSun,
+  27: CloudDrizzle,
+  28: CloudDrizzle,
+  60: CloudRain,
+  61: CloudRain,
+  65: CloudRain,
+};
+
+/**
+ * Нэрнээс нь таних нөөц дүрэм.
+ *
+ * ДАРААЛАЛ чухал: тунадсыг эхэлж шалгана, эс тэгвээс "Бага зэргийн
+ * бороо" нь "бага зэрэг" гэсэн үгээр үүлшилт рүү унана. Мөн "Үүл
+ * багасна" нь "үүл"-ээс ӨМНӨ шалгагдана.
+ */
+const PHENO_BY_WORD: [string, LucideIcon][] = [
+  ["аянга", CloudLightning],
+  ["цасан шуурга", Wind],
+  ["цас", CloudSnow],
+  ["бороо", CloudRain],
+  ["тунадас", CloudDrizzle],
+  ["манан", CloudFog],
+  ["будан", CloudFog],
+  ["шуурга", Wind],
+  ["цэлмэг", Sun],
+  ["нартай", Sun],
+  ["үүл багасна", CloudSun],
+  ["багавтар", CloudSun],
+  ["бага зэрэг үүлтэй", CloudSun],
+  ["үүлэрхэг", Cloudy],
+  ["үүл", Cloud],
+];
+
+function phenoIcon(id: number | null, text: string): LucideIcon | null {
+  if (id != null && PHENO_BY_ID[id]) return PHENO_BY_ID[id];
+  const t = text.trim().toLowerCase();
+  if (!t) return null;
+  for (const [word, icon] of PHENO_BY_WORD) if (t.includes(word)) return icon;
+  return null;
+}
+
+/**
+ * Үзэгдлийн тэмдгийн суудал.
+ *
+ * ⚠ Тэмдгийг `React.createElement`-ээр зурна: олдсон бүрэлдэхүүнийг том
+ * үсгээр эхэлсэн НУТГИЙН хувьсагчид оноовол `react-hooks` дүрэм түүнийг
+ * "зурагдалтын үед үүсгэсэн бүрэлдэхүүн" гэж үзэж унана. Бүрэлдэхүүн
+ * нь дээрх ТОГТМОЛ хүснэгтээс гардаг, шинээр үүсдэггүй.
+ *
+ * ⚠ Суудал нь үзэгдэл танигдаагүй үед ч ТОГТМОЛ өргөнтэй үлдэнэ — эс
+ * тэгвээс өдөр, шөнийн хоёр мөр зөрж эгнэнэ.
+ */
+function PhenoMark({
+  id,
+  text,
+  night = false,
+}: {
+  id: number | null;
+  text: string;
+  night?: boolean;
+}) {
+  const base = phenoIcon(id, text);
+  const icon =
+    night && base === Sun
+      ? Moon
+      : night && base === CloudSun
+        ? CloudMoon
+        : base;
+  return (
+    <span className="flex w-7 shrink-0 items-center justify-center self-center">
+      {icon
+        ? React.createElement(icon, {
+            size: 26,
+            strokeWidth: 1.5,
+            "aria-hidden": true,
+            className: "text-ink-2",
+          })
+        : null}
+    </span>
+  );
+}
+
+/* --------------------------------------------------------------------------
+   САЛХИНЫ ЛУУЖИН
+
+   ⚠⚠ ЗҮГИЙН НЭР БИЧВЭРЭЭР ГАРАХАА БОЛИВ (хэрэглэгчийн шийдвэр,
+   2026-09-21: "Баруун урд гэж бичихгүй … эниийг сайжруулаад томоор
+   харуулъя"). Зүгийг луужин өөрөө хэлнэ; бүтэн нэр нь `title`-д
+   үлдэж, хулгана аваачихад гарна.
+
+   ⚠⚠ СУМ ЗУРАХГҮЙ. Салхины зүг нь ХААНААС үлээж байгааг заадаг (цаг
+   уурын жишиг) тул сум нь "хаашаа" гэж уншигдаж ЭСРЭГ утга өгнө.
+   Хэрэглэгчийн өгсөн жишээ зурагт сум байсан ч энэ дүрэм хүчинтэй:
+   оронд нь цаг уурын салхины ХӨТӨЧ шиг зүү татаж, үзүүрт нь цэг
+   тавина — "салхи эндээс ирж байна".
+
+   ⚠ Зүгийн үсэг нь КИРИЛЛ: Х (хойд) · З (зүүн) · У (урд) · Б
+   (баруун). Жишээ зурагт N/E/S/W байсан ч платформ дээр латин
+   бичиглэл гарахгүй. Луужингийн үсэг нь өгүүлбэр доторх товчлол биш
+   ТЭМДЭГ тул "товчлол задална" дүрэмд хамаарахгүй — хэмжих нэгжийн
+   тэмдэглэгээтэй ижил.
+   -------------------------------------------------------------------------- */
+
+function WindRose({ deg, tone }: { deg: number | null; tone?: string }) {
+  const S = 72;
+  const c = S / 2;
+  const R = 34;
+  const angle =
+    deg == null || !Number.isFinite(deg) ? null : ((deg % 360) + 360) % 360;
+  const accent = tone ?? "var(--water)";
+  /* 0 градус нь ДЭЭШ (хойд) — SVG-ийн өнцөг баруун тийш эхэлдэг тул 90 хасна */
+  const pt = (a: number, r: number) => {
+    const t = ((a - 90) * Math.PI) / 180;
+    return [c + r * Math.cos(t), c + r * Math.sin(t)] as const;
+  };
+
+  const tip = angle == null ? null : pt(angle, 16);
+  const start = angle == null ? null : pt(angle - 25, 18);
+  const end = angle == null ? null : pt(angle + 25, 18);
+  const description =
+    angle == null
+      ? "Салхины зүг тодорхойгүй"
+      : `${windName(angle)} зүгээс · ${num(angle, 0)}°`;
+
+  return (
+    <svg
+      width={64}
+      height={64}
+      viewBox={`0 0 ${S} ${S}`}
+      className="shrink-0"
+      role="img"
+      aria-label={description}
+    >
+      <title>{description}</title>
+      <circle
+        cx={c}
+        cy={c}
+        r={R}
+        fill="var(--paper)"
+        stroke="var(--line)"
+        strokeWidth={1}
+      />
+
+      <circle
+        cx={c}
+        cy={c}
+        r={31.5}
+        fill="none"
+        stroke="var(--line)"
+        strokeWidth={0.5}
+      />
+      <circle
+        cx={c}
+        cy={c}
+        r={18.5}
+        fill="var(--paper-2)"
+        stroke="var(--line)"
+        strokeWidth={0.7}
+      />
+      {/* Үндсэн болон завсрын хуваарь */}
+      {Array.from({ length: 32 }, (_, i) => i * 11.25).map((a) => {
+        const major = a % 90 === 0;
+        const [x1, y1] = pt(a, 31);
+        const [x2, y2] = pt(a, major ? 27.5 : 29.5);
+        return (
+          <line
+            key={a}
+            x1={x1}
+            y1={y1}
+            x2={x2}
+            y2={y2}
+            stroke={major ? "var(--ink-3)" : "var(--line-2)"}
+            strokeWidth={major ? 1.4 : 0.8}
+            strokeLinecap="round"
+          />
+        );
+      })}
+
+      {/* Үндсэн дөрвөн зүг */}
+      {(
+        [
+          [0, "Х"],
+          [90, "З"],
+          [180, "У"],
+          [270, "Б"],
+        ] as const
+      ).map(([a, ch]) => {
+        const [x, y] = pt(a, 24);
+        const active =
+          angle != null && Math.abs(((angle - a + 540) % 360) - 180) <= 45;
+        return (
+          <text
+            key={ch}
+            x={x}
+            y={y}
+            textAnchor="middle"
+            dominantBaseline="central"
+            fontSize={8}
+            fontWeight={active ? 750 : 500}
+            fill={active ? accent : "var(--ink-3)"}
+          >
+            {ch}
+          </text>
+        );
+      })}
+
+      {tip && start && end && angle != null ? (
+        <>
+          <path
+            d={`M${c} ${c} L${start[0]} ${start[1]} A18 18 0 0 1 ${end[0]} ${end[1]} Z`}
+            fill={accent}
+            opacity={0.13}
+          />
+          <circle
+            cx={c}
+            cy={c}
+            r={33}
+            fill="none"
+            stroke={accent}
+            strokeWidth={2}
+            strokeDasharray="23 185"
+            strokeLinecap="round"
+            transform={`rotate(${angle - 110} ${c} ${c})`}
+          />
+          <line
+            x1={pt(angle + 180, 7)[0]}
+            y1={pt(angle + 180, 7)[1]}
+            x2={c}
+            y2={c}
+            stroke="var(--ink-3)"
+            strokeWidth={1.5}
+            strokeLinecap="round"
+            opacity={0.45}
+          />
+          <line
+            x1={c}
+            y1={c}
+            x2={tip[0]}
+            y2={tip[1]}
+            stroke={accent}
+            strokeWidth={2.5}
+            strokeLinecap="round"
+          />
+          <circle
+            cx={tip[0]}
+            cy={tip[1]}
+            r={3.2}
+            fill={accent}
+            stroke="var(--paper-2)"
+            strokeWidth={1.2}
+          />
+          <circle
+            cx={c}
+            cy={c}
+            r={4}
+            fill="var(--paper-2)"
+            stroke={accent}
+            strokeWidth={1.2}
+          />
+          <circle cx={c} cy={c} r={1.5} fill={accent} />
+        </>
+      ) : (
+        <text
+          x={c}
+          y={c}
+          textAnchor="middle"
+          dominantBaseline="central"
+          fontSize={14}
+          fill="var(--ink-3)"
+        >
+          —
+        </text>
+      )}
+    </svg>
   );
 }
 
@@ -881,32 +1493,46 @@ function TempRow({
   value,
   feels,
   pheno,
+  phenoId,
 }: {
   label: string;
   value: number | null;
   feels: number | null;
   pheno: string;
+  phenoId: number | null;
 }) {
+  /*
+    ⚠⚠ ТЭМДЭГ нь ХОЁР БАГАНАТ бүтцийн ЗҮҮН баганад сууна, температурын
+    мөрийн дотор БИШ (хэрэглэгчийн хүсэлт, 2026-09-21: "эднийг хүнд
+    харагдахаар томруулж болохгүй юу"). Мөрийн дотор байхад тэмдэг нь
+    14px-ийн бичвэрийн өндрөөр хязгаарлагдаж, томруулах бүрд мөрийг
+    сунгадаг байв. Хажуудаа гарснаар температур, үзэгдлийн НЭГДСЭН
+    ӨНДРИЙГ (хоёр мөр ≈ 29px) бүтнээр эзэлж, картын өндөр өсөхгүйгээр
+    26px болов.
+  */
   return (
-    <div>
-      <div className="flex items-baseline gap-1.5">
-        <span className="w-[30px] shrink-0 text-[10px] text-ink-3">{label}</span>
-        <span
-          className="num shrink-0 text-[14px] leading-none"
-          style={{ color: colorOf(measureOf("temp"), value) }}
-        >
-          {value == null ? "—" : num(value, 0)}
+    <div className={cn("forecast-period", label === "Шөнө" && "is-night")}>
+      <div className="forecast-reading">
+        <span className="forecast-period-label">
+          {label === "Шөнө" ? (
+            <Moon size={11} aria-hidden />
+          ) : (
+            <Sun size={11} aria-hidden />
+          )}
+          {label}
         </span>
-        <span className="text-[10px] text-ink-3">°C</span>
-        {feels != null && value != null && feels !== value ? (
-          <span className="num text-[10px] text-ink-3">мэдрэгдэх {num(feels, 0)}</span>
-        ) : null}
+        <span className="forecast-temperature num">
+          {value == null ? "—" : num(value, 0)}
+          <small>°C</small>
+        </span>
       </div>
-      {pheno ? (
-        <div className="mt-0.5 truncate pl-[36px] text-[10px] leading-snug text-ink-3">
-          {pheno}
-        </div>
-      ) : null}
+      <div className="forecast-condition">
+        <PhenoMark id={phenoId} text={pheno} night={label === "Шөнө"} />
+        <span>{pheno || "Үзэгдэл мэдээлээгүй"}</span>
+      </div>
+      <span className="forecast-feels num">
+        {feels != null ? `Мэдрэгдэх ${num(feels, 0)} °C` : "Мэдрэгдэх —"}
+      </span>
     </div>
   );
 }
@@ -914,7 +1540,9 @@ function TempRow({
 function Empty({ text }: { text: string }) {
   return (
     <div className="hatch m-3 flex items-center justify-center rounded-xs border border-dashed border-line-2 px-4 py-6">
-      <p className="text-center text-[11.5px] leading-snug text-ink-3">{text}</p>
+      <p className="text-center text-[11.5px] leading-snug text-ink-3">
+        {text}
+      </p>
     </div>
   );
 }

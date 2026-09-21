@@ -222,6 +222,7 @@ export function sizeClass(m2: number): number {
 type Props = Record<string, string | number | null>;
 
 const str = (v: unknown) => (v == null ? "" : String(v).trim());
+const cap = (s: string) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
 const int = (v: unknown) => {
   const n = Number(v);
   return Number.isFinite(n) && n > 0 ? n : null;
@@ -297,7 +298,9 @@ async function fetchLayer(service: string, layer: number, signal?: AbortSignal) 
       activityRaw,
       activity: classifyActivity(activityRaw),
       landuse: str(p.landuse_de) || "Тодорхойгүй",
-      right: str(p.rigth_type) || "Тодорхойгүй",
+      /* Эх сурвалж "эзэмших" гэж жижгээр бичдэг — дэлгэц дээр албан
+         бичгийн хэлбэрээр эхний үсэг том */
+      right: cap(str(p.rigth_type)) || "Тодорхойгүй",
       district: str(p.soum) || "Тодорхойгүй",
       khoroo: str(p.address_kh),
       address: str(p.address_ne),

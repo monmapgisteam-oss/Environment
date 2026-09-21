@@ -520,6 +520,8 @@ export function WellsMap({
   weights,
   detail,
   labels,
+  values,
+  scale,
 }: {
   points: MapPoints;
   /** Шүүлтүүр давсан цэгүүдийн индекс */
@@ -680,6 +682,37 @@ export function WellsMap({
    * гарвал цэгээ дарж, тархалт уншигдахаа болино. Давхцлыг MapLibre
    * өөрөө шийднэ — нягт хэсэгт багтсан нь л үлдэнэ.
    */
+  /**
+   * ЦЭГИЙН ОРОНД ХЭМЖИЛТИЙН УТГА.
+   *
+   * ⚠⚠ Олон улсын цаг уурын зургийн жишиг (WMO-гийн station model):
+   * станцын байрлалд тоо нь ӨӨРӨӨ сууна — уншигч цэг товшилгүйгээр
+   * заалтыг уншина. Windy, Ventusky зэрэг орчин үеийн зураг мөн ижил
+   * зарчимтай: алсаас тоо, ойроос дэлгэрэнгүй.
+   *
+   * Өгвөл `maxzoom`-оос ХОЛ байх үед цэгийн давхаргууд нуугдаж тоо
+   * гарна; ойртоход эсрэгээр — тоо алга болж цэг үлдэнэ.
+   *
+   * ⚠ Тоонууд давхцвал MapLibre өөрөө цөөрүүлнэ (`text-allow-overlap`
+   * анхдагчаар үгүй) тул алсаас зураг бөглөрөхгүй.
+   */
+  /**
+   * АНХНЫ ХАРАГДАЦЫН МАСШТАБ (хуваарийн хуваарь: 900_000 → 1:900 000).
+   *
+   * Өгөөгүй бол зураг өгөгдлийнхөө хүрээнд ТААРУУЛНА (`fitBounds`) —
+   * цэгийн тархалтаас хамаарч масштаб нь өөр өөр гарна. Өгвөл төв нь
+   * хэвээр, ойртолт нь ТОГТМОЛ болно: ижил хэлтсийн зураг үргэлж нэг
+   * хэмжээнд нээгдэнэ.
+   */
+  scale?: number;
+  values?: {
+    /** Цэг бүрийн бичвэр ("15.6 °C"). Хоосон бол тэр цэгт гарахгүй */
+    text: string[];
+    /** Утгын шатлалын өнгө, hex. Өгөөгүй бол цайвар саарал */
+    color?: string[];
+    /** Үүнээс ЦААШ ойртвол тоо алга болж, цэг гарна (анхдагч 13) */
+    maxzoom?: number;
+  };
   labels?: {
     text: string[];
     minzoom?: number;
@@ -810,6 +843,9 @@ export function WellsMap({
     labeled: Boolean(labels),
     labelZoom: labels?.minzoom ?? 12,
     labelOffset: labels?.offset ?? 0.7,
+    valued: Boolean(values),
+    valueZoom: values?.maxzoom ?? 13,
+    scale,
   });
   const detailRef = React.useRef(detail);
   React.useEffect(() => {
@@ -1584,6 +1620,51 @@ export function WellsMap({
         });
       }
 
+      /*
+        ХЭМЖИЛТИЙН УТГА — цэгийн ОРОНД.
+
+        ⚠⚠ Олон улсын цаг уурын зургийн жишиг (WMO-гийн station model):
+        станцын байрлалд заалт нь өөрөө бичигдэнэ. Алсаас тоо уншигдаж,
+        ойртоход цэг рүү шилжинэ — хоёр өөр асуултад хоёр өөр дүрслэл:
+        "хаана хэд вэ" ба "яг хаана байна вэ".
+
+        ⚠ Бичвэрийн өнгө нь УТГЫНХ (`vc`) — шатлалаас гарсан hex.
+        Гэрэл, харанхуй горимд ижил байхын тулд платформын токен
+        ОРОХГҮЙ; уншигдацыг бараан контур барина.
+      */
+      if (modeRef.current.valued) {
+        m.addLayer({
+          id: "wells-value",
+          type: "symbol",
+          source: "wells",
+          maxzoom: modeRef.current.valueZoom,
+          filter: ["all", ["!", ["has", "point_count"]], ["has", "v"]],
+          layout: {
+            "text-field": ["get", "v"],
+            "text-font": FONT,
+            "text-size": ["interpolate", ["linear"], ["zoom"], 6, 11, 12, 14],
+            "text-anchor": "center",
+            "text-padding": 4,
+            "text-max-width": 8,
+          },
+          paint: {
+            "text-color": ["coalesce", ["get", "vc"], "#eef4f8"],
+            "text-halo-color": "rgba(8,14,20,.9)",
+            "text-halo-width": 1.6,
+          },
+        });
+
+        /*
+          Утга харагдаж байх үед ЦЭГ нуугдана (хэрэглэгчийн шийдвэр,
+          2026-09-21: "цэгийн point биш утгууд нь харагдмаар байна").
+          Хоёулаа зэрэг гарвал тоо нь цэгийнхээ гэрэлтэлт дээр суух тул
+          аль аль нь уншигдахаа болино.
+        */
+        for (const id of ["wells-dot", "wells-glow", "wells-halo", "wells-ring"]) {
+          if (m.getLayer(id)) m.setLayerZoomRange(id, modeRef.current.valueZoom, 24);
+        }
+      }
+
       // Бөөгнөрөл дээр товшвол задалж ойртоно
       if (modeRef.current.cluster) m.on("click", "clusters", (e) => {
         const f = e.features?.[0];
@@ -1913,6 +1994,16 @@ export function WellsMap({
     zoomed.current = focus != null;
 
     const [w, s, e, n] = target;
+    /* Масштаб заагдсан зураг АНХНЫ хэмжээндээ буцна — хүрээнд
+       тааруулбал сонголт цуцлах бүрд өөр ойртолт гарна */
+    if (!focus && modeRef.current.scale) {
+      live.easeTo({
+        center: [(w + e) / 2, (s + n) / 2],
+        zoom: zoomForScale(modeRef.current.scale, (s + n) / 2),
+        duration: 700,
+      });
+      return;
+    }
     live.fitBounds(
       [
         [w, s],
@@ -1955,6 +2046,12 @@ export function WellsMap({
       /* Хоосон шошгыг ОГТ бичихгүй — давхаргын `has t` шүүлт үүнд
          тулгуурлаж, шошгогүй цэгийг алгасна */
       if (text?.[i]) props.t = text[i];
+      /* Утга ба түүний өнгө — `has v` шүүлт хоосныг алгасна */
+      if (values?.text[i]) {
+        props.v = values.text[i];
+        const c = values.color?.[i];
+        if (c) props.vc = c;
+      }
       features[k] = {
         type: "Feature",
         geometry: { type: "Point", coordinates: [lon[i], lat[i]] },
@@ -1987,15 +2084,29 @@ export function WellsMap({
       const lo = Math.floor(xs.length * 0.01);
       const hi = Math.ceil(xs.length * 0.99) - 1;
       home.current = [xs[lo], ys[lo], xs[hi], ys[hi]];
-      live.fitBounds(
-        [
-          [xs[lo], ys[lo]],
-          [xs[hi], ys[hi]],
-        ],
-        { padding: 30, duration: 0, maxZoom: 13 },
-      );
+      /*
+        Масштаб заагдсан бол ойртолт нь ТОГТМОЛ: төв нь өгөгдлийнхөө
+        дундаж, хэмжээ нь бүртгэлээс. Эс тэгвээс хүрээнд тааруулна.
+      */
+      if (modeRef.current.scale) {
+        live.jumpTo({
+          center: [(xs[lo] + xs[hi]) / 2, (ys[lo] + ys[hi]) / 2],
+          /* Өргөрөг нь ЭНЭ өгөгдлийнх — `zoomForScale`-ийн анхдагч
+             (УБ, 47.9°) нь ойролцоо ч харьцааны заалттай хагас хувиар
+             зөрдөг */
+          zoom: zoomForScale(modeRef.current.scale, (ys[lo] + ys[hi]) / 2),
+        });
+      } else {
+        live.fitBounds(
+          [
+            [xs[lo], ys[lo]],
+            [xs[hi], ys[hi]],
+          ],
+          { padding: 30, duration: 0, maxZoom: 13 },
+        );
+      }
     }
-  }, [live, points, visible, weights, grades, labels]);
+  }, [live, points, visible, weights, grades, labels, values]);
 
   /*
     Шошгын ХЯЗГААР нь амьд.

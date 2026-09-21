@@ -107,6 +107,7 @@ export const ACTIVITY_LABEL = new Map<string, string>(
 function str(v: unknown) {
   return typeof v === "string" ? v.trim() : "";
 }
+const cap = (s: string) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
 
 /**
  * Талбайг уншигдахуйц бичих.
@@ -231,7 +232,8 @@ export async function fetchBomt(signal?: AbortSignal): Promise<BomtData> {
       plantingRaw,
       planting: classifyPlanting(plantingRaw),
       landuse: str(p.landuse) || "Тодорхойгүй",
-      right: str(p.right) || "Тодорхойгүй",
+      /* Эрхийн хэлбэр эхний үсэг томоор — ерөнхий үнэлгээтэй нэг бичиглэл */
+      right: cap(str(p.right)) || "Тодорхойгүй",
       district: str(p.district) || "Тодорхойгүй",
       districtRaw: str(p.districtRaw),
       khoroo: str(p.khoroo),

@@ -55,9 +55,6 @@
 .workspace-breadcrumb { padding-left: 0; }
 .workspace-icon-button { display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; flex-shrink: 0; border-radius: 50%; border: 1px solid var(--line); color: var(--ink-2); transition: background 160ms; }
 .workspace-icon-button:hover { background: var(--paper-hi); }
-.workspace-search-trigger { display: flex; align-items: center; gap: 10px; border: 1px solid var(--line); border-radius: 30px; padding: 10px 14px; font-size: 12px; color: var(--ink-3); }
-.workspace-search-trigger:hover { background: var(--paper-2); }
-.workspace-search-trigger kbd { border: 1px solid var(--line); border-radius: 5px; margin-left: 16px; padding: 1px 5px; font: inherit; font-size: 10px; }
 .workspace-search-dialog { position: fixed; inset: 0; margin: 12vh auto auto; width: min(640px, calc(100% - 32px)); max-height: 80dvh; padding: 0; border: 1px solid var(--line); border-radius: 22px; background: var(--paper-2); color: var(--ink); box-shadow: 0 24px 100px #0005; }
 .workspace-search-dialog::backdrop { background: #0c211b88; backdrop-filter: blur(5px); }
 .search-result { display: flex; align-items: center; gap: 14px; padding: 14px 12px; border-radius: 10px; font-size: 13px; line-height: 1.6; }
@@ -170,7 +167,6 @@
   .workspace-wordmark > img { width: 44px; height: 44px; }
   .workspace-breadcrumb { display: none; }
   .workspace-main { padding-inline: 18px; }
-  .workspace-search-trigger { width: 38px; height: 38px; justify-content: center; padding: 0; border-radius: 50%; }
   .home-intro { grid-template-columns: 1fr; padding-top: 10px; gap: 26px; }
   .intro-copy h1 { font-size: clamp(35px, 9.3vw, 49px); margin-top: 21px; }
   .intro-description { font-size: 13px; margin-top: 17px; }
