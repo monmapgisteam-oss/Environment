@@ -18,6 +18,7 @@ import {
   Droplets,
   Gauge as GaugeIcon,
   History,
+  ListFilter,
   Loader2,
   MapPin,
   Mountain,
@@ -222,6 +223,9 @@ export function WeatherDashboard() {
   );
 }
 
+/** Ажиглалттай станц — бүртгэл, сүүлийн заалт, түүний нас */
+type Row = { st: Station; obs: Obs; age: number | null };
+
 function LiveWeather({
   refresh,
   setRefresh,
@@ -267,8 +271,6 @@ function LiveWeather({
     setOverview((v) => v + 1);
   }, []);
 
-  const mA = measureOf(measureA);
-
   React.useEffect(() => {
     const ac = new AbortController();
     let busy = false;
@@ -313,7 +315,7 @@ function LiveWeather({
    */
   const rows = React.useMemo(() => {
     if (!data) return [];
-    const out: { st: Station; obs: Obs; age: number | null }[] = [];
+    const out: Row[] = [];
     for (const st of data.stations) {
       if (st.aimag !== CAPITAL) continue;
       const obs = data.obs.get(st.sid);
@@ -434,7 +436,7 @@ function LiveWeather({
         зураг бүтэн өндрөө хадгална.
       */}
       {showForecast ? null : (
-        <section className="observation-panel shrink-0 overflow-hidden border border-line bg-paper">
+        <section className="observation-panel shrink-0 border border-line bg-paper">
           <header className="observation-header">
             <span className="observation-station-icon">
               <MapPin size={20} strokeWidth={1.6} aria-hidden />
@@ -446,19 +448,13 @@ function LiveWeather({
                   : "Станц сонгогдоогүй"}
               </h2>
             </div>
+            {/* ⚠⚠ ӨНДӨРШЛИЙН ОРОНД СТАНЦЫН ШҮҮЛТҮҮР (хэрэглэгчийн
+              шийдвэр, 2026-09-21). Станцын жагсаалт баганаас
+              хасагдсан тул сонгох хэрэгсэл энд шилжив; өндөршил нь
+              газрын зургийн хөвөгч тайлбарт хэвээр */}
+            <StationPicker rows={rows} sid={sid} onPick={pickStation} />
             {current ? (
               <>
-                {/* ⚠ Байршлыг ЗӨВХӨН станцын нэрээс ЯЛГААТАЙ үед бичнэ
-                  (хэрэглэгчийн шийдвэр, 2026-09-21): Улаанбаатар станцын
-                  `place` нь мөн "Улаанбаатар" тул толгойд нэг нэр хоёр
-                  удаа гардаг байв. Буянт-Ухаа зэрэг станцын дүүрэг нь
-                  ялгаатай тул хэвээр гарна */}
-                <span className="observation-place num">
-                  <Mountain size={13} aria-hidden />
-                  {current.st.place === current.st.name
-                    ? `${num(current.st.elev)} м`
-                    : `${current.st.place} · ${num(current.st.elev)} м`}
-                </span>
                 <span
                   className={cn(
                     "observation-time num",
@@ -549,7 +545,19 @@ function LiveWeather({
                 icon={Cloud}
                 tone={colorOf(measureOf("cloud"), current.obs.cloud)}
               />
-              <WindGauge obs={current.obs} />
+              {/* ⚠⚠ ЛУУЖИН ХАСАГДСАН (хэрэглэгчийн шийдвэр,
+                2026-09-21). Салхины зүг нь одоо зүүн баганын РАДАРТ,
+                сүлжээний бусад станцтайгаа зэрэг харагдана — нэг
+                станцын зүгийг хоёр газар зурах нь давхардал. Улмаас
+                энэ нүд бусад тавтайгаа ЯГ ИЖИЛ бүтэцтэй болов */}
+              <Gauge
+                label="Салхи"
+                value={current.obs.wind}
+                unit="м/с"
+                digits={1}
+                icon={Wind}
+                tone={colorOf(measureOf("wind"), current.obs.wind)}
+              />
 
               {/*
               Эх сурвалжийн албан жагсаалтад байгаа ч ажиглалт бүрд
@@ -700,68 +708,31 @@ function LiveWeather({
       {/* Газрын зураг нь хуудасны гол эзэлхүүн — индикатор, урьдчилсан
           мэдээ хоёр нь дээрээ нимгэн зурвас болж суух ба сүлжээний
           зураг доор нь бүтэн өндрөөр дэлгэгдэнэ */}
-      <Columns id="weather" left={272} className="min-h-0 flex-1">
+      <Columns id="weather-2" left={320} className="min-h-0 flex-1">
         {/* Зүүн багана — хэмжигдэхүүний сонголт дээр, станцын
             жагсаалт доор нь */}
         <div className="flex min-h-0 flex-col gap-2">
           <MeasurePicker value={measureA} onChange={setMeasureA} />
 
-          {/* Станцын жагсаалт */}
-          <div className="weather-stations flex min-h-0 flex-1 flex-col overflow-hidden border border-line bg-paper-2 max-xl:min-h-[280px]">
-            <ul className="min-h-0 flex-1 divide-y divide-line overflow-y-auto">
-              {shown.map((r) => {
-                /* Жагсаалтад ЗҮҮН зургийн хэмжигдэхүүн гарна — хоёуланг
-                 нь бичвэл мөр хэт нягт болно */
-                const v = mA.of(r.obs);
-                const on = r.st.sid === sid;
-                return (
-                  <li key={r.st.sid}>
-                    <button
-                      aria-pressed={on}
-                      onClick={() => pickStation(r.st.sid)}
-                      onMouseEnter={() => setListHover(r.st.sid)}
-                      onMouseLeave={() => setListHover(null)}
-                      className={cn(
-                        "relative block w-full px-2.5 py-1.5 text-left transition-colors",
-                        on ? "bg-(--tone)/10" : "hover:bg-paper-hi",
-                      )}
-                    >
-                      {on ? (
-                        <span
-                          aria-hidden
-                          className="absolute inset-y-0 left-0 w-[2px] bg-(--tone)"
-                        />
-                      ) : null}
-                      <div className="flex items-baseline gap-2">
-                        <span
-                          className={cn(
-                            "min-w-0 flex-1 truncate text-[11.5px] leading-snug",
-                            on ? "font-medium text-ink" : "text-ink-2",
-                          )}
-                        >
-                          {r.st.name}
-                        </span>
-                        <span
-                          className="num shrink-0 text-[12px] leading-none font-semibold text-ink"
-                          style={{ color: colorOf(mA, v) }}
-                        >
-                          {v == null ? "—" : `${num(v, mA.digits)} ${mA.unit}`}
-                        </span>
-                      </div>
-                      <div className="mt-0.5 truncate text-[10.5px] leading-snug text-ink-2">
-                        {r.st.place}
-                        {` · ${ageText(r.obs.at, now)}`}
-                      </div>
-                    </button>
-                  </li>
-                );
-              })}
-              {shown.length === 0 ? (
-                <li>
-                  <Empty text="Тохирох станц олдсонгүй" />
-                </li>
-              ) : null}
-            </ul>
+          {/* ⚠⚠ СТАНЦЫН ЖАГСААЛТЫН ОРОНД САЛХИНЫ РАДАР (хэрэглэгчийн
+              шийдвэр, 2026-09-21). Жагсаалт нь сонгосон хэмжигдэхүүний
+              тоог станц бүрээр давтдаг байсан — тэдгээр нь газрын зураг
+              дээр аль хэдийн, байршилтайгаа хамт бичигддэг. Станц сонгох
+              ажил толгойн шүүлтүүр, зураг, радар гуравт үлдсэн */}
+          <div className="weather-rose flex min-h-0 flex-1 flex-col overflow-hidden border border-line bg-paper-2 max-xl:min-h-[280px]">
+            <div className="flex items-baseline justify-between gap-2 border-b border-line px-2.5 py-1.5">
+              <span className="eyebrow">Салхины зүг, хурд</span>
+              <span className="num text-[10.5px] text-ink-3">
+                {num(shown.length)} станц
+              </span>
+            </div>
+            <WindRadar
+              rows={shown}
+              sid={sid}
+              onPick={pickStation}
+              hover={listHover}
+              onHover={setListHover}
+            />
           </div>
         </div>
 
@@ -1132,49 +1103,6 @@ function Gauge({
   );
 }
 
-/** Салхины нүд — хурд нь тоогоор, зүг нь луужингаар */
-function WindGauge({ obs }: { obs: Obs }) {
-  const deg = obs.windDir;
-  return (
-    <div
-      className="observation-metric is-wind"
-      style={
-        {
-          "--metric-tone":
-            obs.wind == null
-              ? "var(--ink-3)"
-              : colorOf(measureOf("wind"), obs.wind),
-        } as React.CSSProperties
-      }
-    >
-      <Wind
-        size={28}
-        strokeWidth={1.6}
-        aria-hidden
-        className="shrink-0 text-ink-3"
-        style={
-          obs.wind == null
-            ? undefined
-            : { color: colorOf(measureOf("wind"), obs.wind) }
-        }
-      />
-      <div className="flex min-w-0 flex-1 flex-col">
-        <div className="text-[11px] leading-tight font-semibold tracking-[0.05em] text-ink-3 uppercase">
-          Салхи
-        </div>
-        <div className="mt-1 flex items-baseline gap-1">
-          <span className="num text-[19px] leading-none font-semibold text-ink">
-            {obs.wind == null ? "—" : num(obs.wind, 1)}
-          </span>
-          <span className="text-[11px] text-ink-2">м/с</span>
-        </div>
-      </div>
-
-      <WindRose deg={deg} tone={colorOf(measureOf("wind"), obs.wind)} />
-    </div>
-  );
-}
-
 /* --------------------------------------------------------------------------
    ҮЗЭГДЛИЙН ТЭМДЭГ
 
@@ -1293,197 +1221,394 @@ function PhenoMark({
 }
 
 /* --------------------------------------------------------------------------
-   САЛХИНЫ ЛУУЖИН
+   СТАНЦ СОНГОХ ШҮҮЛТҮҮР
 
-   ⚠⚠ ЗҮГИЙН НЭР БИЧВЭРЭЭР ГАРАХАА БОЛИВ (хэрэглэгчийн шийдвэр,
-   2026-09-21: "Баруун урд гэж бичихгүй … эниийг сайжруулаад томоор
-   харуулъя"). Зүгийг луужин өөрөө хэлнэ; бүтэн нэр нь `title`-д
-   үлдэж, хулгана аваачихад гарна.
+   ⚠⚠ ТОЛГОЙН ЭНЭ СУУДЛЫГ ӨНДӨРШИЛ ЭЗЭЛЖ БАЙВ (хэрэглэгчийн шийдвэр,
+   2026-09-21). Станцын далайн түвшнээс дээших өндөр нь НЭГ УДАА
+   уншигдвал хангалттай тогтмол тоо бөгөөд өдөр тутмын ажиглалтад
+   хэрэггүй; харин станц СОЛИХ нь энэ самбар дээрх хамгийн байнгын
+   үйлдэл. Өндөршил нь газрын зургийн хөвөгч тайлбарт хэвээр.
 
-   ⚠⚠ СУМ ЗУРАХГҮЙ. Салхины зүг нь ХААНААС үлээж байгааг заадаг (цаг
-   уурын жишиг) тул сум нь "хаашаа" гэж уншигдаж ЭСРЭГ утга өгнө.
-   Хэрэглэгчийн өгсөн жишээ зурагт сум байсан ч энэ дүрэм хүчинтэй:
-   оронд нь цаг уурын салхины ХӨТӨЧ шиг зүү татаж, үзүүрт нь цэг
-   тавина — "салхи эндээс ирж байна".
+   ⚠ Сонгох ГУРАВ дахь зам болов: газрын зураг дээрх цэг, салхины
+   радар, энэ шүүлтүүр гурав НЭГ л төлөвийг (`sid`) удирдана.
 
-   ⚠ Зүгийн үсэг нь КИРИЛЛ: Х (хойд) · З (зүүн) · У (урд) · Б
-   (баруун). Жишээ зурагт N/E/S/W байсан ч платформ дээр латин
-   бичиглэл гарахгүй. Луужингийн үсэг нь өгүүлбэр доторх товчлол биш
-   ТЭМДЭГ тул "товчлол задална" дүрэмд хамаарахгүй — хэмжих нэгжийн
-   тэмдэглэгээтэй ижил.
+   ⚠ Унждаг цэс нь эцэг хэсгийнхээ ХҮРЭЭНЭЭС ХАЛЬДАГ тул тэр хэсгийн
+   `overflow-hidden` ХАСАГДСАН — булангийн радиусыг толгой өөрөө
+   үүрнэ (`weather.css`-ийн `.observation-header`). Хальсан цэс
+   чимээгүй тасрахаас тэр нь дээр.
    -------------------------------------------------------------------------- */
 
-function WindRose({ deg, tone }: { deg: number | null; tone?: string }) {
-  const S = 72;
-  const c = S / 2;
-  const R = 34;
-  const angle =
-    deg == null || !Number.isFinite(deg) ? null : ((deg % 360) + 360) % 360;
-  const accent = tone ?? "var(--water)";
-  /* 0 градус нь ДЭЭШ (хойд) — SVG-ийн өнцөг баруун тийш эхэлдэг тул 90 хасна */
-  const pt = (a: number, r: number) => {
-    const t = ((a - 90) * Math.PI) / 180;
-    return [c + r * Math.cos(t), c + r * Math.sin(t)] as const;
-  };
+function StationPicker({
+  rows,
+  sid,
+  onPick,
+}: {
+  rows: Row[];
+  sid: number;
+  onPick: (id: number) => void;
+}) {
+  const [open, setOpen] = React.useState(false);
+  const holder = React.useRef<HTMLDivElement>(null);
 
-  const tip = angle == null ? null : pt(angle, 16);
-  const start = angle == null ? null : pt(angle - 25, 18);
-  const end = angle == null ? null : pt(angle + 25, 18);
-  const description =
-    angle == null
-      ? "Салхины зүг тодорхойгүй"
-      : `${windName(angle)} зүгээс · ${num(angle, 0)}°`;
+  React.useEffect(() => {
+    if (!open) return;
+    const away = (e: MouseEvent) => {
+      if (!holder.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const esc = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    document.addEventListener("mousedown", away);
+    document.addEventListener("keydown", esc);
+    return () => {
+      document.removeEventListener("mousedown", away);
+      document.removeEventListener("keydown", esc);
+    };
+  }, [open]);
+
+  const current = rows.find((r) => r.st.sid === sid);
 
   return (
-    <svg
-      width={64}
-      height={64}
-      viewBox={`0 0 ${S} ${S}`}
-      className="shrink-0"
-      role="img"
-      aria-label={description}
-    >
-      <title>{description}</title>
-      <circle
-        cx={c}
-        cy={c}
-        r={R}
-        fill="var(--paper)"
-        stroke="var(--line)"
-        strokeWidth={1}
-      />
+    <div ref={holder} className="station-picker">
+      <button
+        type="button"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        onClick={() => setOpen((o) => !o)}
+        className={cn("station-picker-button", open && "is-open")}
+      >
+        <ListFilter size={12} strokeWidth={1.75} aria-hidden />
+        <span className="station-picker-label">Станц</span>
+        <span className="station-picker-value">
+          {current ? current.st.name : "Сонгоогүй"}
+        </span>
+        <ChevronDown
+          size={12}
+          strokeWidth={2}
+          aria-hidden
+          className={cn("transition-transform", open && "rotate-180")}
+        />
+      </button>
+      {open ? (
+        <ul role="listbox" className="station-picker-menu elevated">
+          {rows.map((r) => {
+            const on = r.st.sid === sid;
+            return (
+              <li key={r.st.sid}>
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={on}
+                  onClick={() => {
+                    onPick(r.st.sid);
+                    setOpen(false);
+                  }}
+                  className={cn(on && "is-on")}
+                >
+                  <span className="station-picker-name">{r.st.name}</span>
+                  {/* ⚠ Байршлыг ЗӨВХӨН нэрээсээ ЯЛГААТАЙ үед бичнэ —
+                      "Улаанбаатар · Улаанбаатар" гэж давтагдахгүй */}
+                  {r.st.place === r.st.name ? null : (
+                    <span className="station-picker-place">{r.st.place}</span>
+                  )}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      ) : null}
+    </div>
+  );
+}
 
-      <circle
-        cx={c}
-        cy={c}
-        r={31.5}
-        fill="none"
-        stroke="var(--line)"
-        strokeWidth={0.5}
-      />
-      <circle
-        cx={c}
-        cy={c}
-        r={18.5}
-        fill="var(--paper-2)"
-        stroke="var(--line)"
-        strokeWidth={0.7}
-      />
-      {/* Үндсэн болон завсрын хуваарь */}
-      {Array.from({ length: 32 }, (_, i) => i * 11.25).map((a) => {
-        const major = a % 90 === 0;
-        const [x1, y1] = pt(a, 31);
-        const [x2, y2] = pt(a, major ? 27.5 : 29.5);
-        return (
-          <line
-            key={a}
-            x1={x1}
-            y1={y1}
-            x2={x2}
-            y2={y2}
-            stroke={major ? "var(--ink-3)" : "var(--line-2)"}
-            strokeWidth={major ? 1.4 : 0.8}
-            strokeLinecap="round"
-          />
-        );
-      })}
+/* --------------------------------------------------------------------------
+   САЛХИНЫ РАДАР — сүлжээний зүг, хурд нэг дүрслэлд
 
-      {/* Үндсэн дөрвөн зүг */}
-      {(
-        [
-          [0, "Х"],
-          [90, "З"],
-          [180, "У"],
-          [270, "Б"],
-        ] as const
-      ).map(([a, ch]) => {
-        const [x, y] = pt(a, 24);
-        const active =
-          angle != null && Math.abs(((angle - a + 540) % 360) - 180) <= 45;
-        return (
-          <text
-            key={ch}
-            x={x}
-            y={y}
-            textAnchor="middle"
-            dominantBaseline="central"
-            fontSize={8}
-            fontWeight={active ? 750 : 500}
-            fill={active ? accent : "var(--ink-3)"}
-          >
-            {ch}
-          </text>
-        );
-      })}
+   ⚠⚠ СТАНЦЫН ЖАГСААЛТЫН ОРОНД (хэрэглэгчийн шийдвэр, 2026-09-21).
+   Жагсаалт нь сонгосон хэмжигдэхүүний тоог станц бүрээр давтдаг
+   байсан — тэр тоонууд газрын зураг дээр аль хэдийн, БАЙРШИЛТАЙГАА
+   хамт бичигддэг тул багана нь хуулбар болж байв. Салхины ЗҮГ нь
+   харин өөр хаана ч гардаггүй цорын ганц заалт байлаа.
 
-      {tip && start && end && angle != null ? (
-        <>
-          <path
-            d={`M${c} ${c} L${start[0]} ${start[1]} A18 18 0 0 1 ${end[0]} ${end[1]} Z`}
-            fill={accent}
-            opacity={0.13}
-          />
+   ⚠ Дүрслэл нь цаг уурын САЛХИНЫ СУРГААГ (wind rose) дагана: найман
+   зүгийн зүсэг нь тэр зүгээс үлээж буй станцуудын ДУНДАЖ хурдаар
+   уртсана, станц бүр өөрийн зүг, хурдан дээрээ цэг болж сууна.
+   Радиус нь ХУРД — цагиргууд нь түүний хуваарь.
+
+   ⚠⚠ ЗҮГ нь ХААНААС үлээж байгааг заана (цаг уурын жишиг) тул цэг нь
+   салхи ИРЭХ зүг рүүгээ тавигдана, СУМ ЗУРАХГҮЙ. Хуучин луужин мөн
+   яг энэ дүрмээр зурагддаг байсан.
+
+   ⚠ Зүгийн үсэг КИРИЛЛ: Х · ЗХ · З · ЗУ · У · БУ · Б · БХ. Луужингийн
+   үсэг нь өгүүлбэр доторх товчлол биш ТЭМДЭГ тул "товчлол задална"
+   дүрэмд хамаарахгүй.
+
+   ⚠ Зүг эсвэл хурд нь бүртгэгдээгүй станц зурагт ОРОХГҮЙ — тэр цэгийг
+   төвд тавивал "салхигүй" гэсэн ХУДАЛ заалт болно. Оронд нь доор нь
+   нэрээр нь ил хэлнэ.
+   -------------------------------------------------------------------------- */
+
+/** Найман зүгийн кирилл тэмдэг, хойноос цагийн зүүний дагуу */
+const ROSE_DIRS = ["Х", "ЗХ", "З", "ЗУ", "У", "БУ", "Б", "БХ"];
+
+function WindRadar({
+  rows,
+  sid,
+  onPick,
+  hover,
+  onHover,
+}: {
+  rows: Row[];
+  sid: number;
+  onPick: (id: number) => void;
+  hover: number | null;
+  onHover: (id: number | null) => void;
+}) {
+  /* ⚠ Зураг нь ДӨРВӨЛЖИН БИШ: станцын нэр дугуйн хажууд бичигддэг
+     тул хоёр талдаа 66 нэгжийн зай авав. Дөрвөлжин талбайд "Улаанбаатар"
+     гэсэн нэр хүрээнээс хальж тасардаг байв */
+  const W = 280;
+  const H = 220;
+  const C = W / 2;
+  const CY = H / 2;
+  const R = 80;
+  /* Шошгын мөр хоорондын хамгийн бага зай */
+  const GAP = 11;
+
+  const plotted = rows.flatMap((r) =>
+    r.obs.wind != null && r.obs.windDir != null
+      ? [{ st: r.st, speed: r.obs.wind, dir: r.obs.windDir }]
+      : [],
+  );
+  const missing = rows.filter(
+    (r) => r.obs.wind == null || r.obs.windDir == null,
+  );
+
+  /*
+    ⚠ Хуваарь нь ГУРВАН БҮХЭЛ алхамд хуваагдана. Дээд хязгаарыг зүгээр
+    дээшээ бөөрөнхийлөхөд цагирагууд нь 1.7, 3.3, 5 гэсэн санамсаргүй
+    тоон дээр буудаг байв — 2, 4, 6 гэсэн алхам нь нэг харцаар
+    уншигдана.
+  */
+  const step = Math.max(1, Math.ceil(Math.max(0, ...plotted.map((p) => p.speed)) / 3));
+  const top = step * 3;
+
+  const at = (dir: number, speed: number): [number, number] => {
+    const a = ((dir - 90) * Math.PI) / 180;
+    const rr = (R * speed) / top;
+    return [C + rr * Math.cos(a), CY + rr * Math.sin(a)];
+  };
+
+  /* Найман зүсэг — тэр зүгээс үлээж буй станцуудын дундаж хурд */
+  const sectors = ROSE_DIRS.map((_, i) => {
+    const mine = plotted.filter((p) => Math.round(p.dir / 45) % 8 === i);
+    if (!mine.length) return null;
+    const mean = mine.reduce((s, p) => s + p.speed, 0) / mine.length;
+    const rr = (R * mean) / top;
+    const a0 = ((i * 45 - 22.5 - 90) * Math.PI) / 180;
+    const a1 = ((i * 45 + 22.5 - 90) * Math.PI) / 180;
+    return [
+      `M${C} ${CY}`,
+      `L${C + rr * Math.cos(a0)} ${CY + rr * Math.sin(a0)}`,
+      `A${rr} ${rr} 0 0 1 ${C + rr * Math.cos(a1)} ${CY + rr * Math.sin(a1)}`,
+      "Z",
+    ].join(" ");
+  });
+
+  /*
+    ⚠⚠ ШОШГЫГ БОСООГООР ТАРААНА. Нийслэлийн долоон станц ихэвчлэн НЭГ
+    зүгээс салхитай байдаг (энэ өдөр зургаа нь баруунаас) тул цэгүүд нэг
+    салаанд бөөгнөрч, нэр нь бие биен дээрээ давхарлаж уншигдахгүй байв.
+    Тал бүрд нь дээрээс доош явж хамгийн бага зайг хангана; хөдөлсөн
+    шошго өөрийн цэг рүүгээ нимгэн чиглүүлэгч зураастай үлдэнэ.
+  */
+  const labels = plotted.map((p) => {
+    const [x, y] = at(p.dir, p.speed);
+    return { p, x, y, side: x < C ? -1 : 1, ly: y };
+  });
+  for (const side of [-1, 1]) {
+    const mine = labels.filter((l) => l.side === side).sort((a, b) => a.ly - b.ly);
+    for (let i = 1; i < mine.length; i++) {
+      if (mine[i].ly - mine[i - 1].ly < GAP) mine[i].ly = mine[i - 1].ly + GAP;
+    }
+    const over = mine.length ? mine[mine.length - 1].ly - (H - 8) : 0;
+    if (over > 0) for (const l of mine) l.ly -= over;
+  }
+
+  /* Хулганы доорх станц, байхгүй бол сонгогдсон нь тодорно */
+  const marked = hover ?? sid;
+  const noted = rows.find((r) => r.st.sid === marked);
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-1.5 p-2">
+      <svg
+        viewBox={`0 0 ${W} ${H}`}
+        className="w-full"
+        role="img"
+        aria-label="Станцуудын салхины зүг, хурд"
+      >
+        {/* Хурдны хуваарийн цагирагууд */}
+        {[1 / 3, 2 / 3, 1].map((k) => (
           <circle
-            cx={c}
-            cy={c}
-            r={33}
+            key={k}
+            cx={C}
+            cy={CY}
+            r={R * k}
             fill="none"
-            stroke={accent}
-            strokeWidth={2}
-            strokeDasharray="23 185"
-            strokeLinecap="round"
-            transform={`rotate(${angle - 110} ${c} ${c})`}
+            stroke="var(--line)"
+            strokeWidth={k === 1 ? 1 : 0.6}
           />
-          <line
-            x1={pt(angle + 180, 7)[0]}
-            y1={pt(angle + 180, 7)[1]}
-            x2={c}
-            y2={c}
-            stroke="var(--ink-3)"
-            strokeWidth={1.5}
-            strokeLinecap="round"
-            opacity={0.45}
-          />
-          <line
-            x1={c}
-            y1={c}
-            x2={tip[0]}
-            y2={tip[1]}
-            stroke={accent}
-            strokeWidth={2.5}
-            strokeLinecap="round"
-          />
-          <circle
-            cx={tip[0]}
-            cy={tip[1]}
-            r={3.2}
-            fill={accent}
-            stroke="var(--paper-2)"
-            strokeWidth={1.2}
-          />
-          <circle
-            cx={c}
-            cy={c}
-            r={4}
-            fill="var(--paper-2)"
-            stroke={accent}
-            strokeWidth={1.2}
-          />
-          <circle cx={c} cy={c} r={1.5} fill={accent} />
-        </>
-      ) : (
-        <text
-          x={c}
-          y={c}
-          textAnchor="middle"
-          dominantBaseline="central"
-          fontSize={14}
-          fill="var(--ink-3)"
-        >
-          —
-        </text>
-      )}
-    </svg>
+        ))}
+        {/* Найман зүгийн шугам ба тэмдэг */}
+        {ROSE_DIRS.map((name, i) => {
+          const a = ((i * 45 - 90) * Math.PI) / 180;
+          const main = i % 2 === 0;
+          return (
+            <g key={name}>
+              <line
+                x1={C}
+                y1={CY}
+                x2={C + R * Math.cos(a)}
+                y2={CY + R * Math.sin(a)}
+                stroke="var(--line)"
+                strokeWidth={main ? 0.8 : 0.5}
+              />
+              <text
+                x={C + (R + 12) * Math.cos(a)}
+                y={CY + (R + 12) * Math.sin(a)}
+                textAnchor="middle"
+                dominantBaseline="central"
+                fontSize={main ? 9 : 8}
+                fontWeight={main ? 600 : 400}
+                fill="var(--ink-3)"
+              >
+                {name}
+              </text>
+            </g>
+          );
+        })}
+        {/* Зүсэг бүр тэр зүгийн дундаж хурдаар уртсана */}
+        {sectors.map((d, i) =>
+          d ? (
+            <path
+              key={ROSE_DIRS[i]}
+              d={d}
+              fill="var(--data)"
+              opacity={0.22}
+              stroke="var(--data)"
+              strokeOpacity={0.45}
+              strokeWidth={0.6}
+            />
+          ) : null,
+        )}
+        {/* Станц бүр — зүг дээрээ, хурдныхаа зайд */}
+        {labels.map(({ p, x, y, side, ly }) => {
+          const on = p.st.sid === sid;
+          const lit = p.st.sid === marked;
+          const tone = colorOf(measureOf("wind"), p.speed);
+          const lx = x + side * 7;
+          return (
+            <g
+              key={p.st.sid}
+              className="cursor-pointer"
+              onClick={() => onPick(p.st.sid)}
+              onMouseEnter={() => onHover(p.st.sid)}
+              onMouseLeave={() => onHover(null)}
+            >
+              <line
+                x1={C}
+                y1={CY}
+                x2={x}
+                y2={y}
+                stroke={tone}
+                strokeWidth={lit ? 1.8 : 1}
+                strokeOpacity={lit ? 0.9 : 0.5}
+                strokeLinecap="round"
+              />
+              {Math.abs(ly - y) > 2 ? (
+                <line
+                  x1={x}
+                  y1={y}
+                  x2={lx}
+                  y2={ly}
+                  stroke="var(--line-2)"
+                  strokeWidth={0.6}
+                />
+              ) : null}
+              {on ? (
+                <circle
+                  cx={x}
+                  cy={y}
+                  r={7}
+                  fill="none"
+                  stroke={tone}
+                  strokeWidth={1.2}
+                />
+              ) : null}
+              <circle
+                cx={x}
+                cy={y}
+                r={lit ? 4.4 : 3.4}
+                fill={tone}
+                stroke="var(--paper-2)"
+                strokeWidth={1.2}
+              />
+              {/* Нэр нь цэгийнхээ гадна талд. Дэвсгэрийн өнгөт хүрээ нь
+                  доорх зүсэг, шугамаас тусгаарлана */}
+              <text
+                x={lx}
+                y={ly}
+                textAnchor={side < 0 ? "end" : "start"}
+                dominantBaseline="central"
+                fontSize={8.5}
+                fontWeight={lit ? 600 : 400}
+                fill={lit ? "var(--ink)" : "var(--ink-2)"}
+                stroke="var(--paper-2)"
+                strokeWidth={2.4}
+                paintOrder="stroke"
+              >
+                {p.st.name}
+              </text>
+            </g>
+          );
+        })}
+        {/* Хуваарийн шошго хойд тэнхлэг дээр */}
+        {[1 / 3, 2 / 3, 1].map((k) => (
+          <text
+            key={k}
+            x={C + 3}
+            y={CY - R * k}
+            dominantBaseline="central"
+            fontSize={7.5}
+            fill="var(--ink-3)"
+          >
+            {num(top * k)}
+          </text>
+        ))}
+        <circle cx={C} cy={CY} r={1.6} fill="var(--ink-3)" />
+      </svg>
+
+      {/* Тэмдэглэсэн станцын заалт бүтэн үгээр — радар дээр зөвхөн нэр
+          нь гарч, зүг, хурд нь дүрсээр уншигдана */}
+      <p className="text-center text-[10.5px] leading-snug text-ink-2">
+        {noted && noted.obs.wind != null ? (
+          <>
+            <span className="text-ink">{noted.st.name}</span>
+            {" · "}
+            {noted.obs.windDir == null
+              ? "зүг бүртгэгдээгүй"
+              : `${windName(noted.obs.windDir)} зүгээс`}
+            {" · "}
+            <span className="num">{num(noted.obs.wind, 1)} м/с</span>
+          </>
+        ) : (
+          "Цагирагийн хуваарь: салхины хурд, м/с"
+        )}
+      </p>
+      {missing.length ? (
+        <p className="text-center text-[10px] leading-snug text-ink-3">
+          Салхи бүртгэгдээгүй: {missing.map((r) => r.st.name).join(", ")}
+        </p>
+      ) : null}
+    </div>
   );
 }
 
