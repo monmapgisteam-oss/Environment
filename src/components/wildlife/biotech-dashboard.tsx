@@ -15,7 +15,12 @@ import {
 import { BasemapGallery } from "@/components/map/basemap-gallery";
 import { FilterBar, FilterMenu, PickList } from "@/components/wells/filter-bar";
 import { Columns } from "@/components/ui/resizable-columns";
-import { defaultBasemap, type Basemap } from "@/components/wells/map";
+import {
+  defaultBasemap,
+  type Basemap,
+  type Extent,
+} from "@/components/wells/map";
+import { Bounds } from "@/lib/extent";
 import { fetchBiotech, type BiotechSite } from "@/lib/biotech";
 import { cn, num } from "@/lib/utils";
 
@@ -176,11 +181,48 @@ export function BiotechDashboard() {
   }, [rows]);
 
   /** Товшсон байршил — хүснэгтийн мөр ба зургийн цэг хоёулаа тавина */
-  const chosen = React.useMemo(
-    () =>
-      picked == null ? null : (rows?.find((r) => r.oid === picked) ?? null),
-    [rows, picked],
-  );
+  /*
+    Товшсон байршил — хүснэгтийн мөр ба зургийн цэг хоёулаа тавьна.
+
+    ⚠ Сонголтыг ХАРАГДАЖ БУЙ мөрүүдээс л хайна: хүснэгтээс
+    шүүлт тавьсны дараа сонгосон бичлэг шүүлтээс гарах боломжтой
+    бөгөөд тэгвэл зураг дээрх цонх нь хүснэгтэд байхгүй бичлэгийг
+    харуулсаар үлдэнэ. Төлөвийг эффектээр цэвэрлэхийн ОРОНД
+    ДАМ гаргасан нь зөв: `set` дуудах эффект нэмэлт зурагдалт
+    үүсгэдэг (`react-hooks/set-state-in-effect`).
+  */
+  const chosen = React.useMemo(() => {
+    if (picked == null || !rows) return null;
+    const i = shown.find((k) => rows[k].oid === picked);
+    return i == null ? null : rows[i];
+  }, [rows, shown, picked]);
+
+  /*
+    ОЙРТОХ ҮЙЛДЭЛ (хэрэглэгчийн хүсэлт, 2026-09-21: "map дээр
+    zoom in хийдэг болгоод").
+
+    Хоёр түвшин: БАЙРШИЛ сонговол зөвхөн түүн рүү, ШҮҮЛТ
+    тавьвал үлдсэн бүхнийг багтаана — шилэн барилгын самбартай
+    нэг зарчим.
+    ⚠ Шүүлтгүй, сонголтгүй үед `null`: анхны харагдац бүх 14
+    байршлыг аль хэдийн багтаасан тул дахин ойртуулах шаардлагагүй.
+    ⚠ `Bounds` нь бөглөгдөөгүй, хүрээнээс гадуурх координатыг
+    өөрөө алгасна.
+  */
+  const focus = React.useMemo<Extent | null>(() => {
+    if (!rows) return null;
+
+    if (chosen) {
+      const b = new Bounds();
+      b.add(chosen.lon, chosen.lat);
+      return b.get();
+    }
+
+    if (!district && !officer) return null;
+    const b = new Bounds();
+    for (const i of shown) b.add(rows[i].lon, rows[i].lat);
+    return b.get();
+  }, [rows, shown, chosen, district, officer]);
 
   if (error) {
     return (
@@ -286,14 +328,8 @@ export function BiotechDashboard() {
                    тэмдэглэгээ нь хиймэл дагуулын өнгөн дээр ялгарна */
                 cluster={false}
                 pulse
-                highlight={
-                  picked != null
-                    ? ((): [number, number] | null => {
-                        const r = rows.find((x) => x.oid === picked);
-                        return r ? [r.lon, r.lat] : null;
-                      })()
-                    : null
-                }
+                focus={focus}
+                highlight={chosen ? [chosen.lon, chosen.lat] : null}
                 basemap={basemap}
                 onSelect={(oid) => setPicked(picked === oid ? null : oid)}
               />
@@ -353,9 +389,19 @@ export function BiotechDashboard() {
           (`shrink-0`) — сүүлчийн мөрийн доор хоосон талбай
           үлдэхгүй. Нам дэлгэц дээр БАГАНА өөрөө гүйнэ.
         */}
+        {/*
+          ⚠⚠ БОСОО ГҮЙЛТ ГАРАХГҮЙ (хэрэглэгч, 2026-09-21:
+          "уртаашаа ч scroll авахгүй"). Мөрийн доторх зай 8px-ээс
+          6px болж, бүртгэсний мөрийн дээд зай арилснаар 14 мөр
+          ~605px-ээс ~500px болов — ердийн цонхонд бүрэн багтана.
+          ⚠ `overflow-y-auto` ХАСААГҮЙ: нам дэлгэц дээр агуулга
+          ТАСРАХААС гүйлгэсэн нь дээр (экологийн коридорын
+          диаграмтай нэг зарчим) — багтаж байвал гүйлгүүр
+          өөрөө харагдахгүй.
+        */}
         <div className="flex min-h-0 flex-col gap-2.5 overflow-y-auto xl:w-(--col-r) xl:shrink-0">
           <div className="shrink-0 rounded-xs border border-line bg-paper-2">
-            <div className="flex shrink-0 items-center justify-between gap-2 border-b border-line px-3 py-2">
+            <div className="flex shrink-0 items-center justify-between gap-2 border-b border-line px-3 py-1.5">
               <h2 className="display text-[13.5px] leading-none tracking-[0.06em] uppercase">
                 Байршил, тавьсан тэжээл
               </h2>
@@ -364,15 +410,32 @@ export function BiotechDashboard() {
               </span>
             </div>
 
-            <div className="overflow-x-auto">
-              <table className="w-full border-collapse text-[11.5px]">
+            {/*
+              ⚠⚠ ХӨНДЛӨН ГҮЙЛТ ГАРГАХГҮЙ (хэрэглэгчийн шийдвэр,
+              2026-09-21: "resize хийгээд шахчих юм бол хойшоо
+              scroll-доно").
+
+              `table-fixed` + ХУВИЙН ӨРГӨН: багана бүр хүснэгтийн
+              өргөнийг ДАГАЖ агшина — хүснэгт хэзээ ч баганаасаа
+              өргөн болж чадахгүй. Газрын нэр, дүүргийн бичвэр
+              мөрөө залгана; мөр өндөрсвөл БОСООГӨӨ гүйнэ
+              (баганын `overflow-y-auto`).
+
+              ⚠ Анхны өргөнд (640px) бүх багана бүтнээрээ харагдана;
+              шахахад л бичвэр мөрөө залгана.
+              ⚠ ТООН нүд харин НЭГ МӨРӨНД үлдэнэ: "1,900" хоёр мөр
+              болвол уншигдахаа болно — оронд нь доторх зай нь багасна
+              (`px-2`).
+            */}
+            <div>
+              <table className="w-full table-fixed border-collapse text-[11.5px]">
                 <thead>
                   <tr className="border-b border-line">
                     <Th
                       col="no"
                       sort={sort}
                       onSort={setSort}
-                      className="w-[38px]"
+                      className="w-[7%]"
                     >
                       №
                     </Th>
@@ -383,7 +446,7 @@ export function BiotechDashboard() {
                       col="district"
                       sort={sort}
                       onSort={setSort}
-                      className="w-[130px]"
+                      className="w-[22%]"
                     >
                       Дүүрэг
                     </Th>
@@ -392,7 +455,7 @@ export function BiotechDashboard() {
                       sort={sort}
                       onSort={setSort}
                       num
-                      className="w-[76px]"
+                      className="w-[11%]"
                     >
                       Давс, кг
                     </Th>
@@ -401,7 +464,7 @@ export function BiotechDashboard() {
                       sort={sort}
                       onSort={setSort}
                       num
-                      className="w-[72px]"
+                      className="w-[10%]"
                     >
                       Өвс, хавар
                     </Th>
@@ -410,7 +473,7 @@ export function BiotechDashboard() {
                       sort={sort}
                       onSort={setSort}
                       num
-                      className="w-[72px]"
+                      className="w-[10%]"
                     >
                       Өвс, намар
                     </Th>
@@ -419,7 +482,7 @@ export function BiotechDashboard() {
                       sort={sort}
                       onSort={setSort}
                       num
-                      className="w-[66px]"
+                      className="w-[10%]"
                     >
                       Зам, км
                     </Th>
@@ -442,19 +505,36 @@ export function BiotechDashboard() {
                         }
                         className={cn("district-row", on && "is-picked")}
                       >
-                        <td className="num px-3 py-2 text-ink-3">{r.no}</td>
-                        <td className="px-3 py-2">
+                        <td className="num px-3 py-1.5 text-ink-3">{r.no}</td>
+                        <td className="px-3 py-1.5">
                           <span className="block leading-snug text-ink">
                             {r.place}
                           </span>
                           {r.officer ? (
-                            <span className="mt-0.5 block text-[10px] leading-none text-ink-3">
-                              {r.officer}
-                            </span>
+                            <Pick
+                              label="Бүртгэснээр"
+                              value={r.officer}
+                              active={officer === r.officer}
+                              onPick={() =>
+                                setOfficer(
+                                  officer === r.officer ? null : r.officer,
+                                )
+                              }
+                              className="block text-[10px] leading-none"
+                            />
                           ) : null}
                         </td>
-                        <td className="px-3 py-2 whitespace-nowrap text-ink-2">
-                          {r.district}
+                        <td className="px-3 py-1.5">
+                          <Pick
+                            label="Дүүргээр"
+                            value={r.district}
+                            active={district === r.district}
+                            onPick={() =>
+                              setDistrict(
+                                district === r.district ? null : r.district,
+                              )
+                            }
+                          />
                         </td>
                         <Cell value={r.salt} />
                         <Cell value={r.haySpring} />
@@ -479,15 +559,14 @@ type SortKey =
   "no" | "place" | "district" | "salt" | "spring" | "autumn" | "km";
 
 /**
- * Дүүргийн тунгалаг өнгө — хүснэгтийн мөрийн дэвсгэр
+ * Дүүргийн өнгө — хүснэгтийн мөрийн ЗҮҮН ИРМЭГТ 3px зураас
  * (хэрэглэгчийн хүсэлт, 2026-09-17: "дүүрэг дүүргээр нь
  * өнгөөр ялгая, өнгө нь маш бүдэг шүү").
  *
  * ⚠⚠ ДӨРӨВ ҮНЭХЭЭР ӨӨР ӨНГӨ (хэрэглэгчийн залруулга,
  * 2026-09-17: "4 өөр өнгөөр"). Эхлээд хэлтсийн гэр бүлийн
  * дотор (292–202) дөрвөн өнцөг авсан боловч бүгд цэнхэр-
- * ягаан гэр бүлийнх тул 9%-ийн дүүргэлт дээр ялгагдахгүй
- * байв. Одоо өнцөг нь дугуйгаар тарав: цэнхэр 255 · ягаан 330 ·
+ * ягаан гэр бүлийнх тул ялгагдахгүй байв. Одоо өнцөг нь дугуйгаар тарав: цэнхэр 255 · ягаан 330 ·
  * ногоон-цэнхэр 165 · шар 75. Гэрэлтэлт, ханалт нь АДИЛХАН
  * (L 0.75 / C 0.16) — зөвхөн ӨНЦӨГӨӨРӨӨ ялгаатай гэсэн платформын
  * дүрэм хүчинтэй.
@@ -495,8 +574,8 @@ type SortKey =
  * сонгодог төөрөгдлийн хос. Ногооны оронд тэр суудалд
  * ногоон-цэнхэр (165) сууна.
  * ⚠ Дохионы өнгөтэй (`--moss`, `--ochre`, `--clay`) өнцөг нь
- * ойртсон ч 9%-ийн дэвсгэр нь ТӨЛӨВ мэт уншигдахгүй:
- * дохио нь үргэлж бичвэр, цэг, зураас дээр тодоороо гардаг.
+ * ойртсон ч мөрийн ирмэгийн зураас нь ТӨЛӨВ мэт уншигдахгүй:
+ * дохио нь үргэлж бичвэр, цэг дээр тодоороо гардаг.
  * ⚠ Тайлбар ХЭРЭГГҮЙ: мөр бүр дүүргийнхээ НЭРИЙГ өөрөө
  * баганадаа бичиж байгаа тул өнгө нь зөвхөн БҮЛЭГЛЭЛТЫГ
  * нүдэнд туслана — эрэмбэ солиход нэг дүүргийн мөрүүд
@@ -544,7 +623,7 @@ function Th({
 }) {
   const on = sort.by === col;
   return (
-    <th className={cn("px-3 py-2 font-normal", className)}>
+    <th className={cn("px-3 py-1.5 font-normal", className)}>
       <button
         onClick={() => onSort({ by: col, desc: on ? !sort.desc : true })}
         className={cn(
@@ -575,6 +654,54 @@ function Th({
  * дүүргэлт нийлээд хүснэгт биш диаграм мэт уншигдана.
  */
 /**
+ * ШҮҮДЭГ НҮД — хүснэгтээс шууд шүүнэ (хэрэглэгчийн хүсэлт,
+ * 2026-09-21: "table-аас filter ажилладаг болгоя").
+ *
+ * Дүүрэг, бүртгэсэн хоёр нь шүүлтүүрийн мөрөнд аль хэдийн
+ * цэстэй тул хүснэгтийн нүд нь ТЭР ХОЕР ТӨЛӨВИЙГ өөрчилнө —
+ * гурав дахь шүүлтийн суваг ГАРГААГҮЙ. Дахин товшиход
+ * цуцлагдана (платформын хөндлөн шүүлтийн ерөнхий дүрэм).
+ *
+ * ⚠ Товшилт МӨР РҮҮ ДАМЖИХГҮЙ (`stopPropagation`): мөр өөрөө
+ * бичлэг СОНГОДог тул зэрэг ажиллавал нэг товшилт хоёр
+ * өөр зүйл хийнэ.
+ * ⚠ Идэвхтэй шүүлтийг `--data` өнгөөр тэмдэглэнэ — шүүлтүүрийн
+ * мөрийн товчтой нэг эх сурвалж, дүүргийн таних өнгөтөөс
+ * ТУСДАА (тэр нь зүүн ирмэгт үлдэнэ).
+ */
+function Pick({
+  label,
+  value,
+  active,
+  onPick,
+  className,
+}: {
+  label: string;
+  value: string;
+  active: boolean;
+  onPick: () => void;
+  className?: string;
+}) {
+  return (
+    <button
+      type="button"
+      title={active ? `Шүүлтийг цуцлах` : `${label} шүүх: ${value}`}
+      onClick={(e) => {
+        e.stopPropagation();
+        onPick();
+      }}
+      className={cn(
+        "-mx-1 rounded-xs px-1 text-left transition-colors hover:bg-paper-hi hover:text-ink",
+        active ? "font-medium text-data" : "text-ink-2",
+        className,
+      )}
+    >
+      {value}
+    </button>
+  );
+}
+
+/**
  * Тоон нүд.
  *
  * ⚠ ХЭМЖИГЧИЙН ЗУРААС ХАСАГДСАН (хэрэглэгчийн шийдвэр,
@@ -590,10 +717,10 @@ function Th({
  */
 function Cell({ value }: { value: number | null }) {
   if (value == null) {
-    return <td className="px-3 py-2 text-right text-ink-3">—</td>;
+    return <td className="px-2 py-1.5 text-right text-ink-3">—</td>;
   }
   return (
-    <td className="px-3 py-2 text-right">
+    <td className="px-2 py-1.5 text-right whitespace-nowrap">
       <span className="num text-ink">{num(value)}</span>
     </td>
   );
