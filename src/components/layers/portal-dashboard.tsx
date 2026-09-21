@@ -46,7 +46,13 @@ import {
   type LayerInfo,
 } from "@/lib/portal-layers";
 import { cn, num } from "@/lib/utils";
-import { TopicBreakdown, TopicMapLegend, TOPIC_NOTES, recordUnit, topicChartTitle } from "@/components/unelgee/layer-presentation";
+import {
+  TopicBreakdown,
+  TopicMapLegend,
+  TOPIC_NOTES,
+  recordUnit,
+  topicChartTitle,
+} from "@/components/unelgee/layer-presentation";
 
 const LayerMap = dynamic(
   () => import("@/components/wells/map").then((m) => m.WellsMap),
@@ -233,7 +239,13 @@ function labelFor(hit: Loaded, oid: number): string {
  * мегабайт дэмий явна. Нэг удаа татсаныг санах ойд үлдээнэ — дахин
  * асаахад шууд гарна.
  */
-export function PortalLayersDashboard({ set, presentation }: { set: LayerSet; presentation?: "environment" }) {
+export function PortalLayersDashboard({
+  set,
+  presentation,
+}: {
+  set: LayerSet;
+  presentation?: "environment";
+}) {
   const environment = presentation === "environment";
   const [showCharts, setShowCharts] = React.useState(true);
   /** Давхарга бүрийн тодорхойлолт — эхэнд бүгдийг НЭГ удаа уншина */
@@ -499,6 +511,37 @@ export function PortalLayersDashboard({ set, presentation }: { set: LayerSet; pr
 
     return out;
   }, [on, loaded, filters]);
+
+  /**
+   * ХАМГИЙН УРТ ДИАГРАМ ЗҮҮН БАГАНАД (хэрэглэгчийн хүсэлт, 2026-09-21:
+   * "зүйлийн чартыг нөгөө талд нь гаргачих").
+   *
+   * Сэдэв тус бүрд зориулсан цонхонд давхарга сонгох багана байдаггүй
+   * тул зүүн тал БҮТНЭЭРЭЭ сул байв — зургийн баруун талд дөрвөн
+   * диаграм босоо цуварч, хамгийн сүүлийнх нь (Сонгинохайрханы
+   * судалгаан дээр 21 утгатай "Зүйл") гүйлгэхгүйгээр харагддаггүй
+   * байлаа.
+   *
+   * ⚠ Аль диаграм нь болохыг ДАТА ӨӨРӨӨ шийднэ: хамгийн олон
+   * мөртэйг нь авна. Бүртгэлд гараар бичвэл давхарга бүрд нэг мөр
+   * нэмэх шаардлагатай болох бөгөөд эх сурвалж өөрчлөгдөхөд хуучирна.
+   * ⚠ Зөвхөн найм ба түүнээс олон мөртэй үед л хуваана: гурван
+   * зүсэмтэй бөгжийг дангаар нь нөгөө талд тавих нь тэр баганыг
+   * бараг хоосон үлдээнэ.
+   */
+  const split = React.useMemo(() => {
+    if (picker || !showCharts) return null;
+    let best: { id: string; chart: string; size: number } | null = null;
+    let total = 0;
+    for (const v of views)
+      for (const b of v.charts) {
+        total += 1;
+        if (!best || b.values.length > best.size)
+          best = { id: v.id, chart: b.id, size: b.values.length };
+      }
+    if (!best || total < 2 || best.size < 8) return null;
+    return best;
+  }, [picker, showCharts, views]);
 
   /* Сонгосон УТГА бүрийг тоолно, талбарыг биш: "3 идэвхтэй" гэдэг нь
      гурван утга сонгосныг хэлэх ёстой */
@@ -785,8 +828,207 @@ export function PortalLayersDashboard({ set, presentation }: { set: LayerSet; pr
     );
   }
 
+  /**
+   * Диаграмын картууд — НЭГ үүсгэгч, ХОЁР багана.
+   *
+   * `keep` нь аль диаграм энэ баганад харьяалагдахыг хэлнэ: зүүн
+   * талд зөвхөн хамгийн урт нь ({@link split}), баруунд бусад нь.
+   * Хоёр газар хуулбарлавал өнгө, сонголт, палитрын товч гурав эрт
+   * орой зөрнө.
+   */
+  const chartCards = (keep: (id: string, b: Breakdown) => boolean) =>
+    views.map(({ id, hit, charts, rows }) => {
+      const tone = toneOf(id);
+      /* Задаргаа БҮГД энд: цуваа, харьцуулалт хоёрыг зургийн
+         доод зурваст тавьж байсныг хэрэглэгч буцаав (2026-09-15)
+         — гурван нэгжийн харьцуулалт тэнд хажуу тийшээ гүйж,
+         бүгдийг нь зэрэг харах боломжгүй байв. Нэг баганад
+         босоо цуварсан нь бүгдийг нь нэг чиглэлд гүйлгэж
+         үзэхэд хялбар. */
+      /* Хуваалтын дагуу зөвхөн энэ баганад харьяалагдах диаграм */
+      const cuts = charts.filter((b) => keep(id, b));
+      const sel = filters[id] ?? {};
+
+      /*
+        Давхаргын ТУУЗ — картуудынхаа дээр.
+
+        Урьд нь давхаргын нэрийг эхний картын толгойд бичдэг
+        байсан тул үлдсэн картууд нь зүүн талаасаа хоосон,
+        гарчиг нь баруун тийш дүүжлэгдсэн харагддаг байв. Тууз
+        нь бүлгийг нэг дор зарлаж, карт бүрийн толгой өөрийн
+        диаграмын нэрээр л эхэлнэ.
+      */
+      const band = (
+        <div
+          key={`${id}:band`}
+          className="flex shrink-0 items-center gap-2 pt-1 pb-0.5"
+        >
+          <span
+            aria-hidden
+            className="h-3 w-[3px] shrink-0 rounded-[1px]"
+            style={{ background: tone }}
+          />
+          <span className="eyebrow min-w-0 flex-1 truncate text-ink-2">
+            {hit.info.name}
+          </span>
+          <span className="num shrink-0 text-[10.5px] text-ink-3">
+            {num(rows.length)}
+          </span>
+        </div>
+      );
+
+      /* Задаргаа гарахгүй давхарга баганад ОРОХГҮЙ — хоосон
+         карт ч, бичлэгийн жагсаалт ч зай эзлэхээс өөр юу ч
+         хэлэхгүй (хэрэглэгчийн шийдвэр, 2026-09-15). Бичлэг
+         бүр зурган дээрээ товшигдож, дэлгэрэнгүй нь хөвөгч
+         самбарт гарсаар байна */
+      if (!cuts.length) return null;
+
+      const cards = cuts.map((b, i) => {
+        /* Өнгийг зөвхөн ТООЛЛЫН диаграм жолоодно — нэг талбарын бүх
+         диаграм ижил өнгө хуваалцдаг тул товчийг хаа сайгүй
+         давтвал аль нь юуг сольж байгаа нь ойлгомжгүй болно */
+        const driver = b.kind === "count" && !b.multi;
+        const lit = colorField(id) === b.field;
+        const palette = lit ? palettes[id] : undefined;
+        /* Энэ талбарын сонгогдсон утга. Нэрийг `on` гэж БҮҮ бич —
+           тэр нь энэ файлд "асаалттай давхаргууд" гэсэн утгатай */
+        const chosen = sel[b.field] ?? null;
+        const onPick = (key: string | null) => pick(id, b.field, key);
+
+        return (
+          <CutCard
+            key={`${id}:${b.id}`}
+            title={environment ? topicChartTitle(b, id) : chartTitle(b)}
+            tone={tone}
+            first={i === 0}
+            action={
+              driver ? (
+                <button
+                  type="button"
+                  aria-pressed={lit}
+                  disabled={environment && b.values.length > MAX_COLOR_VALUES}
+                  onClick={() =>
+                    setColorBy((c) => ({
+                      ...c,
+                      [id]: lit ? null : b.field,
+                    }))
+                  }
+                  title={
+                    b.values.length > MAX_COLOR_VALUES
+                      ? "Ангилал хэт олон тул өнгө ялгагдахгүй"
+                      : lit
+                        ? "Газрын зургийг нэг өнгөнд буцаана"
+                        : "Газрын зургийг энэ задаргаагаар өнгөт болгоно"
+                  }
+                  className={cn(
+                    "shrink-0 rounded-[2px] border p-[3px] transition-colors",
+                    lit
+                      ? "border-transparent text-paper"
+                      : "border-line-2 text-ink-3 hover:text-ink",
+                  )}
+                  style={lit ? { background: tone } : undefined}
+                >
+                  {environment ? (
+                    <span className="ue-color-action">
+                      <Palette size={12} />
+                      {lit ? "Өнгө асаалттай" : "Зурагт өнгөөр ялгах"}
+                    </span>
+                  ) : (
+                    <Palette size={11} strokeWidth={1.8} />
+                  )}
+                </button>
+              ) : null
+            }
+          >
+            {environment && !isTime(b) && b.kind !== "compare" ? (
+              <TopicBreakdown
+                breakdown={b}
+                tone={tone}
+                palette={palette}
+                selected={chosen}
+                onSelect={onPick}
+                unit={recordUnit(id)}
+              />
+            ) : b.kind === "compare" && b.groups ? (
+              /*
+                ХЭВТЭЭ багана: ангилал нь дүүрэг, аж ахуйн нэгж
+                зэрэг УРТ нэртэй бөгөөд олон байдаг тул босоо
+                баганад нэр нь ч, утга нь ч таслагдаж байв.
+                Хэвтээ мөрөнд нэр нь дээрээ бүтнээрээ, утга нь
+                мөрийнхөө төгсгөлд суух тул нарийн багананд ч
+                шахагдахгүй.
+              */
+              <GroupedBarChart
+                {...shownSeries(b, series[id], hueOf(id))}
+                layout="horizontal"
+                unit={b.measure}
+                format={measureText}
+                selected={chosen}
+                onSelect={onPick}
+              />
+            ) : isTime(b) ? (
+              <BarChart
+                data={b.values}
+                height={92}
+                tone={translucent(tone)}
+                unit="бичлэг"
+                selected={chosen}
+                onSelect={onPick}
+                labels
+                formatTick={(d, k) => tickOf(b.kind, d, k, b.values.length)}
+              />
+            ) : isPie(b) ? (
+              <PieChart
+                data={b.values}
+                tone={tone}
+                selected={chosen}
+                onSelect={onPick}
+                format={b.kind === "sum" ? measureText : undefined}
+                colorOf={
+                  palette ? (d) => palette.get(d.key) ?? tone : undefined
+                }
+              />
+            ) : (
+              <RowChart
+                data={b.values}
+                tone={tone}
+                selected={chosen}
+                onSelect={onPick}
+                format={b.kind === "count" ? undefined : measureText}
+                colorOf={
+                  palette ? (d) => palette.get(d.key) ?? tone : undefined
+                }
+                /*
+                  ⚠ ШАХСАН МӨР (хэрэглэгчийн хүсэлт, 2026-09-17).
+                  Задаргаа нь хорин таван утга хүртэл байж болох
+                  (`MAX_VALUES`) тул ердийн 51px-ийн мөр нь карт
+                  бүрийг гүйлгүүртэй болгодог байв. Шахсан үед
+                  мөр ~31px — ес, арван утга гүйлгэхгүйгээр
+                  багтана.
+                */
+                dense
+              />
+            )}
+          </CutCard>
+        );
+      });
+
+      return (
+        <React.Fragment key={id}>
+          {band}
+          {cards}
+        </React.Fragment>
+      );
+    });
+
   return (
-    <div className={cn("flex h-full min-h-0 flex-col gap-2.5", environment && "ue-layer-dashboard")}>
+    <div
+      className={cn(
+        "flex h-full min-h-0 flex-col gap-2.5",
+        environment && "ue-layer-dashboard",
+      )}
+    >
       {/*
         ---- ШҮҮЛТҮҮРИЙН МӨР ----
 
@@ -799,7 +1041,16 @@ export function PortalLayersDashboard({ set, presentation }: { set: LayerSet; pr
       */}
       <FilterBar
         title={set.title ?? "Давхарга"}
-        leading={<button type="button" aria-pressed={showCharts} onClick={() => setShowCharts((value) => !value)} className={cn("map-view-toggle", showCharts && "selected")}><ChartNoAxesCombined size={15} /> Шинжилгээ</button>}
+        leading={
+          <button
+            type="button"
+            aria-pressed={showCharts}
+            onClick={() => setShowCharts((value) => !value)}
+            className={cn("map-view-toggle", showCharts && "selected")}
+          >
+            <ChartNoAxesCombined size={15} /> Шинжилгээ
+          </button>
+        }
         activeCount={activeCount}
         onReset={() => {
           setFilters({});
@@ -889,24 +1140,79 @@ export function PortalLayersDashboard({ set, presentation }: { set: LayerSet; pr
         })}
       </FilterBar>
 
-      {environment ? <p className="ue-topic-note">{TOPIC_NOTES[set.key]}</p> : null}
+      {environment ? (
+        <p className="ue-topic-note">{TOPIC_NOTES[set.key]}</p>
+      ) : null}
 
+      {/*
+        ҮЗҮҮЛЭЛТ БҮР ИРСЭН ДАТАГААРАА ГАРНА (2026-09-21).
+
+        ⚠ "Идэвхтэй давхарга" нь ЗӨВХӨН сонгох баганатай үед утгатай:
+        сэдэв тус бүрд зориулсан цонхонд (`openAll`) давхарга бүгд
+        асаалттай тул "1" гэсэн тоо ЮУ Ч ХЭЛЭХГҮЙ.
+        ⚠ "Талбай, га" нь ЦЭГЭН давхаргад БАЙХГҮЙ — "—" гэсэн зураас нь
+        зай эзлэхээс өөр юу ч хэлэхгүй тул ОГТ ГАРГАХГҮЙ. Хоосон
+        төлөвийн дүрэм ҮЗҮҮЛЭЛТЭД хамаарахгүй: тэнд хүлээгдэж буй дата
+        биш, АГУУЛГААГҮЙ хэмжигдэхүүн.
+      */}
       <div className="analytics-overview" aria-label="Өгөгдлийн тойм">
-        <Stat icon={Layers3} label="Идэвхтэй давхарга" value={num(stats.layers)} />
-        <Stat icon={Shapes} label={environment ? "Сонгосон давхаргын бүртгэл" : "Шүүлтэд тохирох бичлэг"} value={environment && on.some((id) => !loaded[id] && !failed[id]) ? "…" : num(stats.records)} />
-        <Stat icon={Ruler} label={environment ? "Дүрсүүдийн талбайн нийлбэр, га" : "Талбай, га"} value={stats.ha > 0 ? (environment ? new Intl.NumberFormat("mn-MN", { maximumFractionDigits: 2 }).format(stats.ha) : num(Math.round(stats.ha))) : "—"} />
+        {picker ? (
+          <Stat
+            icon={Layers3}
+            label="Идэвхтэй давхарга"
+            value={num(stats.layers)}
+          />
+        ) : null}
+        <Stat
+          icon={Shapes}
+          label={
+            environment
+              ? "Сонгосон давхаргын бүртгэл"
+              : "Шүүлтэд тохирох бичлэг"
+          }
+          value={
+            environment && on.some((id) => !loaded[id] && !failed[id])
+              ? "…"
+              : num(stats.records)
+          }
+        />
+        {stats.ha > 0 ? (
+          <Stat
+            icon={Ruler}
+            label={
+              environment ? "Дүрсүүдийн талбайн нийлбэр, га" : "Талбай, га"
+            }
+            value={
+              environment
+                ? new Intl.NumberFormat("mn-MN", {
+                    maximumFractionDigits: 2,
+                  }).format(stats.ha)
+                : num(Math.round(stats.ha))
+            }
+          />
+        ) : null}
       </div>
-      {environment && on.length > 1 ? <p className="ue-chart-note">Давхаргуудын бүртгэл болон талбай давхцаж болно. Нийлбэр нь давхардлыг хассан нийт хэмжээ биш.</p> : null}
+      {environment && on.length > 1 ? (
+        <p className="ue-chart-note">
+          Давхаргуудын бүртгэл болон талбай давхцаж болно. Нийлбэр нь давхардлыг
+          хассан нийт хэмжээ биш.
+        </p>
+      ) : null}
 
       <Columns
         id={`layers-${set.key}`}
-        left={picker ? (environment ? 228 : 286) : undefined}
+        left={picker ? (environment ? 228 : 286) : split ? 320 : undefined}
         /* Бүлэглэсэн багана энд сууна — 300px дээр гурван оны
          харьцуулалт зураас болно. Хэрэглэгч чирж өөрчилнө */
         right={showCharts ? (environment ? 370 : 350) : undefined}
         className="min-h-0 flex-1"
       >
-        {/* ---- ЗҮҮН: давхаргын жагсаалт (зөвхөн сонголттой үед) ---- */}
+        {/* ---- ЗҮҮН: давхаргын жагсаалт, эсвэл хамгийн урт диаграм ---- */}
+        {!picker && split ? (
+          <div className="flex min-h-0 flex-col gap-2.5 overflow-y-auto">
+            {chartCards((id, b) => id === split.id && b.id === split.chart)}
+          </div>
+        ) : null}
         {picker ? (
           <div className="flex min-h-0 flex-col gap-2.5">
             <Card className="min-h-[140px] flex-1">
@@ -950,7 +1256,9 @@ export function PortalLayersDashboard({ set, presentation }: { set: LayerSet; pr
                       <span className="min-w-0 flex-1">
                         <span
                           className={cn(
-                            environment ? "block text-[12px] leading-relaxed" : "block truncate text-[12px] leading-tight",
+                            environment
+                              ? "block text-[12px] leading-relaxed"
+                              : "block truncate text-[12px] leading-tight",
                             isOn ? "text-ink" : "text-ink-2",
                           )}
                         >
@@ -1020,16 +1328,43 @@ export function PortalLayersDashboard({ set, presentation }: { set: LayerSet; pr
                 cluster={false}
               />
               <BasemapGallery value={basemap} onChange={setBasemap} />
-              {environment ? <TopicMapLegend groups={views.map(({ id, hit, rows }) => {
-                const field = colorField(id);
-                const breakdown = hit.charts.find((b) => b.field === field && b.kind === "count");
-                const counts = new Map<string, number>();
-                if (breakdown) for (const row of rows) for (const key of breakdown.keyOf(row)) counts.set(key, (counts.get(key) ?? 0) + 1);
-                return {
-                  id, name: hit.info.name, geometry: hit.info.geometry, field: breakdown?.label,
-                  items: breakdown ? breakdown.values.map((d) => ({ key: d.key, label: d.label, color: palettes[id]?.get(d.key) ?? toneOf(id), count: counts.get(d.key) ?? 0 })) : [{ key: id, label: GEOMETRY_LABEL[hit.info.geometry] ?? "Бүртгэл", color: toneOf(id), count: rows.length }],
-                };
-              })} /> : null}
+              {environment ? (
+                <TopicMapLegend
+                  groups={views.map(({ id, hit, rows }) => {
+                    const field = colorField(id);
+                    const breakdown = hit.charts.find(
+                      (b) => b.field === field && b.kind === "count",
+                    );
+                    const counts = new Map<string, number>();
+                    if (breakdown)
+                      for (const row of rows)
+                        for (const key of breakdown.keyOf(row))
+                          counts.set(key, (counts.get(key) ?? 0) + 1);
+                    return {
+                      id,
+                      name: hit.info.name,
+                      geometry: hit.info.geometry,
+                      field: breakdown?.label,
+                      items: breakdown
+                        ? breakdown.values.map((d) => ({
+                            key: d.key,
+                            label: d.label,
+                            color: palettes[id]?.get(d.key) ?? toneOf(id),
+                            count: counts.get(d.key) ?? 0,
+                          }))
+                        : [
+                            {
+                              key: id,
+                              label:
+                                GEOMETRY_LABEL[hit.info.geometry] ?? "Бүртгэл",
+                              color: toneOf(id),
+                              count: rows.length,
+                            },
+                          ],
+                    };
+                  })}
+                />
+              ) : null}
 
               {/* Шошгын унтраалга — суурь зургийн товчны хажууд */}
               <button
@@ -1125,196 +1460,31 @@ export function PortalLayersDashboard({ set, presentation }: { set: LayerSet; pr
         </div>
 
         {/* ---- БАРУУН: ангиллын задаргаа ---- */}
-        {showCharts && <div className="flex min-h-0 flex-col gap-2.5 overflow-y-auto">
-          {(views.length === 0 || (environment && views.every((view) => !view.charts.length))) ? (
-            <Card className="min-h-[120px] flex-1">
-              <Head title="Задаргаа" />
-              <div className="hatch flex flex-1 items-center justify-center px-4">
-                <p className="text-center text-[12px] leading-relaxed text-ink-3">
-                  {environment && on.some((id) => !loaded[id] && !failed[id])
-                    ? "Сонгосон давхаргын мэдээллийг ачаалж байна…"
-                    : environment && views.length
-                    ? "Ангиллаар харьцуулах мэдээлэл байхгүй. Газрын зураг дээрх бүртгэлээс дэлгэрэнгүйг үзнэ үү."
-                    : picker
-                    ? "Давхарга асаахад задаргаа нь энд гарна."
-                    : "Задаргаа гарахуйц талбар олдсонгүй."}
-                </p>
-              </div>
-            </Card>
-          ) : null}
+        {showCharts && (
+          <div className="flex min-h-0 flex-col gap-2.5 overflow-y-auto">
+            {views.length === 0 ||
+            (environment && views.every((view) => !view.charts.length)) ? (
+              <Card className="min-h-[120px] flex-1">
+                <Head title="Задаргаа" />
+                <div className="hatch flex flex-1 items-center justify-center px-4">
+                  <p className="text-center text-[12px] leading-relaxed text-ink-3">
+                    {environment && on.some((id) => !loaded[id] && !failed[id])
+                      ? "Сонгосон давхаргын мэдээллийг ачаалж байна…"
+                      : environment && views.length
+                        ? "Ангиллаар харьцуулах мэдээлэл байхгүй. Газрын зураг дээрх бүртгэлээс дэлгэрэнгүйг үзнэ үү."
+                        : picker
+                          ? "Давхарга асаахад задаргаа нь энд гарна."
+                          : "Задаргаа гарахуйц талбар олдсонгүй."}
+                  </p>
+                </div>
+              </Card>
+            ) : null}
 
-          {views.map(({ id, hit, charts, rows }) => {
-            const tone = toneOf(id);
-            /* Задаргаа БҮГД энд: цуваа, харьцуулалт хоёрыг зургийн
-               доод зурваст тавьж байсныг хэрэглэгч буцаав (2026-09-15)
-               — гурван нэгжийн харьцуулалт тэнд хажуу тийшээ гүйж,
-               бүгдийг нь зэрэг харах боломжгүй байв. Нэг баганад
-               босоо цуварсан нь бүгдийг нь нэг чиглэлд гүйлгэж
-               үзэхэд хялбар. */
-            const cuts = charts;
-            const sel = filters[id] ?? {};
-
-            /*
-              Давхаргын ТУУЗ — картуудынхаа дээр.
-
-              Урьд нь давхаргын нэрийг эхний картын толгойд бичдэг
-              байсан тул үлдсэн картууд нь зүүн талаасаа хоосон,
-              гарчиг нь баруун тийш дүүжлэгдсэн харагддаг байв. Тууз
-              нь бүлгийг нэг дор зарлаж, карт бүрийн толгой өөрийн
-              диаграмын нэрээр л эхэлнэ.
-            */
-            const band = (
-              <div
-                key={`${id}:band`}
-                className="flex shrink-0 items-center gap-2 pt-1 pb-0.5"
-              >
-                <span
-                  aria-hidden
-                  className="h-3 w-[3px] shrink-0 rounded-[1px]"
-                  style={{ background: tone }}
-                />
-                <span className="eyebrow min-w-0 flex-1 truncate text-ink-2">
-                  {hit.info.name}
-                </span>
-                <span className="num shrink-0 text-[10.5px] text-ink-3">
-                  {num(rows.length)}
-                </span>
-              </div>
-            );
-
-            /* Задаргаа гарахгүй давхарга баганад ОРОХГҮЙ — хоосон
-               карт ч, бичлэгийн жагсаалт ч зай эзлэхээс өөр юу ч
-               хэлэхгүй (хэрэглэгчийн шийдвэр, 2026-09-15). Бичлэг
-               бүр зурган дээрээ товшигдож, дэлгэрэнгүй нь хөвөгч
-               самбарт гарсаар байна */
-            if (!cuts.length) return null;
-
-            const cards = cuts.map((b, i) => {
-              /* Өнгийг зөвхөн ТООЛЛЫН диаграм жолоодно — нэг талбарын бүх
-               диаграм ижил өнгө хуваалцдаг тул товчийг хаа сайгүй
-               давтвал аль нь юуг сольж байгаа нь ойлгомжгүй болно */
-              const driver = b.kind === "count" && !b.multi;
-              const lit = colorField(id) === b.field;
-              const palette = lit ? palettes[id] : undefined;
-              /* Энэ талбарын сонгогдсон утга. Нэрийг `on` гэж БҮҮ бич —
-                 тэр нь энэ файлд "асаалттай давхаргууд" гэсэн утгатай */
-              const chosen = sel[b.field] ?? null;
-              const onPick = (key: string | null) => pick(id, b.field, key);
-
-              return (
-                <CutCard
-                  key={`${id}:${b.id}`}
-                  title={environment ? topicChartTitle(b, id) : chartTitle(b)}
-                  tone={tone}
-                  first={i === 0}
-                  action={
-                    driver ? (
-                      <button
-                        type="button"
-                        aria-pressed={lit}
-                        disabled={environment && b.values.length > MAX_COLOR_VALUES}
-                        onClick={() =>
-                          setColorBy((c) => ({
-                            ...c,
-                            [id]: lit ? null : b.field,
-                          }))
-                        }
-                        title={
-                          b.values.length > MAX_COLOR_VALUES
-                            ? "Ангилал хэт олон тул өнгө ялгагдахгүй"
-                            : lit
-                              ? "Газрын зургийг нэг өнгөнд буцаана"
-                              : "Газрын зургийг энэ задаргаагаар өнгөт болгоно"
-                        }
-                        className={cn(
-                          "shrink-0 rounded-[2px] border p-[3px] transition-colors",
-                          lit
-                            ? "border-transparent text-paper"
-                            : "border-line-2 text-ink-3 hover:text-ink",
-                        )}
-                        style={lit ? { background: tone } : undefined}
-                      >
-                        {environment ? <span className="ue-color-action"><Palette size={12} />{lit ? "Өнгө асаалттай" : "Зурагт өнгөөр ялгах"}</span> : <Palette size={11} strokeWidth={1.8} />}
-                      </button>
-                    ) : null
-                  }
-                >
-                  {environment && !isTime(b) && b.kind !== "compare" ? (
-                    <TopicBreakdown breakdown={b} tone={tone} palette={palette} selected={chosen} onSelect={onPick} unit={recordUnit(id)} />
-                  ) : b.kind === "compare" && b.groups ? (
-                    /*
-                      ХЭВТЭЭ багана: ангилал нь дүүрэг, аж ахуйн нэгж
-                      зэрэг УРТ нэртэй бөгөөд олон байдаг тул босоо
-                      баганад нэр нь ч, утга нь ч таслагдаж байв.
-                      Хэвтээ мөрөнд нэр нь дээрээ бүтнээрээ, утга нь
-                      мөрийнхөө төгсгөлд суух тул нарийн багананд ч
-                      шахагдахгүй.
-                    */
-                    <GroupedBarChart
-                      {...shownSeries(b, series[id], hueOf(id))}
-                      layout="horizontal"
-                      unit={b.measure}
-                      format={measureText}
-                      selected={chosen}
-                      onSelect={onPick}
-                    />
-                  ) : isTime(b) ? (
-                    <BarChart
-                      data={b.values}
-                      height={92}
-                      tone={translucent(tone)}
-                      unit="бичлэг"
-                      selected={chosen}
-                      onSelect={onPick}
-                      labels
-                      formatTick={(d, k) =>
-                        tickOf(b.kind, d, k, b.values.length)
-                      }
-                    />
-                  ) : isPie(b) ? (
-                    <PieChart
-                      data={b.values}
-                      tone={tone}
-                      selected={chosen}
-                      onSelect={onPick}
-                      format={b.kind === "sum" ? measureText : undefined}
-                      colorOf={
-                        palette ? (d) => palette.get(d.key) ?? tone : undefined
-                      }
-                    />
-                  ) : (
-                    <RowChart
-                      data={b.values}
-                      tone={tone}
-                      selected={chosen}
-                      onSelect={onPick}
-                      format={b.kind === "count" ? undefined : measureText}
-                      colorOf={
-                        palette ? (d) => palette.get(d.key) ?? tone : undefined
-                      }
-                      /*
-                        ⚠ ШАХСАН МӨР (хэрэглэгчийн хүсэлт, 2026-09-17).
-                        Задаргаа нь хорин таван утга хүртэл байж болох
-                        (`MAX_VALUES`) тул ердийн 51px-ийн мөр нь карт
-                        бүрийг гүйлгүүртэй болгодог байв. Шахсан үед
-                        мөр ~31px — ес, арван утга гүйлгэхгүйгээр
-                        багтана.
-                      */
-                      dense
-                    />
-                  )}
-                </CutCard>
-              );
-            });
-
-            return (
-              <React.Fragment key={id}>
-                {band}
-                {cards}
-              </React.Fragment>
-            );
-          })}
-        </div>}
+            {chartCards(
+              (id, b) => !(split && id === split.id && b.id === split.chart),
+            )}
+          </div>
+        )}
       </Columns>
     </div>
   );
@@ -1612,17 +1782,12 @@ function CutCard({
       style={first ? { borderTopColor: tone } : undefined}
     >
       <div className="analytics-chart-head">
-        <h2
-          className="text-ink"
-          title={title}
-        >
+        <h2 className="text-ink" title={title}>
           {title}
         </h2>
         {action}
       </div>
-      <div className="analytics-chart-body">
-        {children}
-      </div>
+      <div className="analytics-chart-body">{children}</div>
     </div>
   );
 }
@@ -1734,7 +1899,9 @@ function Stat({
 }) {
   return (
     <div className="analytics-stat">
-      <span className="analytics-stat-icon"><Icon size={20} strokeWidth={1.5} /></span>
+      <span className="analytics-stat-icon">
+        <Icon size={20} strokeWidth={1.5} />
+      </span>
       <div className="min-w-0">
         <span className="analytics-stat-label">{label}</span>
         <span className="analytics-stat-value">{value}</span>

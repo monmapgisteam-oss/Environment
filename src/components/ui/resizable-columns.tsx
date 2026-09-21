@@ -47,10 +47,13 @@ export type ColumnsApi = ReturnType<typeof useColumns>;
 export function useColumns(key: string, def: ColumnSizes) {
   const el = React.useRef<HTMLDivElement | null>(null);
   const size = React.useRef<ColumnSizes>({ ...def });
-  const restored = React.useRef(false);
-  const from = React.useRef<{ side: "left" | "right"; px: number; w: number } | null>(
-    null,
-  );
+  /* Аль талыг сэргээсэн бэ — багана СҮҮЛД нэмэгдэж болно */
+  const restored = React.useRef(new Set<"left" | "right">());
+  const from = React.useRef<{
+    side: "left" | "right";
+    px: number;
+    w: number;
+  } | null>(null);
 
   /** Хүрээндээ багтаагаад CSS хувьсагч руу бичнэ */
   const apply = React.useCallback(() => {
@@ -62,12 +65,18 @@ export function useColumns(key: string, def: ColumnSizes) {
       if (v == null) continue;
       let w = v;
       if (total > 0) {
-        const other = side === "left" ? (size.current.right ?? 0) : (size.current.left ?? 0);
+        const other =
+          side === "left"
+            ? (size.current.right ?? 0)
+            : (size.current.left ?? 0);
         const max = Math.max(MIN, total - other - CENTER_MIN);
         w = Math.min(Math.max(w, MIN), max);
       }
       size.current[side] = w;
-      node.style.setProperty(side === "left" ? "--col-l" : "--col-r", `${Math.round(w)}px`);
+      node.style.setProperty(
+        side === "left" ? "--col-l" : "--col-r",
+        `${Math.round(w)}px`,
+      );
     }
   }, []);
 
@@ -85,21 +94,38 @@ export function useColumns(key: string, def: ColumnSizes) {
     (node: HTMLDivElement | null) => {
       el.current = node;
       if (!node) return;
-      if (!restored.current) {
-        restored.current = true;
+
+      /*
+        ⚠⚠ БАГАНА СҮҮЛД НЭМЭГДЭЖ БОЛНО (2026-09-21).
+
+        Дуудагч тал дата ирсний ДАРАА шинэ багана нээж болно
+        (порталын самбар хамгийн урт диаграмаа зүүн тийш гаргадаг).
+        Өргөн нь эхний зурагдалтад бичигдсэн `size`-д байхгүй бол
+        `--col-l` тодорхойгүй үлдэж, grid-ийн ЗАГВАР БҮХЭЛДЭЭ
+        хүчингүй болж БҮХ МӨР НЭГ БАГАНА болж нурна — 2026-09-15-нд
+        өөр шалтгаанаар яг ингэж эвдэрсэн.
+        Тиймээс `def`-ээс дутуу талыг нөхнө, алга болсон талыг
+        цэвэрлэнэ.
+      */
+      for (const side of ["left", "right"] as const) {
+        if (def[side] == null) {
+          size.current[side] = undefined;
+          restored.current.delete(side);
+          continue;
+        }
+        if (restored.current.has(side)) continue;
+        restored.current.add(side);
+        size.current[side] = def[side];
         try {
           const raw = localStorage.getItem(`cols.${key}`);
           if (raw) {
             const saved = JSON.parse(raw) as ColumnSizes;
-            /* Зөвхөн энэ самбарт БАЙГАА талыг сэргээнэ — хуучин
-               түлхүүрт байхгүй тал үлдсэн байж болно */
-            if (def.left != null && typeof saved.left === "number")
-              size.current.left = saved.left;
-            if (def.right != null && typeof saved.right === "number")
-              size.current.right = saved.right;
+            if (typeof saved[side] === "number")
+              size.current[side] = saved[side];
           }
         } catch {}
       }
+
       apply();
     },
     [key, def, apply],
@@ -198,7 +224,9 @@ function Handle({ cols, side }: { cols: ColumnsApi; side: "left" | "right" }) {
       role="separator"
       aria-orientation="vertical"
       aria-label="Баганын өргөн"
-      style={side === "left" ? { left: "var(--col-l)" } : { right: "var(--col-r)" }}
+      style={
+        side === "left" ? { left: "var(--col-l)" } : { right: "var(--col-r)" }
+      }
       className={cn(
         "group absolute inset-y-0 z-10 hidden w-2.5 cursor-col-resize touch-none xl:block",
       )}
@@ -245,7 +273,10 @@ export function Columns({
   className?: string;
   children: React.ReactNode;
 }) {
-  const def = React.useMemo<ColumnSizes>(() => ({ left, right }), [left, right]);
+  const def = React.useMemo<ColumnSizes>(
+    () => ({ left, right }),
+    [left, right],
+  );
   const cols = useColumns(id, def);
   const el = React.useRef<HTMLDivElement>(null);
 

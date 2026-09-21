@@ -349,15 +349,40 @@
 @media (max-width: 380px) {
   .donut-chart.is-stacked .donut-chart-legend { grid-template-columns: minmax(0, 1fr); }
 }
-.analytics-overview { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; flex-shrink: 0; }
+/* Үзүүлэлтийн тоо давхаргаасаа хамаарах тул багана нь АВТОМАТ */
+.analytics-overview { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 12px; flex-shrink: 0; }
 .analytics-stat { display: flex; align-items: center; gap: 14px; min-width: 0; padding: 14px 18px; border: 1px solid var(--line); border-radius: 13px; background: var(--paper-2); }
 .analytics-stat-icon { display: grid; place-items: center; width: 38px; height: 38px; flex-shrink: 0; border-radius: 10px; background: var(--paper-3); color: var(--moss); }
 .analytics-stat-label { display: block; margin-bottom: 5px; font-size: 10px; line-height: 1.4; color: var(--ink-3); }
 .analytics-stat-value { font-size: 23px; line-height: 1.2; font-weight: 600; letter-spacing: -.04em; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
-.analytics-chart-card { flex-shrink: 0; }
-.analytics-chart-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 14px 16px; border-bottom: 1px solid var(--line); }
+.analytics-chart-head { display: flex; flex-shrink: 0; align-items: center; justify-content: space-between; gap: 10px; padding: 14px 16px; border-bottom: 1px solid var(--line); }
 .analytics-chart-head h2 { min-width: 0; flex: 1; font-size: 12px; font-weight: 600; line-height: 1.6; }
-.analytics-chart-body { padding: 14px 12px; min-height: 0; max-height: 360px; overflow-y: auto; }
+/*
+  КАРТУУД БАГАНАДАА БАГТАНА (хэрэглэгч, 2026-09-21: "багтаа").
+
+  Урьд нь карт бүр өндрөө агуулгаараа авч (`flex-shrink: 0`,
+  бие нь `max-height: 360px`) гурав карт нийлээд баганаасаа халж
+  БАГАНА ӨӨРӨӨ гүйдэг байв.
+
+  Одоо картууд үлдсэн өндрийг ХУВААЛЦАНА: зайтай үед
+  сунаж доод талыг дүүргэнэ, зай дутвал агшиж агуулгаа
+  КАРТ ДОТОРОО гүйлгэнэ — багана өөрөө хөдлөхгүй.
+  ⚠ 168px гэсэн ДООД ХЯЗГААР ЗААВАЛ: ойн хэлтэс дээр нэг
+  баганад араваад карт цувардаг тул хязгааргүй бол
+  карт бүр таних аргагүй болтлоо шахагдана; тэр үед
+  багана өөрөө гүйнэ.
+  ⚠ `xl`-ээс доош багана нэг мөр болж өндөр нь АГУУЛГААРАА
+  хэмжигдэх тул 360px-ийн хязгаар тэнд ХЭВЭЭР — эс тэгвээс
+  хорин мөртэй диаграм хуудсыг утасны дэлгэцээр сунгана.
+*/
+.analytics-chart-body { padding: 14px 12px; min-height: 0; overflow-y: auto; }
+@media (max-width: 1279px) {
+  .analytics-chart-body { max-height: 360px; }
+}
+@media (min-width: 1280px) {
+  .analytics-chart-card { flex: 1 1 auto; min-height: 168px; }
+  .analytics-chart-body { flex: 1 1 auto; }
+}
 @media (max-width: 640px) {
   .analytics-overview { gap: 6px; }
   .analytics-stat { padding: 10px; gap: 0; }
@@ -367,16 +392,28 @@
 }
 
 /* --------------------------------------------------------------------------
-   БИОТЕХНИКИЙН ХҮСНЭГТ — дүүргийн БҮДЭГ ялгаа
+   БИОТЕХНИКИЙН ХҮСНЭГТ — дүүргийн ЯЛГАА МӨРИЙН ИРМЭГТ
 
    Мөр бүр `--tint`-ээ инлайнаар үүрнэ (дүүргийн өнгөний дугаараас).
-   Дүүргэлт нь ердөө 9% тул тоо, нэрийн контраст хөндөгдөхгүй; зорилго
-   нь нэг дүүргийн мөрүүд нүдэнд бүлэглэгдэх.
+
+   ⚠⚠ БҮТЭН МӨРИЙН ДҮҮРГЭЛТ БУЦААГДСАН (хэрэглэгч, 2026-09-21:
+   "арай өөрөөр нь засаад үзээд"). 9%-ийн дүүргэлт дөрвөн өнгөөр
+   тарсны дараа хүснэгт өөрөө өнгөний блок болж, тооноосоо илүү
+   жин авч байв — платформын "өнгө нь зураас/цэг/икон дээр л
+   гарна" дүрэм (дизайны 7) яг энэ тухай.
+   Одоо өнгө нь мөрийн ЗҮҮН ИРМЭГТ 3px зураас — дүүрэг бүр өөрийн
+   тод өнгөтэй бөгөөд зэрэгцээ мөрүүд НЭГ ТАСРАЛГҮЙ ЗУРААС
+   болж бүлэглэлтийг өөрөө хэлнэ. Дэвсгэр цэвэр тул тооны
+   контраст хөндөгдөхгүй, hover ба сонголт ч бүрэн харагдана.
+   ⚠ Зураас нь 3px бөгөөд БҮДЭГ БИШ: нимгэн зураас дээр бүдэг
+   өнгө танигдахгүй — бүдэг байх шаардлага нь ДҮҮРГЭЛТЭЭС
+   гарсан бөгөөд дүүргэлт алга болсон тул хүчингүй.
 
    ⚠ Tailwind-ийн `hover:bg-*`, `bg-data/10` ХЭРЭГЛЭЭГҮЙ: inline `style`
    нь класс бүрийг дардаг тул hover, сонголт хоёр ажиллахгүй болно.
    Гурван төлөв бүгд ЭНД, нэг газар тодорхойлогдоно.
    -------------------------------------------------------------------------- */
-.district-row { cursor: pointer; background: color-mix(in oklab, var(--tint) 9%, transparent); transition: background-color 120ms ease; }
+.district-row { cursor: pointer; transition: background-color 120ms ease; }
+.district-row > td:first-child { box-shadow: inset 3px 0 0 var(--tint); }
 .district-row:hover { background: var(--paper-hi); }
 .district-row.is-picked { background: color-mix(in oklab, var(--data) 14%, transparent); }
