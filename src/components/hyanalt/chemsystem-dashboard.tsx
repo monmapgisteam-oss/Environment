@@ -378,6 +378,20 @@ export function ChemSystemDashboard() {
     const bu = UNGROUPED.includes(b.id) ? 1 : 0;
     return au - bu || groupValue(b) - groupValue(a) || a.label.localeCompare(b.label, "mn");
   });
+  /*
+    ⚠⚠ ХАМРАХ ХҮРЭЭ СОЛИХОД ХҮСНЭГТ ХААГДАНА (хэрэглэгчийн шийдвэр,
+    2026-09-23: "хүснэгт дараад орон нутаг дээр дарвал шууд орон
+    нутаг db шилжинэ гэсэн үг, хүснэгт дотроо шүүгдэхгүйгээр").
+    Хамрах хүрээ нь ХАРАГДАЦЫН сонголт: Улаанбаатар, Орон нутаг хоёр
+    нь газрын зурагтай ба зураггүй хоёр өөр самбар. Хүснэгтийн дотор
+    шүүгдэхэд хэрэглэгч "би хүрээгээ соллоо, гэтэл самбар нь хэвээр"
+    гэсэн байдалд ордог байв.
+  */
+  const pickScope = (next: Scope) => {
+    setScope(next);
+    setTable(false);
+  };
+
   /** Бодис сонгох — агуулахын сонголтыг цэвэрлэнэ (хоёул шүүдэг тул) */
   const pickChem = (id: number) => {
     setPickedChem(pickedChem === id ? null : id);
@@ -390,10 +404,21 @@ export function ChemSystemDashboard() {
       {/* ---------------- Хамрах хүрээ ---------------- */}
       <div className="flex shrink-0 flex-wrap items-center gap-x-2 gap-y-1.5 rounded-xs border border-line bg-paper-2 px-2.5 py-1.5">
         <span className="eyebrow shrink-0">Хамрах хүрээ</span>
-        <Pill on={scope === "city"} onClick={() => setScope("city")}>
+
+        {/*
+          ⚠⚠ ХУУЧИН ТОВЧНУУД ХЭВЭЭР (хэрэглэгчийн шийдвэр, 2026-09-23:
+          "бас хуучин design руу буцаа, хуучин гоё байсан"). Хоёр
+          талыг нэг хүрээтэй хайрцагт суулгаж, идэвхтэйг нь
+          дүүргэлттэй болгосон сэлгэгч туршигдаж БУЦААГДСАН.
+
+          ⚠ Анхны гомдол нь ЗАГВАРЫНХ БИШ, ЗАН ТӨЛӨВИЙНХ байв: нэг
+          мөрөнд хамрах хүрээ ба "Хүснэгт" хоёр ЗЭРЭГ тодорч байсан.
+          Түүнийг `pickScope` шийдсэн — хүрээ солиход хүснэгт хаагдана.
+        */}
+        <Pill on={scope === "city"} onClick={() => pickScope("city")}>
           Улаанбаатар <span className="num opacity-60">{num(scopeCounts.city)}</span>
         </Pill>
-        <Pill on={scope === "rural"} onClick={() => setScope("rural")}>
+        <Pill on={scope === "rural"} onClick={() => pickScope("rural")}>
           Орон нутаг <span className="num opacity-60">{num(scopeCounts.rural)}</span>
         </Pill>
 
