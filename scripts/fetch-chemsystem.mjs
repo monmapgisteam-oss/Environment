@@ -86,6 +86,52 @@ async function all(resource) {
 const num = (v) => (typeof v === "number" && Number.isFinite(v) ? v : null);
 const str = (v) => (typeof v === "string" && v.trim() ? v.trim() : "");
 
+/**
+ * ХУВЬ ХҮНИЙ талбарууд — тайланд НЭР нь гарна, УТГА нь ХЭЗЭЭ Ч гарахгүй.
+ *
+ * Тайлан нь зөвхөн "хэдэн мөрд бөглөгдсөн" гэсэн ТООГ агуулдаг тул
+ * эдгээрийг нэрлэх нь өөрөө задрал биш; харин утга нь нийтэд гарах
+ * файлд орох ёсгүй.
+ */
+const PRIVATE = new Set([
+  "phone",
+  "email",
+  "users",
+  "user_ids",
+  "identity_card_number",
+]);
+
+/**
+ * ТАЛБАРЫН БӨГЛӨЛТИЙН ТАЙЛАН.
+ *
+ * ⚠⚠ Яагаад хэрэгтэй вэ (хэрэглэгчийн хүсэлт, 2026-09-23: "хоосон ч
+ * хамаагүй бүх column буюу field надад хэрэгтэй, би харж байгаад
+ * хүмүүс нь бөглүүрэй гээд хэлэх гээд байна"). Хормын хувилбар нь
+ * цагаан жагсаалтаар угсрагддаг тул БӨГЛӨГДӨӨГҮЙ талбар нь файлд
+ * огт үлддэггүй — улмаас "энэ талбар байдаг ч хоосон байна" гэдгийг
+ * дэлгэцээс мэдэх арга байхгүй байв.
+ *
+ * Тайлан нь эх сурвалжийн БҮХ талбарыг нэрээр нь, хэдэн мөрд
+ * бөглөгдсөнөөр нь жагсаана. Утга агуулдаггүй тул хувь хүний талбар
+ * ч аюулгүй — зөвхөн "энэ нэртэй талбар байна, 517 мөрд бөглөгдсөн"
+ * гэсэн тоо.
+ */
+function fieldReport(rows) {
+  const seen = new Map();
+  for (const r of rows) {
+    for (const [k, v] of Object.entries(r ?? {})) {
+      const filled =
+        v != null && v !== "" && !(Array.isArray(v) && v.length === 0);
+      const e = seen.get(k) ?? { filled: 0, kept: !PRIVATE.has(k) };
+      if (filled) e.filled++;
+      seen.set(k, e);
+    }
+  }
+  return [...seen]
+    .map(([field, e]) => ({ field, filled: e.filled, kept: e.kept }))
+    .sort((a, b) => b.filled - a.filled || a.field.localeCompare(b.field));
+}
+
 async function main() {
   if (!KEY) {
     console.log("chemsystem: CHEMSYSTEM_KEY алга — хормын хувилбарыг алгаслаа");
@@ -118,14 +164,22 @@ async function main() {
     return t.length ? { types: t } : null;
   };
 
+  /*
+    ⚠ `cas` нь одоогоор 0/8,117 бөглөгдсөн ч ХАДГАЛАГДАНА: хоосон
+    талбар нь "бөглөх шаардлагатай" гэсэн мэдээлэл өөрөө юм. Олон
+    улсын давтагдашгүй дугаар тул бөглөгдвөл гадаад мэдээллийн
+    сантай шууд холбогдоно.
+  */
   const chem = chemicals
     .filter((c) => held.has(c.id))
-    .map((c) => ({ id: c.id, name: str(c.name), ...typesOf(c) }));
+    .map((c) => ({ id: c.id, name: str(c.name), cas: str(c.cas_number), ...typesOf(c) }));
 
   const orgs = organizations.map((o) => ({
     id: o.id,
     name: str(o.name),
     reg: str(o.reg_number),
+    /** Одоогоор 0/520 бөглөгдсөн — хоосон нь өөрөө мэдээлэл */
+    cert: str(o.certificate_number),
     address: str(o.address),
     ...typesOf(o),
   }));
@@ -217,6 +271,18 @@ async function main() {
     source: {
       system: "HazTrack",
       api: BASE,
+      /*
+        Талбарын бөглөлт — эх сурвалжийн БҮХ талбар нэрээрээ, хэдэн
+        мөрд бөглөгдсөнөөр нь. `kept: false` нь хувь хүний мэдээлэл
+        тул утга нь файлд ОРООГҮЙ гэсэн үг.
+      */
+      fields: {
+        chemicals: fieldReport(chemicals),
+        organizations: fieldReport(organizations),
+        locations: fieldReport(locations),
+        holdings: fieldReport(holdings),
+        disposals: fieldReport(disposes),
+      },
       fetched: new Date().toISOString(),
     },
     selections,
