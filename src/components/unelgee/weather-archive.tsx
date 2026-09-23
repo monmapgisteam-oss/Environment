@@ -1,17 +1,57 @@
 "use client";
 
 import * as React from "react";
-import { RefreshCw } from "lucide-react";
+import dynamic from "next/dynamic";
+import {
+  Building2,
+  Database,
+  Loader2,
+  MapPin,
+  RefreshCw,
+} from "lucide-react";
+import { BasemapGallery } from "@/components/map/basemap-gallery";
+import { MapTip, MapTipRow, useMapTip } from "@/components/map/hover-tip";
+import { Columns } from "@/components/ui/resizable-columns";
+import {
+  defaultBasemap,
+  type Basemap,
+  type MapPoints,
+} from "@/components/wells/map";
 import { MEASURES, type Measure, type MeasureId } from "@/lib/weather";
 import {
   WINDOW_DAYS,
   fetchArchive,
   type ArchiveData,
   type ArchiveRow,
+  type ArchiveStation,
 } from "@/lib/weather-archive";
 import { num } from "@/lib/utils";
 import { Card, Head } from "./ui";
 import { Segments } from "./viz";
+
+/*
+  ⚠⚠ НИЙТ ҮҮЛШИЛ АРХИВЫН ДИАГРАМД ОРОХГҮЙ (хэрэглэгчийн шийдвэр,
+  2026-09-21: "Нийт үүлшил энэ chart хэрэггүй юм байна").
+
+  ⚠ Хэмжигдэхүүн өөрөө ХАСАГДААГҮЙ: бодит цагийн табын заалтын нүд,
+  газрын зургийн сонголт хоёрт хэвээр байна — тэнд энэ нь ОДООГИЙН
+  тэнгэрийн байдлыг хэлдэг. Хасагдсан нь зөвхөн ЦУВАА: үүлшил нь
+  0–10 баллын бүдүүн шатлалтай тул хугацааны тэнхлэг дээр шаталсан
+  шугам болж, чиг хандлага уншигдахгүй.
+*/
+const ARCHIVE_MEASURES = MEASURES.filter((m) => m.id !== "cloud");
+
+const PointMap = dynamic(
+  () => import("@/components/wells/map").then((m) => m.WellsMap),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex h-full w-full items-center justify-center bg-paper-3">
+        <Loader2 size={16} className="animate-spin text-ink-3" />
+      </div>
+    ),
+  },
+);
 
 /* --------------------------------------------------------------------------
    ЦАГ АГААРЫН АРХИВ
@@ -124,7 +164,7 @@ export function WeatherArchive() {
   /** Хэмжигдэхүүн бүрийн цуваа ба хураангуй */
   const subjects = React.useMemo(
     () =>
-      MEASURES.map((m) => {
+      ARCHIVE_MEASURES.map((m) => {
         const pts: { t: number; v: number }[] = [];
         if (sid == null) {
           /* Сүлжээний дундаж — цаг тутмын нүдэнд нэгтгэнэ */
@@ -235,32 +275,45 @@ export function WeatherArchive() {
         </div>
       </Card>
 
-      {/* ---------------- Сэдэв тус бүрийн цуваа ----------------
-          ⚠ Таван диаграм нэг дэлгэцэнд багтахгүй тул ЭНЭ БАГАНА дотроо
-          гүйнэ. Архив нь хэмжих хэрэгслийн самбар биш УНШИХ харагдац —
-          дээрээс доош сэдэв сэдвээр уншигдана. */}
-      <div className="grid min-h-0 flex-1 content-start gap-2 overflow-y-auto xl:grid-cols-2">
-        {subjects.map((s) => (
-          <Card key={s.m.id} className="min-h-[164px]">
-            <Head title={s.m.label}>
-              <span className="num text-[10.5px] text-ink-3">
-                {s.min == null || s.max == null || s.avg == null
-                  ? s.m.unit
-                  : `бага ${num(s.min, s.m.digits)} · дундаж ${num(s.avg, s.m.digits)} · их ${num(s.max, s.m.digits)} ${s.m.unit}`}
-              </span>
-            </Head>
-            <div className="px-3 pt-2 pb-1">
-              {s.pts.length ? (
-                <Line points={s.pts} measure={s.m} />
-              ) : (
-                <div className="chart-empty">
-                  Энэ хугацаанд заалт бүртгэгдээгүй байна
-                </div>
-              )}
-            </div>
-          </Card>
-        ))}
-      </div>
+      {/* ---------------- Зүүн: сэдвүүд · Баруун: зураг ----------------
+          ⚠⚠ ТАВАН ДИАГРАМ НЭГ БАГАНАД (хэрэглэгчийн шийдвэр,
+          2026-09-21). Урьд нь хоёр баганат тор байсан бөгөөд сондгой
+          тав нь сүүлийн эгнээг хагас хоосон үлдээдэг байв. Нэг
+          баганад цуварсан нь мөн ХАРЬЦУУЛАХАД зөв: диаграмууд
+          хугацааны НЭГ тэнхлэг хуваалцдаг тул дээр дооргүй эгнэхэд
+          "халуун байхад чийг нь ямар байв" гэдэг босоогоор уншигдана.
+          ⚠ Таван карт нэг дэлгэцэнд багтахгүй тул БАГАНА дотроо
+          гүйнэ; зураг нь гүйхгүй, бүтэн өндрөө барина. */}
+      <Columns id="weather-archive" left={640} className="min-h-0 flex-1">
+        <div className="flex min-h-0 flex-col gap-2 overflow-y-auto">
+          {subjects.map((s) => (
+            <Card key={s.m.id} className="min-h-[164px] flex-1">
+              <Head title={s.m.label}>
+                <span className="num text-[10.5px] text-ink-3">
+                  {s.min == null || s.max == null || s.avg == null
+                    ? s.m.unit
+                    : `бага ${num(s.min, s.m.digits)} · дундаж ${num(s.avg, s.m.digits)} · их ${num(s.max, s.m.digits)} ${s.m.unit}`}
+                </span>
+              </Head>
+              <div className="flex min-h-0 flex-1 flex-col px-3 pt-2 pb-1">
+                {s.pts.length ? (
+                  <Line points={s.pts} measure={s.m} />
+                ) : (
+                  <div className="chart-empty">
+                    Энэ хугацаанд заалт бүртгэгдээгүй байна
+                  </div>
+                )}
+              </div>
+            </Card>
+          ))}
+        </div>
+
+        <ArchiveMap
+          stations={data.stations}
+          station={station}
+          onPick={setStation}
+        />
+      </Columns>
     </div>
   );
 }
@@ -283,20 +336,30 @@ function Line({
   points: { t: number; v: number }[];
   measure: Measure;
 }) {
+  /*
+    ⚠ ӨРГӨН, ӨНДӨР ХОЁУЛАА ХЭМЖИГДЭНЭ. Урьд нь өндөр нь 104px гэж
+    кодод бичигдсэн байсан тул дөрвөн карт баганынхаа өндрийг дүүргэж
+    чадахгүй, доороо хоосон талбай үлдээдэг байв. Одоо карт нь үлдсэн
+    өндрийг ХУВААЛЦАЖ (`flex-1`), диаграм нь картаа дүүргэнэ — нам
+    дэлгэц дээр доод хязгаартаа тулаад багана өөрөө гүйнэ.
+  */
   const box = React.useRef<HTMLDivElement>(null);
   const [w, setW] = React.useState(0);
+  const [h, setH] = React.useState(0);
   React.useLayoutEffect(() => {
     const el = box.current;
     if (!el) return;
-    const ro = new ResizeObserver(([e]) =>
-      setW(Math.round(e.contentRect.width)),
-    );
+    const ro = new ResizeObserver(([e]) => {
+      setW(Math.round(e.contentRect.width));
+      setH(Math.round(e.contentRect.height));
+    });
     ro.observe(el);
     setW(Math.round(el.clientWidth));
+    setH(Math.round(el.clientHeight));
     return () => ro.disconnect();
   }, []);
 
-  const H = 104;
+  const H = Math.max(96, h);
   const L = 34;
   const R = 6;
   const T = 8;
@@ -304,7 +367,7 @@ function Line({
 
   if (!points.length)
     return (
-      <div ref={box} className="chart-empty">
+      <div ref={box} className="chart-empty h-full">
         Үзүүлэлт байхгүй
       </div>
     );
@@ -331,7 +394,7 @@ function Line({
     .join(" ");
 
   return (
-    <div ref={box} className="w-full">
+    <div ref={box} className="h-full min-h-[96px] w-full">
       {w > 0 ? (
         <svg
           width={w}
@@ -412,4 +475,138 @@ function timeText(ms: number): string {
   const d = new Date(ms + 8 * 3_600_000);
   const p = (n: number) => String(n).padStart(2, "0");
   return `${p(d.getUTCMonth() + 1)}.${p(d.getUTCDate())} ${p(d.getUTCHours())}:${p(d.getUTCMinutes())}`;
+}
+
+/* --------------------------------------------------------------------------
+   АРХИВЫН ГАЗРЫН ЗУРАГ
+
+   ⚠⚠ УРЬД НЬ АРХИВ ЗУРАГГҮЙ БАЙВ (хэрэглэгчийн шийдвэр, 2026-09-21:
+   "энэ 5 чартыг зүүн талд 1 column 5 row болгоод оруул, харин баруун
+   талд нь map"). Хоёр таб элементээ давтахгүй гэсэн дүрэм ХҮЧИНТЭЙ
+   хэвээр — энэ зураг нь бодит цагийнхыг ДАВТАХГҮЙ:
+
+     · бодит цагийнх нь ОДООГИЙН заалтыг тоогоор бичдэг, хэмжигдэхүүн
+       нь сонгогддог;
+     · архивынх нь ХУРИМТЛАЛЫГ хэлнэ — цэгийн хэмжээ нь тухайн станц
+       энэ цонхонд хэдэн заалт өгснийг заана. "Аль станц тасалдалгүй
+       бичигдэж байна вэ" гэдэг нь зөвхөн архивын хариулдаг асуулт.
+
+   ⚠ ӨНГӨ ГАНЦ (`--data`): шатлалын хоёр үзүүрт нэг өнгө өгснөөр
+   зөвхөн РАДИУС нь хэмжигдэхүүн үүрнэ (платформын "дата дүрслэлийн
+   өнгө ганц" дүрэм). Заалтын тоо нь эрэмбэтэй хэмжүүр биш, бүрэн
+   бүтэн байдлын тоолол тул олон өнгө шаардахгүй.
+
+   ⚠ Цэг товшиход тэр станцаар ШҮҮНЭ — шүүлтүүрийн мөрийн "Станц"
+   товчлууртай НЭГ төлөв. Хоёр дахь удирдлага биш, гурав дахь зам.
+   -------------------------------------------------------------------------- */
+
+const ARCHIVE_DOT = "#67d7e4";
+
+function ArchiveMap({
+  stations,
+  station,
+  onPick,
+}: {
+  stations: ArchiveStation[];
+  station: string;
+  onPick: (id: string) => void;
+}) {
+  const tip = useMapTip();
+  const [basemap, setBasemap] = React.useState<Basemap>(defaultBasemap);
+
+  /* Координатгүй станц зурагт ОРОХГҮЙ — (0, 0) нь Гвинейн булан */
+  const shown = React.useMemo(
+    () => stations.filter((s) => s.lat != null && s.lon != null),
+    [stations],
+  );
+
+  const points = React.useMemo<MapPoints>(
+    () => ({
+      oid: shown.map((s) => s.sid),
+      lon: shown.map((s) => s.lon as number),
+      lat: shown.map((s) => s.lat as number),
+    }),
+    [shown],
+  );
+
+  const visible = React.useMemo(
+    () => Uint32Array.from(shown.map((_, i) => i)),
+    [shown],
+  );
+
+  const grades = React.useMemo(() => {
+    const top = Math.max(1, ...shown.map((s) => s.n));
+    return {
+      values: shown.map((s) => s.n),
+      /* Хоёр үзүүрт НЭГ өнгө — радиус л хэмжигдэхүүн үүрнэ */
+      stops: [
+        [0, ARCHIVE_DOT],
+        [top, ARCHIVE_DOT],
+      ] as [number, string][],
+      firefly: true as const,
+    };
+  }, [shown]);
+
+  /*
+    ⚠⚠ ШОШГЫН ХЯЗГААР 0 — бодит цагийн зургийнх шиг 8 БИШ. Анхны
+    харагдац 1:900 000 нь z≈7.8 тул найман түвшний хязгаар долоон
+    нэрийг бүгдийг нь нуудаг байв (хэмжиж тогтоосон). Тэр зураг дээр
+    станцын НЭР нь хоёрдогч — заалт нь тоогоороо бичигддэг; энд харин
+    нэр нь цэгийн ЦОРЫН ГАНЦ таних тэмдэг.
+  */
+  const labels = React.useMemo(
+    () => ({ text: shown.map((s) => s.name), minzoom: 0 }),
+    [shown],
+  );
+
+  const hovered = React.useMemo(
+    () =>
+      tip.oid == null ? null : (shown.find((s) => s.sid === tip.oid) ?? null),
+    [shown, tip.oid],
+  );
+
+  const picked = station === "" ? null : Number(station);
+  const spot = React.useMemo(() => {
+    const id = tip.oid ?? picked;
+    return id == null ? null : (shown.find((s) => s.sid === id) ?? null);
+  }, [shown, tip.oid, picked]);
+
+  return (
+    <div className="weather-map flex min-h-0 flex-col overflow-hidden border border-line bg-paper-2 max-xl:min-h-[420px]">
+      <div className="relative min-h-0 flex-1">
+        <PointMap
+          points={points}
+          visible={visible}
+          labels={labels}
+          grades={grades}
+          scale={900_000}
+          basemap={basemap}
+          /* Товшилт нь шүүлтүүр: дахин товшиход цуцлагдана */
+          onSelect={(id) => onPick(String(id) === station ? "" : String(id))}
+          onHover={tip.onHover}
+          cluster={false}
+          highlight={
+            spot ? [spot.lon as number, spot.lat as number] : null
+          }
+        />
+        <BasemapGallery
+          value={basemap}
+          onChange={setBasemap}
+          placement="top-left"
+        />
+        {hovered ? (
+          <MapTip state={tip}>
+            <MapTipRow icon={MapPin} text={hovered.name} />
+            {hovered.place && hovered.place !== hovered.name ? (
+              <MapTipRow icon={Building2} text={hovered.place} />
+            ) : null}
+            <MapTipRow
+              icon={Database}
+              text={`${num(hovered.n)} заалт`}
+            />
+          </MapTip>
+        ) : null}
+      </div>
+    </div>
+  );
 }

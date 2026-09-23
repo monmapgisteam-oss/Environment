@@ -59,6 +59,9 @@ export type ArchiveStation = {
   place: string;
   /** Цонхонд оногдох бичлэгийн тоо */
   n: number;
+  /** Байршил — бичилт бүрд давтагддаг тул эхний олдсоноор нь */
+  lat: number | null;
+  lon: number | null;
 };
 
 export type ArchiveData = {
@@ -141,10 +144,17 @@ async function layerId(signal?: AbortSignal): Promise<number> {
   return id;
 }
 
+/*
+  ⚠ `lat`, `lon` нь СТАНЦЫН тогтмол шинж — мөр бүрд давтагддаг ч
+  татахаас өөр арга алга (архивын давхарга нь геометргүй, зөвхөн
+  атрибут). Мөрд хадгалахгүй: зөвхөн станцын бүртгэлд нэг удаа сууна.
+*/
 const FIELDS = [
   "sid",
   "name",
   "place",
+  "lat",
+  "lon",
   "obs_date",
   "ttt",
   "ttt_feels",
@@ -305,8 +315,21 @@ async function load(): Promise<ArchiveData> {
     });
 
     const hit = byStation.get(sid);
-    if (hit) hit.n += 1;
-    else byStation.set(sid, { sid, name, place, n: 1 });
+    if (hit) {
+      hit.n += 1;
+      /* Эхний бичилтэд координат байхгүй байж болно */
+      hit.lat ??= num(a.lat);
+      hit.lon ??= num(a.lon);
+    } else {
+      byStation.set(sid, {
+        sid,
+        name,
+        place,
+        n: 1,
+        lat: num(a.lat),
+        lon: num(a.lon),
+      });
+    }
   }
 
   rows.sort((a, b) => a.t - b.t);

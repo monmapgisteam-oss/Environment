@@ -51,7 +51,6 @@ import {
   localTime,
   measureOf,
   stopHex,
-  windName,
   type MeasureId,
   type Obs,
   type Station,
@@ -1362,16 +1361,18 @@ function WindRadar({
   hover: number | null;
   onHover: (id: number | null) => void;
 }) {
-  /* ⚠ Зураг нь ДӨРВӨЛЖИН БИШ: станцын нэр дугуйн хажууд бичигддэг
-     тул хоёр талдаа 66 нэгжийн зай авав. Дөрвөлжин талбайд "Улаанбаатар"
-     гэсэн нэр хүрээнээс хальж тасардаг байв */
-  const W = 280;
+  /* ⚠⚠ СТАНЦЫН НЭР ЗУРАГТ БИЧИГДЭХГҮЙ (хэрэглэгчийн шийдвэр,
+     2026-09-21: "нэр байхгүй ээ, зүгээр зүгийг нь харуулаач"). Долоон
+     нэр нь дугуйн хажуугаар тарж, дүрсээ өөрийг нь жижигрүүлж байв —
+     радарын хэлэх ёстой зүйл нь ЗҮГ, ХУРД хоёр. Нэр нь хулганы доорх,
+     эсвэл сонгосон станцынх доод мөрөнд бүтнээрээ гарна.
+     ⚠ Нэр байхгүй тул талбай ДӨРВӨЛЖИН болж, дугуй нь өргөнөө бүтнээр
+     эзлэв (R 80 → 88). */
+  const W = 220;
   const H = 220;
   const C = W / 2;
   const CY = H / 2;
-  const R = 80;
-  /* Шошгын мөр хоорондын хамгийн бага зай */
-  const GAP = 11;
+  const R = 88;
 
   const plotted = rows.flatMap((r) =>
     r.obs.wind != null && r.obs.windDir != null
@@ -1413,29 +1414,8 @@ function WindRadar({
     ].join(" ");
   });
 
-  /*
-    ⚠⚠ ШОШГЫГ БОСООГООР ТАРААНА. Нийслэлийн долоон станц ихэвчлэн НЭГ
-    зүгээс салхитай байдаг (энэ өдөр зургаа нь баруунаас) тул цэгүүд нэг
-    салаанд бөөгнөрч, нэр нь бие биен дээрээ давхарлаж уншигдахгүй байв.
-    Тал бүрд нь дээрээс доош явж хамгийн бага зайг хангана; хөдөлсөн
-    шошго өөрийн цэг рүүгээ нимгэн чиглүүлэгч зураастай үлдэнэ.
-  */
-  const labels = plotted.map((p) => {
-    const [x, y] = at(p.dir, p.speed);
-    return { p, x, y, side: x < C ? -1 : 1, ly: y };
-  });
-  for (const side of [-1, 1]) {
-    const mine = labels.filter((l) => l.side === side).sort((a, b) => a.ly - b.ly);
-    for (let i = 1; i < mine.length; i++) {
-      if (mine[i].ly - mine[i - 1].ly < GAP) mine[i].ly = mine[i - 1].ly + GAP;
-    }
-    const over = mine.length ? mine[mine.length - 1].ly - (H - 8) : 0;
-    if (over > 0) for (const l of mine) l.ly -= over;
-  }
-
   /* Хулганы доорх станц, байхгүй бол сонгогдсон нь тодорно */
   const marked = hover ?? sid;
-  const noted = rows.find((r) => r.st.sid === marked);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-1.5 p-2">
@@ -1472,8 +1452,8 @@ function WindRadar({
                 strokeWidth={main ? 0.8 : 0.5}
               />
               <text
-                x={C + (R + 12) * Math.cos(a)}
-                y={CY + (R + 12) * Math.sin(a)}
+                x={C + (R + 13) * Math.cos(a)}
+                y={CY + (R + 13) * Math.sin(a)}
                 textAnchor="middle"
                 dominantBaseline="central"
                 fontSize={main ? 9 : 8}
@@ -1500,11 +1480,11 @@ function WindRadar({
           ) : null,
         )}
         {/* Станц бүр — зүг дээрээ, хурдныхаа зайд */}
-        {labels.map(({ p, x, y, side, ly }) => {
+        {plotted.map((p) => {
+          const [x, y] = at(p.dir, p.speed);
           const on = p.st.sid === sid;
           const lit = p.st.sid === marked;
           const tone = colorOf(measureOf("wind"), p.speed);
-          const lx = x + side * 7;
           return (
             <g
               key={p.st.sid}
@@ -1523,21 +1503,11 @@ function WindRadar({
                 strokeOpacity={lit ? 0.9 : 0.5}
                 strokeLinecap="round"
               />
-              {Math.abs(ly - y) > 2 ? (
-                <line
-                  x1={x}
-                  y1={y}
-                  x2={lx}
-                  y2={ly}
-                  stroke="var(--line-2)"
-                  strokeWidth={0.6}
-                />
-              ) : null}
               {on ? (
                 <circle
                   cx={x}
                   cy={y}
-                  r={7}
+                  r={7.5}
                   fill="none"
                   stroke={tone}
                   strokeWidth={1.2}
@@ -1546,27 +1516,11 @@ function WindRadar({
               <circle
                 cx={x}
                 cy={y}
-                r={lit ? 4.4 : 3.4}
+                r={lit ? 4.6 : 3.6}
                 fill={tone}
                 stroke="var(--paper-2)"
                 strokeWidth={1.2}
               />
-              {/* Нэр нь цэгийнхээ гадна талд. Дэвсгэрийн өнгөт хүрээ нь
-                  доорх зүсэг, шугамаас тусгаарлана */}
-              <text
-                x={lx}
-                y={ly}
-                textAnchor={side < 0 ? "end" : "start"}
-                dominantBaseline="central"
-                fontSize={8.5}
-                fontWeight={lit ? 600 : 400}
-                fill={lit ? "var(--ink)" : "var(--ink-2)"}
-                stroke="var(--paper-2)"
-                strokeWidth={2.4}
-                paintOrder="stroke"
-              >
-                {p.st.name}
-              </text>
             </g>
           );
         })}
@@ -1586,23 +1540,16 @@ function WindRadar({
         <circle cx={C} cy={CY} r={1.6} fill="var(--ink-3)" />
       </svg>
 
-      {/* Тэмдэглэсэн станцын заалт бүтэн үгээр — радар дээр зөвхөн нэр
-          нь гарч, зүг, хурд нь дүрсээр уншигдана */}
-      <p className="text-center text-[10.5px] leading-snug text-ink-2">
-        {noted && noted.obs.wind != null ? (
-          <>
-            <span className="text-ink">{noted.st.name}</span>
-            {" · "}
-            {noted.obs.windDir == null
-              ? "зүг бүртгэгдээгүй"
-              : `${windName(noted.obs.windDir)} зүгээс`}
-            {" · "}
-            <span className="num">{num(noted.obs.wind, 1)} м/с</span>
-          </>
-        ) : (
-          "Цагирагийн хуваарь: салхины хурд, м/с"
-        )}
-      </p>
+      {/*
+        ⚠⚠ АНГИЛЛЫН ТАЙЛБАР ба ЗААЛТЫН МӨР ХОЁУЛАА ХАСАГДСАН
+        (хэрэглэгчийн шийдвэр, 2026-09-21). Таван ангийн нэр бүхий
+        тайлбар, түүний доор "Улаанбаатар · Баруун хойд зүгээс ·
+        3.6 м/с" гэсэн мөр хоёр нь дүрсийн доор хоёр давхар бичвэр
+        болж, картын өндрийг идэж байв.
+        ⚠ Ангиллын нэр одоо дэлгэц дээр ГАРАХГҮЙ — өнгө, радиус хоёр
+        л хурдыг хэлнэ (`WIND_BANDS` нь кодод хэвээр). Дахин нэмэх
+        бол картын өндрийг дагуулж шалга.
+      */}
       {missing.length ? (
         <p className="text-center text-[10px] leading-snug text-ink-3">
           Салхи бүртгэгдээгүй: {missing.map((r) => r.st.name).join(", ")}

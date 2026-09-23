@@ -45,9 +45,19 @@
    ⚠ Зайг ЗУРГУУЛАНД нэмнэ — гуравт нь л нэмбэл тэмдгүүд эгнэхээ
    болино. Тэмдгийн зайг 9-өөс 8 болгож, шошгын өргөнөөс ердөө
    3px л хасав */
-.observation-metric { display: flex; align-items: center; gap: 8px; padding: 6px 10px 6px 14px; min-height: 64px; border: 1px solid var(--line); border-radius: 5px; background: var(--paper-2); }
+/* ⚠⚠ АГУУЛГА КАРТДАА ГОЛЛОНО (хэрэглэгчийн хүсэлт, 2026-09-21:
+   "голлуул"). Богино нэртэй гурван карт (даралт, үүлшил, салхи) дээр
+   тэмдэг, бичвэр хоёр зүүн ирмэгт наалдаж, баруун тал нь хоосон
+   үлддэг байв. Урьд нь зүүн талын зайг 14px болгож үзсэн боловч тэр нь
+   зөрүүг жижигрүүлээд л орхисон — голлох нь картын өргөнөөс үл
+   хамаарч тэнцвэртэй байна.
+   ⚠ Ингэхийн тулд бичвэрийн блок СУНАХАА БОЛИХ ёстой (`flex: 0 1 auto`)
+   — `flex: 1` үед тэр нь үлдсэн өргөнийг бүхэлд нь эзэлж, голлолт нь
+   юу ч хийхгүй. Урт нэртэй картууд хэвээр шахагдана (`min-width: 0`).
+   ⚠ Босоо зай СИММЕТР болов: зүүн тал руу тусгай 14px хэрэггүй. */
+.observation-metric { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 6px 10px; min-height: 64px; border: 1px solid var(--line); border-radius: 5px; background: var(--paper-2); }
 .observation-metric > svg:first-child { width: 24px; height: 24px; flex-shrink: 0; }
-.observation-metric > div { display: flex; flex: 1; min-width: 0; flex-direction: column; }
+.observation-metric > div { display: flex; flex: 0 1 auto; min-width: 0; flex-direction: column; }
 /* ⚠ ТОМ ҮСГЭЭР, 12px (хэрэглэгчийн хүсэлт, 2026-09-21: "нэрүүдийг
    uppercase, size 1px томруул"). Өргөн зай нь 0.03em — том үсгийн
    эгнээг уншигдахуйц байлгах хамгийн бага хэмжээ; илүү өгвөл урт
