@@ -18,12 +18,11 @@
  * нь хоёр зангилаанд ЦЭВЭР хуваагдана — нэгтгэвэл дотоод хяналтын
  * мөчир алга болно.
  *
- * ХЭРЭГЛЭХГҮЙ ТОГТМОЛУУД: `Хариуцах нэгж` (147/147 "СААМХ"),
- * `Зорилтот түвшин` (үргэлж 100), `Хэмжих үзүүлэлт` ("100% хэрэгжилт"),
- * `Тайлбар` (бүрэн хоосон). Эдгээр нь хэмжигдэхүүн болохгүй.
+ * `Зорилтот түвшин` (үргэлж 100), `Хэмжих үзүүлэлт` ("100% хэрэгжилт")
+ * нь ажлын дэлгэрэнгүйд харагдана; тусдаа нэгтгэлийн хэмжигдэхүүн биш.
  *
- * `Гүйцэтгэл` баганыг мөн ХЭРЭГЛЭХГҮЙ: 13 мөрд хоосон бөгөөд бусад
- * бүх мөрд `Хэрэгжилт %`-тэй яг таарна. Сүүлийнх нь бүрэн (147/147).
+ * `Гүйцэтгэл`-ийн хоосон утгыг хадгална: Excel-ийн N багана хоосон
+ * гүйцэтгэлийг 0% болгодог тул зөвхөн N-ээс мэдээлэлгүй ажлыг ялгахгүй.
  */
 
 import { asset } from "@/lib/base-path";
@@ -67,6 +66,8 @@ export type Task = {
   staff: string;
   unit: string;
   target: number | null;
+  /** Excel-ийн M багана. null нь мэдээлэл оруулаагүй, 0 нь бүртгэсэн утга. */
+  performance: number | null;
   /** `Хэрэгжилт %` — 0…100 */
   progress: number | null;
   /** Хоосон байж болно: 130 ажлын 84-д төлөв тэмдэглэгдээгүй */
@@ -74,7 +75,7 @@ export type Task = {
 };
 
 export type PlanData = {
-  source: { file: string; sheet: string; unit: string; year: number };
+  source: { file: string; sheet: string; unit: string; year: number; performanceFile?: string };
   units: Unit[];
   staff: Staff[];
   categories: { id: string; label: string }[];
@@ -111,7 +112,51 @@ export async function fetchPlan(signal?: AbortSignal): Promise<PlanData> {
 export function dayOf(iso: string): number | null {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
   if (!m) return null;
-  return Date.UTC(+m[1], +m[2] - 1, +m[3]) / 86400000;
+  const date = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3]));
+  if (date.toISOString().slice(0, 10) !== iso) return null;
+  return date.getTime() / 86400000;
+}
+
+/** Улаанбаатарын календарийн өнөөдөр (UTC+08). */
+export function planDay(now = Date.now()): number {
+  return Math.floor((now + 8 * 3600000) / 86400000);
+}
+
+/** Хоосон гүйцэтгэлийг Excel-ийн томьёоны 0%-тай андуурахгүй. */
+export function recordedProgress(t: Task): number | null {
+  return t.performance == null ? null : t.progress;
+}
+
+export const DEADLINE_LABELS = {
+  complete: "Гүйцэтгэл 100%",
+  overdue: "Хугацаа өнгөрсөн",
+  active: "Хугацаа дуусаагүй",
+  upcoming: "Эхлэх болоогүй",
+  undated: "Огноо дутуу",
+} as const;
+export type DeadlineState = keyof typeof DEADLINE_LABELS;
+
+/** Дуусах өдөр дуустал хугацаа нээлттэй. Явцыг жигд байх ёстой гэж үзэхгүй. */
+export function deadlineOf(t: Task, today: number): DeadlineState {
+  if ((recordedProgress(t) ?? -1) >= 100) return "complete";
+  const start = dayOf(t.start);
+  const end = dayOf(t.end);
+  if (start == null || end == null || end < start) return "undated";
+  if (today > end) return "overdue";
+  if (today < start) return "upcoming";
+  return "active";
+}
+
+export function summarizeTasks(tasks: Task[], today: number) {
+  const recorded = tasks.map(recordedProgress).filter((v): v is number => v != null);
+  const times = tasks.map((t) => elapsed(t, today)).filter((v): v is number => v != null);
+  return {
+    progress: recorded.length ? recorded.reduce((a, b) => a + b, 0) / recorded.length : null,
+    elapsed: times.length ? times.reduce((a, b) => a + b, 0) / times.length : 0,
+    zero: recorded.filter((v) => v === 0).length,
+    missing: tasks.length - recorded.length,
+    stated: tasks.filter((t) => t.status).length,
+  };
 }
 
 /**
@@ -123,7 +168,7 @@ export function dayOf(iso: string): number | null {
 export function elapsed(t: Task, today: number): number | null {
   const a = dayOf(t.start);
   const b = dayOf(t.end);
-  if (a == null || b == null) return null;
+  if (a == null || b == null || b < a) return null;
   if (today <= a) return 0;
   if (today >= b) return 100;
   const span = b - a;
@@ -133,8 +178,9 @@ export function elapsed(t: Task, today: number): number | null {
 /** Хугацааны явц хэрэгжилтээс хэдэн нэгжээр давсан бэ. Сөрөг бол түрүүлсэн */
 export function gapOf(t: Task, today: number): number | null {
   const e = elapsed(t, today);
-  if (e == null) return null;
-  return e - (t.progress ?? 0);
+  const progress = recordedProgress(t);
+  if (e == null || progress == null) return null;
+  return e - progress;
 }
 
 /* --------------------------------------------------------------------------
@@ -146,12 +192,13 @@ export type Rollup = {
   tasks: Task[];
   /** Зөвхөн энэ зангилаанд шууд харьяалагдах */
   own: number;
-  /** Хэрэгжилтийн дундаж, хувь */
-  progress: number;
+  /** Гүйцэтгэл бүртгэсэн ажлуудын дундаж; бүгд хоосон бол null. */
+  progress: number | null;
   /** Хугацааны явцын дундаж, хувь */
   elapsed: number;
-  /** Хэрэгжилт огт тэмдэглэгдээгүй ажлын тоо */
+  /** 0% гэж бүртгэсэн ажлын тоо */
   zero: number;
+  missing: number;
   /** Төлөв тэмдэглэгдсэн ажлын тоо */
   stated: number;
 };
@@ -176,28 +223,10 @@ export function rollup(
     const all = [...own];
     for (const k of kids.get(id) ?? []) all.push(...walk(k));
 
-    let sp = 0;
-    let se = 0;
-    let ne = 0;
-    let zero = 0;
-    let stated = 0;
-    for (const t of all) {
-      sp += t.progress ?? 0;
-      const e = elapsed(t, today);
-      if (e != null) {
-        se += e;
-        ne++;
-      }
-      if ((t.progress ?? 0) === 0) zero++;
-      if (t.status) stated++;
-    }
     out.set(id, {
       tasks: all,
       own: own.length,
-      progress: all.length ? sp / all.length : 0,
-      elapsed: ne ? se / ne : 0,
-      zero,
-      stated,
+      ...summarizeTasks(all, today),
     });
     return all;
   };

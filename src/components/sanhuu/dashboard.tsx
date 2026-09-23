@@ -1,13 +1,20 @@
 "use client";
 
 import * as React from "react";
-import { Check, ChevronDown, Loader2, User } from "lucide-react";
+import { Building2, ChevronLeft, ChevronRight, Layers, Loader2, User, UserRound, Network, Users, RotateCcw, Search, CalendarDays, X } from "lucide-react";
+import "./organization.css";
+import "./tasks.css";
 import {
   dayOf,
+  deadlineOf,
+  DEADLINE_LABELS,
   elapsed,
   fetchPlan,
-  gapOf,
+  planDay,
+  recordedProgress,
   rollup,
+  summarizeTasks,
+  type DeadlineState,
   type PlanData,
   type Staff,
   type Task,
@@ -63,16 +70,28 @@ export function SanhuuDashboard() {
 
   const [unit, setUnit] = React.useState("heltes");
   const [person, setPerson] = React.useState<string | null>(null);
-  /** Зөвхөн хэрэгжилт огт тэмдэглэгдээгүй ажил — хяналтын гол шүүлт */
-  const [onlyZero, setOnlyZero] = React.useState(false);
-  /** Ажлын төлөв. `""` нь төлөв тэмдэглэгдээгүй ажлыг сонгоно */
-  const [status, setStatus] = React.useState<string | null>(null);
+  /*
+    ⚠⚠ АЛБАН ХААГЧИЙН НЭР ТОВЧООР ГАРНА (хэрэглэгчийн хүсэлт,
+    2026-09-21: "ажилтан гэж дарвал модон дээр нэрс гарч ирнэ").
+
+    Мод нь анхнаасаа зөвхөн НЭГЖҮҮДИЙГ харуулна — нэр бүр өөрийн мөр,
+    албан тушаал, хэмжигчтэй тул зангилаа хоёр, гурав дахин өндөрсөж,
+    бүтэц нь тэдний дунд алдагддаг байв. Товч дарахад нэрс нээгдэнэ.
+    ⚠ Хэдэн хүн байгаа нь нуугдахгүй: зангилаа бүр "Шууд харьяалах: N"
+    гэж тоогоороо хэлсээр байна.
+  */
+  const [showStaff, setShowStaff] = React.useState(false);
+  /* Хажуугийн самбарт нээгдсэн ажил */
+  const [detail, setDetail] = React.useState<number | null>(null);
+  const [recordFilter, setRecordFilter] = React.useState<"all" | "zero" | "missing">("all");
+  const [status, setStatus] = React.useState<DeadlineState | null>(null);
+  const [query, setQuery] = React.useState("");
 
   /*
     Өнөөдрийг НЭГ УДАА барина. Зурагдалт бүрд `new Date()` дуудвал
     сервер ба хөтөч дээр өөр утга гарч, гидраци зөрөх эрсдэлтэй.
   */
-  const [today] = React.useState(() => Math.floor(Date.now() / 86400000));
+  const [today] = React.useState(() => planDay());
 
   React.useEffect(() => {
     const ac = new AbortController();
@@ -102,66 +121,57 @@ export function SanhuuDashboard() {
     for (const t of tasks) by.set(t.staff, [...(by.get(t.staff) ?? []), t]);
     const out = new Map<string, PersonStat>();
     for (const [name, ts] of by) {
-      let sp = 0;
-      let se = 0;
-      let ne = 0;
-      let zero = 0;
-      let stated = 0;
-      for (const t of ts) {
-        sp += t.progress ?? 0;
-        const e = elapsed(t, today);
-        if (e != null) {
-          se += e;
-          ne++;
-        }
-        if ((t.progress ?? 0) === 0) zero++;
-        if (t.status) stated++;
-      }
-      const progress = sp / ts.length;
-      const el = ne ? se / ne : 0;
+      const summary = summarizeTasks(ts, today);
+      const starts = ts.map((t) => t.start).filter(Boolean).sort();
+      const ends = ts.map((t) => t.end).filter(Boolean).sort();
       out.set(name, {
         name,
         position: pos.get(name) ?? "",
         n: ts.length,
-        progress,
-        elapsed: el,
-        gap: el - progress,
-        zero,
-        stated,
+        ...summary,
+        gap: summary.progress == null ? null : summary.elapsed - summary.progress,
+        start: starts[0] ?? "",
+        end: ends[ends.length - 1] ?? "",
       });
     }
     return out;
   }, [tasks, data, today]);
 
-  const list = React.useMemo(() => {
-    let out = person ? scope.filter((t) => t.staff === person) : scope;
-    if (onlyZero) out = out.filter((t) => (t.progress ?? 0) === 0);
-    if (status != null) out = out.filter((t) => (t.status ?? "") === status);
-    return [...out].sort((a, b) => (a.progress ?? 0) - (b.progress ?? 0) || a.no - b.no);
-  }, [scope, person, onlyZero, status]);
+  /** Сонгосон нэгж, хүний ажлууд — төлөв, тэглэлтийн шүүлтээс ӨМНӨ */
+  const pool = React.useMemo(
+    () => (person ? scope.filter((t) => t.staff === person) : scope),
+    [scope, person],
+  );
 
-  /*
-    Төлөвийн шүүлтүүр нь эх сурвалжийн бүртгэлээс БИШ, БОДИТ утгуудаас
-    угсарна. Хуудсанд таван төлөв тодорхойлогдсон ("Дууссан",
-    "Хугацаандаа", "Хоцорсон", "Цуцлагдсан", "Түр зогссон") ч 130
-    ажлын дөнгөж 46-д нь тэмдэглэгдсэн бөгөөд хоёрхон утга тохиолдоно.
-    Хэрэглэгдээгүй гурвыг товч болгон гаргавал үргэлж хоосон үр дүн
-    буцаадаг товчнууд болно.
-
-    Тэмдэглэгдээгүй нь МӨН сонголт: 84 ажлын төлөв хоосон байгаа нь
-    өөрөө хяналтын мэдээлэл — төлөвийг зөвхөн гурван хүн хөтөлдөг.
-  */
   const statusTabs = React.useMemo(() => {
-    const seen = new Map<string, number>();
-    for (const t of tasks) {
-      const k = t.status ?? "";
-      seen.set(k, (seen.get(k) ?? 0) + 1);
+    const seen = new Map<DeadlineState, number>();
+    for (const t of pool) {
+      const key = deadlineOf(t, today);
+      seen.set(key, (seen.get(key) ?? 0) + 1);
     }
-    const order = (k: string) => (k === "" ? 1 : 0);
-    return [...seen]
-      .map(([id, n]) => ({ id, n, label: id || "Төлөв тэмдэглэгдээгүй" }))
-      .sort((a, b) => order(a.id) - order(b.id) || b.n - a.n);
-  }, [tasks]);
+    return [...seen].map(([id, n]) => ({ id, n, label: DEADLINE_LABELS[id] }));
+  }, [pool, today]);
+  const activeStatus = statusTabs.some((x) => x.id === status) ? status : null;
+  const zeroCount = pool.filter((t) => recordedProgress(t) === 0).length;
+  const missingCount = pool.filter((t) => recordedProgress(t) == null).length;
+  const activeRecord = (recordFilter === "zero" && !zeroCount) ||
+    (recordFilter === "missing" && !missingCount) ? "all" : recordFilter;
+  const list = React.useMemo(() => {
+    const needle = query.trim().toLocaleLowerCase();
+    return pool.filter((t) => {
+      const progress = recordedProgress(t);
+      return (activeRecord !== "zero" || progress === 0) &&
+        (activeRecord !== "missing" || progress == null) &&
+        (activeStatus == null || deadlineOf(t, today) === activeStatus) &&
+        (!needle || `${t.no} ${t.text} ${t.staff}`.toLocaleLowerCase().includes(needle));
+    }).sort((a, b) => a.no - b.no);
+  }, [pool, activeRecord, activeStatus, query, today]);
+
+  /** Хажуугийн самбарт нээгдсэн ажил */
+  const detailTask = React.useMemo(
+    () => (detail == null ? null : (tasks.find((t) => t.no === detail) ?? null)),
+    [tasks, detail],
+  );
 
   /** Модны үндэс — сонголт цуцлахад буцаж очих газар */
   const rootId = React.useMemo(
@@ -174,13 +184,41 @@ export function SanhuuDashboard() {
     хүрээ рүү буцна. Үүнгүй бол хэрэглэгч мөчир сонгосны дараа буцах
     арга олдохгүй — үндсийг нь тусгайлан хайх шаардлагатай болдог.
   */
+  /*
+    ⚠⚠ ХҮҮХДҮҮД НЬ ДЭЛГЭГДЭЖ БУЙ НЭГЖ. Сонголт (`unit`, ажлын
+    жагсаалтыг шүүнэ) ба гүнзгийрэлт (`focus`, зурагт аль шат
+    харагдах) нь ХОЁР ӨӨР зүйл: хүүхэдгүй нэгж дээр товшиход
+    сонголт өөрчлөгдөх ч зураг байрандаа үлдэнэ.
+  */
+  const [focus, setFocus] = React.useState("heltes");
+  const resetTaskView = React.useCallback(() => {
+    setRecordFilter("all");
+    setStatus(null);
+    setQuery("");
+    setDetail(null);
+  }, []);
+
   const pickUnit = React.useCallback(
     (id: string) => {
-      setUnit((prev) => (prev === id ? rootId : id));
+      resetTaskView();
+      setUnit(id);
       setPerson(null);
+      /* ⚠ Хүүхэдгүй нэгж ч ФОКУС авна (2026-09-22): мөчрийн харагдацад
+         баруун тал нь тэр нэгжийн АЖЛУУД тул хоосон болохгүй — урьд нь
+         "хүүхэдтэй бол л гүнзгийрнэ" гэсэн дүрэм Дотоод хяналт зэрэг
+         навчин нэгжийг зөвхөн сонгоод, дэлгэц хөдөлгөөнгүй үлдээж байв */
+      setFocus(id);
     },
-    [rootId],
+    [resetTaskView],
   );
+
+  /* Зам заагчаас товшиход тэр шат руу БУЦАЖ гарна */
+  const goTo = React.useCallback((id: string) => {
+    resetTaskView();
+    setFocus(id);
+    setUnit(id);
+    setPerson(null);
+  }, [resetTaskView]);
 
   /*
     Хүн сонгоход түүний зангилаа руу мөн шилжинэ. Эс тэгвээс өөр мөчир
@@ -189,6 +227,7 @@ export function SanhuuDashboard() {
   */
   const pickPerson = React.useCallback(
     (name: string) => {
+      resetTaskView();
       if (person === name) {
         setPerson(null);
         return;
@@ -197,7 +236,7 @@ export function SanhuuDashboard() {
       if (u) setUnit(u);
       setPerson(name);
     },
-    [person, data],
+    [person, data, resetTaskView],
   );
 
   if (error) {
@@ -225,113 +264,419 @@ export function SanhuuDashboard() {
   }
 
   const unitLabel = units.find((u) => u.id === unit)?.label ?? "";
+  const scopedPeople = [...new Set(pool.map((t) => t.staff))];
+  const showTaskStaff = !person && scopedPeople.length > 1;
+  const taskNote = person ?? (scopedPeople.length === 1 ? `${unitLabel} · ${scopedPeople[0]}` : unitLabel);
+
+
+  /** Мөчир рүү орсон эсэх — зүүн талд том карт, баруун талд ажлууд */
+  const deep = focus !== rootId;
+
+  /*
+    Ажлын жагсаалт ХОЁР газар гарна: албан хаагчийн хуудсанд бүтэн
+    өргөнөөр, мөчрийн харагдацад том картын БАРУУН талд. Нэг JSX —
+    хоёр газар хуулбарлавал шүүлтүүр, самбар хоёр эрт орой зөрнө.
+  */
+  const taskSection = (
+    <section className="task-panel" aria-label="Гүйцэтгэх ажлууд">
+      <header className="task-toolbar">
+        <div className="task-heading">
+          <h2>Гүйцэтгэх ажил <span className="task-count num">{num(pool.length)}</span></h2>
+          <p>{taskNote}</p>
+        </div>
+        <label className="task-search">
+          <Search size={14} aria-hidden />
+          <input type="search" aria-label="Ажил хайх" placeholder="Ажил, ажилтан хайх…" value={query} onChange={(e) => setQuery(e.target.value)} />
+        </label>
+      </header>
+      <div className="task-filters">
+        <div className="task-record-filters" role="group" aria-label="Гүйцэтгэлийн бүртгэлээр шүүх">
+          <button type="button" aria-pressed={activeRecord === "all"} onClick={() => setRecordFilter("all")}>Бүгд <span className="num">{num(pool.length)}</span></button>
+          {zeroCount > 0 && <button type="button" aria-pressed={activeRecord === "zero"} onClick={() => setRecordFilter("zero")}>0% <span className="num">{num(zeroCount)}</span></button>}
+          {missingCount > 0 && <button type="button" aria-pressed={activeRecord === "missing"} onClick={() => setRecordFilter("missing")}>Мэдээлэлгүй <span className="num">{num(missingCount)}</span></button>}
+        </div>
+        <label className="task-deadline-filter">
+          <CalendarDays size={13} aria-hidden />
+          <select aria-label="Хугацааны төлөвөөр шүүх" value={activeStatus ?? ""} onChange={(e) => setStatus(e.target.value ? e.target.value as DeadlineState : null)}>
+            <option value="">Бүх хугацаа</option>
+            {statusTabs.map((x) => <option key={x.id} value={x.id}>{x.label} · {num(x.n)}</option>)}
+          </select>
+        </label>
+        {(activeRecord !== "all" || activeStatus || query) && <button type="button" className="task-clear" onClick={() => { setRecordFilter("all"); setStatus(null); setQuery(""); }}>Шүүлт цэвэрлэх <X size={12} aria-hidden /></button>}
+      </div>
+    {list.length === 0 ? (
+      <Empty text="Тохирох ажил олдсонгүй" />
+    ) : (
+      <>
+        <TaskHead showStaff={showTaskStaff} />
+        <ol className="task-list">
+          {list.map((t) => (
+            <TaskRow
+              key={t.no}
+              task={t}
+              today={today}
+              showStaff={showTaskStaff}
+              open={detail === t.no}
+              onOpen={() => setDetail((v) => (v === t.no ? null : t.no))}
+            />
+          ))}
+        </ol>
+      </>
+    )}
+
+      <footer className="task-footer" aria-live="polite"><span><b className="num">{num(list.length)}</b> / {num(pool.length)} ажил</span><span>Мөр сонгож дэлгэрэнгүйг харна</span></footer>
+    </section>
+  );
+
 
   return (
     <Shell>
-      {/* ---- 1. БҮТЭЦ, ХҮМҮҮС ---- */}
-      <Head text="Байгууллагын бүтэц" note={person ?? unitLabel} />
-      <div className="overflow-x-auto px-4 py-5">
-        <OrgChart
+      {/*
+        ⚠⚠ ХОЁР ХУУДАС ЭЭЛЖЛЭНЭ (хэрэглэгчийн шийдвэр, 2026-09-21).
+        Албан хаагч сонгогдсон үед МОД БҮХЭЛДЭЭ солигдож, тухайн хүний
+        хуудас нээгдэнэ; доорх ажлын жагсаалт нь түүний ажил болно.
+        Мод нь БҮТЦИЙН, хүний хуудас нь ГҮЙЦЭТГЭЛИЙН асуулт — хоёуланг
+        нэг дэлгэцэнд нийлүүлэхэд жагсаалт нь модны сүүл мэт болж,
+        хүний үзүүлэлт хаана ч гардаггүй байв.
+      */}
+      {person && people.get(person) ? (
+        <PersonPage
+          stat={people.get(person)!}
           units={units}
-          tree={tree}
-          staff={data.staff}
-          people={people}
-          selected={unit}
-          person={person}
-          onPick={pickUnit}
-          onPickPerson={pickPerson}
-        />
-      </div>
-
-      {/* ---- 2. АЖИЛ ---- */}
-      <Head
-        text="Гүйцэтгэх ажил"
-        note={person ?? unitLabel}
-        count={list.length}
-        action={
-          <div className="flex flex-wrap items-center justify-end gap-1">
-            {statusTabs.map((x) => (
-              <Toggle
-                key={x.id || "none"}
-                on={status === x.id}
-                onClick={() => setStatus(status === x.id ? null : x.id)}
-              >
-                {x.label}
-                <span className="num ml-1 opacity-60">{num(x.n)}</span>
-              </Toggle>
-            ))}
-
-            <Toggle on={onlyZero} onClick={() => setOnlyZero((v) => !v)} box>
-              Хэрэгжилт тэмдэглэгдээгүй
-            </Toggle>
-          </div>
-        }
-      />
-      {list.length === 0 ? (
-        <Empty text="Тохирох ажил олдсонгүй" />
+          unitId={data.staff.find((x) => x.name === person)?.unit ?? null}
+          onBack={() => { resetTaskView(); setPerson(null); }}
+          onUnit={goTo}
+        >
+          {taskSection}
+        </PersonPage>
       ) : (
         <>
-          <TaskHead showStaff={!person} />
-          <ol className="divide-y divide-line">
-            {list.map((t) => (
-              <TaskRow key={t.no} task={t} today={today} showStaff={!person} data={data} />
-            ))}
-          </ol>
+        {/* ---- 1. БҮТЭЦ, ХҮМҮҮС ---- */}
+        <section className="organization" aria-label="Байгууллагын бүтэц">
+          <header className="org-toolbar">
+            <div className="org-title"><Network size={17} aria-hidden /><h2>Байгууллагын бүтэц</h2></div>
+            <OrgPath units={units} focus={focus} onPick={goTo} />
+            {/* ⚠ Нэрийг нуухад СОНГОЛТ нь ч цуцлагдана — эс тэгвээс
+                сонгогдсон хүн хаана ч харагдахгүй атлаа доорх ажлын
+                жагсаалтыг шүүсээр үлдэнэ */}
+            <button
+              type="button"
+              className="org-toggle"
+              aria-pressed={showStaff}
+              onClick={() =>
+                setShowStaff((v) => {
+                  if (v) setPerson(null);
+                  return !v;
+                })
+              }
+            >
+              <User size={12} aria-hidden />
+              Албан хаагч
+            </button>
+            <button type="button" className="org-reset" disabled={unit === rootId && person == null && focus === rootId} onClick={() => goTo(rootId)} aria-label="Бүх бүтэц" title="Бүх бүтэц"><RotateCcw size={13} aria-hidden /></button>
+          </header>
+          {/* ⚠ Хэмжигчийн тайлбар ("Хэрэгжилт | Хугацааны явц") ХАСАГДСАН
+            (хэрэглэгчийн шийдвэр, 2026-09-22). Карт бүр "12% хэрэгжилт ·
+            72% хугацаа" гэж хоёр тоогоо өөрөө бичдэг тул тайлбар давхардал
+            байв. */}
+        <div className="org-guide"><span>Нэгж сонгож бүтцийг задлах, албан хаагч сонгож ажлуудыг харна.</span></div>
+          {/*
+            ⚠⚠ МӨЧИР РҮҮ ОРСОН ҮЕД ХОЁР БАГАНА (хэрэглэгчийн санаа,
+            2026-09-22: "Дотоод хяналт дээр дарлаа — бусад картууд
+            харагдахгүй, зөвхөн Дотоод хяналт зүүн тийш шилжээд нилээн
+            томорно; картын баруун талд тухайн албан хаагчийн ажлууд
+            гарч ирнэ"). Урьд нь мөчрийн дэд мод дэлгэцийн голд
+            дэлгэгдэж, ажил нь хаана ч гардаггүй байв.
+            ⚠ Картын АГУУЛГА хараахан эцэслээгүй — хэрэглэгч дараа нь
+            хэлнэ; одоо ердийн карт томорсон хэлбэрээр.
+          */}
+          <div className={cn("org-body", deep && "is-focus")}>
+            <OrgChart
+              units={units}
+              tree={tree}
+              staff={data.staff}
+              people={people}
+              selected={unit}
+              person={person}
+              showStaff={showStaff}
+              focus={focus}
+              onPick={pickUnit}
+              onPickHead={goTo}
+              onPickPerson={pickPerson}
+            />
+            {deep ? <div className="org-tasks">{taskSection}</div> : null}
+          </div>
+        </section>
+
         </>
       )}
+
+      {/*
+        ⚠⚠ АЖЛЫН ЖАГСААЛТ ЗӨВХӨН АЛБАН ХААГЧИЙН ХУУДСАНД (хэрэглэгчийн
+        шийдвэр, 2026-09-21: "ажлын модны доор байгаа тэр хэсгийг
+        delete"). Модны доор бүх хэлтсийн 130 мөр жагсаж, модыг
+        дэлгэцээс түлхдэг байв — мод нь БҮТЦИЙН асуулт тул хариултаа
+        өөрийнхөө карт дээр (ажлын тоо, хэрэгжилт) аль хэдийн хэлдэг.
+        ⚠ Ажил руу очих зам: мод → албан хаагч → түүний хуудас.
+      */}
+      {detailTask ? (
+        <TaskDrawer
+          task={detailTask}
+          today={today}
+          data={data}
+          onClose={() => setDetail(null)}
+        />
+      ) : null}
     </Shell>
+  );
+}
+
+/* --------------------------------------------------------------------------
+   АЛБАН ХААГЧИЙН ХУУДАС
+
+   ⚠⚠ АЖЛЫН ЖАГСААЛТ МОДНЫ ДООР ГАРАХАА БОЛИВ (хэрэглэгчийн шийдвэр,
+   2026-09-21: "хаагч дээр дарвал тэр доор гарч ирэхгүй, өөр page дээр
+   харагдана"). Хүн сонгоход мод нь БҮХЭЛДЭЭ солигдож, тухайн албан
+   хаагчийн хуудас нээгдэнэ.
+
+   Яагаад вэ: мод нь БҮТЦИЙН асуулт ("хэн хаана харьяалагддаг вэ"),
+   хүний хуудас нь ГҮЙЦЭТГЭЛИЙН асуулт ("энэ хүн юу хийж байна вэ").
+   Хоёуланг нэг дэлгэцэнд нийлүүлэхэд ажлын жагсаалт модны сүүл мэт
+   болж, хүний үзүүлэлт нь хаана ч гардаггүй байв.
+
+   ⚠ БУЦАХ ЗАМ ЗААВАЛ: хуудасны толгойд "Байгууллагын бүтэц" товч.
+   Үүнгүй бол хэрэглэгч модонд буцаж очих арга олохгүй.
+
+   ⚠ Албан хаагчийн ХАРЬЯАЛАЛ зам заагчаар гарна — тэр хүн модны аль
+   мөчирт байгааг хуудас нь өөрөө хэлэх ёстой.
+   -------------------------------------------------------------------------- */
+
+function PersonPage({
+  stat,
+  units,
+  unitId,
+  onBack,
+  onUnit,
+  children,
+}: {
+  stat: PersonStat;
+  units: Unit[];
+  /** Албан хаагчийн харьяалагдах нэгж */
+  unitId: string | null;
+  onBack: () => void;
+  onUnit: (id: string) => void;
+  /** Тэр хүний ажлын жагсаалт — картын БАРУУН талд */
+  children: React.ReactNode;
+}) {
+  const chain: Unit[] = [];
+  let at: string | null = unitId;
+  while (at) {
+    const u: Unit | undefined = units.find((x) => x.id === at);
+    if (!u) break;
+    chain.unshift(u);
+    at = u.parent;
+  }
+  const band = bandOf(stat.gap);
+
+  return (
+    <section className="person-page" aria-label="Албан хаагчийн хуудас">
+      <header className="person-head">
+        <button type="button" className="org-reset" onClick={onBack}>
+          <ChevronLeft size={12} aria-hidden />
+          Байгууллагын бүтэц
+        </button>
+        {chain.length ? (
+          <nav className="org-path" aria-label="Харьяалал">
+            {chain.map((u, i) => (
+              <React.Fragment key={u.id}>
+                {i ? (
+                  <ChevronRight size={11} aria-hidden className="org-path-sep" />
+                ) : null}
+                <button type="button" onClick={() => onUnit(u.id)}>
+                  {u.label}
+                </button>
+              </React.Fragment>
+            ))}
+            <ChevronRight size={11} aria-hidden className="org-path-sep" />
+            <button type="button" disabled aria-current="true">
+              {stat.name}
+            </button>
+          </nav>
+        ) : null}
+      </header>
+
+      {/*
+        ⚠⚠ МӨЧРИЙН ХАРАГДАЦТАЙ НЭГ ХЭВ (хэрэглэгч, 2026-09-22: хүн дээр
+        дарахад "хуучин" бүтэн өргөнтэй хуудас гарч байсныг заав).
+        Зүүнд хүний КАРТ (нэгжийн картын загвараар — `org-node`), баруунд
+        ажлын жагсаалт. Нэгж, хүн хоёр дээр нэг л хэлбэр гарна.
+      */}
+      <div className="org-body is-focus">
+        <div className="org-chart is-deep person-chart">
+          <div className="org-node person-node">
+            <div className="person-hero">
+              <span className="person-avatar" aria-hidden>
+                <User size={20} strokeWidth={1.5} />
+              </span>
+              <span className="person-id">
+                <span className="org-node-name" title={stat.name}>
+                  {stat.name}
+                </span>
+                {stat.position ? <span className="person-position">{stat.position}</span> : null}
+                {chain.length ? (
+                  <span className="person-unit">
+                    <Layers size={10} aria-hidden />
+                    {chain[chain.length - 1].label}
+                  </span>
+                ) : null}
+              </span>
+            </div>
+
+            {/*
+              ⚠⚠ КАРТ ЭНГИЙН (хэрэглэгч, 2026-09-22: "ойлгомжгүй байна").
+              Өмнөх хувилбар цагираг, хэмжигч, зөрүүний тэмдэг, зурвас,
+              гурван нүд гээд ТАВАН хийсвэр дүрстэй байсан — тус бүр нь
+              тайлбар шаардаж байв. Одоо хоёр блок, дүрс нь хоёрхон:
+              1. ХЭРЭГЖИЛТ БА ХУГАЦАА — хоёр тоо, нэг хэмжигч, доор нь
+                 зөрүүг ЭНГИЙН ӨГҮҮЛБЭРЭЭР ("хугацааны явцаас 24 пунктээр
+                 бага"). "Хоцорсон" гэж шийдэхгүй, зөвхөн баримт.
+              2. АЖЛЫН БАЙДАЛ — дөрвөн мөр, мөр бүр бүтэн шошго, тоо ба
+                 нийтэд эзлэх хувийн нимгэн зурвас. Нэг хэлбэр давтагдах
+                 тул сурах шаардлагагүй.
+            */}
+            {/*
+              ⚠⚠ "ХУГАЦААНЫ ЯВЦ" ГЭДЭГ ОЙЛГОЛТ ӨӨРӨӨ ХИЙСВЭР (хэрэглэгч,
+              2026-09-22: "энийг ерөөсөө ойлгохгүй юм"). Хоёр том хувь,
+              bullet хэмжигч, "пунктээр бага" гэсэн өгүүлбэр — гурвуулаа
+              тайлбар шаардаж байв. Одоо:
+              · хоёр ЗЭРЭГЦЭЭ ЗУРВАС (платформын мөрөн диаграмтай нэг
+                хэлбэр): дээд нь хийгдсэн ажил, доод нь өнгөрсөн хугацаа —
+                урт нь шууд харьцуулагдана, тайлбар хэрэггүй;
+              · хугацаа нь ОГНООГООР ил: "2026.01.01 – 2026.12.31";
+              · доор нь нэг өгүүлбэр: "Хугацааны 73% нь өнгөрсөн, ажлын
+                0% нь хэрэгжсэн байна."
+            */}
+            <div className="person-block">
+              <span className="eyebrow">Гүйцэтгэл</span>
+              <div className="person-bars">
+                <div>
+                  <span className="person-bars-label">Хийгдсэн ажил</span>
+                  <span className="num person-bars-val" style={{ color: stat.progress == null ? undefined : band.tone }}>
+                    {stat.progress == null ? "—" : `${num(stat.progress, 0)}%`}
+                  </span>
+                  <span className="person-bars-track" aria-hidden>
+                    <span style={{ width: `${Math.min(stat.progress ?? 0, 100)}%`, background: band.tone }} />
+                  </span>
+                </div>
+                <div>
+                  <span className="person-bars-label">Өнгөрсөн хугацаа</span>
+                  <span className="num person-bars-val">{num(stat.elapsed, 0)}%</span>
+                  <span className="person-bars-track" aria-hidden>
+                    <span className="is-time" style={{ width: `${Math.min(stat.elapsed, 100)}%` }} />
+                  </span>
+                </div>
+              </div>
+              {stat.start && stat.end ? (
+                <p className="person-dates">
+                  <span>Ажлын хугацаа</span>
+                  <span className="num">{dots(stat.start)} – {dots(stat.end)}</span>
+                </p>
+              ) : null}
+              <p className="person-note">{gapText(stat)}</p>
+            </div>
+
+            <div className="person-block">
+              <div className="person-block-head">
+                <span className="eyebrow">Ажлын байдал</span>
+                <span className="num person-big">{num(stat.n)} ажил</span>
+              </div>
+              <PersonRows stat={stat} />
+            </div>
+          </div>
+        </div>
+        <div className="org-tasks">{children}</div>
+      </div>
+    </section>
+  );
+}
+
+/**
+ * Хэрэгжилт ба хугацааны явцын зөрүүг ЭНГИЙН ӨГҮҮЛБЭРЭЭР. "Хоцорсон"
+ * гэж ШИЙДЭХГҮЙ (явц нь жигд гэсэн таамаг дээрх тооцоо) — зөвхөн хоёр
+ * тооны зөрүүг хэлнэ, дүгнэлт хүнийх.
+ */
+function gapText(stat: PersonStat): string {
+  const t = num(stat.elapsed, 0);
+  if (stat.progress == null)
+    return `Хугацааны ${t}% нь өнгөрсөн; гүйцэтгэлийн мэдээлэл оруулаагүй тул хэрэгжилт тооцоогүй.`;
+  return `Хугацааны ${t}% нь өнгөрсөн, ажлын ${num(stat.progress, 0)}% нь хэрэгжсэн байна.`;
+}
+
+/** ISO огноог "2026.01.01" хэлбэрт */
+function dots(iso: string): string {
+  return iso.replaceAll("-", ".");
+}
+
+/**
+ * Ажлын байдал — дөрвөн мөр, нэг хэлбэр: шошго · тоо · нийтэд эзлэх
+ * хувийн зурвас. Эхний гурав нь нийлээд яг N (хэрэгжилтээ хэрхэн
+ * бүртгүүлснээр), дөрөв дэх нь төлөв. Тэг мөр ч харагдана —
+ * "оруулаагүй 0" гэдэг нь өөрөө мэдээлэл.
+ * ⚠ Өнгө = утга: 0% мөр `--clay`, оруулаагүй мөр зураастай, бусад `--tone`.
+ */
+function PersonRows({ stat }: { stat: PersonStat }) {
+  const some = Math.max(0, stat.n - stat.zero - stat.missing);
+  const rows = [
+    { label: "Хэрэгжилт бүртгэсэн", n: some, cls: "" },
+    { label: "Хэрэгжилт 0% гэж бүртгэсэн", n: stat.zero, cls: "is-zero" },
+    { label: "Гүйцэтгэлийн мэдээлэл оруулаагүй", n: stat.missing, cls: "is-missing" },
+    { label: "Төлөв тэмдэглэсэн", n: stat.stated, cls: "" },
+  ];
+  return (
+    <dl className="person-rows">
+      {rows.map((x) => (
+        <div key={x.label}>
+          <dt>{x.label}</dt>
+          <dd className="num">
+            {num(x.n)}
+            <small> / {num(stat.n)}</small>
+          </dd>
+          <span className={cn("person-rows-bar", x.cls)} aria-hidden>
+            <span style={{ width: `${stat.n ? (x.n / stat.n) * 100 : 0}%` }} />
+          </span>
+        </div>
+      ))}
+    </dl>
   );
 }
 
 /* -------------------------------------------------------------------------- */
 
 function Shell({ children }: { children: React.ReactNode }) {
+  /* ⚠ ГАДНА ГҮЙЛГҮҮРГҮЙ (хэрэглэгчийн хүсэлт, 2026-09-22: "энд байгаа
+     scroll-ыг устгаад дотор нь оруул"). Бүрхүүл өндрөө барьж хөдлөхгүй;
+     толгой, зам заагч үргэлж харагдаж, зөвхөн модны бие ба ажлын
+     жагсаалт тус тусдаа гүйнэ (`.org-body`, `.org-tasks`). */
   return (
-    <div className="h-full min-h-0 overflow-y-auto rounded-xs border border-line bg-paper-2">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-xs border border-line bg-paper-2">
       {children}
     </div>
   );
 }
 
-function Head({
-  text,
-  note,
-  count,
-  action,
-}: {
-  text: string;
-  note?: string;
-  count?: number;
-  action?: React.ReactNode;
-}) {
-  return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 border-y border-line bg-paper-3 px-4 py-2 first:border-t-0">
-      <span className="eyebrow shrink-0">{text}</span>
-      {count != null ? (
-        <span className="num shrink-0 text-[10.5px] text-ink-3">{num(count)}</span>
-      ) : null}
-      {note ? (
-        <span className="min-w-0 flex-1 basis-24 truncate text-[10.5px] text-ink-3">
-          {note}
-        </span>
-      ) : (
-        <span className="flex-1" />
-      )}
-      {action}
-    </div>
-  );
-}
-
-/** Нэг албан хаагчийн нэгтгэсэн үзүүлэлт */
 type PersonStat = {
   name: string;
   position: string;
   n: number;
-  progress: number;
+  progress: number | null;
   elapsed: number;
-  gap: number;
+  gap: number | null;
   zero: number;
+  missing: number;
   stated: number;
+  /** Ажлуудын хамгийн эрт эхлэх, хамгийн сүүлд дуусах огноо (ISO) */
+  start: string;
+  end: string;
 };
 
 /* --------------------------------------------------------------------------
@@ -350,6 +695,32 @@ type PersonStat = {
    таслагдана.
    -------------------------------------------------------------------------- */
 
+/* --------------------------------------------------------------------------
+   МОД — ХОЁР ШАТ, ГҮНЗГИЙРЭХ ЗАМААР
+
+   ⚠⚠ ГУРАВ ДАХЬ ХУВИЛБАР (хэрэглэгчийн санаа, 2026-09-21: "зүгээр л
+   dynamic болгочихвол болох юм байна — Санхүү, төсөв карт дээр дарвал
+   одоогийн бүтэц биш зураг дээрх шиг бүтэцтэй болно").
+
+   Өмнөх хоёр нь хоёулаа БҮХ ШАТЫГ ЗЭРЭГ зурахыг оролдож бүтэлгүйтсэн:
+     (1) бүгд хэвтээ — мод хажуу тийш хэдэн мянган пиксел сунаж,
+         гүйлгүүргүйгээр уншигдахгүй;
+     (2) гүний шат нь догол мөрт жагсаалт — нэг бүлэг ганцаараа доошоо
+         сунаж, хажуугийн гурав нь хоосон үлддэг.
+
+   Шийдэл нь шатыг ЦӨӨРҮҮЛЭХ: дэлгэц дээр ҮРГЭЛЖ ХОЁР шат л байна —
+   сонгосон нэгж дээрээ, түүний ШУУД харьяа нэгжүүд доороо эгнэнэ.
+   Хүүхэдтэй карт дээр товшиход тэр нь дээд байрандаа гарч, өөрийн
+   хүүхдүүдээ дэлгэнэ. Гүн хэдэн ч шат байсан зураг нь ижил өндөртэй.
+
+   ⚠ Буцах зам нь ЗАМ ЗААГЧ (`org-path`): хаана байгаагаа харуулаад,
+   аль ч шат руу нэг товшилтоор буцаана. Үүнгүй бол гүнзгийрсэн
+   хэрэглэгч "Бүх бүтэц" дээр дарж эхнээс нь эхлэхээс өөр аргагүй.
+
+   ⚠ ХҮҮХЭДГҮЙ нэгж дээр товшиход ГҮНЗГИЙРЭХГҮЙ — зөвхөн сонгогдоно.
+   Эс тэгвээс дэлгэц хоосон болж, хэрэглэгч замаа алдана.
+   -------------------------------------------------------------------------- */
+
 function OrgChart({
   units,
   tree,
@@ -357,7 +728,10 @@ function OrgChart({
   people,
   selected,
   person,
+  showStaff,
+  focus,
   onPick,
+  onPickHead,
   onPickPerson,
 }: {
   units: Unit[];
@@ -366,80 +740,131 @@ function OrgChart({
   people: Map<string, PersonStat>;
   selected: string;
   person: string | null;
+  showStaff: boolean;
+  /** Хүүхдүүд нь дэлгэгдэж буй нэгж */
+  focus: string;
   onPick: (id: string) => void;
+  /** Дээд картын товшилт — гүнзгийрэлтийг хөндөхгүй, зөвхөн сонгоно */
+  onPickHead: (id: string) => void;
   onPickPerson: (name: string) => void;
 }) {
-  const root = units.find((u) => u.parent === null);
-  if (!root) return null;
+  const head = units.find((u) => u.id === focus);
+  if (!head) return null;
+  const kids = units.filter((u) => u.parent === focus);
+  const countKids = (id: string) => units.filter((u) => u.parent === id).length;
+  /** Үндэс дээр хоёр шат, мөчир дотор бүтэн задаргаа */
+  const deep = head.parent !== null;
+
   return (
-    <div className="flex min-w-max justify-center">
-      <Branch
-        id={root.id}
-        units={units}
-        tree={tree}
-        staff={staff}
-        people={people}
-        selected={selected}
-        person={person}
-        onPick={onPick}
-        onPickPerson={onPickPerson}
-      />
+    <div className={cn("org-chart", deep && "is-deep")}>
+      {/* ⚠ Гүйлтийн хүрээ ба агуулга нь ХОЁР ӨӨР элемент байна:
+          нэг элемент зэрэг гүйж, зэрэг агуулгынхаа өргөнөөр тэлж
+          чадахгүй. Дээд карт нь энэ давхаргын ДОТОР голлоно */}
+      <div className="org-canvas">
+        <div className="org-root">
+          <NodeCard
+            unit={head}
+            tree={tree}
+            staff={staff}
+            people={people}
+            on={selected === head.id}
+            person={person}
+            showStaff={showStaff}
+            kids={0}
+            depth={depthOf(head.id, units)}
+            onPick={() => onPickHead(head.id)}
+            onPickPerson={onPickPerson}
+          />
+        </div>
+        {kids.length ? (
+          <div className="org-branches">
+            {kids.map((u) => (
+              <div key={u.id} className="org-branch">
+                {/*
+                  ⚠ Мөчир рүү орсон үед хүүхдүүд нь том картын ДООР босоо
+                  цуварна (2026-09-22): дэлгэцийн баруун тал ажлын
+                  жагсаалтынх болсон тул хэвтээ тарах зай байхгүй. Товшиход
+                  цааш гүнзгийрнэ.
+                */}
+                <NodeCard
+                  unit={u}
+                  tree={tree}
+                  staff={staff}
+                  people={people}
+                  on={selected === u.id}
+                  person={person}
+                  showStaff={showStaff}
+                  kids={countKids(u.id)}
+                  depth={depthOf(u.id, units)}
+                  onPick={() => onPick(u.id)}
+                  onPickPerson={onPickPerson}
+                />
+              </div>
+            ))}
+          </div>
+        ) : null}
+      </div>
     </div>
   );
 }
 
-function Branch(props: {
-  id: string;
+/** Зам заагч — үндэснээс сонгосон нэгж хүртэл */
+function OrgPath({
+  units,
+  focus,
+  onPick,
+}: {
   units: Unit[];
-  tree: ReturnType<typeof rollup>;
-  staff: Staff[];
-  people: Map<string, PersonStat>;
-  selected: string;
-  person: string | null;
+  focus: string;
   onPick: (id: string) => void;
-  onPickPerson: (name: string) => void;
 }) {
-  const { id, units } = props;
-  const kids = units.filter((u) => u.parent === id);
+  const chain: Unit[] = [];
+  let at: string | null = focus;
+  while (at) {
+    const u: Unit | undefined = units.find((x) => x.id === at);
+    if (!u) break;
+    chain.unshift(u);
+    at = u.parent;
+  }
   return (
-    <div className="flex flex-col items-center">
-      <NodeCard
-        unit={units.find((u) => u.id === id)!}
-        tree={props.tree}
-        staff={props.staff}
-        people={props.people}
-        on={props.selected === id}
-        person={props.person}
-        onPick={() => props.onPick(id)}
-        onPickPerson={props.onPickPerson}
-      />
-
-      {kids.length ? (
-        <>
-          {/* Эцгээс доош унжаа */}
-          <span aria-hidden className="h-4 w-px bg-line-2" />
-          <div className="flex items-start">
-            {kids.map((k, i) => (
-              <div key={k.id} className="flex flex-col items-center px-1.5">
-                {/* Хэвтээ төмөр + хүүхэд рүү унжаа */}
-                <span aria-hidden className="relative h-4 w-full">
-                  <span
-                    className="absolute top-0 h-px bg-line-2"
-                    style={{
-                      left: i === 0 ? "50%" : 0,
-                      right: i === kids.length - 1 ? "50%" : 0,
-                    }}
-                  />
-                  <span className="absolute top-0 left-1/2 h-4 w-px bg-line-2" />
-                </span>
-                <Branch {...props} id={k.id} />
-              </div>
-            ))}
-          </div>
-        </>
-      ) : null}
-    </div>
+    <nav className="org-path" aria-label="Бүтцийн зам">
+      {chain.map((u, i) => (
+        <React.Fragment key={u.id}>
+          {i ? (
+            <ChevronRight size={11} aria-hidden className="org-path-sep" />
+          ) : null}
+          <button
+            type="button"
+            onClick={() => onPick(u.id)}
+            aria-current={i === chain.length - 1 ? "true" : undefined}
+            disabled={i === chain.length - 1}
+          >
+            {u.label}
+          </button>
+        </React.Fragment>
+      ))}
+    </nav>
   );
+}
+
+/*
+  ⚠⚠ ЗАНГИЛААНЫ ТЭМДЭГ нь ТҮВШНИЙГ хэлнэ, агуулгыг БИШ (2026-09-21).
+  Хэлтсийн таксономи нь хэлтэс → бүлэг → дэд бүлэг → зардлын ангилал
+  гэсэн дөрвөн шатлалтай бөгөөд ГҮН нь баримт мөн. Харин "Цалин"-д
+  хэтэвч, "Тендер"-т алх зэрэг тэмдэг өгөх нь утгыг ТААМАГЛАХ болно —
+  эх сурвалж зангилааны төрлийг хэлээгүй.
+*/
+const LEVEL_ICONS = [Building2, Network, Layers] as const;
+
+/** Зангилааны шат — үндэс нь 0 */
+function depthOf(id: string, units: Unit[]): number {
+  let d = 0;
+  let at = units.find((u) => u.id === id)?.parent ?? null;
+  while (at) {
+    d += 1;
+    at = units.find((u) => u.id === at)?.parent ?? null;
+  }
+  return d;
 }
 
 function NodeCard({
@@ -449,6 +874,9 @@ function NodeCard({
   people,
   on,
   person,
+  showStaff,
+  kids,
+  depth,
   onPick,
   onPickPerson,
 }: {
@@ -458,6 +886,11 @@ function NodeCard({
   people: Map<string, PersonStat>;
   on: boolean;
   person: string | null;
+  showStaff: boolean;
+  /** Шууд харьяа НЭГЖИЙН тоо — товшиход гүнзгийрнэ гэдгийн дохио */
+  kids: number;
+  /** Модны шат — тэмдэг үүнээс гарна */
+  depth: number;
   onPick: () => void;
   onPickPerson: (name: string) => void;
 }) {
@@ -465,24 +898,24 @@ function NodeCard({
   const n = r?.tasks.length ?? 0;
   const mine = staff
     .filter((x) => x.unit === unit.id)
-    .map((x) => people.get(x.name))
-    .filter((x): x is PersonStat => Boolean(x))
-    .sort((a, b) => b.gap - a.gap || b.n - a.n);
+    .map((x): PersonStat => people.get(x.name) ?? { name: x.name, position: x.position, n: 0, progress: null, elapsed: 0, gap: null, zero: 0, missing: 0, stated: 0, start: "", end: "" })
+    .sort((a, b) => (b.gap ?? 0) - (a.gap ?? 0) || b.n - a.n);
   const band = bandOf(n ? (r?.elapsed ?? 0) - (r?.progress ?? 0) : null);
 
   return (
     <div
       className={cn(
-        "w-[228px] overflow-hidden rounded-xs border bg-paper transition-colors",
-        on ? "border-(--tone)" : "border-line",
+        "org-node",
+        on && !person && "is-selected",
+        mine.some((x) => x.name === person) && "has-selected-person",
       )}
     >
-      <button onClick={onPick} className="block w-full px-2.5 py-2 text-left">
-        <div className="flex items-baseline gap-1.5">
+      <button type="button" onClick={onPick} aria-pressed={on && !person} className="org-node-heading">
+        <div className="org-node-top">
           {unit.no ? (
             <span
               className={cn(
-                "num shrink-0 text-[10px]",
+                "org-number num",
                 on ? "text-(--tone)" : "text-ink-3",
               )}
             >
@@ -491,24 +924,35 @@ function NodeCard({
           ) : null}
           <span
             className={cn(
-              "min-w-0 flex-1 truncate text-[11.5px] leading-snug",
+              "org-node-name min-w-0 flex-1 text-[11.5px] leading-snug",
               on ? "font-medium text-(--tone)" : "text-ink",
             )}
             title={unit.label}
           >
             {unit.label}
           </span>
-          <span className="num shrink-0 text-[10px] text-ink-3">{num(n)}</span>
+          {/* ⚠ Тэмдэг нь ТҮВШНИЙ тэмдэглэгээ — баруун дээд буланд,
+              сонгогдсон үед хэлтсийн өнгөөр асна */}
+          <span className="org-node-icon" aria-hidden>
+            {React.createElement(
+              LEVEL_ICONS[Math.min(depth, LEVEL_ICONS.length - 1)],
+              { size: 14, strokeWidth: 1.7 },
+            )}
+          </span>
+        </div>
+        <div className="org-node-summary">
+          <span className="org-work-count"><strong className="num">{num(n)}</strong><span>ажил</span></span>
+          <div className="org-summary-context">
+            {mine.length ? <span title="Шууд харьяалах албан хаагч"><Users size={12} aria-hidden />Шууд харьяалах: <b className="num">{num(mine.length)}</b></span> : null}
+            {kids ? <span className="org-node-kids"><Network size={12} aria-hidden />Дэд бүтэц <b className="num">{num(kids)}</b><ChevronRight size={12} aria-hidden /></span> : null}
+          </div>
         </div>
 
         {n ? (
           <>
-            <div className="mt-1.5">
-              <Bullet progress={r?.progress ?? 0} elapsed={r?.elapsed ?? 0} />
-            </div>
-            <div className="num mt-1 text-[10px]" style={{ color: band.tone }}>
-              {num(r?.progress ?? 0, 0)}
-              <span className="text-ink-3"> / {num(r?.elapsed ?? 0, 0)} хувь</span>
+            <div className="org-progress">
+              <div className="org-progress-labels"><span title="Гүйцэтгэл бүртгэсэн ажлуудын дундаж">Хэрэгжилт <strong className="num" style={{ color: band.tone }}>{r?.progress == null ? "—" : `${num(r.progress, 0)}%`}</strong></span><span>Хугацаа <b className="num">{num(r?.elapsed ?? 0, 0)}%</b></span></div>
+              {r?.progress != null && <Bullet progress={r.progress} elapsed={r.elapsed} />}
             </div>
 
             {/*
@@ -516,22 +960,39 @@ function NodeCard({
               вэ. Дундаж хэрэгжилт нь үүнийг нуудаг — цөөн ажил өндөр
               хувьтай байхад л дундаж өснө.
             */}
-            {r && r.zero ? (
-              <div className="num mt-0.5 text-[9.5px] text-ochre">
-                Хэрэгжилт тэмдэглэгдээгүй {num(r.zero)}
+            {r && r.missing ? (
+              <div className="org-pending">
+                <span>Гүйцэтгэл оруулаагүй</span><strong className="num">{num(r.missing)}</strong>
               </div>
             ) : null}
           </>
         ) : (
-          <div className="hatch mt-1.5 rounded-xs border border-dashed border-line-2 px-1.5 py-1 text-[9.5px] leading-snug text-ink-3">
+          /*
+            ⚠⚠ ХОЁР ӨӨР ХООСОН ТӨЛӨВ (2026-09-10-ны шийдвэр). Албан
+            хаагчтай атлаа ажилгүй мөчир нь "ажил бүртгэгдээгүй" —
+            төлөвлөгөөний БАЙДАЛ. Харин албан хаагч ч, ажил ч байхгүй
+            зангилаанууд (Цалин, Тендер, Нийслэлийн төсөв …) нь ӨӨР эх
+            сурвалжийнх: тэдний дата хараахан ИРЭЭГҮЙ. Хоёуланг нь нэг
+            бичвэрээр хэлбэл дата ирээгүйг "ажил алга" гэж ХУДЛАА
+            мэдээлнэ.
+            ⚠ `.hatch` тасархай блок нь платформын хоосон төлөвийн
+            дүрэм — "хоосон" биш "хүлээгдэж буй" гэдгийг дүрсээр хэлнэ.
+          */
+          <div
+            className={cn(
+              "org-empty text-[10px] leading-snug text-ink-3",
+              !mine.length &&
+                "hatch rounded-xs border border-dashed border-line-2 px-1.5 py-1",
+            )}
+          >
             {mine.length ? "Ажил бүртгэгдээгүй" : "Мэдээлэл хүлээгдэж байна"}
           </div>
         )}
       </button>
 
-      {/* Албан хаагч — зангилааны ДОТОР */}
-      {mine.length ? (
-        <div className="divide-y divide-line border-t border-line">
+      {/* Албан хаагч — зангилааны ДОТОР, товч дарсан үед */}
+      {showStaff && mine.length ? (
+        <div className="org-staff-list">
           {mine.map((x) => (
             <PersonRow
               key={x.name}
@@ -565,34 +1026,39 @@ function PersonRow({
   const band = bandOf(row.gap);
   return (
     <button
+      type="button"
+      aria-pressed={on}
       onClick={onPick}
       title={`${row.name} · ${row.position}`}
       className={cn(
-        "relative block w-full px-2.5 py-1.5 text-left transition-colors",
+        "org-person relative block w-full text-left transition-colors",
         on ? "bg-(--tone)/10" : "hover:bg-paper-hi",
       )}
     >
       {on ? (
         <span aria-hidden className="absolute inset-y-0 left-0 w-[2px] bg-(--tone)" />
       ) : null}
-      <div className="flex items-baseline gap-1.5">
-        <User size={9} className="shrink-0 text-ink-3" />
+      <div className="flex items-center gap-1.5">
+        <span className="org-person-icon" aria-hidden="true">
+          <UserRound size={14} strokeWidth={1.7} />
+        </span>
         <span
           className={cn(
-            "min-w-0 flex-1 truncate text-[10.5px] leading-snug",
+            "min-w-0 flex-1 text-[11px] leading-snug",
             on ? "font-medium text-ink" : "text-ink-2",
           )}
         >
           {row.name}
         </span>
-        <span className="num shrink-0 text-[9.5px] text-ink-3">{num(row.n)}</span>
+        <span className="num shrink-0 text-[10px] text-ink-3">{num(row.n)} ажил</span>
       </div>
-      <div className="mt-1 flex items-center gap-1.5 pl-[15px]">
+      {row.position ? <p className="org-position">{row.position}</p> : null}
+      {row.n && row.progress != null ? <div className="org-person-progress mt-1.5 flex items-center gap-1.5">
         <Bullet progress={row.progress} elapsed={row.elapsed} thin />
         <span className="num shrink-0 text-[9.5px]" style={{ color: band.tone }}>
-          {num(row.progress, 0)}
+          {num(row.progress, 0)}%
         </span>
-      </div>
+      </div> : <p className="org-position">{row.n ? "Гүйцэтгэл оруулаагүй" : "Ажил бүртгэгдээгүй"}</p>}
     </button>
   );
 }
@@ -640,13 +1106,10 @@ function Bullet({
 /* --------------------------------------------------------------------------
    ГҮЙЦЭТГЭХ АЖЛЫН ЖАГСААЛТ
 
-   Мөр бүр ГУРВАН зүйлд хариулна: юу хийх ёстой вэ, хэр хийгдсэн бэ,
-   хугацаанаасаа хэр хоцорч байна вэ.
-
-   БАГАНЫН ТОЛГОЙ ЗААВАЛ. Хэмжигчийн доторх босоо зураас нь хугацааны
-   явц гэдгийг тайлбаргүйгээр таах боломжгүй байв. Тиймээс баганад
-   "Хэрэгжилт / хугацааны явц" гэсэн нэр өгч, ХОЁУЛАНГ нь тоогоор
-   давхар бичив — зураас нь юу болох нь хоёр тооноос өөрөө уншигдана.
+   Мөр нь ажлын нэр, бүртгэсэн хэрэгжилт, дуусах огноо, огнооноос
+   тооцсон төлөвийг салгаж харуулна. Хугацааны явц ба эх сурвалжийн
+   гараар бичсэн төлөв нь дэлгэрэнгүй самбарт байна. Хоосон гүйцэтгэл
+   нь 0% биш; хоосон төлөвөөс "Хугацаандаа" гэсэн дүгнэлт гаргахгүй.
 
    Мөр нь дэлгэрдгийг ХЭЛЭХ ёстой: урьд нь бүтэн мөр нь товч байсан ч
    ямар ч тэмдэг байгаагүй тул товшиж болохыг мэдэх аргагүй байв.
@@ -656,212 +1119,151 @@ function Bullet({
    бүтнээр нь дэлгэрэнгүйд гаргана.
    -------------------------------------------------------------------------- */
 
-/**
- * Мөр ба толгойн НЭГ сүлжээ.
- *
- * Хоёр тусад нь бичвэл багана эрт орой хэзээ нэгэн цагт зөрнө. Tailwind
- * ангийн нэрийг эх кодоос шууд уншдаг тул бүтэн мөрөөр бичигдэнэ.
- */
-const GRID =
-  "grid gap-x-2 px-4 grid-cols-[24px_1fr_18px] md:grid-cols-[24px_1fr_168px_128px_18px]";
-
 function TaskHead({ showStaff }: { showStaff: boolean }) {
   return (
-    <div
-      className={cn(
-        GRID,
-        "border-b border-line bg-paper py-1.5 text-[9.5px] leading-none tracking-[0.06em] text-ink-3 uppercase",
-      )}
-    >
-      <span className="num">№</span>
-      <span className="truncate">
-        Гүйцэтгэх ажил{showStaff ? " · албан хаагч" : ""}
-      </span>
-      <span className="hidden md:col-start-3 md:block">
-        Хэрэгжилт / хугацааны явц, хувь
-      </span>
-      <span className="hidden md:col-start-4 md:block">Төлөв</span>
+    <div className="task-grid task-columns" aria-hidden="true">
+      <span>№</span>
+      <span>Гүйцэтгэх ажил{showStaff ? " · албан хаагч" : ""}</span>
+      <span>Хэрэгжилт</span>
+      <span>Дуусах огноо</span>
+      <span>Хугацааны төлөв</span>
       <span />
     </div>
   );
 }
 
-function TaskRow({
-  task,
-  today,
-  showStaff,
-  data,
-}: {
+function DeadlineBadge({ state }: { state: DeadlineState }) {
+  return <span className={`task-status is-${state}`}><span aria-hidden="true" />{DEADLINE_LABELS[state]}</span>;
+}
+
+function TaskProgress({ value }: { value: number | null }) {
+  return value == null ? (
+    <span className="task-missing">Мэдээлэл оруулаагүй</span>
+  ) : (
+    <span className={cn("task-progress-value", value >= 100 && "is-complete")}>
+      <strong className="num">{num(value, 0)}<small>%</small></strong>
+      <span className="task-progress-track" aria-hidden="true"><span style={{ width: `${Math.max(0, Math.min(value, 100))}%` }} /></span>
+    </span>
+  );
+}
+
+function TaskRow({ task, today, showStaff, open, onOpen }: {
   task: Task;
   today: number;
   showStaff: boolean;
-  data: PlanData;
+  open: boolean;
+  onOpen: () => void;
 }) {
-  const [open, setOpen] = React.useState(false);
-  const el = elapsed(task, today) ?? 0;
-  const progress = task.progress ?? 0;
-  const band = bandOf(gapOf(task, today));
-  const cat = data.categories.find((c) => c.id === task.category);
-
-  /*
-    Дуусах хугацааг ЗӨВХӨН оны эцсээс өмнөх ажилд харуулна. 130 ажлын
-    127 нь 12 сард дуусдаг тул тусдаа багана болговол бараг бүхэлдээ
-    давтагдсан утга болно; харин 5, 8 сард дуусах гурав нь өнөөдрийн
-    байдлаар аль хэдийн хугацаа нь өнгөрсөн тул тэднийг л тэмдэглэнэ.
-  */
-  const endDay = dayOf(task.end);
-  /* Дууссан ажилд анхааруулах өнгө тавихгүй — хугацаа өнгөрсөн нь
-     зөвхөн гүйцэтгэл дутуу үлдсэн үед л асуудал */
-  const past = endDay != null && endDay < today && progress < 100;
-
+  const progress = recordedProgress(task);
+  const state = deadlineOf(task, today);
   return (
     <li>
-      <button
-        onClick={() => setOpen((v) => !v)}
-        aria-expanded={open}
-        className={cn(
-          GRID,
-          "w-full py-2 text-left transition-colors hover:bg-paper-hi",
-          open && "bg-paper-hi",
-        )}
-      >
-        <span className="num pt-[2px] text-[10px] text-ink-3">{task.no}</span>
-
-        <span className="min-w-0">
-          <span className="line-clamp-2 text-[11.5px] leading-snug text-ink">
-            {task.text}
-          </span>
-          <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
-            {showStaff ? (
-              <span className="text-[10px] leading-none text-ink-3">{task.staff}</span>
-            ) : null}
-            {past ? (
-              <span className="num rounded-xs border border-ochre/45 px-1 py-[1px] text-[9.5px] leading-none text-ochre">
-                Хугацаа дууссан · {task.end}
-              </span>
-            ) : null}
-          </span>
+      <button type="button" onClick={onOpen} aria-expanded={open} aria-controls={open ? "task-detail" : undefined}
+        data-task-no={task.no} className={cn("task-grid task-row", open && "is-open")}>
+        <span className="task-number num">{task.no}</span>
+        <span className="task-title-cell">
+          <span className="task-name">{task.text}</span>
+          {showStaff && <span className="task-assignee"><UserRound size={11} aria-hidden />{task.staff}</span>}
         </span>
-
-        {/*
-          Хэмжигч ба ХОЁР тоо. Зөвхөн хэрэгжилтийг бичвэл хэмжигчийн
-          босоо зураас юу болох нь тодорхойгүй үлдэнэ.
-        */}
-        <span className="col-start-2 mt-2 flex items-center gap-2 md:col-start-3 md:mt-0 md:self-center">
-          <Bullet progress={progress} elapsed={el} thin />
-          <span className="num shrink-0 text-[10.5px] leading-none">
-            <span style={{ color: band.tone }}>{num(progress)}</span>
-            <span className="text-ink-3"> / {num(el, 0)}</span>
-          </span>
+        <span className="task-progress-cell">
+          <span className="task-mobile-label">Хэрэгжилт</span>
+          <TaskProgress value={progress} />
         </span>
-
-        <span className="col-start-2 mt-1.5 text-[10px] leading-none md:col-start-4 md:mt-0 md:self-center">
-          {task.status ? (
-            <span className="text-ink-2">{task.status}</span>
-          ) : (
-            /* 130 ажлын 84-д төлөв хоосон. Урт өгүүлбэрийг давтвал
-               жагсаалт бүхэлдээ тэр бичвэрээр дүүрнэ */
-            <span className="text-ink-3">—</span>
-          )}
+        <span className="task-due-cell">
+          <span className="task-mobile-label">Дуусах огноо</span>
+          <span className="num">{dayOf(task.end) == null ? "—" : task.end.replaceAll("-", ".")}</span>
         </span>
-
-        <ChevronDown
-          size={13}
-          className={cn(
-            "col-start-3 row-start-1 mt-[1px] shrink-0 text-ink-3 transition-transform md:col-start-5 md:self-center",
-            open && "rotate-180",
-          )}
-        />
+        <span className="task-status-cell"><DeadlineBadge state={state} /></span>
+        <ChevronRight size={14} className="task-chevron" aria-hidden />
       </button>
-
-      {open ? (
-        <dl className="space-y-1.5 border-t border-line bg-paper px-4 py-2.5">
-          {/* Хураагдсан нэрийг бүтнээр нь */}
-          <Field k="Гүйцэтгэх ажил" v={task.text} />
-          <Field k="Албан хаагч" v={task.staff} />
-          <Field k="Ажлын ангилал" v={cat ? cat.label : "Тэмдэглэгдээгүй"} />
-          <Field k="Хэмжих үзүүлэлт" v={task.measure || "—"} />
-          <Field
-            k="Хугацаа"
-            v={
-              <span className="num">
-                {task.start} – {task.end}
-                {task.days == null ? "" : ` · ${num(task.days)} хоног`}
-              </span>
-            }
-          />
-          <Field
-            k="Хэрэгжилт"
-            v={
-              <span className="num">
-                {num(progress)} хувь
-                {task.target == null ? "" : ` · зорилтот түвшин ${num(task.target)}`}
-              </span>
-            }
-          />
-          <Field k="Хугацааны явц" v={<span className="num">{num(el, 1)} хувь</span>} />
-          <Field k="Төлөв" v={task.status || "Тэмдэглэгдээгүй"} />
-        </dl>
-      ) : null}
     </li>
   );
 }
 
-/**
- * Толгойн шүүлтүүрийн товч.
- *
- * `box` нь хайрцагтай хувилбар — тийм/үгүй сонголтод. Төлөвийн товчнууд
- * нь хоорондоо СОЛИГДДОГ тул хайрцаггүй: хайрцаг нь хэд хэдэн зүйлийг
- * зэрэг сонгож болно гэсэн амлалт өгнө.
- */
-function Toggle({
-  on,
-  onClick,
-  box,
-  children,
-}: {
-  on: boolean;
-  onClick: () => void;
-  box?: boolean;
-  children: React.ReactNode;
+
+/* --------------------------------------------------------------------------
+   АЖЛЫН ДЭЛГЭРЭНГҮЙ — ХАЖУУГИЙН САМБАР
+
+   ⚠⚠ МӨРИЙН ДОТОР ДЭЛГЭХЭЭ БОЛИВ (хэрэглэгчийн хүсэлт, 2026-09-21,
+   жишээ зураг заан: "ийм маягаар хажуу талд гарч ирдэг бол зүгээр").
+   Дэлгэрэнгүй нь мөрийг ДООШ ТҮЛХЭЖ, доорх ажлуудыг дэлгэцээс
+   шахдаг байв — нэг ажлыг уншиж байхад жагсаалтын байрлал алдагддаг.
+   Хажуугийн самбар нь жагсаалтыг ХӨДӨЛГӨХГҮЙ: өөр мөр товшиход
+   агуулга нь солигдоно, байрлал нь хэвээр.
+
+   ⚠ Самбар нь ҮНЭХЭЭР ХӨВЖ буй гадаргуу тул платформын `.elevated`
+   сүүдэр энд ЗӨВШӨӨРӨГДӨНӨ (дүрэм: сүүдэр зөвхөн хөвөгч гадаргууд).
+   Картууд нь өөрсдөө сүүдэргүй, 1px зураасаар л тусгаарлагдана.
+
+   ⚠ ХӨШИГ (scrim) ТАВИХГҮЙ: жагсаалт цаанаасаа харагдаж, дараагийн
+   мөрөө шууд товшиж болно. Хөшиг нь "энэ бол цонх, хаа" гэсэн
+   шаардлага тавьдаг — энд самбар нь уншихад туслах хавсралт.
+
+   ⚠ Товшсон мөр нь жагсаалтдаа ТОДОРНО, эс тэгвээс самбар хаанаас
+   гарсныг мэдэхгүй.
+   -------------------------------------------------------------------------- */
+
+function TaskDrawer({ task, today, data, onClose }: {
+  task: Task;
+  today: number;
+  data: PlanData;
+  onClose: () => void;
 }) {
+  const el = elapsed(task, today);
+  const progress = recordedProgress(task);
+  const state = deadlineOf(task, today);
+  const cat = data.categories.find((c) => c.id === task.category);
+  const staff = data.staff.find((x) => x.name === task.staff);
+  const titleRef = React.useRef<HTMLHeadingElement>(null);
+  React.useEffect(() => {
+    const trigger = document.activeElement;
+    titleRef.current?.focus();
+    return () => { if (trigger instanceof HTMLElement && trigger.isConnected) trigger.focus(); };
+  }, []);
+  React.useEffect(() => {
+    const esc = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    document.addEventListener("keydown", esc);
+    return () => document.removeEventListener("keydown", esc);
+  }, [onClose]);
   return (
-    <button
-      onClick={onClick}
-      aria-pressed={on}
-      className={cn(
-        "flex items-center gap-1.5 rounded-xs border px-2 py-1 text-[11px] leading-none transition-colors",
-        on
-          ? "border-(--tone)/45 bg-(--tone)/10 text-(--tone)"
-          : "border-line text-ink-2 hover:border-line-2 hover:text-ink",
-      )}
-    >
-      {box ? (
-        <span
-          aria-hidden
-          className={cn(
-            "flex size-3 shrink-0 items-center justify-center rounded-[2px] border transition-colors",
-            on ? "border-(--tone) bg-(--tone)" : "border-line-2",
-          )}
-        >
-          {on ? <Check size={8} strokeWidth={3} className="text-paper" /> : null}
-        </span>
-      ) : null}
-      {children}
-    </button>
+    <aside id="task-detail" className="task-drawer elevated" role="dialog" aria-modal="false" aria-labelledby="task-detail-title">
+      <header className="task-drawer-head">
+        <span>Ажлын дэлгэрэнгүй <span className="num">№ {task.no}</span></span>
+        <button type="button" onClick={onClose} aria-label="Ажлын дэлгэрэнгүйг хаах"><X size={16} aria-hidden /></button>
+      </header>
+      <div className="task-drawer-body" key={task.no}>
+        <DeadlineBadge state={state} />
+        <h2 id="task-detail-title" ref={titleRef} tabIndex={-1} className="task-drawer-title">{task.text}</h2>
+        <div className="task-owner">
+          <span className="task-owner-icon"><UserRound size={17} aria-hidden /></span>
+          <div><strong>{task.staff}</strong><p>{staff?.position || "Албан тушаал тэмдэглэгдээгүй"}</p></div>
+        </div>
+        <div className="task-drawer-progress">
+          <span className="task-detail-label">Хэрэгжилт</span>
+          <TaskProgress value={progress} />
+          {progress == null && <p className="task-detail-note">Гүйцэтгэлийн утга оруулаагүй байна. Энэ нь бүртгэсэн 0%-аас ялгаатай.</p>}
+        </div>
+        <div className="task-schedule">
+          <div className="task-schedule-dates">
+            <span><small>Эхлэх огноо</small><b className="num">{task.start || "—"}</b></span>
+            <span><small>Дуусах огноо</small><b className="num">{task.end || "—"}</b></span>
+          </div>
+          <div className="task-time-track" aria-hidden="true"><span style={{ width: `${el ?? 0}%` }} /></div>
+          <div className="task-schedule-summary"><span>Хугацааны явц <b className="num">{el == null ? "—" : `${num(el, 1)}%`}</b></span><span className="num">{task.days == null ? "" : `${num(task.days)} хоног`}</span></div>
+          <p className="task-detail-note">Хугацааны явц нь өнгөрсөн хугацааг харуулна. Шаардлагатай гүйцэтгэлийн хувь биш.</p>
+        </div>
+        <dl className="task-drawer-grid">
+          <div><dt>Зорилтот түвшин</dt><dd className="num">{task.target == null ? "Тэмдэглэгдээгүй" : num(task.target)}</dd></div>
+          <div><dt>Гүйцэтгэл</dt><dd className="num">{task.performance == null ? "Оруулаагүй" : num(task.performance)}</dd></div>
+          <div className="is-wide"><dt>Хэмжих үзүүлэлт</dt><dd>{task.measure || "Тэмдэглэгдээгүй"}</dd></div>
+          <div className="is-wide"><dt>Бүртгэсэн төлөв · Excel</dt><dd>{task.status || "Тэмдэглэгдээгүй"}</dd></div>
+          <div className="is-wide"><dt>Ажлын ангилал</dt><dd>{cat?.label || "Тэмдэглэгдээгүй"}</dd></div>
+        </dl>
+      </div>
+    </aside>
   );
 }
 
-function Field({ k, v }: { k: string; v: React.ReactNode }) {
-  return (
-    <div className="flex gap-2">
-      <dt className="w-[112px] shrink-0 text-[10px] leading-snug tracking-[0.06em] text-ink-3 uppercase">
-        {k}
-      </dt>
-      <dd className="min-w-0 flex-1 text-[11px] leading-snug text-ink">{v}</dd>
-    </div>
-  );
-}
 
 function Empty({ text }: { text: string }) {
   return (

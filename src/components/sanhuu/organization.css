@@ -1,0 +1,326 @@
+.organization, .person-page {
+  --org-canvas: var(--paper);
+  --org-surface: #ffffff;
+  --org-surface-end: #f2f5ef;
+  --org-cap: #e6ede3;
+  --org-border: #b9c8b8;
+  --org-selected: #e8eee4;
+  --org-accent: #718b59;
+  --org-edge-light: #ffffff;
+  --org-edge-dark: #a6bba7;
+  --org-header-glow: #dbe8ce;
+  --org-inset: #e7ede4;
+  --org-person-surface: #ffffff;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  background-color: var(--org-canvas);
+  background-image: radial-gradient(ellipse at 50% 0%, color-mix(in srgb, var(--paper-2) 75%, transparent), transparent 70%);
+}
+:root[data-theme="dark"] .organization, :root[data-theme="dark"] .person-page {
+  --org-surface: #182724;
+  --org-surface-end: #14211f;
+  --org-cap: #2c443b;
+  --org-border: #476158;
+  --org-selected: #1d2e27;
+  --org-accent: #a5bc88;
+  --org-edge-light: #708b7a;
+  --org-edge-dark: #294338;
+  --org-header-glow: #415a3e;
+  --org-inset: #101c19;
+  --org-person-surface: #192a24;
+}
+.org-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; padding: 11px 16px; border-bottom: 1px solid var(--line); background: var(--paper-2); }
+.org-title { display: flex; align-items: center; gap: 8px; color: var(--ink); }
+.org-title svg { box-sizing: content-box; padding: 6px; border: 1px solid var(--line); border-radius: 7px; background: var(--paper); color: var(--tone); }
+.org-title h2 { font-size: 13px; font-weight: 600; letter-spacing: -.01em; }
+.org-selection { min-width: 0; flex: 1; color: var(--ink-3); font-size: 11px; }
+.org-reset { display: flex; align-items: center; gap: 5px; border: 1px solid var(--line); border-radius: 5px; padding: 5px 8px; font-size: 11px; color: var(--ink-2); }
+.org-reset:disabled { opacity: .4; cursor: default; }
+.organization .org-reset:not(:disabled):hover { background: var(--paper-hi); border-color: var(--line-2); color: var(--ink); }
+.organization .org-reset, .organization .org-toggle { transition: background-color .15s, border-color .15s, color .15s; }
+/* ⚠ Албан хаагчийн нэрийг нээх товч. Дарагдсан төлөв нь `aria-pressed`
+   -ээр илэрхийлэгдэх ба хэлтсийн өнгөөр тодорно — "Бүх бүтэц" товч нь
+   үйлдэл (нэг удаагийн), энэ нь ТӨЛӨВ тул хоёр нь өөрөөр харагдана */
+.org-toggle { display: flex; align-items: center; gap: 5px; border: 1px solid var(--line); border-radius: 5px; padding: 5px 8px; font-size: 11px; color: var(--ink-2); }
+.org-toggle:hover { border-color: var(--line-2); color: var(--ink); }
+.org-toggle[aria-pressed="true"] { border-color: color-mix(in srgb, var(--tone) 45%, var(--line)); background: color-mix(in srgb, var(--tone) 10%, transparent); color: var(--ink); }
+.org-toggle[aria-pressed="true"] svg { color: var(--tone); }
+.org-guide { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 16px 0; font-size: 10px; color: var(--ink-3); }
+/* ⚠ Зангилаа аль болох ЖИЖИГ (хэрэглэгчийн хүсэлт, 2026-09-21:
+   "картыг аль болох боломжоороо жижигхэн болго"). Бүх зай
+   багассан — бичвэрийн хэмжээ нь платформын 10px-ийн доод
+   хязгаараас ДООШ ороогүй (`ink-3`-ийн контраст). Холбоосын
+   шугамуудын өндөр нь тороны зайтай хамт өөрчлөгдөнө: зөвхөн нэгийг
+   нь сольвол зураас зангилаанаасаа тасарна */
+.org-chart { padding: 12px 16px 20px; }
+.org-root { position: relative; width: min(100%, 360px); margin: 0 auto 29px; }
+.org-root::after { content: ''; position: absolute; left: 50%; top: 100%; height: 16px; border-left: 1px solid var(--line-2); }
+/* ⚠ Багана нь дэлгэцийн өргөнийг ДҮҮРГЭХГҮЙ (хэрэглэгчийн хүсэлт,
+   2026-09-21: "картуудын өргөнг багасга"). `1fr` үед дөрөв нь бүтэн
+   өргөнийг хувааж, богино нэртэй зангилаанууд хагас хоосон карт болж
+   байв. Дээд хязгаар тавьж, торыг голлуулав — холбоос зураасууд нь
+   баганын ТӨВӨӨС татагддаг тул өргөн багасахад дагаж нийлнэ. */
+/* ⚠ Хүүхдийн тоо шат бүрд ӨӨР (4, 3, 1, 2 …) тул тогтмол дөрвөн
+   баганат тор тохирохоо болив: ганц хүүхэдтэй шат дээр карт нь
+   дэлгэцийн дөрөвний нэгд наалдаж, гурав нь хоосон үлдэнэ. Уян
+   эгнээ нь хэдэн ч картыг голлуулна. */
+.org-branches { display: flex; flex-wrap: wrap; justify-content: center; gap: 14px 34px; align-items: start; }
+.org-branches > .org-branch { flex: 0 0 272px; max-width: 100%; }
+.org-branch { position: relative; min-width: 0; }
+.org-branches > .org-branch::before { content: ''; position: absolute; top: -14px; height: 14px; left: -17px; right: -17px; border-top: 1px solid var(--line-2); }
+.org-branches > .org-branch:first-child::before { left: 50%; }
+.org-branches > .org-branch:last-child::before { right: 50%; }
+.org-branches > .org-branch::after { content: ''; position: absolute; top: -14px; left: 50%; height: 14px; border-left: 1px solid var(--line-2); }
+/* Surface redesign is scoped to the organization chart. Typography, card
+   dimensions and hierarchy stay unchanged. */
+.org-node { position: relative; min-width: 0; overflow: hidden; border: 1px solid transparent; border-radius: 13px; background: linear-gradient(155deg, var(--org-surface), var(--org-inset)) padding-box, linear-gradient(135deg, var(--org-edge-light), var(--org-edge-dark) 48%, var(--org-border)) border-box; box-shadow: 0 8px 18px #07121f26, inset 0 0 0 3px color-mix(in srgb, var(--org-surface) 65%, transparent); transition: box-shadow .18s; }
+.org-node::before { content: ''; position: absolute; top: 0; left: 17%; right: 17%; height: 1px; background: linear-gradient(90deg, transparent, var(--org-edge-light), transparent); pointer-events: none; }
+.org-node:hover { box-shadow: 0 10px 22px #07121f33, 0 0 0 1px color-mix(in srgb, var(--org-accent) 40%, transparent), inset 0 0 0 3px color-mix(in srgb, var(--org-surface) 65%, transparent); }
+.org-node.is-selected::before { height: 1px; background: linear-gradient(90deg, transparent, var(--org-border), transparent); }
+.org-node.has-selected-person::before { background: color-mix(in srgb, var(--tone) 55%, transparent); }
+.org-node.is-selected { border-color: color-mix(in srgb, var(--org-accent) 20%, var(--org-border)); background: linear-gradient(155deg, var(--org-selected), var(--org-inset)) padding-box; box-shadow: 0 4px 12px #07121f26; }
+.organization .org-node.is-selected .org-node-name { color: var(--ink); }
+.org-node.has-selected-person { border-color: color-mix(in srgb, var(--tone) 50%, var(--line)); }
+.org-node-heading { display: block; width: 100%; padding: 0; text-align: left; }
+.org-node-name { overflow-wrap: anywhere; font-weight: 600; letter-spacing: -.01em; }
+/* Толгойн мөр: дугаар · нэр · түвшний тэмдэг */
+.org-node-top { display: flex; align-items: center; gap: 8px; margin: 5px 5px 0; padding: 7px 6px; border: 1px solid color-mix(in srgb, var(--org-edge-light) 45%, transparent); border-radius: 8px; background: transparent; box-shadow: inset 0 1px 0 color-mix(in srgb, var(--org-edge-light) 22%, transparent); }
+.organization .org-node-name { font-size: 11px; line-height: 1.4; text-transform: uppercase; }
+.organization .org-node-top { display: grid; grid-template-columns: 18px minmax(0, 1fr) 18px; }
+.organization .org-node-name { grid-column: 2; text-align: center; }
+.organization .org-node-icon { grid-column: 3; justify-self: end; }
+.org-number { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; flex-shrink: 0; border: 1px solid var(--org-border); border-radius: 5px; background: var(--org-inset); box-shadow: inset 0 1px 3px #07121f22; font-size: 10px; }
+.org-node.is-selected .org-number { border-color: color-mix(in srgb, var(--tone) 45%, var(--line)); background: color-mix(in srgb, var(--tone) 14%, transparent); }
+/* ⚠ Тэмдэг нь ТҮВШНИЙ тэмдэглэгээ: сонгогдоогүй үед бүдэг, сонгогдоход
+   хэлтсийн өнгөөр асна — өнгө нь ТӨЛӨВ заана, чимэглэл биш */
+.org-node-icon { display: flex; flex-shrink: 0; margin-left: auto; color: var(--ink-3); opacity: .8; transition: color .12s, opacity .12s; }
+.org-node-heading:hover .org-node-icon { opacity: .9; }
+.org-node.is-selected .org-node-icon { color: var(--tone); opacity: 1; }
+.org-node-meta { display: flex; flex-wrap: wrap; gap: 2px 9px; margin-top: 5px; color: var(--ink-3); font-size: 10px; }
+.org-node-meta > span { display: flex; align-items: center; gap: 4px; }
+.org-node-meta > span:first-child { color: var(--ink-2); font-weight: 500; }
+.organization .org-node-kids { border-radius: 3px; color: var(--ink-2); }
+.organization .org-node-heading:hover .org-node-kids { color: var(--tone); }
+.organization .org-node-heading > .num { line-height: 1.45; }
+.organization .org-person:hover { background: var(--paper-hi); }
+.org-node-summary { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 8px 11px; }
+.org-work-count { display: flex; align-items: baseline; gap: 5px; color: var(--ink-3); font-size: 10px; }
+.org-work-count strong { color: var(--ink); font-size: 16px; font-weight: 600; line-height: 1.1; letter-spacing: -.03em; }
+.org-summary-context { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; color: var(--ink-3); font-size: 10px; }
+.org-summary-context > span { display: flex; align-items: center; gap: 4px; }
+.org-summary-context b { font-weight: 500; color: var(--ink-2); }
+.organization .org-summary-context .org-node-kids { padding: 3px 5px; border: 1px solid var(--line); background: var(--paper); border-radius: 4px; }
+.org-progress { padding: 0 11px 9px; }
+.org-progress-labels { display: flex; justify-content: space-between; gap: 6px; margin-bottom: 5px; font-size: 10px; color: var(--ink-3); }
+.org-progress-labels strong { font-size: 13px; font-weight: 600; margin-left: 3px; }
+.org-progress-labels b { font-size: 10px; font-weight: 500; margin-left: 3px; color: var(--ink-2); }
+.org-progress > span { height: 5px; border-radius: 2px; }
+.org-pending { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin: 0 6px 6px; padding: 4px 5px; border: 1px solid color-mix(in srgb, var(--ochre) 28%, var(--org-border)); border-radius: 5px; background: linear-gradient(100deg, color-mix(in srgb, var(--ochre) 12%, var(--org-inset)), var(--org-inset)); font-size: 10px; color: var(--ochre); }
+.org-pending strong { font-size: 11px; font-weight: 600; }
+.org-empty { margin: 0 11px 9px; }
+.organization .org-toolbar .org-toggle, .organization .org-toolbar .org-reset { padding: 7px 10px; border-radius: 6px; background: var(--paper); }
+.organization .org-toolbar .org-toggle[aria-pressed="true"] { background: color-mix(in srgb, var(--tone) 12%, var(--paper)); }
+/* Албан хаагчийн мөр — дугуй тэмдэгтэй (жишээ зургийн санаа) */
+.org-person { --org-person-indent: 30px; padding: 7px 9px; }
+.organization .org-staff-list { display: grid; gap: 5px; padding: 6px; border-top: 1px solid var(--org-border); background: var(--org-inset); box-shadow: inset 0 3px 6px #07121f12; }
+.organization .org-staff-list .org-person { padding: 5px 6px; border: 1px solid color-mix(in srgb, var(--org-border) 70%, transparent); border-radius: 7px; background: linear-gradient(120deg, var(--org-person-surface), var(--org-surface-end)); }
+.organization .org-staff-list .org-person:hover, .organization .org-staff-list .org-person[aria-pressed="true"] { border-color: var(--org-accent); background: var(--org-selected); }
+.org-person-icon { display: inline-grid; place-items: center; width: 24px; height: 24px; flex-shrink: 0; border: 1px solid color-mix(in srgb, var(--org-accent) 30%, var(--org-border)); border-radius: 8px; background: linear-gradient(145deg, color-mix(in srgb, var(--org-accent) 15%, var(--org-surface)), var(--org-inset)); color: var(--ink-2); box-shadow: inset 0 1px 0 color-mix(in srgb, var(--org-accent) 12%, transparent); transition: border-color .15s, color .15s; }
+.org-person-icon svg { fill: color-mix(in srgb, currentColor 12%, transparent); }
+.org-person:hover .org-person-icon, .org-person[aria-pressed="true"] .org-person-icon { border-color: var(--org-accent); color: var(--ink); }
+.org-position { padding-left: var(--org-person-indent); margin-top: 1px; font-size: 10px; line-height: 1.35; color: var(--ink-3); overflow-wrap: anywhere; }
+.org-person-progress { padding-left: var(--org-person-indent); }
+/* Light surfaces need visible edges without the dark theme's highlights. */
+:root:not([data-theme="dark"]) .organization {
+  --org-surface-end: #f7f9f7;
+  --org-inset: #eff3f0;
+  --org-border: #c3cfc7;
+  --org-selected: #edf4ef;
+  --org-accent: #658477;
+}
+:root:not([data-theme="dark"]) .organization .org-node {
+  border-color: #8fa69a;
+  background: linear-gradient(155deg, var(--org-surface), var(--org-surface-end)) padding-box;
+  box-shadow: 0 2px 6px #162e2110;
+}
+:root:not([data-theme="dark"]) .organization .org-node::before { display: none; }
+:root:not([data-theme="dark"]) .organization .org-node:hover {
+  border-color: var(--org-accent);
+  box-shadow: 0 3px 8px #162e2118;
+}
+:root:not([data-theme="dark"]) .organization .org-node.is-selected {
+  border-color: var(--org-accent);
+  background: var(--org-selected);
+  box-shadow: 0 2px 6px #162e2110;
+}
+:root:not([data-theme="dark"]) .organization .org-node-top {
+  border-color: #9aafa2;
+  box-shadow: none;
+}
+:root:not([data-theme="dark"]) .organization .org-pending {
+  border-color: #e2d5b9;
+  background: #faf4e8;
+  color: #855315;
+}
+.organization button:focus-visible { outline: 2px solid var(--tone); outline-offset: 2px; }
+@media (max-width: 1100px) {
+  .org-branches { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .org-branches > .org-branch::before, .org-branches > .org-branch::after, .org-root::after { display: none; }
+  .org-root { margin-bottom: 10px; }
+}
+@media (max-width: 600px) {
+  .org-branches { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+  .org-chart { padding: 12px 10px; }
+  .org-toolbar { padding: 10px; }
+  .org-selection { flex-basis: 100%; order: 3; }
+  .org-reset { margin-left: auto; }
+  .org-guide { padding-inline: 10px; }
+}
+
+
+/* --------------------------------------------------------------------------
+   ЗАМ ЗААГЧ — үндэснээс сонгосон нэгж хүртэл
+
+   ⚠ Гүнзгийрэх бүтцэд буцах зам ЗААВАЛ: хэрэглэгч хаана байгаагаа
+   мэдэж, аль ч шат руу нэг товшилтоор буцах ёстой. Үүнгүй бол "Бүх
+   бүтэц" дээр дарж эхнээс нь эхлэхээс өөр аргагүй болно.
+   -------------------------------------------------------------------------- */
+.org-path { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 4px; min-width: 0; flex: 1; font-size: 11px; }
+.org-path button { padding: 2px 4px; border-radius: 4px; color: var(--ink-3); text-align: left; }
+.org-path button:hover:not(:disabled) { background: var(--paper-hi); color: var(--ink); }
+.org-path button:disabled { color: var(--tone); cursor: default; }
+.org-path-sep { flex-shrink: 0; color: var(--ink-3); opacity: .6; }
+/* Гүнзгийрэх боломжтойг зангилаа өөрөө хэлнэ */
+.org-node-kids { color: var(--ink-2); }
+.org-node-heading:hover .org-node-kids { color: var(--ink); }
+
+/* --------------------------------------------------------------------------
+   МӨЧРИЙН ХАРАГДАЦ — ЗҮҮН ТАЛД ТОМ КАРТ, БАРУУН ТАЛД АЖЛУУД
+
+   ⚠⚠ ХЭРЭГЛЭГЧИЙН САНАА (2026-09-22): "Дотоод хяналт дээр дарлаа —
+   бусад картууд харагдахгүй, зөвхөн Дотоод хяналт зүүн тийш шилжээд
+   нилээн томорно; картын баруун талд тухайн албан хаагчийн ажлууд
+   гарч ирнэ." Урьд нь мөчрийн дэд мод дэлгэцийн голд хэвтээ
+   дэлгэгдэж (`TreeNode`), ажил нь энэ харагдацад огт гардаггүй байв.
+   ⚠ Картын АГУУЛГА хараахан эцэслээгүй — одоогоор ердийн карт
+   томорсон хэлбэрээр (өргөн 440px, толгойн зай, нэрийн хэмжээ өссөн).
+   ⚠ Хүүхэд нэгжүүд том картын ДООР босоо цуварна: баруун тал ажлынх
+   тул хэвтээ тарах зай байхгүй. Холбоос зураас энд ХЭРЭГГҮЙ —
+   доогуур цувсан нь өөрөө харьяаллыг хэлнэ.
+   -------------------------------------------------------------------------- */
+/* ⚠ ГҮЙЛГҮҮР ДОТРОО (хэрэглэгчийн хүсэлт, 2026-09-22). Бүрхүүл (`Shell`)
+   өндрөө барьж хөдөлдөггүй тул модны бие үлдсэн өндрийг эзэлж дотроо
+   гүйнэ; мөчрийн харагдацад хоёр багана ТУС ТУСДАА гүйнэ — зүүн карт
+   богино, баруун жагсаалт урт тул нэг гүйлгүүрт уявал карт дээшээ
+   алга болно. */
+.org-body { flex: 1; min-height: 0; overflow: auto; }
+.org-body.is-focus { display: flex; align-items: stretch; overflow: hidden; }
+.org-body.is-focus > .org-chart { flex: 0 0 440px; padding: 14px 16px 20px; overflow-y: auto; }
+.org-tasks { flex: 1; min-width: 0; overflow-y: auto; border-left: 1px solid var(--line); background: var(--paper-2); }
+.org-chart.is-deep .org-root { width: 100%; margin-bottom: 14px; }
+.org-chart.is-deep .org-root::after { display: none; }
+/* ⚠ Босоо цуваанд `align-items: start` нь картыг АГУУЛГААРАА нарийсгадаг
+   тул хүүхэд бүр өөр өргөнтэй гарч байв — баганаа бүтэн дүүргэнэ */
+.org-chart.is-deep .org-branches { flex-direction: column; align-items: stretch; gap: 10px; }
+.org-chart.is-deep .org-branches > .org-branch { flex: 0 0 auto; width: 100%; }
+.org-chart.is-deep .org-branches > .org-branch::before,
+.org-chart.is-deep .org-branches > .org-branch::after { display: none; }
+/* Дээд карт ТОМ: толгой, нэр, дугаар, мета бүгд нэг шат өснө */
+.org-chart.is-deep .org-root .org-node-heading { padding: 16px 18px 14px; }
+.org-chart.is-deep .org-root .org-node-name { font-size: 15px; }
+.org-chart.is-deep .org-root .org-number { width: 22px; height: 22px; font-size: 11.5px; }
+.org-chart.is-deep .org-root .org-node-meta { margin-top: 8px; font-size: 11px; gap: 4px 12px; }
+.org-chart.is-deep .org-root .org-node-icon svg { width: 18px; height: 18px; }
+.org-chart.is-deep .org-root .org-person { padding: 9px 18px; }
+@media (max-width: 1100px) {
+  /* Босоо цувсан үед нэг л гүйлгүүр — багана тус бүр гүйвэл давхар гүйлт үүснэ */
+  .org-body.is-focus { flex-direction: column; overflow: auto; }
+  .org-body.is-focus > .org-chart { flex-basis: auto; overflow: visible; }
+  .org-tasks { overflow: visible; border-left: 0; border-top: 1px solid var(--line); }
+}
+
+/* --------------------------------------------------------------------------
+   АЛБАН ХААГЧИЙН ХУУДАС
+
+   ⚠ Мод нь БҮТЦИЙН, энэ нь ГҮЙЦЭТГЭЛИЙН асуулт тул хоёр нь ээлжилнэ.
+   Толгой нь модны хэрэгслийн мөртэй НЭГ өндөр, нэг өнгөтэй — хэрэглэгч
+   өөр газар очсон гэхээсээ илүү нэг самбарын хоёр харагдац гэж
+   уншина.
+   -------------------------------------------------------------------------- */
+.person-page { display: flex; flex-direction: column; flex: 1; min-height: 0; background: var(--paper); }
+.person-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; padding: 11px 16px; border-bottom: 1px solid var(--line); background: var(--paper-2); }
+.person-head > .org-path { flex: 1; }
+/* Хүний карт — нэгжийн картын загвар (`org-node`, Codex-ийн `--org-*`
+   палитр `.person-page`-д мөн тодорхойлогдсон — эс тэгвээс градиент,
+   хүрээ алга болж хавтгай гардаг байв).
+   ⚠ ХОЁР БЛОК (2026-09-22, "ойлгомжгүй байна" гэсний дараа): хэрэгжилт
+   ба хугацаа · ажлын байдал. Дүрс нь хоёрхон — хэмжигч ба мөрийн зурвас. */
+.person-chart .person-node { width: 100%; }
+.person-hero { display: flex; align-items: center; gap: 12px; padding: 16px 16px 14px; background: linear-gradient(180deg, color-mix(in srgb, var(--org-cap) 70%, transparent), transparent); }
+.person-avatar { display: flex; align-items: center; justify-content: center; width: 42px; height: 42px; flex-shrink: 0; border-radius: 50%; border: 1px solid var(--org-border); background: var(--org-inset); color: var(--tone); }
+.person-id { display: flex; flex-direction: column; gap: 4px; min-width: 0; flex: 1; }
+.person-node .org-node-name { min-width: 0; font-size: 14px; text-align: left; text-transform: none; letter-spacing: -.01em; }
+.person-position { font-size: 10.5px; line-height: 1.4; color: var(--ink-3); overflow-wrap: anywhere; }
+.person-unit { display: inline-flex; align-items: center; gap: 4px; align-self: flex-start; margin-top: 2px; padding: 2px 6px; border: 1px solid var(--org-border); border-radius: 4px; background: var(--org-inset); font-size: 9.5px; color: var(--ink-2); }
+.person-unit svg { color: var(--tone); }
+/* Блокууд */
+.person-block { padding: 12px 16px 13px; border-top: 1px solid var(--org-border); }
+.person-block > .eyebrow { display: block; margin-bottom: 8px; }
+.person-block-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
+.person-block-head > .person-big { font-size: 12px; font-weight: 500; color: var(--ink); }
+/* Гүйцэтгэл — хоёр зэрэгцээ зурвас (хийгдсэн ажил · өнгөрсөн хугацаа),
+   огноо, өгүүлбэр. Bullet хэмжигч, том хувь, тайлбар бүгд ХАСАГДСАН
+   (2026-09-22: "ерөөсөө ойлгохгүй") */
+.person-bars > div { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; row-gap: 5px; padding: 4px 0 8px; }
+.person-bars-label { font-size: 11px; color: var(--ink-2); }
+.person-bars-val { font-size: 15px; font-weight: 500; line-height: 1; letter-spacing: -.02em; color: var(--ink); }
+.person-bars-track { grid-column: 1 / -1; display: block; height: 7px; border-radius: 2px; background: var(--line); overflow: hidden; }
+.person-bars-track > span { display: block; height: 100%; border-radius: 2px; min-width: 0; }
+.person-bars-track > span.is-time { background: var(--ink-3); }
+.person-dates { display: flex; justify-content: space-between; gap: 10px; margin-top: 2px; padding-top: 8px; border-top: 1px solid var(--line); font-size: 10.5px; color: var(--ink-3); }
+.person-dates .num { color: var(--ink-2); }
+.person-note { margin-top: 9px; font-size: 11px; line-height: 1.45; color: var(--ink-2); }
+/* Ажлын байдал — мөр бүр шошго · тоо · хувийн зурвас */
+.person-rows > div { display: grid; grid-template-columns: minmax(0, 1fr) auto; row-gap: 5px; padding: 8px 0; border-top: 1px solid var(--line); }
+.person-rows > div:first-child { border-top: 0; padding-top: 2px; }
+.person-rows dt { font-size: 11px; line-height: 1.35; color: var(--ink-2); }
+.person-rows dd { font-size: 13px; font-weight: 500; line-height: 1.2; color: var(--ink); }
+.person-rows dd small { font-size: 10px; font-weight: 400; color: var(--ink-3); }
+.person-rows-bar { grid-column: 1 / -1; display: block; height: 4px; border-radius: 2px; background: var(--line); overflow: hidden; }
+.person-rows-bar > span { display: block; height: 100%; background: var(--tone); }
+.person-rows-bar.is-zero > span { background: var(--clay); }
+.person-rows-bar.is-missing > span { background: repeating-linear-gradient(135deg, var(--ink-3) 0 2px, transparent 2px 4px); }
+
+/* --------------------------------------------------------------------------
+   АЖЛЫН ДЭЛГЭРЭНГҮЙ — ХАЖУУГИЙН САМБАР
+
+   ⚠ Мөрийн дотор дэлгэхэд доорх ажлууд дэлгэцээс шахагддаг байв.
+   Хажуугийн самбар нь жагсаалтыг ХӨДӨЛГӨХГҮЙ.
+   ⚠ Платформын хэмжээсүүд: булан хурц (`rounded-xs`), сүүдэр нь
+   ЗӨВХӨН хөвөгч гадаргууд зөвшөөрөгдөнө (`.elevated`).
+   ⚠ Толгойн доор эхэлнэ (`top: 52px`) — платформын бүтэн өргөнтэй
+   толгойг дардаггүй.
+   -------------------------------------------------------------------------- */
+.task-drawer { position: fixed; z-index: 40; top: 52px; right: 0; bottom: 0; display: flex; flex-direction: column; width: min(440px, 100vw); border-left: 1px solid var(--line-2); background: var(--paper-2); }
+.task-drawer-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-shrink: 0; padding: 10px 14px; border-bottom: 1px solid var(--line); background: var(--paper-3); }
+.task-drawer-head button { display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; border: 1px solid var(--line); border-radius: 2px; color: var(--ink-2); }
+.task-drawer-head button:hover { border-color: var(--line-2); color: var(--ink); }
+.task-drawer-body { min-height: 0; flex: 1; overflow-y: auto; padding: 14px; }
+.task-drawer-title { font-size: 13.5px; font-weight: 500; line-height: 1.45; color: var(--ink); }
+.task-drawer-progress { display: flex; flex-direction: column; gap: 9px; margin-top: 13px; padding: 11px 12px; border: 1px solid var(--line); background: var(--paper); }
+/* Тоонууд ба хэмжигч — задаргааны блоктой НЭГ загвар */
+.task-detail-nums { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px; font-size: 10px; color: var(--ink-3); }
+.task-detail-nums span { display: flex; align-items: baseline; gap: 4px; }
+.task-detail-nums b { font-size: 15px; font-weight: 500; color: var(--ink); }
+/* Баримтууд — хоёр багана, зураасаар тусгаарласан */
+.task-drawer-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1px; margin-top: 12px; background: var(--line); border: 1px solid var(--line); }
+.task-drawer-grid > div { padding: 9px 11px; background: var(--paper); }
+.task-drawer-grid > div.is-wide { grid-column: 1 / -1; }
+.task-drawer-grid dt { font-size: 9.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+.task-drawer-grid dd { margin-top: 4px; font-size: 11.5px; line-height: 1.45; color: var(--ink); overflow-wrap: anywhere; }
+.task-drawer-badge { display: inline-block; padding: 2px 7px; border: 1px solid color-mix(in srgb, var(--moss) 45%, var(--line)); border-radius: 2px; background: color-mix(in srgb, var(--moss) 12%, transparent); font-size: 10.5px; color: var(--moss); }
+/* Нээлттэй мөр жагсаалтдаа тодорно */
+.task-row.is-open { box-shadow: inset 2px 0 0 var(--tone); }
+@media (max-width: 720px) { .task-drawer { width: 100vw; } }
