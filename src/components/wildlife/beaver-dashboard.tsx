@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import { RowChart, type Datum } from "@/components/charts";
 import { BasemapGallery } from "@/components/map/basemap-gallery";
-import { DATA_COLOR } from "@/components/wells/colors";
+import { DATA_COLOR, oklchHex } from "@/components/wells/colors";
 import { FilterBar, FilterMenu, PickList } from "@/components/wells/filter-bar";
 import {
   defaultBasemap,
@@ -112,6 +112,45 @@ export function BeaverDashboard() {
     () => tally((i) => data?.spots[i].kind ?? "", "kind"),
     [tally, data],
   );
+  /*
+    АНГИЛАЛ БҮР ӨӨР ӨНГӨӨР, НЭГ ГЭР БҮЛД (хэрэглэгч, 2026-09-22).
+
+    Эхлээд өнцөг дугуйгаараа тарсан найман өнгө (цэнхэр, улбар шар, ягаан …)
+    өгсөн боловч хэрэглэгч БУЦААВ: "өнгөнүүдийг ойролцоо өгөөч, солонго
+    биш". Энэ нь `tone-ramp.ts`-ийн зарчим: ангилал нь нэг зүйлийн хэдэн
+    хувилбар тул өнгө нь нэг гэр бүлд, ялгаа нь ГЭРЭЛТЭЛТЭЭР — солонго нь
+    өнгө бүрд өөр утга байгаа мэт уншигдана.
+
+    Шатлал нь платформын дата цэнхэрийн эргэн тойронд: өнцөг 195 → 228
+    (`TONE_RAMP`-тай ижил нарийн муж), гэрэлтэлт 0.90 → 0.48. Найман шат нь
+    "зургаа хүртэл" хязгаараас давсан тул хөрш шат зураг дээр бараг ялгагдахгүй
+    — хэрэглэгчийн ухамсартай сонголт; "Ангиллаар" диаграм нь тайлбар,
+    хөвөгч тайлбар нь ангиллыг нэрлэнэ.
+
+    ⚠ Дараалал нь ШҮҮГДЭЭГҮЙ тооллоос (буурахаар): хамгийн түгээмэл
+    ангилал хамгийн цайвар (порталын самбартай нэг дүрэм); шүүлт тавихад
+    өнгө солигдохгүй.
+    ⚠ Диаграм ба зураг НЭГ толиос — диаграм нь зургийн тайлбар.
+  */
+  const kindColor = React.useMemo(() => {
+    const out = new Map<string, string>();
+    if (!data) return out;
+    const counts = new Map<string, number>();
+    for (const s of data.spots)
+      counts.set(s.kind, (counts.get(s.kind) ?? 0) + 1);
+    const keys = [...counts.entries()]
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+      .map(([k]) => k);
+    const ramp = kindRamp(keys.length);
+    keys.forEach((k, i) => out.set(k, ramp[i]));
+    return out;
+  }, [data]);
+
+  const colors = React.useMemo(
+    () => data?.spots.map((s) => kindColor.get(s.kind)) ?? [],
+    [data, kindColor],
+  );
+
   const byRound = React.useMemo(
     () => tally((i) => data?.spots[i].round ?? "", "round"),
     [tally, data],
@@ -159,9 +198,19 @@ export function BeaverDashboard() {
       out.push({
         id: "minj-route",
         data: data.routes,
-        /* Маршрут нь талбайн ДОТОР сууна — нимгэн, бүдэг барьснаар
-           хоёр шугам хоорондоо ялгагдана */
-        line: { color: DATA_COLOR, opacity: 0.5, width: 1 },
+        /*
+          Маршрут ӨӨР ӨНГӨӨР (хэрэглэгчийн хүсэлт, 2026-09-22: "маршрут
+          бас өөр өнгөөр"). Урьд нь талбайн хүрээтэй нэг цэнхэр, зөвхөн
+          нимгэн бүдэг байсан тул аль нь хүрээ, аль нь явсан зам болох нь
+          тааварт үлддэг байв.
+          ⚠ Бүлэгт НЭГ өнгө, маршрут бүрд биш: арван хоёр шугам нь нэргүй
+          GPS-ийн түүхий гаралт тул тус тусад нь өнгө өгвөл тайлбарлах зүйл
+          байхгүй.
+          ⚠ МӨН ЦЭНХЭР ГЭР БҮЛД (хэрэглэгч: "маршрут ч гэсэн", солонго биш):
+          хүрээнээс ГЭРЭЛТЭЛТЭЭР сална — хүрээ ханалттай цэнхэр, зам бараг
+          цагаан цэнхэр (L 0.95 / C 0.05 / H 205).
+        */
+        line: { color: ROUTE_COLOR, opacity: 0.85, width: 1.4 },
       });
     }
 
@@ -269,7 +318,21 @@ export function BeaverDashboard() {
                 /* 120 цэг тул бөөгнөрүүлэхгүй — бөөгнөрвөл маршрутын
                    дагуух дараалал нь алдагдана */
                 cluster={false}
-                pulse
+                colors={colors}
+                /*
+                  ⚠⚠ `pulse` ХАСАГДСАН (2026-09-22, хэрэглэгч: "зургийн
+                  загварыг янзлаарай"). Хоёр шалтгаан:
+                  1. Цохилтын тэмдэг нь DOM элемент бөгөөд `--data` CSS
+                     хувьсагчаас өнгөө авдаг — гэрэл горимд бараан ногоон
+                     (#2e7f8b) болж, тогтмол hex-ээр зурагдсан талбайн хүрээ,
+                     маршрутын цэнхэртэй зөрдөг байв — "газрын зураг хоёр
+                     горимд ижил" дүрмийн зөрчил.
+                  2. Цохилт бол ДОХИО (эрсдэл, хугацаа дууссан) — 120
+                     ажиглалт зэрэг цохилоход хиймэл дагуулын зураг бараан
+                     цагиргаар дүүрч, талбай, маршрутын шугам уншигдахаа болив.
+                  Одоо бусад самбартай ижил firefly цэг (canvas, тогтмол hex) —
+                  хүрээ, маршрут, цэг гурвуулаа НЭГ өнгөөр.
+                */
                 highlight={detail ? [detail.lon, detail.lat] : null}
                 basemap={basemap}
                 onSelect={(oid) => setPicked(picked === oid ? null : oid)}
@@ -303,8 +366,8 @@ export function BeaverDashboard() {
           </div>
 
           <p className="shrink-0 px-0.5 text-[10.5px] leading-none text-ink-3">
-            Суурь зураг: Esri · Дата: ArcGIS Enterprise · хүрээ нь судалгааны
-            талбай, шугам нь явсан маршрут
+            Суурь зураг: Esri · Дата: ArcGIS Enterprise · цэнхэр хүрээ нь
+            судалгааны талбай, цайвар шугам нь явсан маршрут
           </p>
         </div>
 
@@ -327,12 +390,24 @@ export function BeaverDashboard() {
             </div>
           </Card>
 
-          <Card className="min-h-[150px] flex-1">
+          {/*
+            ⚠ Карт ӨНДРӨӨ АГУУЛГААРАА авна, `flex-1` БИШ (2026-09-22, хэрэглэгч:
+            "энэ баганыг янзлаарай"). Багана бүтэн өндөр авсны дараа энэ
+            карт үлдсэн зайг бүгдийг шингээж, найман мөрөөс доош бүтэн
+            дэлгэцийн хоосон талбай гаргаж байв. Үлдсэн зай баганын ДООД
+            талд хуримтлагдана — карт ДОТОР биш.
+          */}
+          <Card className="shrink-0">
             <Head title="Ангиллаар">
               <span className="text-[10.5px] text-ink-3">ажиглалт</span>
             </Head>
-            <div className="min-h-0 flex-1 overflow-y-auto p-3">
-              <RowChart data={byKind} selected={kind} onSelect={setKind} />
+            <div className="max-h-[420px] overflow-y-auto p-3">
+              <RowChart
+                data={byKind}
+                colorOf={(d) => kindColor.get(d.key) ?? DATA_COLOR}
+                selected={kind}
+                onSelect={setKind}
+              />
             </div>
           </Card>
 
@@ -374,6 +449,27 @@ export function BeaverDashboard() {
 }
 
 /* -------------------------------------------------------------------------- */
+
+/**
+ * Маршрутын өнгө — МӨН ЦЭНХЭР ГЭР БҮЛД (хэрэглэгч, 2026-09-22: "маршрут ч
+ * гэсэн"). Дулаан шаргал хувилбар буцаагдсан. Хүрээний цэнхэрээс ГЭРЭЛТЭЛТЭЭР
+ * сална: бараг цагаан цэнхэр — хүрээ ханалттай, зам цайвар.
+ */
+const ROUTE_COLOR = oklchHex(0.95, 0.05, 205);
+
+/**
+ * Ангиллын өнгөний шатлал — нэг гэр бүл, гэрэлтэлтээр сална.
+ * Өнцөг 195 → 228 бага зэрэг хөдөлнө (`TONE_RAMP`-тай ижил) — цэвэр
+ * гэрэлтэлтийн шатлалаас арай илүү ялгарах боловч солонго болохгүй.
+ * Цайвар үзүүр нь бараан цагиргаар газраас ялгарна (`colors` проп).
+ */
+function kindRamp(n: number): string[] {
+  if (n <= 1) return [DATA_COLOR];
+  return Array.from({ length: n }, (_, i) => {
+    const t = i / (n - 1);
+    return oklchHex(0.9 - t * 0.42, 0.11 + t * 0.03, 195 + t * 33);
+  });
+}
 
 function Field({ k, v }: { k: string; v: string }) {
   if (!v) return null;

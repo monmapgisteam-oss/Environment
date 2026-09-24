@@ -52,3 +52,37 @@ export const FOREST_FIREFLY = {
   mid: "#68efaf",
   core: "#d0ffe4",
 };
+
+/**
+ * OKLCH → hex.
+ *
+ * MapLibre `oklch()` уншдаггүй бөгөөд өнгийг ажиллах үед (ангиллын тоо
+ * мэдэгдсэний дараа) үүсгэх шаардлагатай тул хөрвүүлэлтийг энд хийнэ.
+ * Хэрэв муж халисан бол 0…1-д хавчина — OKLCH нь sRGB-ээс өргөн.
+ */
+export function oklchHex(L: number, C: number, H: number): string {
+  const h = (H * Math.PI) / 180;
+  const a = C * Math.cos(h);
+  const b = C * Math.sin(h);
+  const l = (L + 0.3963377774 * a + 0.2158037573 * b) ** 3;
+  const m = (L - 0.1055613458 * a - 0.0638541728 * b) ** 3;
+  const s = (L - 0.0894841775 * a - 1.291485548 * b) ** 3;
+
+  const lin = [
+    4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s,
+    -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s,
+    -0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s,
+  ];
+
+  return `#${lin
+    .map((v) => {
+      const g =
+        v <= 0.0031308
+          ? 12.92 * v
+          : 1.055 * Math.max(v, 0) ** (1 / 2.4) - 0.055;
+      return Math.round(Math.min(1, Math.max(0, g)) * 255)
+        .toString(16)
+        .padStart(2, "0");
+    })
+    .join("")}`;
+}

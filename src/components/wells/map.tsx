@@ -513,6 +513,7 @@ export function WellsMap({
   pulseColor,
   onHover,
   firefly,
+  colors,
   highlight = null,
   overlays,
   shapes,
@@ -609,6 +610,20 @@ export function WellsMap({
    * газрын зураг дээр ус мэт уншигдана.
    */
   firefly?: { glow: string; mid: string; core: string };
+  /**
+   * Цэг бүрийн АНГИЛЛЫН өнгө (hex), индекс нь `points`-тэй ижил.
+   *
+   * Өгөгдсөн цэг гурван давхаргаараа (сарнисан гэрэл → бие → цөм) тэр
+   * өнгөөр зурагдана (олон өнгөт `grades.firefly: "graded"`-тэй нэг хэл);
+   * өгөгдөөгүй цэг `firefly` өнгөндөө үлдэнэ. Зэрэглэсэн горимоос ялгаатай
+   * нь РАДИУС тогтмол — ангилал бол эрэмбэгүй тул хэмжээгээр илэрхийлэх
+   * зүйлгүй.
+   *
+   * ⚠ Ангилал ЦӨӨН үед л хэрэглэ ({@link lib/tone-ramp.ts}) — биеийн доор
+   * бараан цагираг нэмэгдэнэ, эс тэгвээс ногоон, шар өнгө хиймэл дагуулын
+   * газарт уусна (олон өнгөт шатлалтай ижил шалтгаан).
+   */
+  colors?: ArrayLike<string | undefined>;
   /**
    * Тодруулах цэгийн байрлал `[lon, lat]`. Өгвөл тэр цэгийг гэрэлтэх
    * цаграгаар тойруулна.
@@ -836,6 +851,7 @@ export function WellsMap({
     shapeGlow: Boolean(shapes?.glow),
     shapeColor: shapes?.color,
     fire: firefly ?? FIREFLY,
+    tinted: Boolean(colors),
     shapeLabelZoom: shapes?.labelZoom ?? 0,
     shapeFlow: Boolean(shapes?.flow),
     shapeLabelOnLine: shapes?.labelPlacement === "line-center",
@@ -1538,6 +1554,11 @@ export function WellsMap({
         төвөөсөө захад хүртэл бүрэн сарних гэсэн үг. Тиймээс гадна давхаргын
         радиус томрох тусам гэрэл нь ч зөөлөрнө.
       */
+      /* Ангиллын өнгө (`colors` проп, `c`) өгөгдсөн цэг гурван давхаргаараа тэр
+         өнгөөр; бусад нь firefly-ийн анхдагч өнгөнд */
+      const tint = (fallback: string): ExpressionSpecification =>
+        ["coalesce", ["get", "c"], fallback] as unknown as ExpressionSpecification;
+
       m.addLayer({
         id: "wells-glow",
         type: "circle",
@@ -1545,11 +1566,28 @@ export function WellsMap({
         filter: ["!", ["has", "point_count"]],
         paint: {
           "circle-radius": ["interpolate", ["linear"], ["zoom"], 8, 7, 12, 11, 16, 18],
-          "circle-color": modeRef.current.fire.glow,
+          "circle-color": tint(modeRef.current.fire.glow),
           "circle-blur": 1,
           "circle-opacity": 0.38,
         },
       });
+
+      /* Ангиллын өнгөтэй үед биеийн доор БАРААН ЦАГИРАГ — олон өнгөт
+         шатлалтай нэг шалтгаан: ногоон, шар нь хиймэл дагуулын газарт уусдаг */
+      if (modeRef.current.tinted) {
+        m.addLayer({
+          id: "wells-ring",
+          type: "circle",
+          source: "wells",
+          filter: ["!", ["has", "point_count"]],
+          paint: {
+            "circle-radius": ["interpolate", ["linear"], ["zoom"], 8, 4.4, 12, 6.6, 16, 10.8],
+            "circle-opacity": 0,
+            "circle-stroke-width": 1.1,
+            "circle-stroke-color": "rgba(8,14,20,.7)",
+          },
+        });
+      }
 
       m.addLayer({
         id: "wells-halo",
@@ -1558,7 +1596,7 @@ export function WellsMap({
         filter: ["!", ["has", "point_count"]],
         paint: {
           "circle-radius": ["interpolate", ["linear"], ["zoom"], 8, 3.6, 12, 5.6, 16, 9.5],
-          "circle-color": modeRef.current.fire.mid,
+          "circle-color": tint(modeRef.current.fire.mid),
           "circle-blur": 0.6,
           "circle-opacity": 0.6,
         },
@@ -1575,7 +1613,7 @@ export function WellsMap({
         filter: ["!", ["has", "point_count"]],
         paint: {
           "circle-radius": ["interpolate", ["linear"], ["zoom"], 8, 1.5, 12, 2.3, 16, 4],
-          "circle-color": modeRef.current.fire.core,
+          "circle-color": tint(modeRef.current.fire.core),
           "circle-opacity": 0.95,
         },
       });
@@ -2043,6 +2081,7 @@ export function WellsMap({
       const props: Record<string, unknown> = { oid: oid[i] };
       if (weights) props.w = weights[i];
       else if (grades) props.g = grades.values[i];
+      if (colors?.[i]) props.c = colors[i];
       /* Хоосон шошгыг ОГТ бичихгүй — давхаргын `has t` шүүлт үүнд
          тулгуурлаж, шошгогүй цэгийг алгасна */
       if (text?.[i]) props.t = text[i];
@@ -2106,7 +2145,7 @@ export function WellsMap({
         );
       }
     }
-  }, [live, points, visible, weights, grades, labels, values]);
+  }, [live, points, visible, weights, grades, labels, values, colors]);
 
   /*
     Шошгын ХЯЗГААР нь амьд.
