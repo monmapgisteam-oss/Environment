@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Building2, ChevronLeft, ChevronRight, Layers, Loader2, User, UserRound, Network, Users, RotateCcw, Search, CalendarDays, X } from "lucide-react";
+import { Building2, ChevronLeft, ChevronRight, ClipboardList, Layers, Loader2, User, UserRound, Network, Users, RotateCcw, Search, CalendarDays, X } from "lucide-react";
 import "./organization.css";
 import "./tasks.css";
 import {
@@ -191,6 +191,35 @@ export function SanhuuDashboard() {
     сонголт өөрчлөгдөх ч зураг байрандаа үлдэнэ.
   */
   const [focus, setFocus] = React.useState("heltes");
+
+  /*
+    ⚠⚠ ХОЁР АЛХАМ: БҮТЭЦ → ЗАДАРГАА (хэрэглэгчийн шийдвэр,
+    2026-09-25: "Санхүү, төсөв дээр дарвал эхлээд Санхүү, төсвийн
+    ажлын мод харагдана, тэгээд дарж орохоор нөгөө задаргаа
+    харагдана").
+
+    Урьд нь товшилт бүр ШУУД задаргаа руу үсэрдэг байв: хүүхэдтэй
+    нэгж дээр дарахад ч баруун тал ажлын жагсаалтаар эзлэгдэж, доорх
+    мөчрүүд нь нарийн баганад босоо цуварна — улмаас "Санхүү төсөв"
+    доторх гурван салаа бүтцээрээ ХАРАГДАХГҮЙ өнгөрдөг байлаа.
+
+    Одоо `breakdown` нь задаргаа нээгдсэн эсэхийг барина:
+      · хүүхэдтэй нэгж дээр товших → тэр нэгжийн МОД дэлгэгдэнэ;
+      · навчин нэгж дээр товших → задаргаа шууд нээгдэнэ (задлах
+        зүйл байхгүй тул хоёр дахь товшилт утгагүй);
+      · ДЭЭД карт дээр товших → тэр нэгжийн задаргаа нээгдэнэ.
+    ⚠ Зам заагч ба "Бүх бүтэц" нь задаргааг ХААНА — тэдгээр нь
+    бүтэц рүү буцах зам тул задаргаатай хамт буцвал хаана байгаагаа
+    алдана.
+  */
+  const [breakdown, setBreakdown] = React.useState(false);
+
+  /** Тухайн нэгж задлах зүйлтэй эсэх — товшилтын хариу үүнээс гарна */
+  const hasKids = React.useCallback(
+    (id: string) => units.some((u) => u.parent === id),
+    [units],
+  );
+
   const resetTaskView = React.useCallback(() => {
     setRecordFilter("all");
     setStatus(null);
@@ -198,19 +227,44 @@ export function SanhuuDashboard() {
     setDetail(null);
   }, []);
 
+  /**
+   * Доорх мөчрийн карт дээр товшсон үйлдэл.
+   *
+   * ⚠⚠ ҮНДЭС ДЭЭР задлана, МӨЧИР ДОТОР задаргаа нээнэ. Үндсэн
+   * харагдац нь зөвхөн хоёр шат (хэлтэс ба түүний дөрвөн салаа) тул
+   * хүүхэдтэй салаа дээр товшихыг "энэ салааг задал" гэж уншина.
+   * Мөчир дотор харин БҮХ ШАТ аль хэдийн дэлгэгдсэн байдаг тул
+   * задлах зүйл үлдэхгүй — товшилт нь тэр нэгжийн ажлыг нээнэ.
+   *
+   * ⚠ Навчин нэгж дээр (Хууль, эрх зүй гэх мэт) үндэс дээр ч задаргаа
+   * шууд нээгдэнэ: 2026-09-22-нд "хүүхэдтэй бол л гүнзгийрнэ" гэсэн
+   * дүрэм навчин нэгжийг зөвхөн сонгоод дэлгэцийг хөдөлгөөнгүй
+   * үлдээж байсан гомдол энд хэвээр шийдэгдэнэ.
+   */
   const pickUnit = React.useCallback(
     (id: string) => {
       resetTaskView();
       setUnit(id);
       setPerson(null);
-      /* ⚠ Хүүхэдгүй нэгж ч ФОКУС авна (2026-09-22): мөчрийн харагдацад
-         баруун тал нь тэр нэгжийн АЖЛУУД тул хоосон болохгүй — урьд нь
-         "хүүхэдтэй бол л гүнзгийрнэ" гэсэн дүрэм Дотоод хяналт зэрэг
-         навчин нэгжийг зөвхөн сонгоод, дэлгэц хөдөлгөөнгүй үлдээж байв */
       setFocus(id);
+      setBreakdown(!(focus === rootId && hasKids(id)));
     },
-    [resetTaskView],
+    [resetTaskView, hasKids, focus, rootId],
   );
+
+  /**
+   * ДЭЭД картын товшилт — задаргаа нээнэ.
+   *
+   * ⚠ Мөчир доторх ганц зам: хүүхэдтэй нэгжийн ажлуудыг харах бол
+   * түүн рүү орсны дараа дээд картаа дарна. Эс тэгвээс "Санхүү
+   * төсөв"-ийн нийт ажилд хүрэх арга байхгүй болно.
+   */
+  const openBreakdown = React.useCallback((id: string) => {
+    resetTaskView();
+    setUnit(id);
+    setPerson(null);
+    setBreakdown(true);
+  }, [resetTaskView]);
 
   /* Зам заагчаас товшиход тэр шат руу БУЦАЖ гарна */
   const goTo = React.useCallback((id: string) => {
@@ -218,6 +272,7 @@ export function SanhuuDashboard() {
     setFocus(id);
     setUnit(id);
     setPerson(null);
+    setBreakdown(false);
   }, [resetTaskView]);
 
   /*
@@ -269,8 +324,8 @@ export function SanhuuDashboard() {
   const taskNote = person ?? (scopedPeople.length === 1 ? `${unitLabel} · ${scopedPeople[0]}` : unitLabel);
 
 
-  /** Мөчир рүү орсон эсэх — зүүн талд том карт, баруун талд ажлууд */
-  const deep = focus !== rootId;
+  /** Задаргаа нээгдсэн эсэх — зүүн талд том карт, баруун талд ажлууд */
+  const deep = breakdown;
 
   /*
     Ажлын жагсаалт ХОЁР газар гарна: албан хаагчийн хуудсанд бүтэн
@@ -373,13 +428,13 @@ export function SanhuuDashboard() {
               <User size={12} aria-hidden />
               Албан хаагч
             </button>
-            <button type="button" className="org-reset" disabled={unit === rootId && person == null && focus === rootId} onClick={() => goTo(rootId)} aria-label="Бүх бүтэц" title="Бүх бүтэц"><RotateCcw size={13} aria-hidden /></button>
+            <button type="button" className="org-reset" disabled={unit === rootId && person == null && focus === rootId && !breakdown} onClick={() => goTo(rootId)} aria-label="Бүх бүтэц" title="Бүх бүтэц"><RotateCcw size={13} aria-hidden /></button>
           </header>
           {/* ⚠ Хэмжигчийн тайлбар ("Хэрэгжилт | Хугацааны явц") ХАСАГДСАН
             (хэрэглэгчийн шийдвэр, 2026-09-22). Карт бүр "12% хэрэгжилт ·
             72% хугацаа" гэж хоёр тоогоо өөрөө бичдэг тул тайлбар давхардал
             байв. */}
-        <div className="org-guide"><span>Нэгж сонгож бүтцийг задлах, албан хаагч сонгож ажлуудыг харна.</span></div>
+        <div className="org-guide"><span>Салаа дээр товшиж бүтцийг бүтнээр задлаад, нэгж дээр товшиж ажлуудыг харна.</span></div>
           {/*
             ⚠⚠ МӨЧИР РҮҮ ОРСОН ҮЕД ХОЁР БАГАНА (хэрэглэгчийн санаа,
             2026-09-22: "Дотоод хяналт дээр дарлаа — бусад картууд
@@ -400,8 +455,9 @@ export function SanhuuDashboard() {
               person={person}
               showStaff={showStaff}
               focus={focus}
+              breakdown={breakdown}
               onPick={pickUnit}
-              onPickHead={goTo}
+              onPickHead={openBreakdown}
               onPickPerson={pickPerson}
             />
             {deep ? <div className="org-tasks">{taskSection}</div> : null}
@@ -476,7 +532,6 @@ function PersonPage({
     chain.unshift(u);
     at = u.parent;
   }
-  const band = bandOf(stat.gap);
 
   return (
     <section className="person-page" aria-label="Албан хаагчийн хуудас">
@@ -513,86 +568,7 @@ function PersonPage({
       */}
       <div className="org-body is-focus">
         <div className="org-chart is-deep person-chart">
-          <div className="org-node person-node">
-            <div className="person-hero">
-              <span className="person-avatar" aria-hidden>
-                <User size={20} strokeWidth={1.5} />
-              </span>
-              <span className="person-id">
-                <span className="org-node-name" title={stat.name}>
-                  {stat.name}
-                </span>
-                {stat.position ? <span className="person-position">{stat.position}</span> : null}
-                {chain.length ? (
-                  <span className="person-unit">
-                    <Layers size={10} aria-hidden />
-                    {chain[chain.length - 1].label}
-                  </span>
-                ) : null}
-              </span>
-            </div>
-
-            {/*
-              ⚠⚠ КАРТ ЭНГИЙН (хэрэглэгч, 2026-09-22: "ойлгомжгүй байна").
-              Өмнөх хувилбар цагираг, хэмжигч, зөрүүний тэмдэг, зурвас,
-              гурван нүд гээд ТАВАН хийсвэр дүрстэй байсан — тус бүр нь
-              тайлбар шаардаж байв. Одоо хоёр блок, дүрс нь хоёрхон:
-              1. ХЭРЭГЖИЛТ БА ХУГАЦАА — хоёр тоо, нэг хэмжигч, доор нь
-                 зөрүүг ЭНГИЙН ӨГҮҮЛБЭРЭЭР ("хугацааны явцаас 24 пунктээр
-                 бага"). "Хоцорсон" гэж шийдэхгүй, зөвхөн баримт.
-              2. АЖЛЫН БАЙДАЛ — дөрвөн мөр, мөр бүр бүтэн шошго, тоо ба
-                 нийтэд эзлэх хувийн нимгэн зурвас. Нэг хэлбэр давтагдах
-                 тул сурах шаардлагагүй.
-            */}
-            {/*
-              ⚠⚠ "ХУГАЦААНЫ ЯВЦ" ГЭДЭГ ОЙЛГОЛТ ӨӨРӨӨ ХИЙСВЭР (хэрэглэгч,
-              2026-09-22: "энийг ерөөсөө ойлгохгүй юм"). Хоёр том хувь,
-              bullet хэмжигч, "пунктээр бага" гэсэн өгүүлбэр — гурвуулаа
-              тайлбар шаардаж байв. Одоо:
-              · хоёр ЗЭРЭГЦЭЭ ЗУРВАС (платформын мөрөн диаграмтай нэг
-                хэлбэр): дээд нь хийгдсэн ажил, доод нь өнгөрсөн хугацаа —
-                урт нь шууд харьцуулагдана, тайлбар хэрэггүй;
-              · хугацаа нь ОГНООГООР ил: "2026.01.01 – 2026.12.31";
-              · доор нь нэг өгүүлбэр: "Хугацааны 73% нь өнгөрсөн, ажлын
-                0% нь хэрэгжсэн байна."
-            */}
-            <div className="person-block">
-              <span className="eyebrow">Гүйцэтгэл</span>
-              <div className="person-bars">
-                <div>
-                  <span className="person-bars-label">Хийгдсэн ажил</span>
-                  <span className="num person-bars-val" style={{ color: stat.progress == null ? undefined : band.tone }}>
-                    {stat.progress == null ? "—" : `${num(stat.progress, 0)}%`}
-                  </span>
-                  <span className="person-bars-track" aria-hidden>
-                    <span style={{ width: `${Math.min(stat.progress ?? 0, 100)}%`, background: band.tone }} />
-                  </span>
-                </div>
-                <div>
-                  <span className="person-bars-label">Өнгөрсөн хугацаа</span>
-                  <span className="num person-bars-val">{num(stat.elapsed, 0)}%</span>
-                  <span className="person-bars-track" aria-hidden>
-                    <span className="is-time" style={{ width: `${Math.min(stat.elapsed, 100)}%` }} />
-                  </span>
-                </div>
-              </div>
-              {stat.start && stat.end ? (
-                <p className="person-dates">
-                  <span>Ажлын хугацаа</span>
-                  <span className="num">{dots(stat.start)} – {dots(stat.end)}</span>
-                </p>
-              ) : null}
-              <p className="person-note">{gapText(stat)}</p>
-            </div>
-
-            <div className="person-block">
-              <div className="person-block-head">
-                <span className="eyebrow">Ажлын байдал</span>
-                <span className="num person-big">{num(stat.n)} ажил</span>
-              </div>
-              <PersonRows stat={stat} />
-            </div>
-          </div>
+          <PersonSummary stat={stat} unitName={chain.at(-1)?.label} />
         </div>
         <div className="org-tasks">{children}</div>
       </div>
@@ -600,55 +576,64 @@ function PersonPage({
   );
 }
 
-/**
- * Хэрэгжилт ба хугацааны явцын зөрүүг ЭНГИЙН ӨГҮҮЛБЭРЭЭР. "Хоцорсон"
- * гэж ШИЙДЭХГҮЙ (явц нь жигд гэсэн таамаг дээрх тооцоо) — зөвхөн хоёр
- * тооны зөрүүг хэлнэ, дүгнэлт хүнийх.
- */
-function gapText(stat: PersonStat): string {
-  const t = num(stat.elapsed, 0);
-  if (stat.progress == null)
-    return `Хугацааны ${t}% нь өнгөрсөн; гүйцэтгэлийн мэдээлэл оруулаагүй тул хэрэгжилт тооцоогүй.`;
-  return `Хугацааны ${t}% нь өнгөрсөн, ажлын ${num(stat.progress, 0)}% нь хэрэгжсэн байна.`;
+/** A percentage average and a task count represent different things. */
+function PersonSummary({ stat, unitName }: { stat: PersonStat; unitName?: string }) {
+  const recorded = stat.n - stat.missing;
+  const positive = Math.max(0, recorded - stat.zero);
+  const counts = [
+    { label: "0%-аас дээш хэрэгжилттэй", value: positive, kind: "reported" },
+    { label: "0% гэж бүртгэсэн", value: stat.zero, kind: "zero" },
+    { label: "Гүйцэтгэл оруулаагүй", value: stat.missing, kind: "missing" },
+  ];
+  return (
+    <section className="person-summary" aria-label={`${stat.name} · ажлын нэгтгэл`}>
+      <header className="person-summary-identity">
+        <span className="person-summary-avatar" aria-hidden="true"><UserRound size={21} strokeWidth={1.6} /></span>
+        <div className="person-summary-id">
+          <h2>{stat.name}</h2>
+          {stat.position && <p>{stat.position}</p>}
+        </div>
+        {unitName && <div className="person-summary-unit"><Layers size={11} aria-hidden="true" /><span>{unitName}</span></div>}
+      </header>
+
+      <div className="person-summary-performance">
+        <div className="person-summary-metric">
+          <h3>Дундаж хэрэгжилт</h3>
+          <span className="person-summary-percent num">{stat.progress == null ? "—" : num(stat.progress, 0)}{stat.progress != null && <small>%</small>}</span>
+        </div>
+        {stat.progress != null && <div className="person-summary-track" aria-hidden="true"><span style={{ width: `${Math.max(0, Math.min(stat.progress, 100))}%` }} /></div>}
+        <p className="person-summary-caption">{stat.progress == null
+          ? "Гүйцэтгэлийн мэдээлэл оруулаагүй тул дундаж тооцоогүй."
+          : `Гүйцэтгэл бүртгэсэн ${num(recorded)} ажлын дундаж.`}</p>
+      </div>
+
+      <div className="person-summary-registration">
+        <div className="person-summary-section-head"><h3>Ажлын бүртгэл</h3><span className="person-summary-total num">Нийт <b>{num(stat.n)}</b> ажил</span></div>
+        <dl className="person-summary-counts">
+          {counts.map((item) => <div key={item.kind} className={`is-${item.kind}`}>
+            <dt><span aria-hidden="true" />{item.label}</dt><dd className="num">{num(item.value)}<small> ажил</small></dd>
+          </div>)}
+        </dl>
+        <div className="person-summary-status"><span>Төлөв бөглөсөн</span><span className="num"><b>{num(stat.stated)}</b> / {num(stat.n)} ажил</span></div>
+      </div>
+
+      <div className="person-summary-schedule">
+        <div className="person-summary-section-head"><h3><CalendarDays size={13} aria-hidden="true" />Хугацааны явц</h3><span className="num">{stat.n ? `${num(stat.elapsed, 0)}%` : "—"}</span></div>
+        {stat.n > 0 && <div className="person-summary-track is-time" aria-hidden="true"><span style={{ width: `${Math.max(0, Math.min(stat.elapsed, 100))}%` }} /></div>}
+        {stat.start && stat.end && <dl className="person-summary-dates">
+          <div><dt>Хамгийн эрт эхлэх</dt><dd className="num">{dots(stat.start)}</dd></div>
+          <div><dt>Хамгийн сүүлд дуусах</dt><dd className="num">{dots(stat.end)}</dd></div>
+        </dl>}
+        <p className="person-summary-caption">Ажлуудын өнгөрсөн хугацааны дундаж. Хэрэгжилтийн үнэлгээ биш.</p>
+      </div>
+    </section>
+  );
 }
 
-/** ISO огноог "2026.01.01" хэлбэрт */
 function dots(iso: string): string {
   return iso.replaceAll("-", ".");
 }
 
-/**
- * Ажлын байдал — дөрвөн мөр, нэг хэлбэр: шошго · тоо · нийтэд эзлэх
- * хувийн зурвас. Эхний гурав нь нийлээд яг N (хэрэгжилтээ хэрхэн
- * бүртгүүлснээр), дөрөв дэх нь төлөв. Тэг мөр ч харагдана —
- * "оруулаагүй 0" гэдэг нь өөрөө мэдээлэл.
- * ⚠ Өнгө = утга: 0% мөр `--clay`, оруулаагүй мөр зураастай, бусад `--tone`.
- */
-function PersonRows({ stat }: { stat: PersonStat }) {
-  const some = Math.max(0, stat.n - stat.zero - stat.missing);
-  const rows = [
-    { label: "Хэрэгжилт бүртгэсэн", n: some, cls: "" },
-    { label: "Хэрэгжилт 0% гэж бүртгэсэн", n: stat.zero, cls: "is-zero" },
-    { label: "Гүйцэтгэлийн мэдээлэл оруулаагүй", n: stat.missing, cls: "is-missing" },
-    { label: "Төлөв тэмдэглэсэн", n: stat.stated, cls: "" },
-  ];
-  return (
-    <dl className="person-rows">
-      {rows.map((x) => (
-        <div key={x.label}>
-          <dt>{x.label}</dt>
-          <dd className="num">
-            {num(x.n)}
-            <small> / {num(stat.n)}</small>
-          </dd>
-          <span className={cn("person-rows-bar", x.cls)} aria-hidden>
-            <span style={{ width: `${stat.n ? (x.n / stat.n) * 100 : 0}%` }} />
-          </span>
-        </div>
-      ))}
-    </dl>
-  );
-}
 
 /* -------------------------------------------------------------------------- */
 
@@ -730,6 +715,7 @@ function OrgChart({
   person,
   showStaff,
   focus,
+  breakdown,
   onPick,
   onPickHead,
   onPickPerson,
@@ -743,20 +729,42 @@ function OrgChart({
   showStaff: boolean;
   /** Хүүхдүүд нь дэлгэгдэж буй нэгж */
   focus: string;
+  /** Задаргаа нээгдсэн эсэх — нарийн багана болох эсэхийг энэ шийднэ */
+  breakdown: boolean;
   onPick: (id: string) => void;
-  /** Дээд картын товшилт — гүнзгийрэлтийг хөндөхгүй, зөвхөн сонгоно */
+  /** Дээд картын товшилт — задаргааг нээнэ */
   onPickHead: (id: string) => void;
   onPickPerson: (name: string) => void;
 }) {
   const head = units.find((u) => u.id === focus);
   if (!head) return null;
   const kids = units.filter((u) => u.parent === focus);
-  const countKids = (id: string) => units.filter((u) => u.parent === id).length;
-  /** Үндэс дээр хоёр шат, мөчир дотор бүтэн задаргаа */
-  const deep = head.parent !== null;
+  /*
+    ⚠⚠ НАРИЙН БАГАНА нь ЗАДАРГААНААС гарна, шатнаасаа БИШ
+    (2026-09-25). Урьд нь `head.parent !== null` байсан тул үндэснээс
+    нэг шат бууснаар л мод нь 440px-ийн баганад шахагдаж, хүүхдүүд нь
+    босоо цуварна — "Санхүү төсөв" доторх гурван салаа бүтцээрээ
+    харагдах боломжгүй болдог байв. Одоо ажлын жагсаалт гарч ирэх үед
+    л нарийсна: зэрэгцэн харагдах хоёр зүйл байгаа тохиолдолд.
+  */
+  const deep = breakdown;
+  /*
+    ⚠⚠ МӨЧИР ДОТОР БҮХ ШАТ НЭГ ДОР (хэрэглэгчийн шийдвэр, 2026-09-25:
+    "Санхүү төсөв дээр дарвал цааш задрахгүй бүх задарга харагдана").
+    Салаа руу орсон хэрэглэгч бүтцийг ХАРАХААР орж байгаа тул шат
+    бүрийг тусад нь товшиж нээх нь дэмий алхам байв.
+
+    ⚠ ҮНДЭС ДЭЭР ХОЁР ШАТ ХЭВЭЭР: хэлтсийн бүтэн мод нь найман навчтай
+    буюу ~2,400px өргөн болох тул гүйлгүүргүйгээр уншигдахгүй (2026-09-21-нд
+    яг ингэж оролдоод буцаасан). Салаа тус бүр харин таваас илүүгүй
+    навчтай — бүтнээрээ багтана.
+  */
+  const full = head.parent !== null;
+
+  const ctx = { units, tree, staff, people, selected, person, showStaff, full, onPick, onPickPerson };
 
   return (
-    <div className={cn("org-chart", deep && "is-deep")}>
+    <div className={cn("org-chart", deep && "is-deep", full && !deep && "is-full")}>
       {/* ⚠ Гүйлтийн хүрээ ба агуулга нь ХОЁР ӨӨР элемент байна:
           нэг элемент зэрэг гүйж, зэрэг агуулгынхаа өргөнөөр тэлж
           чадахгүй. Дээд карт нь энэ давхаргын ДОТОР голлоно */}
@@ -771,6 +779,7 @@ function OrgChart({
             person={person}
             showStaff={showStaff}
             kids={0}
+            openHint={!breakdown}
             depth={depthOf(head.id, units)}
             onPick={() => onPickHead(head.id)}
             onPickPerson={onPickPerson}
@@ -779,31 +788,89 @@ function OrgChart({
         {kids.length ? (
           <div className="org-branches">
             {kids.map((u) => (
-              <div key={u.id} className="org-branch">
-                {/*
-                  ⚠ Мөчир рүү орсон үед хүүхдүүд нь том картын ДООР босоо
-                  цуварна (2026-09-22): дэлгэцийн баруун тал ажлын
-                  жагсаалтынх болсон тул хэвтээ тарах зай байхгүй. Товшиход
-                  цааш гүнзгийрнэ.
-                */}
-                <NodeCard
-                  unit={u}
-                  tree={tree}
-                  staff={staff}
-                  people={people}
-                  on={selected === u.id}
-                  person={person}
-                  showStaff={showStaff}
-                  kids={countKids(u.id)}
-                  depth={depthOf(u.id, units)}
-                  onPick={() => onPick(u.id)}
-                  onPickPerson={onPickPerson}
-                />
-              </div>
+              <Branch key={u.id} unit={u} {...ctx} />
             ))}
           </div>
         ) : null}
       </div>
+    </div>
+  );
+}
+
+/**
+ * Нэг мөчир ба (мөчрийн харагдацад) түүний БҮХ үр удам.
+ *
+ * ⚠ Рекурсив: хүүхэд бүр өөрийнхөө хүүхдүүдийг доороо агуулна.
+ * Холбоос зураас нь `.org-branches > .org-branch`-ийн ::before/::after
+ * -ээс гардаг тул гүн хэдэн ч шат байсан нэг л дүрмээр зурагдана.
+ * ⚠ Үндсэн харагдацад (`full` худал) хүүхдүүд нь зурагдахгүй —
+ * зөвхөн "Дэд бүтэц N ›" гэсэн дохио үлдэнэ.
+ */
+function Branch({
+  unit,
+  units,
+  tree,
+  staff,
+  people,
+  selected,
+  person,
+  showStaff,
+  full,
+  onPick,
+  onPickPerson,
+}: {
+  unit: Unit;
+  units: Unit[];
+  tree: ReturnType<typeof rollup>;
+  staff: Staff[];
+  people: Map<string, PersonStat>;
+  selected: string;
+  person: string | null;
+  showStaff: boolean;
+  /** Үр удмыг нь доор нь дэлгэх эсэх */
+  full: boolean;
+  onPick: (id: string) => void;
+  onPickPerson: (name: string) => void;
+}) {
+  const kids = units.filter((u) => u.parent === unit.id);
+  return (
+    <div className="org-branch">
+      <NodeCard
+        unit={unit}
+        tree={tree}
+        staff={staff}
+        people={people}
+        on={selected === unit.id}
+        person={person}
+        showStaff={showStaff}
+        kids={kids.length}
+        /* ⚠ Хүүхдүүд нь ДООРОО аль хэдийн зурагдсан бол сум хэрэггүй:
+           тэр нь "товшвол задарна" гэсэн амлалт болж уншигдана */
+        kidsAction={!full}
+        depth={depthOf(unit.id, units)}
+        onPick={() => onPick(unit.id)}
+        onPickPerson={onPickPerson}
+      />
+      {full && kids.length ? (
+        <div className="org-branches">
+          {kids.map((k) => (
+            <Branch
+              key={k.id}
+              unit={k}
+              units={units}
+              tree={tree}
+              staff={staff}
+              people={people}
+              selected={selected}
+              person={person}
+              showStaff={showStaff}
+              full={full}
+              onPick={onPick}
+              onPickPerson={onPickPerson}
+            />
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -876,6 +943,8 @@ function NodeCard({
   person,
   showStaff,
   kids,
+  kidsAction = true,
+  openHint,
   depth,
   onPick,
   onPickPerson,
@@ -889,6 +958,16 @@ function NodeCard({
   showStaff: boolean;
   /** Шууд харьяа НЭГЖИЙН тоо — товшиход гүнзгийрнэ гэдгийн дохио */
   kids: number;
+  /** Тоо нь ҮЙЛДЭЛ заах эсэх. Үр удам нь доороо зурагдсан үед ЗӨВХӨН баримт */
+  kidsAction?: boolean;
+  /**
+   * Дээд карт дээр "товшиход ажил нь гарна" гэсэн дохио.
+   *
+   * ⚠ Дэд карт нь "Дэд бүтэц N ›" гэж задлагдахаа хэлдэг; дээд карт
+   * нь задлагдахгүй тул өөр үйлдлээ өөрөө нэрлэх ёстой. Үүнгүй бол
+   * мөчирт орсон хэрэглэгч ажлын жагсаалт руу хүрэх замыг таамаглана.
+   */
+  openHint?: boolean;
   /** Модны шат — тэмдэг үүнээс гарна */
   depth: number;
   onPick: () => void;
@@ -944,7 +1023,8 @@ function NodeCard({
           <span className="org-work-count"><strong className="num">{num(n)}</strong><span>ажил</span></span>
           <div className="org-summary-context">
             {mine.length ? <span title="Шууд харьяалах албан хаагч"><Users size={12} aria-hidden />Шууд харьяалах: <b className="num">{num(mine.length)}</b></span> : null}
-            {kids ? <span className="org-node-kids"><Network size={12} aria-hidden />Дэд бүтэц <b className="num">{num(kids)}</b><ChevronRight size={12} aria-hidden /></span> : null}
+            {kids ? <span className="org-node-kids"><Network size={12} aria-hidden />Дэд бүтэц <b className="num">{num(kids)}</b>{kidsAction ? <ChevronRight size={12} aria-hidden /> : null}</span> : null}
+            {openHint && n ? <span className="org-node-kids"><ClipboardList size={12} aria-hidden />Ажлыг харах<ChevronRight size={12} aria-hidden /></span> : null}
           </div>
         </div>
 
