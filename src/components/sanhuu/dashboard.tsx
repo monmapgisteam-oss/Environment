@@ -397,6 +397,7 @@ export function SanhuuDashboard() {
       {person && people.get(person) ? (
         <PersonPage
           stat={people.get(person)!}
+          today={today}
           units={units}
           unitId={data.staff.find((x) => x.name === person)?.unit ?? null}
           onBack={() => { resetTaskView(); setPerson(null); }}
@@ -509,6 +510,7 @@ export function SanhuuDashboard() {
 
 function PersonPage({
   stat,
+  today,
   units,
   unitId,
   onBack,
@@ -516,6 +518,7 @@ function PersonPage({
   children,
 }: {
   stat: PersonStat;
+  today: number;
   units: Unit[];
   /** Албан хаагчийн харьяалагдах нэгж */
   unitId: string | null;
@@ -568,7 +571,7 @@ function PersonPage({
       */}
       <div className="org-body is-focus">
         <div className="org-chart is-deep person-chart">
-          <PersonSummary stat={stat} unitName={chain.at(-1)?.label} />
+          <PersonSummary stat={stat} today={today} unitName={chain.at(-1)?.label} />
         </div>
         <div className="org-tasks">{children}</div>
       </div>
@@ -577,7 +580,13 @@ function PersonPage({
 }
 
 /** A percentage average and a task count represent different things. */
-function PersonSummary({ stat, unitName }: { stat: PersonStat; unitName?: string }) {
+function PersonSummary({ stat, today, unitName }: { stat: PersonStat; today: number; unitName?: string }) {
+  const endDay = stat.n ? dayOf(stat.end) : null;
+  const remaining = endDay == null ? null : endDay - today;
+  const deadlineText = remaining == null ? "Огноо тодорхойгүй"
+    : remaining > 0 ? `${num(remaining)} хоног үлдсэн`
+    : remaining === 0 ? "Өнөөдөр дуусна"
+    : `${num(-remaining)} хоног өнгөрсөн`;
   const recorded = stat.n - stat.missing;
   const positive = Math.max(0, recorded - stat.zero);
   const counts = [
@@ -618,13 +627,12 @@ function PersonSummary({ stat, unitName }: { stat: PersonStat; unitName?: string
       </div>
 
       <div className="person-summary-schedule">
-        <div className="person-summary-section-head"><h3><CalendarDays size={13} aria-hidden="true" />Хугацааны явц</h3><span className="num">{stat.n ? `${num(stat.elapsed, 0)}%` : "—"}</span></div>
-        {stat.n > 0 && <div className="person-summary-track is-time" aria-hidden="true"><span style={{ width: `${Math.max(0, Math.min(stat.elapsed, 100))}%` }} /></div>}
+        <div className="person-summary-section-head"><h3><CalendarDays size={13} aria-hidden="true" />Ажлын хугацаа</h3><span className="num">{deadlineText}</span></div>
+        {stat.n > 0 && endDay != null && <div className="person-summary-track is-time" role="progressbar" aria-label="Ажлуудын хугацааны дундаж явц" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.max(0, Math.min(stat.elapsed, 100))} title={`Хугацааны дундаж явц: ${num(stat.elapsed, 0)}%`}><span style={{ width: `${Math.max(0, Math.min(stat.elapsed, 100))}%` }} /></div>}
         {stat.start && stat.end && <dl className="person-summary-dates">
-          <div><dt>Хамгийн эрт эхлэх</dt><dd className="num">{dots(stat.start)}</dd></div>
-          <div><dt>Хамгийн сүүлд дуусах</dt><dd className="num">{dots(stat.end)}</dd></div>
+          <div><dt>Эхлэх</dt><dd className="num">{dots(stat.start)}</dd></div>
+          <div><dt>Дуусах</dt><dd className="num">{dots(stat.end)}</dd></div>
         </dl>}
-        <p className="person-summary-caption">Ажлуудын өнгөрсөн хугацааны дундаж. Хэрэгжилтийн үнэлгээ биш.</p>
       </div>
     </section>
   );

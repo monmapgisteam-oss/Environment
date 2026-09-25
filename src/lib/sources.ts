@@ -24,6 +24,8 @@ import { SOIL_SERVICES } from "@/lib/soil";
 import { CITY_SERVICE, PIT_SERVICE } from "@/lib/toilets";
 import { BOMT_SERVICE } from "@/lib/bomt";
 import { NEUTRALIZATION_SERVICE } from "@/lib/neutralization";
+import { WEATHER_API } from "@/lib/weather";
+import { CHEMSYSTEM_API } from "@/lib/chemsystem";
 
 export type Source = {
   /** Аль хэлтсийн эх сурвалж вэ */
@@ -79,70 +81,72 @@ export const SOURCES: Source[] = [
   {
     slug: "orchin",
     name: "Нүхэн жорлонгийн бүртгэл, орчны үнэлгээ",
-    kind: "ArcGIS FeatureServer",
+    kind: "ArcGIS Enterprise FeatureServer",
     url: PIT_SERVICE,
   },
   {
     slug: "orchin",
     name: "Нийтийн бие засах газар",
-    kind: "ArcGIS FeatureServer",
+    kind: "ArcGIS Enterprise FeatureServer",
     url: CITY_SERVICE,
   },
   {
     slug: "orchin",
     name: "Хөрсний хяналт шинжилгээ — 2024, 500 цэг",
-    kind: "ArcGIS FeatureServer",
+    kind: "ArcGIS Enterprise FeatureServer",
     url: SOIL_SERVICES[0],
   },
   {
     slug: "orchin",
     name: "Хөрсний хяналт шинжилгээ — 2023, 500 цэг",
-    kind: "ArcGIS FeatureServer",
+    kind: "ArcGIS Enterprise FeatureServer",
     url: SOIL_SERVICES[1],
   },
   {
     slug: "orchin",
     name: "Хөрсний саармагжуулалт — 4 цэг",
-    /* Бусад эх сурвалжаас ялгаатай: хост нь өөрөө гарын үсэг зурсан TLS
-       гэрчилгээтэй тул хөтөч холбогдож чадахгүй. Дата нь `neutralization.ts`
-       дотор хуулбараар хадгалагдаж байгаа. */
-    kind: "ArcGIS FeatureServer · хуулбар",
+    /* ⚠ 2026-09-25 хүртэл "хуулбар" гэж тэмдэглэгдсэн байв: хост нь
+       өөрөө гарын үсэг зурсан TLS гэрчилгээтэй байхад дата нь
+       `neutralization.ts` дотор бичигдсэн байсан. Гэрчилгээ
+       2026-09-12-нд засагдаж, модуль нь `arcgisJson`-оор АМЬДААР
+       татдаг болсон тул тэмдэглэгээ ХУУЧИРСАН. */
+    kind: "ArcGIS Enterprise FeatureServer",
     url: NEUTRALIZATION_SERVICE,
   },
   {
     slug: "orchin",
     name: "Нөхөн сэргээлт — аж ахуйн нэгжийн хөрөнгөөр",
-    kind: "ArcGIS FeatureServer",
+    kind: "ArcGIS Enterprise FeatureServer",
     url: RECLAMATION_SERVICES[0],
   },
   {
     slug: "orchin",
     name: "Нөхөн сэргээлт — нийслэлийн төсвөөр",
-    kind: "ArcGIS FeatureServer",
+    kind: "ArcGIS Enterprise FeatureServer",
     url: RECLAMATION_SERVICES[1],
   },
   {
     slug: "orchin",
     name: "Эвдэрсэн газрын талбай",
-    kind: "ArcGIS FeatureServer",
+    kind: "ArcGIS Enterprise FeatureServer",
     url: DAMAGED_SERVICE,
   },
   {
     slug: "orchin",
     name: "Өргөдлийн талбай, шийдвэрлэлт",
-    kind: "ArcGIS FeatureServer",
+    kind: "ArcGIS Enterprise FeatureServer",
     url: PETITIONS_SERVICE,
   },
   {
     slug: "orchin",
     name: "Түгээмэл тархацтай ашигт малтмалын тусгай зөвшөөрөл",
-    kind: "ArcGIS FeatureServer",
+    kind: "ArcGIS Enterprise FeatureServer",
     url: LICENSES_SERVICE,
   },
   {
     slug: "orchin",
     name: "Ашигт малтмалын тусгай зөвшөөрөлтэй талбай (нүүрс, алт)",
-    kind: "ArcGIS FeatureServer",
+    kind: "ArcGIS Enterprise FeatureServer",
     url: MINERALS_SERVICE,
   },
   ...portalSources("oi", FOREST),
@@ -150,40 +154,77 @@ export const SOURCES: Source[] = [
   {
     slug: "hyanalt",
     name: "Авто засварын үйлчилгээний цэг",
-    kind: "ArcGIS FeatureServer",
+    kind: "ArcGIS Enterprise FeatureServer",
     url: REPAIR_SERVICE,
   },
   {
     slug: "hyanalt",
     name: "Химийн хорт, аюултай бодисын агуулах 2023",
-    kind: "ArcGIS FeatureServer",
+    kind: "ArcGIS Enterprise FeatureServer",
     url: chemicalService(2023),
   },
   {
     slug: "hyanalt",
     name: "Химийн хорт, аюултай бодисын агуулах 2024",
-    kind: "ArcGIS FeatureServer",
+    kind: "ArcGIS Enterprise FeatureServer",
     url: chemicalService(2024),
+  },
+  {
+    slug: "hyanalt",
+    name: "Химийн бодисын үндэсний бүртгэл",
+    /* ⚠ Хөтөч энэ хаяг руу ШУУД хандахгүй: түлхүүр нь бичих эрхтэй
+       тул бүтээх үед татаж хормын хувилбар болгодог. Эх сурвалж нь
+       гэхдээ ЭНЭ систем мөн — каталогид үнэнийг нь бичнэ. */
+    kind: "Түлхүүртэй API",
+    url: CHEMSYSTEM_API,
   },
   {
     slug: "unelgee-uur-amisgal",
     name: "Байгаль орчны ерөнхий үнэлгээ 2025 — нэгж талбар",
-    kind: "ArcGIS FeatureServer",
+    kind: "ArcGIS Enterprise FeatureServer",
     url: ASSESSMENT_SERVICES[0].url,
   },
   {
     slug: "unelgee-uur-amisgal",
     name: "Байгаль орчны ерөнхий үнэлгээ 2026 — нэгж талбар",
-    kind: "ArcGIS FeatureServer",
+    kind: "ArcGIS Enterprise FeatureServer",
     url: ASSESSMENT_SERVICES[1].url,
   },
   {
     slug: "unelgee-uur-amisgal",
     name: "Байгаль орчны менежментийн төлөвлөгөө — 2026 оны нэгтгэл",
-    /* Хост нь өөрөө гарын үсэг зурсан TLS гэрчилгээтэй тул хөтөч
-       холбогдож чадахгүй. Дата нь `public/data/bomt-2026.json` дотор
-       хуулбараар хадгалагдаж, бидний өөрийн эх сурвалжаас татагдана. */
-    kind: "ArcGIS FeatureServer · хуулбар",
+    /* ⚠ Мөн адил ХУУЧИРСАН тэмдэглэгээ байв. Иш татагдаж байсан
+       `public/data/bomt-2026.json` хуулбар 2026-09-16-нд УСТГАГДСАН —
+       давхарга нь порталаас шууд татагдана. */
+    kind: "ArcGIS Enterprise FeatureServer",
     url: BOMT_SERVICE,
+  },
+  /*
+    Ус цаг уур, орчны шинжилгээний газрын НЭЭЛТТЭЙ API. Түлхүүр
+    шаардахгүй, CORS-оо хүсэлтийн эх үүсвэрээр буцаадаг тул хөтчөөс
+    шууд татагдана.
+
+    ⚠ ГУРВАН ЗАМ ТУСДАА мөр болно: нэг API боловч хаяг нь өөр өөр
+    бөгөөд агуулга нь ч өөр (станцын бүртгэл · сүүлийн заалт ·
+    урьдчилсан мэдээ). Каталогийн бусад мөр бүр НЭГ хаягийг заадаг
+    тул гурвыг нэг мөрөнд нийлүүлбэл хаягийн багана худал болно.
+  */
+  {
+    slug: "unelgee-uur-amisgal",
+    name: "Цаг уурын станцын бүртгэл",
+    kind: "Нээлттэй API",
+    url: `${WEATHER_API}/obs/aimags`,
+  },
+  {
+    slug: "unelgee-uur-amisgal",
+    name: "Станцын сүүлийн ажиглалт",
+    kind: "Нээлттэй API",
+    url: `${WEATHER_API}/obs/data/aws`,
+  },
+  {
+    slug: "unelgee-uur-amisgal",
+    name: "Таван хоногийн урьдчилсан мэдээ",
+    kind: "Нээлттэй API",
+    url: `${WEATHER_API}/5dayforecastall`,
   },
 ];

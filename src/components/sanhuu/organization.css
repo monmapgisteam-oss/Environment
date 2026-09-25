@@ -315,9 +315,9 @@
 .person-summary-status { display: flex; justify-content: space-between; gap: 10px; margin-top: 13px; padding-top: 10px; border-top: 1px solid var(--summary-line); font-size: 10px; color: var(--ink-3); }
 .person-summary-status b { font-weight: 500; color: var(--ink-2); }
 .person-summary-schedule { padding: 15px 16px; }
-.person-summary-schedule .person-summary-section-head > span { font-size: 12px; font-weight: 500; color: var(--ink-2); }
 .person-summary-track.is-time { height: 3px; margin-top: 9px; }
 .person-summary-track.is-time > span { background: var(--ink-3); opacity: .65; }
+.person-summary-schedule .person-summary-section-head > span { font-size: 12px; font-weight: 500; color: var(--ink-2); }
 .person-summary-dates { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 16px; margin-top: 11px; }
 .person-summary-dates dt { font-size: 9.5px; color: var(--ink-3); }
 .person-summary-dates dd { margin-top: 3px; font-size: 10.5px; color: var(--ink-2); }
