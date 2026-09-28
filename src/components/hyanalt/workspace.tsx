@@ -2,15 +2,19 @@
 
 import * as React from "react";
 import dynamic from "next/dynamic";
-import { Boxes, FlaskConical, Loader2, Workflow, Wrench } from "lucide-react";
+import { Boxes, FlaskConical, Loader2, Trash2, Workflow, Wrench } from "lucide-react";
 import { SourceTabs, useStoredTab } from "@/components/ui/source-tabs";
+import { WASTE } from "@/lib/hyanalt-layers";
 
 /*
   Хэлтэс ТАВАН табтай. Зэрэг ачаалахгүй: сонгосон нь л татагдана.
   Эхний хоёр нь MapLibre-тэй бөгөөд химийн бүртгэл нь бодисын урт
   бичвэртэй тул эхнээс нь бүгдийг татах нь илүүц.
 
-  Гурав дахь нь дата БИШ ЖУРАМ — хэлтсийн ажлын урсгалын схем. Тоон
+  Хог хаягдлын таб нь ХУВААЛЦСАН порталын самбараар зурагдана — өөрийн
+  код байхгүй, ялгаа нь `LayerSet` бүртгэлд.
+
+  Схемийн таб нь дата БИШ ЖУРАМ — хэлтсийн ажлын урсгал. Тоон
   харагдацуудын хажууд байрлах нь зөв: хэрэглэгч бүртгэлийг хараад
   "энэ хаанаас гардаг юм бэ" гэж асуухад хариулт нь нэг товшилтын
   зайд байна.
@@ -46,6 +50,20 @@ const ChemSystemDashboard = dynamic(
   { ssr: false, loading: spinner },
 );
 
+/*
+  Хог хаягдлын хоёр давхарга — ХУВААЛЦСАН порталын самбараар
+  ({@link src/components/layers/portal-dashboard.tsx}). Бүтцээ эх
+  сурвалжаас өөрөө уншдаг тул энэ сэдэвт тусдаа код бичээгүй: ялгаа нь
+  зөвхөн `LayerSet`-д ({@link src/lib/hyanalt-layers.ts}).
+*/
+const PortalLayers = dynamic(
+  () =>
+    import("@/components/layers/portal-dashboard").then(
+      (m) => m.PortalLayersDashboard,
+    ),
+  { ssr: false, loading: spinner },
+);
+
 const TABS = [
   {
     /*
@@ -77,6 +95,27 @@ const TABS = [
     label: "Авто засварын үйлчилгээ",
     note: "528 цэг · зөвхөн газрын зураг",
     icon: Wrench,
+  },
+  {
+    /*
+      ⚠⚠ НЭР нь ХЭРЭГЛЭГЧИЙН СОНГОЛТ (2026-09-28: "ner ni landfill").
+      Агуулга нь хотын хогийн цэг БА аюултай хог хаягдлын зөвшөөрөл
+      хоёр тул "ландфилл" нь хагасыг нь л нэрлэнэ — тайлбар мөр нь
+      хоёуланг ил хэлнэ.
+
+      ⚠ Тайлбарт БИЧЛЭГИЙН ТОО БИЧЭЭГҮЙ: эдгээр нь нэмэгдсээр байгаа
+      бүртгэл тул энд бичсэн тоо маргааш хуучирна. Оронд нь эх
+      сурвалжийн ӨӨРИЙН хоёр нэрийг тавив — тэдгээр нь бүртгэлийн
+      БҮТЭЦ тул тогтвортой.
+
+      ⚠⚠ Энэ нь хуучин "Устгал, ландфилл" табын ОРЛОГЧ БИШ: тэр нь
+      зохиомол жишээ дата (`lib/landfill.ts`) дээр сууж байсан бөгөөд
+      2026-09-21-нд хасагдсан. Энэ бол порталын бодит хоёр давхарга.
+    */
+    id: "landfill",
+    label: "Ландфилл",
+    note: "Энгийн · аюултай хог хаягдал",
+    icon: Trash2,
   },
   {
     id: "scheme",
@@ -159,6 +198,8 @@ export function HyanaltWorkspace() {
       <div className="department-workspace-content">
         {open === "chemsystem" ? (
           <ChemSystemDashboard />
+        ) : open === "landfill" ? (
+          <PortalLayers set={WASTE} />
         ) : open === "repair" ? (
           <RepairMap />
         ) : open === "scheme" ? (

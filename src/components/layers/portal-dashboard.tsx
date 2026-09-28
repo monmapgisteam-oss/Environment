@@ -1443,11 +1443,38 @@ export function PortalLayersDashboard({
               (`openAll`) цонхонд юу ч уншигдаагүй бол алдааг ил хэлнэ:
               тэнд хоосон зураг нь техникийн гэмтэл.
             */}
-              {on.length === 0 && !picker ? (
+              {/*
+              ⚠⚠ АЛДАА ХААНА Ч ГАРАХГҮЙ БАЙВ (2026-09-28). Жагсаалттай
+              цонхонд давхаргын татацын алдаа мөрөндөө ил бичигддэг —
+              `openAll` цонхонд тэр жагсаалт БАЙХГҮЙ тул алдаа хаана ч
+              буудаггүй байлаа. Давхаргууд асаалттай (`on.length > 0`)
+              тул доорх "уншигдсангүй" мэдэгдэл ч гарахгүй, задаргааны
+              багана нь "Задаргаа гарахуйц талбар олдсонгүй" гэж
+              ДАТАНЫ тухай өгүүлбэр бичнэ — техникийн гэмтлийг баримт
+              мэт харуулж байгаа хэрэг.
+              ⚠ Бодит нөхцөл: токен хугацаа дуусах, давхарга устгагдах,
+              сүлжээ тасрах. Гурвуулаа "энэ давхаргад ангилал байхгүй"
+              гэж ХУДЛАА уншигдаж байв.
+            */}
+              {!picker && (on.length === 0 || on.every((id) => failed[id])) ? (
                 <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
-                  <p className="elevated max-w-[300px] rounded-xs border border-line bg-paper/92 px-4 py-3 text-center text-[12.5px] leading-relaxed text-ink-2 backdrop-blur-md">
-                    Давхарга уншигдсангүй.
-                  </p>
+                  <div className="elevated max-w-[340px] rounded-xs border border-line bg-paper/92 px-4 py-3 text-center backdrop-blur-md">
+                    <p className="text-[12.5px] leading-relaxed text-ink-2">
+                      Давхарга уншигдсангүй.
+                    </p>
+                    {/* Серверийн хариуг БҮТНЭЭР нь дамжуулна: "Invalid
+                        Token" ба "Item does not exist" хоёр нь тэс өөр
+                        арга хэмжээ шаардана */}
+                    {on
+                      .map((id) => failed[id])
+                      .filter((m): m is string => Boolean(m))
+                      .slice(0, 2)
+                      .map((message) => (
+                        <p key={message} className="num mt-1.5 text-[11px] leading-snug text-ink-3">
+                          {message}
+                        </p>
+                      ))}
+                  </div>
                 </div>
               ) : null}
             </div>
