@@ -13,7 +13,7 @@ import {
   Tag,
 } from "lucide-react";
 import {
-  BarChart,
+  AreaChart,
   GroupedBarChart,
   PieChart,
   RowChart,
@@ -258,7 +258,9 @@ export function PortalLayersDashboard({
   const [on, setOn] = React.useState<string[]>(() =>
     set.openAll
       ? [...set.layers]
-      : (set.open ?? []).filter((id) => set.layers.includes(id)),
+      : set.exclusive
+        ? set.layers.slice(0, 1)
+        : (set.open ?? []).filter((id) => set.layers.includes(id)),
   );
 
   /*
@@ -274,7 +276,7 @@ export function PortalLayersDashboard({
     Ойн хэлтэс дээр долоон давхарга ХООСОН эхэлдэг тул тэнд жагсаалт
     хэвээр — тэр нь жинхэнэ сонголт.
   */
-  const picker = !set.openAll;
+  const picker = !set.openAll && !set.exclusive;
   /** Татагдсан бичлэгүүд — унтраасан ч санах ойд үлдэнэ */
   const [loaded, setLoaded] = React.useState<Record<string, Loaded>>({});
   /* Явж буй хүсэлтүүд — ref, учир нь зурагдалтад нөлөөлдөггүй. Төлөвд
@@ -788,7 +790,17 @@ export function PortalLayersDashboard({
     давхаргын ЭХНИЙ карт үүрнэ (`first`).
   */
   function toggle(id: string) {
-    setOn((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
+    /* ⚠ Харилцан үгүйсгэх бүрдэлд сонголт нь СОЛИГДОНО, нэмэгддэггүй:
+       дахин товшиход ч унтрахгүй — хоосон зураг нь сонголт биш алдаа
+       мэт харагдана (цаг агаарын хэмжигдэхүүний радио мөртэй нэг
+       зарчим) */
+    setOn((s) =>
+      set.exclusive
+        ? [id]
+        : s.includes(id)
+          ? s.filter((x) => x !== id)
+          : [...s, id],
+    );
     /* Унтраасан давхаргын шүүлт үлдвэл дараа нь асаахад учир
        битүүлэг байдлаар хоосон гарна */
     const drop = (m: Record<string, unknown>) =>
@@ -968,10 +980,30 @@ export function PortalLayersDashboard({
                 onSelect={onPick}
               />
             ) : isTime(b) ? (
-              <BarChart
+              /*
+                ⚠⚠ ХУГАЦААНЫ ЦУВАА нь ТАЛБАЙН ДИАГРАМ (хэрэглэгчийн
+                шийдвэр, 2026-09-28: "он сар байгаа бол area chart-аар
+                хийж бай, үүнийг тогтоогоод ав"). Урьд нь багана байв.
+
+                Баганууд нь ангилал бүрийг ТУСДАА нэгж мэт харуулдаг
+                бөгөөд хугацаа нь тийм биш — он, сар хоёр нь ТАСРАЛТГҮЙ
+                тэнхлэг. Шугам нь хөршүүдийг холбож чиг хандлагыг өөрөө
+                хэлнэ; хоосон он (тэг) нь уналт болж харагдана.
+
+                ⚠ Өнгө нь ТУНГАЛАГ БИШ. Багана нь бүтэн өргөнтэй
+                дүүргэлттэй тул картыг өнгөний блок болгохгүйн тулд
+                сулруулдаг байв; талбайн диаграмын дүүргэлт нь аль
+                хэдийн градиент тул давхар сулруулбал шугам нь
+                үзэгдэхээ болино.
+                ⚠ Өндөр нь 92-оос 108: `labels` асаалттай үед шошго нь
+                цэгийнхээ ДЭЭР суудаг тул дээд талд 15px зай нэмэгдэнэ
+                ({@link src/components/charts.tsx}-ийн `pad`). Өндрийг
+                дагуулж нэмэхгүй бол шугам өөрөө нямхан болно.
+              */
+              <AreaChart
                 data={b.values}
-                height={92}
-                tone={translucent(tone)}
+                height={108}
+                tone={tone}
                 unit="бичлэг"
                 selected={chosen}
                 onSelect={onPick}
@@ -1042,14 +1074,63 @@ export function PortalLayersDashboard({
       <FilterBar
         title={set.title ?? "Давхарга"}
         leading={
-          <button
-            type="button"
-            aria-pressed={showCharts}
-            onClick={() => setShowCharts((value) => !value)}
-            className={cn("map-view-toggle", showCharts && "selected")}
-          >
-            <ChartNoAxesCombined size={15} /> Шинжилгээ
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              aria-pressed={showCharts}
+              onClick={() => setShowCharts((value) => !value)}
+              className={cn("map-view-toggle", showCharts && "selected")}
+            >
+              <ChartNoAxesCombined size={15} /> Шинжилгээ
+            </button>
+
+            {/*
+              ⚠⚠ ХАРИЛЦАН ҮГҮЙСГЭХ БҮРДЭЛД ДАВХАРГА СОНГОХ ТОВЧНУУД
+              (`LayerSet.exclusive`, хэрэглэгчийн хүсэлт 2026-09-28:
+              "аюултай болон энгийн гэсэн button байгаад солигддог
+              бол зүгээр").
+
+              ⚠ Эдгээр нь ШҮҮЛТҮҮР БИШ, "юуг харах вэ" гэсэн эх
+              сурвалжийн сонголт тул гарчгийн ХАЖУУД сууна —
+              шүүлтүүрүүд нь баруун тийш шахагдана ({@link FilterBar}
+              -ийн `leading`). Хөрсний оны товчтой нэг гэр бүл.
+
+              ⚠ Унтраалга БИШ РАДИО: нэг давхарга л асна, дахин
+              товшиход цуцлагдахгүй. Хоосон зураг нь сонголт биш
+              алдаа мэт уншигдана.
+
+              ⚠ Өнгөт цэг нь тухайн давхаргын зургийн өнгө — товч нь
+              зургийн тайлбар болж давхар ажиллана.
+            */}
+            {set.exclusive ? (
+              <div className="flex items-center gap-1" role="group" aria-label="Давхарга">
+                {set.layers.map((id) => {
+                  const isOn = on.includes(id);
+                  return (
+                    <button
+                      key={id}
+                      type="button"
+                      aria-pressed={isOn}
+                      onClick={() => (isOn ? undefined : toggle(id))}
+                      className={cn(
+                        "flex items-center gap-1.5 rounded-xs border px-2 py-1 text-[12px] transition-colors",
+                        isOn
+                          ? "border-data/45 bg-data/12 font-medium text-ink"
+                          : "border-line text-ink-2 hover:border-line-2 hover:text-ink",
+                      )}
+                    >
+                      <span
+                        aria-hidden
+                        className="size-2 rounded-full"
+                        style={{ background: toneOf(id) }}
+                      />
+                      {set.names[id] ?? infos[id]?.name ?? id}
+                    </button>
+                  );
+                })}
+              </div>
+            ) : null}
+          </div>
         }
         activeCount={activeCount}
         onReset={() => {
@@ -1561,22 +1642,6 @@ function tipRows(
   }
 
   return out;
-}
-
-/**
- * Багана диаграмын ТУНГАЛАГ дүүргэлт.
- *
- * Цуваа нь бүтэн өргөнтэй багануудаас тогтдог тул бүтэн дүүргэлттэй
- * бол карт нь өнгөний блок болж, дэлгэцийн бусад хэсгээс хамаагүй
- * хүчтэй жин авна. Тунгалаг дүүргэлт нь суурийн давхаргыг нэвт
- * харуулж, зурвасыг зургийн доор сууж буй хэмжигч мэт үлдээнэ —
- * бөгжин диаграмын дүүргэлттэй нэг зарчим.
- *
- * Найман оронтой hex (`#RRGGBBAA`) — `oklchHex` нь үргэлж зургаан
- * оронтой утга буцаадаг тул залгахад аюулгүй.
- */
-function translucent(hex: string): string {
-  return `${hex}9c`;
 }
 
 /** Хугацааны цуваа мөн үү */
