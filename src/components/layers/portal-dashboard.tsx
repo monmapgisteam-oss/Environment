@@ -24,6 +24,7 @@ import { BasemapGallery } from "@/components/map/basemap-gallery";
 import {
   countParcelsIn,
   fetchParcelsIn,
+  fetchParcelsOn,
   NO_PARCELS,
   PARCEL_SCALE,
   ringsOf,
@@ -398,34 +399,114 @@ export function PortalLayersDashboard({
      нэмэлт зурагдалт үүсгэнэ */
   const shownParcels = parcelsOn && close ? parcels : NO_PARCELS;
 
+  /*
+    БҮСТЭЙ ДАВХЦАХ НЭГЖ ТАЛБАР — ТОДООР (хэрэглэгч, 2026-09-29:
+    "parcel map дээр харагдахгүй байна, бүгдийг харуулах ёстой, 3
+    бүстэй давхцаж байгаа нь улаан өнгөөр ч юмуу тодоор харагдана").
+
+    ⚠⚠ Яагаад харагдахгүй байсан бэ: суурь давхаргын татац нь
+    ХАРАГДАХ ХҮРЭЭНД, зөвхөн 1:13 000-аас ОЙРТСОН үед л ажилладаг.
+    Гэтэл хамгаалалтын гурван бүс нь хотыг бүхэлд нь хамардаг тул
+    хэрэглэгч тэр харагдацад (1:400 000 орчим) байхад нэгж талбар
+    ХЭЗЭЭ Ч гардаггүй байв.
+
+    ⚠⚠ "БҮГДИЙГ" гэдэг нь 524,052 дүрс БИШ — тэр нь 262 хуудас,
+    хэдэн зуун мегабайт бөгөөд хөтөч зогсоно. Хэрэглэгчийн асуултын
+    бодит агуулга нь "БҮСЭД ДАВХЦАЖ БУЙ бүгд" тул давхцлыг СЕРВЕР
+    олж, зөвхөн тэднийг татна: хэмжсэнээр ~33 мянга (бүсүүд хоорондоо
+    давхцдаг тул давхардалгүй нь бага).
+    ⚠ Ойртолтоос ҮЛ ХАМААРНА: энэ нь суурь биш ДАТА — "хамгаалалтын
+    бүсэд хэдэн газар орсон бэ" гэсэн асуултын хариулт.
+
+    ⚠ ӨНГӨ нь ДОХИО (`--clay`-гийн тогтмол hex): хамгаалалтын бүсэд
+    орсон газар нь анхаарал шаардана. Газрын зураг хоёр горимд ижил
+    байх ёстой тул CSS хувьсагч БИШ hex.
+    ⚠ Суурь (саарал) нэгж талбар ХЭВЭЭР: ойртсон үед контекст өгнө.
+  */
+  const zoneRings = React.useMemo(() => {
+    if (!set.tidy) return [];
+    const out: GeoJSON.Position[][] = [];
+    for (const id of on) {
+      const hit = loaded[id];
+      if (!hit || hit.info.geometry === "Point") continue;
+      out.push(...ringsOf(hit.data.shapes.features));
+    }
+    return out;
+  }, [set.tidy, on, loaded]);
+
+  /* Аль бүсийн хослолд татсаныг нэрлэх түлхүүр — үүнгүй бол бүс
+     солиход ӨМНӨХ хослолын нэгж талбар зураг дээр үлдэнэ */
+  const zoneKey = React.useMemo(
+    () => `${on.join("|")}:${zoneRings.length}`,
+    [on, zoneRings],
+  );
+  const [zoneParcels, setZoneParcels] = React.useState<{
+    key: string;
+    tile: ParcelTile;
+  }>({ key: "", tile: NO_PARCELS });
+
+  React.useEffect(() => {
+    if (!parcelsOn || !zoneRings.length) return;
+    const ac = new AbortController();
+    fetchParcelsOn(zoneRings, ac.signal)
+      .then((tile) => {
+        if (!ac.signal.aborted) setZoneParcels({ key: zoneKey, tile });
+      })
+      .catch(() => {
+        /* Суурь давхарга тул самбарыг УНАГААХГҮЙ */
+        if (!ac.signal.aborted)
+          setZoneParcels({ key: zoneKey, tile: NO_PARCELS });
+      });
+    return () => ac.abort();
+  }, [parcelsOn, zoneRings, zoneKey]);
+
+  /* Төлөв нь ДАМ гарна: эффектээс `set*` дуудахыг
+     `react-hooks/set-state-in-effect` хориглодог */
+  const zoneReady = zoneParcels.key === zoneKey;
+  const shownZoneParcels = parcelsOn && zoneReady ? zoneParcels.tile : NO_PARCELS;
+  const zoneBusy = parcelsOn && zoneRings.length > 0 && !zoneReady;
+
   const onView = React.useCallback(
     (box: [number, number, number, number], zoom: number) =>
       setView({ box, zoom }),
     [],
   );
 
-  const overlays = React.useMemo(
-    () =>
-      shownParcels.data.features.length
-        ? [
-            {
-              id: "parcel",
-              data: shownParcels.data,
-              /* ⚠ Дүүргэлт МАШ БҮДЭГ: нэгж талбар нь ДАТА биш СУУРЬ —
-                 доорх хиймэл дагуул, дээрх дата давхаргыг дарахгүй */
-              fill: { color: "#e8eef5", opacity: 0.07 },
-              /* ⚠⚠ ЗУРААС 0.7px-ЭЭС 1.2px БОЛОВ. Өнөөдөр олон
-                 өнцөгтийн хүрээ дээр яг ийм алдаа гарсан: дэд
-                 пикселийн, бүдэг цагаан зураас нь хиймэл дагуулын
-                 зураг дээр бүрэн уусдаг ({@link shape-case}). Нэгж
-                 талбар нь нягт тор тул зузаан нь ч болохгүй — 1.2px
-                 дээр тор нь уншигдаж, доорх зураг нь харагдсаар. */
-              line: { color: "#e8eef5", opacity: 0.8, width: 1.2 },
-            },
-          ]
-        : undefined,
-    [shownParcels],
-  );
+  /*
+    ⚠ ХОЁР ДАВХАРГА: саарал нь СУУРЬ (харагдах хүрээнд, ойртсон үед),
+    улаан нь ДАТА (бүстэй давхцсан). Улаан нь дээр нь суух ёстой.
+  */
+  const overlays = React.useMemo(() => {
+    const list: NonNullable<
+      React.ComponentProps<typeof LayerMap>["overlays"]
+    > = [];
+    if (shownParcels.data.features.length)
+      list.push({
+        id: "parcel",
+        /* ⚠ Дүүргэлт МАШ БҮДЭГ: нэгж талбар нь ДАТА биш СУУРЬ —
+           доорх хиймэл дагуул, дээрх дата давхаргыг дарахгүй */
+        data: shownParcels.data,
+        fill: { color: "#e8eef5", opacity: 0.07 },
+        /* ⚠⚠ ЗУРААС 0.7px-ЭЭС 1.2px БОЛОВ: дэд пикселийн, бүдэг
+           цагаан зураас нь хиймэл дагуулын зураг дээр бүрэн уусдаг
+           ({@link shape-case}). Зузаан нь ч болохгүй — нэгж талбар
+           нягт тор тул 1.2px дээр тор нь уншигдаж, доорх зураг нь
+           харагдсаар байна. */
+        line: { color: "#e8eef5", opacity: 0.8, width: 1.2 },
+      });
+    /* Бүстэй давхцсан нь ТОДООР — дохионы улаан, тогтмол hex
+       ("газрын зураг хоёр горимд ижил" дүрэм) */
+    if (shownZoneParcels.data.features.length)
+      list.push({
+        id: "parcel-zone",
+        data: shownZoneParcels.data,
+        fill: { color: "#e47b7b", opacity: 0.3 },
+        line: { color: "#e47b7b", opacity: 0.95, width: 1.2 },
+        /* Бүсийн дүүргэлтийн ДЭЭР — доор нь орвол огт харагдахгүй */
+        above: true,
+      });
+    return list.length ? list : undefined;
+  }, [shownParcels, shownZoneParcels]);
   const tip = useMapTip();
 
   /*
@@ -580,16 +661,53 @@ export function PortalLayersDashboard({
           return keys ? sel[f].some((v) => keys.includes(v)) : true;
         });
 
+      /*
+        ⚠⚠ ЗУРАГ ДЭЭРЭЭС СОНГОСОН БИЧЛЭГ нь ШҮҮЛТ БОЛНО (хэрэглэгч,
+        2026-09-29: "map дээрээс filter хийхэд ч мөн адил chart нтр
+        шүүгдэнэ шүү"). Хөндлөн шүүлт нь ХОЁР ТИЙШЭЭ ажиллана: диаграм
+        зургийг шүүдэг шиг зураг ч диаграмыг шүүнэ.
+
+        ⚠⚠ ЭНЭ НЬ 2026-09-29-ний ӨМНӨХ ШИЙДВЭРИЙГ ОРЛОВ. Тэр үед
+        "сонголт нь шүүлт БИШ тул диаграмын тоонууд хэвээр үлдэнэ"
+        гэж бичигдсэн байсан — хэрэглэгч эсрэгээр шийдэв.
+        ⚠ Ингэснээр `solo` (зураг дээр зөвхөн сонгосон дүрсийг
+        үлдээх) хэрэггүй болов: шүүлт өөрөө бусдыг хасна. Нэг зүйлийг
+        хоёр механизмаар барихаас нэг эх сурвалж дээр.
+        ⚠ СОНГОСОН БИЧЛЭГИЙН ДАВХАРГААС БУСАД нь бүхэлдээ хоосон
+        болно: нэг бичлэг сонгогдсон үед өөр давхаргын задаргаа
+        "сонгосон зүйлийн тухай" юу ч хэлэхгүй.
+        ⚠ БУЦАХ: дүрсээ дахин товших, бичлэгийн цонхыг хаах, эсвэл
+        диаграмаас шүүлт тавих (`pick` нь сонголтыг цуцалдаг).
+      */
+      const base = set.layers.indexOf(id) * STRIDE;
+      const only =
+        picked != null && picked >= base && picked < base + STRIDE
+          ? picked - base
+          : null;
+      /* Өөр давхаргын бичлэг сонгогдсон бол энэ давхаргаас юу ч
+         үлдэхгүй */
+      const muted = picked != null && only == null;
+
       const rows: Row[] = [];
       const oids = new Set<number>();
-      for (const [oid, row] of Object.entries(hit.data.rows)) {
-        if (!passes(row)) continue;
-        rows.push(row);
-        oids.add(Number(oid));
-      }
+      if (!muted)
+        for (const [oid, row] of Object.entries(hit.data.rows)) {
+          if (only != null && Number(oid) !== only) continue;
+          if (!passes(row)) continue;
+          rows.push(row);
+          oids.add(Number(oid));
+        }
 
       let charts = hit.charts;
-      if (fields.length) {
+      /*
+        ⚠ СОНГОЛТ нь БҮХ диаграмыг дахин тоолуулна. Талбарын шүүлт нь
+        ӨӨРИЙНХӨӨ диаграмыг алгасдаг (эс тэгвээс сонгосон ангилал л
+        үлдэж, өөр рүү шилжих арга алга болно) — сонголт харин талбар
+        БИШ тул алгасах зүйлгүй: диаграм бүр тэр нэг бичлэгийг харна.
+      */
+      if (muted || only != null) {
+        charts = hit.charts.map((b) => ({ ...b, ...b.recount(rows) }));
+      } else if (fields.length) {
         /* Талбар бүрийн зүсэлтийг НЭГ удаа бодно — ижил талбартай
            диаграмууд түүнийг хуваалцана */
         const cache = new Map<string, Row[]>();
@@ -612,7 +730,7 @@ export function PortalLayersDashboard({
     }
 
     return out;
-  }, [on, loaded, filters]);
+  }, [on, loaded, filters, picked, set.layers]);
 
   /**
    * ХАМГИЙН УРТ ДИАГРАМ ЗҮҮН БАГАНАД (хэрэглэгчийн хүсэлт, 2026-09-21:
@@ -663,20 +781,30 @@ export function PortalLayersDashboard({
 
   /* Сонгосон УТГА бүрийг тоолно, талбарыг биш: "3 идэвхтэй" гэдэг нь
      гурван утга сонгосныг хэлэх ёстой */
-  const activeCount = React.useMemo(
-    () =>
-      views.reduce(
-        (n, v) =>
-          n +
-          Object.values(filters[v.id] ?? {}).reduce(
-            (k, vs) => k + vs.length,
-            0,
-          ) +
-          (series[v.id]?.length ?? 0),
-        0,
-      ),
-    [views, filters, series],
-  );
+  /*
+    ⚠⚠ ИДЭВХТЭЙ ШҮҮЛТИЙН ТОО нь БҮХ төрлийг хамарна (хэрэглэгч,
+    2026-09-29: "чартаас шүүсэн бол буцааж reset хийдэг болгоорой").
+
+    Урьд нь зөвхөн ТАЛБАРЫН шүүлт ба оны цуваа тоологддог байв.
+    Гэтэл диаграмын мөрөөс бичлэг сонгох нь ч бүх самбарыг шүүдэг
+    болсон (`picked`), бүсийн цэс нь давхаргыг хумидаг — тэр хоёр
+    тоологдохгүй тул "N идэвхтэй" гарахгүй, улмаас **Цэвэрлэх товч ч
+    гарахгүй**: хэрэглэгч буцах замгүй үлддэг байв.
+    ⚠ Сонголт нь ганц бичлэг тул НЭГ гэж тоологдоно; бүсийн хумилт
+    мөн нэг (хэдэн бүс нуугдсан нь тусдаа тоо биш, нэг л шийдвэр).
+  */
+  const activeCount = React.useMemo(() => {
+    let n = views.reduce(
+      (k, v) =>
+        k +
+        Object.values(filters[v.id] ?? {}).reduce((m, vs) => m + vs.length, 0) +
+        (series[v.id]?.length ?? 0),
+      0,
+    );
+    if (picked != null) n += 1;
+    if (!picker && !set.exclusive && on.length < set.layers.length) n += 1;
+    return n;
+  }, [views, filters, series, picked, picker, set.exclusive, set.layers, on]);
 
   /**
    * Нэг утгыг НЭМЭХ, эсвэл ХАСАХ.
@@ -835,21 +963,11 @@ export function PortalLayersDashboard({
     өнцөгт зурдаг, цэгийн давхарга нь тусдаа эх сурвалжтай.
   */
   /*
-    ⚠⚠ СОНГОСОН ДҮРС ЗУРАГ ДЭЭР ГАНЦААРАА ҮЛДЭНЭ (хэрэглэгч,
-    2026-09-29: "filter хийхэд map дээр ганцхан сонгогдсон feature л
-    үлддэг байхаар хийгээрэй"). Бичлэг сонгогдсон үед бусад БҮХ дүрс,
-    цэг зурагдахаа болино — нөхөн сэргээлтийн самбартай нэг зан төлөв.
-    ⚠ Энэ нь ЗУРГИЙНХ, диаграмынх БИШ: сонголт нь шүүлт биш тул
-    диаграмын тоонууд ХЭВЭЭР үлдэнэ ("сонголт ≠ шүүлт" дүрэм). Эс
-    тэгвээс нэг бичлэг сонгомогц бүх диаграм нэг мөр болж хумигдана.
-    ⚠ БУЦАХ ГУРВАН ЗАМ: үлдсэн дүрсээ дахин товших, бичлэгийн цонхны
-    хаах товч, эсвэл өөр давхарга асаах/унтраах. Гурвуулаа
-    `setPicked(null)` дуудна.
-    ⚠ Нэмэлт давхарга (хил, нэгж талбар) нь СУУРЬ тул хөндөгдөхгүй —
-    сонгосон дүрс хаана байгааг тэдгээр нь хэлнэ.
+    ⚠ Зураг дээр сонгосон дүрс ГАНЦААРАА үлдэх нь одоо ШҮҮЛТЭЭР
+    хийгдэнэ ({@link views}) — урьд нь `solo` гэсэн тусдаа механизм
+    байсныг хассан: нэг зүйлийг хоёр газар барихаас нэг эх сурвалж
+    дээр.
   */
-  const solo = picked;
-
   const shapes = React.useMemo<GeoJSON.FeatureCollection>(() => {
     const features: GeoJSON.Feature[] = [];
     for (const { id, hit, oids } of views) {
@@ -863,7 +981,6 @@ export function PortalLayersDashboard({
            зүйлийг харуулах ёстой */
         if (!oids.has(Number(f.id))) continue;
         const uid = base + Number(f.id);
-        if (solo != null && uid !== solo) continue;
         /* Ангиллын өнгө олдохгүй бол давхаргынхаа өнгөнд буцна —
            зурагдахгүй үлдэх нь бичлэг байхгүй мэт худал хэлнэ */
         const c =
@@ -882,7 +999,7 @@ export function PortalLayersDashboard({
       }
     }
     return { type: "FeatureCollection", features };
-  }, [views, toneOf, uidBase, colorField, palettes, solo]);
+  }, [views, toneOf, uidBase, colorField, palettes]);
 
   const points = React.useMemo<{ at: MapPoints; text: string[] }>(() => {
     const oid: number[] = [];
@@ -895,7 +1012,6 @@ export function PortalLayersDashboard({
       for (const f of hit.data.shapes.features) {
         if (f.geometry?.type !== "Point") continue;
         if (!oids.has(Number(f.id))) continue;
-        if (solo != null && base + Number(f.id) !== solo) continue;
         const [x, y] = f.geometry.coordinates as [number, number];
         oid.push(base + Number(f.id));
         lon.push(x);
@@ -904,7 +1020,7 @@ export function PortalLayersDashboard({
       }
     }
     return { at: { oid, lon, lat }, text };
-  }, [views, uidBase, solo]);
+  }, [views, uidBase]);
 
   const visible = React.useMemo(
     () => Uint32Array.from(points.at.oid, (_, i) => i),
@@ -939,17 +1055,33 @@ export function PortalLayersDashboard({
       ? "Дүрсийн хүрээг ачаалж байна."
       : "Дүрсийн хүрээ ирсэнгүй.";
 
-  /* Асаалттай давхарга бүрийн хамрах хүрээ рүү ойртоно */
+  /*
+    ШҮҮЛТИЙН ҮР ДҮН РҮҮ ОЙРТОНО (хэрэглэгч, 2026-09-29: "чартын filter
+    map дээр zoom in хийдэг болгоорой").
+
+    Урьд нь хүрээ нь БҮХ дүрсээс тоологддог байсан тул диаграмаас
+    шүүхэд зураг дээр цөөн дүрс үлдэх ч ойртолт нь хэвээр: сонгосон
+    зүйл нь өргөн хүрээний дунд жижигхэн толбо болж үлддэг байв.
+    Одоо хүрээ нь ШҮҮГДСЭН дүрсээс гарна — шүүлт тавих бүрд зураг
+    үлдсэн хэсэг рүүгээ нисч ойртоно, шүүлт цуцлахад буцна.
+
+    ⚠ Зан төлөв нь шилэн барилга, биотехникийн самбартай НЭГ: "шүүлт
+    тавьвал үлдсэн бүхнийг багтаана".
+    ⚠ Шүүлтгүй үед энэ нь БҮХ дүрсийн хүрээ буюу өмнөхтэйгээ ЯГ ИЖИЛ.
+    ⚠ БИЧЛЭГ СОНГОХОД энд хөндөгдөхгүй: `pick` нь сонголтыг цуцалдаг
+    тул хоёр ойртолт хэзээ ч зөрчилдөхгүй; диаграмын мөрөөс сонгосон
+    дүрс рүү ойртохыг `rowFocus` тусад нь хийнэ.
+    ⚠ Шүүлтэд нэг ч дүрс нийцэхгүй бол `null` — зураг анхны хүрээндээ
+    үлдэнэ, "хаашаа ч юм нисэх" нь буруу.
+  */
   const focus = React.useMemo<Extent | null>(() => {
-    if (!on.length) return null;
+    if (!views.length) return null;
     const b = new Bounds();
-    for (const id of on) {
-      const hit = loaded[id];
-      if (!hit) continue;
-      for (const f of hit.data.shapes.features) b.addGeometry(f.geometry);
-    }
+    for (const { hit, oids } of views)
+      for (const f of hit.data.shapes.features)
+        if (oids.has(Number(f.id))) b.addGeometry(f.geometry);
     return b.get(0.004);
-  }, [on, loaded]);
+  }, [views]);
 
   /*
     ДИАГРАМЫН МӨРӨӨС ДҮРС СОНГОХ (2026-09-29, хэрэглэгч: "чартуудыг
@@ -1171,6 +1303,24 @@ export function PortalLayersDashboard({
     ДААСАН бүлэг биш, нэг эгнээ. Давхаргын нэрийг зөвхөн тухайн
     давхаргын ЭХНИЙ карт үүрнэ (`first`).
   */
+  /**
+   * ХАРАГДАХ ДАВХАРГУУДЫГ ШУУД ТАВИХ.
+   *
+   * `toggle` нь НЭГ давхаргыг сэлгэдэг; бүсийн цэс нь нэг товшилтоор
+   * хэд хэдэн давхаргыг унтраадаг (нэгийг тусгаарлах) тул унтарсан
+   * БҮГДИЙН нь шүүлт, цуваа цэвэрлэгдэх ёстой.
+   */
+  function showLayers(next: readonly string[]) {
+    setOn([...next]);
+    const gone = set.layers.filter((id) => !next.includes(id));
+    if (!gone.length) return setPicked(null);
+    const drop = (m: Record<string, unknown>) =>
+      Object.fromEntries(Object.entries(m).filter(([k]) => !gone.includes(k)));
+    setFilters((f) => drop(f) as typeof f);
+    setSeries((v) => drop(v) as typeof v);
+    setPicked(null);
+  }
+
   function toggle(id: string) {
     /* ⚠ Харилцан үгүйсгэх бүрдэлд сонголт нь СОЛИГДОНО, нэмэгддэггүй:
        дахин товшиход ч унтрахгүй — хоосон зураг нь сонголт биш алдаа
@@ -1819,8 +1969,16 @@ export function PortalLayersDashboard({
               ⚠ ОЛОН СОНГОЛТ (`exclusive`-ийн радиогоос ялгаатай):
               бүсүүд нь нэг системийн шатууд тул хоёуланг нь зэрэг
               харах нь утгатай.
-              ⚠ СҮҮЛЧИЙН БҮСИЙГ УНТРААХГҮЙ: хоосон зураг нь сонголт
-              биш алдаа мэт уншигдана (`exclusive`-тэй нэг зарчим).
+              ⚠⚠ ДАРАХААР АСНА, УНТРААДАГГҮЙ (хэрэглэгч, 2026-09-29:
+              "дархаар унтардаг биш асдаг болгоод эсэргээр нь
+              хийгээрэй"). Эхний хувилбарт бүх бүс ТЭМДЭГЛЭГДСЭН
+              байдлаар нээгдэж, товшилт нь тэр бүсийг УНТРААДАГ байв —
+              шүүлтүүрийн мөрийн бусад БҮХ цэстэй эсрэг: тэнд юу ч
+              тэмдэглээгүй нь "шүүлтгүй, бүгд харагдана" гэсэн үг
+              бөгөөд товшилт нь утгыг НЭМДЭГ.
+              Одоо ижил дүрэм: тэмдэглэгээгүй = бүх бүс харагдана;
+              эхний товшилт нь ЗӨВХӨН тэр бүсийг үлдээнэ; дараагийн
+              товшилтууд нэмнэ; сүүлчийнхийг нь авбал бүгд буцна.
               ⚠ Цэсний НЭР нь бүртгэлээс (`layerLabel`): хамгаалалтын
               цэсэд "Бүс", булгийнхад "Хувилбар" — давхаргууд нь өөр
               өөр зүйл тул нэг нэрээр нэрлэвэл аль нэгэнд нь худал.
@@ -1842,7 +2000,7 @@ export function PortalLayersDashboard({
                 active={on.length < set.layers.length}
                 onClear={
                   on.length < set.layers.length
-                    ? () => setOn([...set.layers])
+                    ? () => showLayers([...set.layers])
                     : undefined
                 }
               >
@@ -1852,14 +2010,21 @@ export function PortalLayersDashboard({
                     label: set.names[id] ?? infos[id]?.name ?? id,
                     value: infos[id]?.count ?? 0,
                   }))}
-                  selected={on}
+                  /* Бүгд харагдаж байгаа нь "шүүлтгүй" гэсэн үг тул
+                     тэмдэглэгээ ХООСОН — бусад цэстэй нэг дүрэм */
+                  selected={on.length < set.layers.length ? on : []}
                   onPick={(key) => {
-                    /* `null` нь "бүгдийг цуцла" — энд бүх бүсийг буцаана */
-                    if (key == null) return setOn([...set.layers]);
-                    /* Ганц үлдсэнийг нь унтраахгүй: хоосон зураг нь
-                       сонголт биш алдаа мэт уншигдана */
-                    if (on.length === 1 && on[0] === key) return;
-                    toggle(key);
+                    const all = [...set.layers];
+                    if (key == null) return showLayers(all);
+                    /* Шүүлтгүй байхад эхний товшилт нь ЗӨВХӨН тэр бүсийг
+                       үлдээнэ — "дарахаар асна" */
+                    if (on.length === set.layers.length) return showLayers([key]);
+                    const next = on.includes(key)
+                      ? on.filter((x) => x !== key)
+                      : [...on, key];
+                    /* Сүүлчийнхийг нь авбал шүүлт цуцлагдаж бүгд буцна —
+                       хоосон зураг нь сонголт биш алдаа мэт уншигдана */
+                    showLayers(next.length ? next : all);
                   }}
                 />
               </FilterMenu>
@@ -1896,9 +2061,15 @@ export function PortalLayersDashboard({
           </div>
         }
         activeCount={activeCount}
+        /* ЦЭВЭРЛЭХ нь БҮХ шүүлтийг авна: талбар, он, зургаас
+           сонгосон бичлэг, бүсийн хумилт — дөрвүүлэнг нь. Аль нэгийг
+           нь үлдээвэл товч дарсан ч самбар хэвээр шүүгдсэн харагдана */
         onReset={() => {
           setFilters({});
           setSeries({});
+          setPicked(null);
+          setRowPick(null);
+          if (on.length < set.layers.length) setOn([...set.layers]);
         }}
       >
         {views.length === 0 ? (
@@ -1909,7 +2080,10 @@ export function PortalLayersDashboard({
           const sel = filters[id] ?? {};
           /* Сонгох боломжтой утгууд нь ШҮҮГДЭЭГҮЙ жагсаалтаас: шүүсний
              дараа цэс нь өөрийгөө хумивал сонголтоо солих арга үлдэхгүй */
-          const cuts = menusOf(hit.charts);
+          /* Талбарын цэс нь хэлтсийн сонголт: диаграмууд өөрсдөө
+             шүүдэг болсон газарт цэс нь ижил сонголтыг давтана
+             ({@link LayerSet.fieldMenus}) */
+          const cuts = set.fieldMenus === false ? [] : menusOf(hit.charts);
           const years = yearsOf(hit.charts);
           if (!cuts.length && !years.length) return null;
 
@@ -2252,11 +2426,22 @@ export function PortalLayersDashboard({
                 </button>
                 {parcelsOn ? (
                   <span className="num rounded-xs bg-paper/92 px-1.5 py-0.5 text-[10px] text-ink-3 backdrop-blur-md">
-                    {!close
-                      ? `1:${num(PARCEL_SCALE)}-аас ойртоно уу`
-                      : shownParcels.capped
-                        ? `${num(shownParcels.data.features.length)}, хэсэгчилсэн`
-                        : num(shownParcels.data.features.length)}
+                    {/*
+                      БҮСТЭЙ ЦЭСЭД мэдэгдэл нь ДАВХЦЛЫГ хэлнэ:
+                      тэнд нэгж талбар нь ойртолтоос үл хамааран
+                      гардаг тул "ойртоно уу" гэдэг нь худал болно.
+                    */}
+                    {zoneRings.length
+                      ? zoneBusy
+                        ? "Давхцлыг тооцож байна…"
+                        : `${num(shownZoneParcels.data.features.length)} давхцсан${
+                            shownZoneParcels.capped ? ", хэсэгчилсэн" : ""
+                          }`
+                      : !close
+                        ? `1:${num(PARCEL_SCALE)}-аас ойртоно уу`
+                        : shownParcels.capped
+                          ? `${num(shownParcels.data.features.length)}, хэсэгчилсэн`
+                          : num(shownParcels.data.features.length)}
                   </span>
                 ) : null}
               </div>

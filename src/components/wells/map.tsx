@@ -124,6 +124,17 @@ export type MapOverlay = {
     byGrid?: number[];
   };
   line: { color: string; opacity: number; width: number };
+  /**
+   * ДАТА ДАВХАРГЫН ДЭЭР зурагдах эсэх.
+   *
+   * ⚠ Нэмэлт давхарга нь ерөнхийдөө СУУРЬ тул доор нь суудаг (хил,
+   * бүсийн тор). Гэвч заримдаа тэр нь өөрөө ДАТА байна: бүстэй
+   * давхцсан нэгж талбар нь бүсийн дүүргэлтийн ДООР орвол огт
+   * харагдахгүй (хэрэглэгч, 2026-09-29: "parcel 3 бүсийнхээ дээр
+   * харагдана шүү").
+   * ⚠ ШОШГЫН ДООР үлдэнэ: бичвэр нь үргэлж хамгийн дээр.
+   */
+  above?: boolean;
 };
 
 /* --------------------------------------------------------------------------
@@ -2399,7 +2410,9 @@ export function WellsMap({
       if (id.startsWith("ov-") && !wanted.has(id)) live.removeSource(id);
     }
 
-    const below = live.getLayer("bnd-country") ? "bnd-country" : undefined;
+    const under = live.getLayer("bnd-country") ? "bnd-country" : undefined;
+    /* Дата давхаргын ДЭЭР, гэхдээ шошгоны ДООР */
+    const over = live.getLayer("shape-label") ? "shape-label" : undefined;
 
     for (const o of list) {
       const src = `ov-${o.id}`;
@@ -2441,7 +2454,7 @@ export function WellsMap({
                 : (o.fill.opacity ?? 0.08),
             },
           },
-          below,
+          o.above ? over : under,
         );
       }
 
@@ -2458,7 +2471,7 @@ export function WellsMap({
               "line-width": o.line.width,
             },
           },
-          below,
+          o.above ? over : under,
         );
       }
     }

@@ -44,7 +44,12 @@ export function FilterBar({
       <div className="ml-auto flex flex-wrap items-center gap-1.5">
         {children}
 
-        <span className="mx-1 h-4 w-px shrink-0 bg-line" aria-hidden />
+        {/* Шүүлтүүр огт байхгүй бол (жишээ нь ногоон бүсэд, тэнд
+            диаграмууд өөрсдөө шүүдэг) зураас ГАНЦААРАА үлдэх тул
+            хүүхэдтэй үедээ л гарна */}
+        {React.Children.toArray(children).length ? (
+          <span className="mx-1 h-4 w-px shrink-0 bg-line" aria-hidden />
+        ) : null}
 
         {activeCount > 0 ? (
           <>

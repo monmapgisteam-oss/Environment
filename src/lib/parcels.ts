@@ -167,6 +167,104 @@ export async function countParcelsIn(
   return json.count ?? 0;
 }
 
+
+/**
+ * ӨГӨГДСӨН ДҮРСТЭЙ ДАВХЦАХ нэгж талбаруудыг ГЕОМЕТРТЭЙ нь татна.
+ *
+ * ⚠⚠ Харагдах хүрээний татацаас (`fetchParcelsIn`) ӨӨР ЗОРИЛГОТОЙ.
+ * Тэр нь "энэ дүрс хэний газар дээр байна" гэдгийг ойртсон үед
+ * харуулдаг СУУРЬ давхарга; энэ нь "хамгаалалтын бүсэд ХЭДЭН газар
+ * орсон бэ" гэсэн ДАТА-гийн асуултад хариулна тул ойртолтоос ҮЛ
+ * ХАМААРНА — бүсүүд хотыг бүхэлд нь хамардаг.
+ *
+ * ⚠ Хэмжсэн (2026-09-25): тэжээгдэл 17,724 · хязгаарлалт 11,487 ·
+ * хориглолт 3,978 давхцалтай. Гурвуулаа ~33 мянга боловч бүсүүд
+ * хоорондоо давхцдаг тул давхардалгүй тоо нь бага. Дугаараар
+ * НЭГТГЭНЭ ({@link mergeParcels}).
+ *
+ * ⚠⚠ ТООГ НЬ ЭХЛЭЭД асууж, хуудсуудыг ЗЭРЭГ гуйна — порталын
+ * давхаргын татацтай нэг загвар (`portal-layers`). Дараалуулбал
+ * арван долоон хуудас нь ээлжлэн хүлээж хэдэн арван секунд болно.
+ * ⚠ `CAP_ON` нь дээд хязгаар: түүнээс их бол ил хэлнэ (`capped`) —
+ * дутуу торыг бүтэн мэт харуулах нь худал.
+ */
+const CAP_ON = 24 * PAGE;
+
+export async function fetchParcelsOn(
+  rings: GeoJSON.Position[][],
+  signal?: AbortSignal,
+): Promise<ParcelTile> {
+  if (!rings.length) return EMPTY;
+  const shape = JSON.stringify({ rings, spatialReference: { wkid: 4326 } });
+  const base = () => {
+    const b = new URLSearchParams({
+      where: "1=1",
+      geometry: shape,
+      geometryType: "esriGeometryPolygon",
+      inSR: "4326",
+      spatialRel: "esriSpatialRelIntersects",
+    });
+    return b;
+  };
+
+  /* Хэдэн хуудас болохыг эхлээд тодорхойлно */
+  const head = base();
+  head.set("returnCountOnly", "true");
+  head.set("f", "json");
+  const total = (
+    await arcgisJson<{ count?: number }>(`${SERVICE}/query`, "Нэгж талбар", {
+      method: "POST",
+      body: head,
+      signal,
+    })
+  ).count ?? 0;
+  if (!total) return EMPTY;
+
+  const want = Math.min(total, CAP_ON);
+  const pages: Promise<GeoJSON.Feature[]>[] = [];
+  for (let offset = 0; offset < want; offset += PAGE) {
+    const body = base();
+    body.set("outFields", "objectid");
+    body.set("outSR", "4326");
+    /* Градусаар ерөнхийлнө: 0.00002° ≈ 2 м — нэгж талбарын ирмэг
+       түүнээс нарийн ч зурагт ялгагдахгүй */
+    body.set("maxAllowableOffset", "0.00002");
+    body.set("geometryPrecision", "6");
+    body.set("resultRecordCount", String(PAGE));
+    body.set("resultOffset", String(offset));
+    body.set("f", "geojson");
+    pages.push(
+      arcgisJson<{ features?: GeoJSON.Feature[] }>(
+        `${SERVICE}/query`,
+        "Нэгж талбар",
+        { method: "POST", body, signal },
+      ).then((j) => j.features ?? []),
+    );
+  }
+  const got = await Promise.all(pages);
+  return {
+    data: { type: "FeatureCollection", features: got.flat() },
+    capped: total > CAP_ON,
+  };
+}
+
+/** Хэд хэдэн бүсийн үр дүнг ДУГААРААР нь давхардалгүй нэгтгэнэ */
+export function mergeParcels(tiles: readonly ParcelTile[]): ParcelTile {
+  const seen = new Set<number>();
+  const features: GeoJSON.Feature[] = [];
+  let capped = false;
+  for (const t of tiles) {
+    capped = capped || t.capped;
+    for (const f of t.data.features) {
+      const id = Number(f.id ?? f.properties?.objectid);
+      if (!Number.isFinite(id) || seen.has(id)) continue;
+      seen.add(id);
+      features.push(f);
+    }
+  }
+  return { data: { type: "FeatureCollection", features }, capped };
+}
+
 /** Олон дүрсийн цагиргуудыг НЭГ асуулгад нийлүүлнэ */
 export function ringsOf(features: GeoJSON.Feature[]): GeoJSON.Position[][] {
   const out: GeoJSON.Position[][] = [];
