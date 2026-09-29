@@ -19,6 +19,17 @@
 
 import { asset } from "@/lib/base-path";
 
+/**
+ * Эх системийн API-ийн хаяг.
+ *
+ * ⚠ Хөтөч ЭНЭ хаяг руу хандахгүй — хормын хувилбарыг л уншина (дээрх
+ * тайлбарыг үз). Тогтмол нь зөвхөн эх сурвалжийн хуудсанд гарах ба
+ * бүтээх үеийн скрипт `scripts/fetch-chemsystem.mjs` дотор ижил утга
+ * бичигдсэн: тэр нь `.mjs` тул TypeScript-ээс импортлох боломжгүй.
+ * Хаяг солигдвол ХОЁУЛАНГ нь засна.
+ */
+export const CHEMSYSTEM_API = "https://b.sanbit.mn/api/v1";
+
 const SNAPSHOT = "/data/chemsystem.json";
 
 export type Chemical = {

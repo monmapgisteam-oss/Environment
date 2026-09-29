@@ -91,7 +91,13 @@
 
 const KEY = process.env.NEXT_PUBLIC_WEATHER_KEY ?? "";
 
-const API = "https://weather.gov.mn/api/get";
+/**
+ * ⚠ Эх сурвалжийн хуудас мөн үүнийг уншина
+ * ({@link src/lib/sources.ts}) — хаягийг хоёр газар бичвэл
+ * каталогид харагдах хаяг бодит дуудлагаасаа зөрнө.
+ */
+export const WEATHER_API = "https://weather.gov.mn/api/get";
+const API = WEATHER_API;
 
 export type Station = {
   sid: number;

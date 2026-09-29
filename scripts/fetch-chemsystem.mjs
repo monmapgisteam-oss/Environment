@@ -29,6 +29,9 @@ import { fileURLToPath } from "node:url";
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const OUT = join(ROOT, "public", "data", "chemsystem.json");
 
+/* ⚠ Ижил утга `src/lib/chemsystem.ts`-ийн `CHEMSYSTEM_API`-д бий
+   (эх сурвалжийн хуудас түүнийг уншина). Энэ файл нь `.mjs` тул
+   тэндээс импортлох боломжгүй — хаяг солигдвол хоёуланг нь засна. */
 const BASE = "https://b.sanbit.mn/api/v1";
 /** Серверийн дээд хязгаар — үүнээс их хүсэлт ч 200 мөр буцаана */
 const PAGE = 200;
