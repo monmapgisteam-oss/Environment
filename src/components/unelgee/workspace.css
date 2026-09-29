@@ -22,18 +22,6 @@
 .ue-chart-track i { display: block; height: 100%; border-radius: inherit; min-width: 0; }
 .ue-chart-note { color: var(--ink-3); font-size: 10px; line-height: 1.6; padding-top: 6px; }
 .ue-composition { display: flex; height: 22px; gap: 2px; overflow: hidden; border-radius: 5px; margin-bottom: 8px; }
-.ue-map-legend { position: absolute; z-index: 10; bottom: 32px; left: 12px; width: min(275px, calc(100% - 65px)); border: 1px solid var(--line-2); border-radius: 10px; background: color-mix(in oklab, var(--paper) 96%, transparent); box-shadow: 0 4px 18px #0003; }
-.ue-map-legend summary { cursor: pointer; padding: 10px 12px; font-size: 11px; font-weight: 600; color: var(--ink); }
-.ue-map-legend-body { max-height: 210px; overflow-y: auto; border-top: 1px solid var(--line); padding: 10px 12px; }
-.ue-map-legend section + section { border-top: 1px solid var(--line); margin-top: 10px; padding-top: 10px; }
-.ue-map-legend h3 { font-size: 11px; font-weight: 600; line-height: 1.5; }
-.ue-map-legend p { font-size: 10px; color: var(--ink-3); line-height: 1.5; margin-top: 5px; }
-.ue-legend-row { display: flex; align-items: center; gap: 8px; padding-top: 7px; font-size: 11px; color: var(--ink-2); }
-.ue-legend-row > span:nth-child(2) { flex: 1; }
-.ue-legend-row strong { font-size: 11px; font-variant-numeric: tabular-nums; font-weight: 500; }
-.ue-map-symbol { width: 16px; height: 12px; flex-shrink: 0; border: 2px solid currentColor; background: color-mix(in srgb, currentColor 30%, transparent); border-radius: 2px; }
-.ue-map-symbol.is-point { width: 12px; height: 12px; margin-inline: 2px; border-radius: 50%; background: currentColor; }
-.ue-map-symbol.is-line { height: 0; background: none; border-width: 2px 0 0; }
 .ue-matrix-help { padding: 8px 12px; color: var(--ink-3); font-size: 10px; line-height: 1.6; border-bottom: 1px solid var(--line); }
 .ue-workspace .ue-matrix { min-width: 620px; }
 .ue-chart-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 14px; color: var(--ink-3); font-size: 10px; }

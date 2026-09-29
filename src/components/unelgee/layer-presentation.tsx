@@ -51,22 +51,33 @@ export function TopicBreakdown({ breakdown: b, tone, palette, selected, onSelect
   );
 }
 
-export type LayerLegendGroup = { id: string; name: string; geometry: string; field?: string; items: { key: string; label: string; color: string; count: number }[] };
+/**
+ * ⚠⚠ МӨР БҮР ЗӨВХӨН ӨНГӨ БА НЭР (2026-09-29, хэрэглэгч: "энэ
+ * харагдах шаардлагагүй, өнгө түүний тайлбар байхад болно").
+ * Урьд нь мөрийн ард бичлэгийн ТОО бичигддэг байсан ч тайлбарын
+ * асуулт нь "энэ өнгө юу вэ" — тоо нь диаграмд аль хэдийн бий.
+ *
+ * `solo` нь ЗАДАРГААГҮЙ давхарга: бүх дүрс НЭГ өнгөтэй тул гарчиг,
+ * мөр хоёр болж хуваагдахгүй, давхаргын нэр нь өөрөө мөрийн шошго
+ * болно. Урьд нь "Хориглолтын бүс" гэсэн гарчгийн дор "талбай 18"
+ * гэсэн мөр гардаг байсан нь геометрийн төрлийг давтахаас өөр юу ч
+ * хэлэхгүй байв.
+ */
+export type LayerLegendGroup = { id: string; name: string; geometry: string; field?: string; solo?: boolean; items: { key: string; label: string; color: string }[] };
 
 export function TopicMapLegend({ groups }: { groups: LayerLegendGroup[] }) {
   if (!groups.length) return null;
   return <details open className="ue-map-legend">
-    <summary>Газрын зургийн таних тэмдэг</summary>
+    <summary>Таних тэмдэг</summary>
     <div className="ue-map-legend-body">
-      {groups.map((group) => <section key={group.id}>
-        <h3>{group.name}</h3>
-        {group.field ? <p>Өнгөөр ялгасан үзүүлэлт: {group.field}</p> : null}
+      {groups.map((group) => <section key={group.id} className={group.solo ? "is-solo" : undefined}>
+        {group.solo ? null : <h3>{group.name}</h3>}
+        {group.field && !group.solo ? <p>Өнгөөр ялгасан үзүүлэлт: {group.field}</p> : null}
         {group.items.map((item) => <div key={item.key} className="ue-legend-row">
           <span aria-hidden="true" className={`ue-map-symbol ${group.geometry.includes("Point") ? "is-point" : group.geometry.includes("Polyline") ? "is-line" : "is-area"}`} style={{ color: item.color }} />
-          <span>{item.label}</span><strong>{num(item.count)}</strong>
+          <span title={item.label}>{item.label}</span>
         </div>)}
       </section>)}
-      <p>Тоо нь одоогийн шүүлтэд тохирох бүртгэл.</p>
     </div>
   </details>;
 }

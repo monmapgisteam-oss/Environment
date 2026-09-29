@@ -948,7 +948,9 @@ function Detail({ row, onClose }: { row: AnyRow; onClose: () => void }) {
       state={panel}
       title="Бүртгэлийн бичилт"
       onClose={onClose}
-      className="top-2 right-2 bottom-8 w-[284px]"
+      /* Өндөр нь агуулгаараа — `bottom` бэхлэвэл цөөн талбартай
+         бичлэг дээр хоосон талбай үлдэнэ (2026-09-29) */
+      className="top-2 right-2 max-h-[calc(100%-2.5rem)] w-[284px]"
     >
 
       <div className="min-h-0 flex-1 overflow-y-auto px-2.5 py-2">

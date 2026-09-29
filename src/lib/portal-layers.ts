@@ -161,6 +161,48 @@ export type LayerSet = {
    */
   skipField?: RegExp;
   /**
+   * ДИАГРАМЫН ЦЭГЦ — бодит датан дээр илэрсэн гурван шуугианыг цэвэрлэнэ
+   * (2026-09-25, ногоон бүсийн 18 давхаргыг токеноор шалгасны дараа).
+   *
+   * 1. **Бичиглэлийн хувилбарыг нэгтгэнэ** — "Айлтай" ба "айлтай" нь
+   *    ХОЁР ангилал болж, намгархаг газрын дөрвөн бодит утга ДОЛООН
+   *    зурвас болж байв. Нэгтгэлт нь ТАТАХ мөчид хийгдэх тул диаграм,
+   *    шүүлтүүр, бичлэгийн дэлгэрэнгүй гурвуулаа нэг хэлбэр харуулна.
+   * 2. **Хоосон хугацааны цувааг хаяна** — суурилуулсан он нь 30
+   *    бичлэгийг 11 жилд тарааж, ихэнх багана нь тэг байв. Ийм цуваа
+   *    чиг хандлага БИШ, шуугиан.
+   * 3. **Нэрийн баганаар хэмжсэн диаграмыг НЭГЭЭР хязгаарлана** —
+   *    гадаргын усны бүртгэлд "Нэр / Өндөр", "Нэр / pH", "Нэр / TDS",
+   *    "Нэр / Температур" гэсэн ДӨРӨВ зэрэг гарч, нэг давхарга АРВАН
+   *    ХОЁР диаграмтай болж байв. Нэр бүр НЭГ бичлэгтэй тул тэдгээрийн
+   *    "дундаж" нь задаргаа биш, түүхий утгын жагсаалт.
+   * 4. **Хоёр, гурван утгатай ТООН талбар нь ангилал** — булгийн бүсийн
+   *    `distance` (50 ба 200) нь тоон тул хэмжилт гэж үзэгдэж, 495
+   *    бичлэгтэй давхарга НЭГ Ч диаграмгүй үлддэг байв.
+   *
+   * ⚠ Бүртгэлийн тэмдэг болгосон нь санаатай: эдгээр нь хуваалцсан
+   * хөдөлгүүрийн зан төлөвийг өөрчилдөг тул ой, амьтан, үнэлгээний
+   * хэлтсийг ХӨНДӨХГҮЙ. Тэдгээр дээр шалгаж баталсны дараа асаана.
+   */
+  tidy?: boolean;
+  /**
+   * ҮЗҮҮЛЭЛТИЙН ЗУРВАС ГАРАХ ЭСЭХ (анхдагчаар гарна).
+   *
+   * ⚠⚠ Ногоон бүсийн хэлтэс дээр `false` (2026-09-29, хэрэглэгч:
+   * "НБАХ-ийн бусад цэсүүдээс бас эдгээрийг нь хасъя"). Тэнд зурвас
+   * нь "Шүүлтэд тохирох бичлэг · Талбай, га" гэсэн хоёр тоог
+   * харуулдаг ч хоёулаа ӨӨР ГАЗАР аль хэдийн бий: бүсийн карт,
+   * таних тэмдэг, давхаргын тууз, диаграмын толгойн нийт дүн.
+   * Санхүүгийн хэлтэст ЯГ ИЖИЛ шалтгаанаар зурвас хасагдсан
+   * (2026-09-10) — дүрэм нэг: НЭГ ТООГ ХОЁР ГАЗАР БИЧИХГҮЙ.
+   *
+   * ⚠⚠ `tidy`-Д УЯХГҮЙ: ой, амьтан, үнэлгээний хэлтэс дээр `tidy`
+   * хожим асаж болзошгүй (дээрх тэмдэглэлийг үзнэ үү) бөгөөд тэдэнд
+   * зурвас ХЭРЭГТЭЙ — ойн хэсэглэлийн "7,699 бичлэг" өөр хаана ч
+   * гардаггүй. Тиймээс тусдаа туг, хэлтсийн ӨӨРИЙН шийдвэр.
+   */
+  overview?: boolean;
+  /**
    * ЛАТИНААР буусан домэйны утгыг харагдах хэлбэрт нь буулгана.
    *
    * ⚠ Энэ нь ОРЧУУЛГА БИШ, бичиглэлийн засвар: эх сурвалж монгол үгээ
@@ -184,6 +226,27 @@ export type LayerSet = {
    * чимээгүй эргэж ирнэ.
    */
   skipUnit?: RegExp;
+  /**
+   * ГЕКТАРЫН БАГАНА — давхаргын дугаар → талбарын нэр.
+   *
+   * Хөдөлгүүр талбайн баганыг НЭР (`talbai_ga`) ба ШОШГООР
+   * (", га"-гаар төгссөн) тандаг. Гэтэл зарим эх сурвалж
+   * хоёрын аль альд нь ордоггүй:
+   *
+   * `A00_Ecology_korridor_2024`-ийн бодит талбай нь кирилл
+   * **`талбай`** баганад (11,562 · 5,926 · 2,863 = **20,352 га**,
+   * хэлтсийн бүртгэлтэй яг таарна) — шошго нь зүгээр
+   * "талбай" тул нэгж нь бичигдээгүй. Хажууд нь `ortson_ga`
+   * ("Өртсөн талбайн хэмжээ, га") байдаг бөгөөд тэр нь
+   * шошгоороо танигдана — гэвч тэр нь БҮСИЙН талбай БИШ,
+   * гуравны хоёрт л бөглөгдсөн "өртсөн" хэмжээ (463 га).
+   *
+   * ⚠ Нэгжийг ШОШГООС ТААМАГЛАХГҮЙ: нүцгэн "талбай" нь
+   * м² байж болно. Тиймээс ерөнхий дүрэмд ОРОХГҮЙ — аль
+   * багана юу гэсэн үг болохыг эх сурвалжийн эзэн мэднэ тул
+   * ХЭЛТСИЙН бүртгэлд сууна (`skipMeasure`-тэй нэг зарчим).
+   */
+  areaHa?: Record<string, string>;
 };
 
 /** Давхаргын харагдах нэр — бүртгэлд байхгүй бол үйлчилгээнийхээр */
@@ -241,6 +304,13 @@ export type LayerInfo = {
   objectIdField: string;
   /** Талбайн талбарын нэр (`Shape__Area` эсвэл жижиг үсгээр) — байхгүй ч байж болно */
   areaField: string | null;
+  /**
+   * Талбайн багана ГЕКТАРААР бичигдсэн эсэх.
+   *
+   * ⚠ `false` бол `SHAPE__Area` буюу Web Mercator-ийн квадрат метр —
+   * Улаанбаатарын өргөрөгт бодит талбайгаас **2.2 дахин их**.
+   */
+  areaInHa: boolean;
   count: number;
   /**
    * Нэг хуудсанд татах бичлэг — серверийн `maxRecordCount` ба бидний
@@ -331,7 +401,11 @@ async function loadLayerInfo(
     arcgisJson<LayerMeta>(`${service}/${first.id}?f=json`, id, { signal }),
     arcgisJson<{ count?: number }>(
       `${service}/${first.id}/query?` +
-        new URLSearchParams({ where: "1=1", returnCountOnly: "true", f: "json" }),
+        new URLSearchParams({
+          where: "1=1",
+          returnCountOnly: "true",
+          f: "json",
+        }),
       id,
       { signal },
     ).then(
@@ -369,8 +443,110 @@ async function loadLayerInfo(
     all.find((f) => /^objectid$/i.test(f.name))?.name ||
     "objectid";
 
-  const areaField =
-    all.find((f) => /^shape_+area$/i.test(f.name))?.name ?? null;
+  /*
+    ⚠⚠ **`SHAPE__Area` нь ГЕКТАР БИШ, WEB MERCATOR КВАДРАТ МЕТР**
+    (2026-09-25-нд хэмжиж тогтоов).
+
+    Хостлогдсон давхаргын `SHAPE__Area` нь хадгалалтын проекцоор
+    бодогддог бөгөөд тэр нь Web Mercator. Энэ проекц туйл руу ойртох
+    тусам талбайг `1/cos²φ` дахин хөөрөгдөнө — Улаанбаатарын өргөрөгт
+    (47.9°) яг **2.225 дахин**.
+
+    Хязгаарлалтын бүсийн таван дүрс дээр хэмжсэн: эх сурвалжийн
+    `talbai_ga` нь 3,923 · 642 · 3,691 · 3,431 · 1,020 га, харин
+    `SHAPE__Area / 10000` нь 8,702 · 1,429 · 8,209 · 7,625 · 2,261 —
+    харьцаа нь 2.218–2.225. Байгаль хамгаалагчийн бүс дээр ч ижил:
+    бүртгэлийн 365,484 га нь дэлгэц дээр 814,238 болж гарч байв
+    (2.228 дахин).
+
+    Тиймээс эх сурвалжийн ӨӨРИЙН гектарын багана ДАВУУ ЭРХТЭЙ.
+    ⚠ Проекцын коэффициентээр ЗАСАХГҮЙ: өргөрөг бүрд өөр бөгөөд
+    давхарга бүр Web Mercator-т хадгалагдсан гэсэн баталгаа алга.
+    Эх сурвалж өөрөө гектараа бичсэн бол түүнийг АВНА — таамаг
+    хэрэггүй.
+    ⚠ `SHAPE__Area` нь зөвхөн НӨӨЦ: гектарын багана байхгүй давхаргад
+    хэмжээний ХАРЬЦАА (аль нь илүү том) зөв хэвээр үлдэнэ.
+  */
+  /*
+    ⚠⚠ **`all` нь ЭХ МЕТАДАТА — төрөл нь `esriFieldTypeDouble`
+    хэвээр.** `NUMERIC` нь задалсан хэлбэрийг (`Double`) хоёр
+    талаасаа бэхлээд шалгадаг тул эх төрлийг шууд үзвэл
+    ХЭЗЭЭ Ч таарахгүй. Гектарын багана нь иймээр ХАГАС САР
+    ДАРАА ч олдохгүй байсан бөгөөд `SHAPE__Area` (төрлийн
+    шалгалтгүй тул) үргэлж шалгардаг байв — улмаар
+    платформын БҮХ "Талбай, га" тоо 2.2 дахин илүү хэвээр
+    үлдсэн (2026-09-28-нд токеноор илрүүлэв: хязгаарлалтын
+    бүс 28,229 гэж гарсан — бодит нь 12,687).
+    ⚠ Бусад гурав дуудалт (`measures`, `band`, хуанли) нь
+    `info.fields`-д ажилладаг — тэнд төрөл аль хэдийн задарсан
+    тул зөв ажиллаж байсан. Энд бас задлана.
+  */
+  const numeric = (f: { type: string }) =>
+    NUMERIC.test(f.type.replace("esriFieldType", ""));
+
+  /*
+    ⚠⚠ **НЭГ ДАВХАРГА ГЕКТАРЫН ХЭДЭН БАГАНАТАЙ БАЙЖ БОЛНО**
+    (2026-09-28-нд токеноор зургаан давхарга дээр илэрсэн). Эх
+    сурвалж НЭГ талбайг хэдэн аргаар бичдэг:
+      `O01_THGN_polygon`  — тогтоолоор · геодезийн · ArcGIS
+      `B11_tsetserlegt_hureelen` — НЭРЭНД БИЧСЭН · геодезийн
+      `B11_nogoon_baiguulamj` — файлаар · геодезийн
+      `B12_hogiin_tseg_*` — геодезийн · баримтаар
+    `find` нь ТАЛБАРЫН ДАРААЛЛААР эхнихийг авдаг тул
+    цэцерлэгт хүрээлэнгийн талбай нь "НЭРЭНД БИЧСЭН" бую
+    шошгоноос уншсан бичвэрээс гарах байв — хэмжилт БИШ.
+
+    Тиймээс КАНОНИК НЭР (`talbai_ga`, `area_hec`) ДАВУУ ЭРХТЭЙ:
+    зургаан давхаргын тавд тэр нь эх сурвалжийн өөрийн ГОЛ
+    багана бөгөөд ойн хэлтсийн "ЗӨВХӨН ТОГТООЛЫНХ" гэсэн
+    шийдвэртэй хүртэл таарна (`SKIP_MEASURE`).
+
+    ⚠⚠ АЛЬ НЬ БОЛОХ НЬ ТОДОРГОЙ БОЛ ТАЛБАЙ ГАРГАХГҮЙ.
+    `N06_Bulag_hamgaalaltiin_bus_26` нь ЦЭГЭН давхарга бөгөөд
+    "Онцгой хамгаалалтын бүс (50 м), га" ба "Энгийн … (200 м), га"
+    гэсэн ХОЁР буферын баганатай — аль нэгийг САНАМСГҮЙ
+    сонговол дэлгэц дээр бүсийн ТАЛ талбай "Нийт талбай"
+    мэт гарна. Эх сурвалжийн эзэн шийдэх зүйл тул түр зуур
+    талбайг НЭГ Ч ГАРГАХГҮЙ (`areaField` нь `null`) — буруу
+    тоо харуулахаас үзүүлэлтийг үгүй болгосон нь дээр.
+
+    ⚠ НЭГ Л НЭР ДЭВШИГЧ байвал каноник нэр ШААРДАГДАХГҮЙ:
+    энд эргэлзэх зүйл алга (`A00`-ийн `ortson_ga`, `B11`-ийн `area_ha`).
+  */
+  const ALIAS_HA = /,\s*га$/i;
+  const CANON_HA = /(^|_)(talbai|area)_?(ga|hec)$/i;
+
+  /* БҮРТГЭЛИЙН ДАРЛАЛТ ДАВУУ ЭРХТЭЙ ({@link LayerSet.areaHa}) —
+     шошго, нэр хоёрт нь ороогүй баганыг хэлтэс эргэлзээгүй
+     өгсөн бол түүнийг АВНА */
+  const pinned = set.areaHa?.[id];
+  const pinnedField = pinned
+    ? all.find((f) => f.name === pinned && numeric(f))
+    : undefined;
+
+  const haFields = all.filter(
+    (f) =>
+      numeric(f) &&
+      (CANON_HA.test(f.name) || ALIAS_HA.test((f.alias ?? "").trim())),
+  );
+  const canon = haFields.filter((f) => CANON_HA.test(f.name));
+  const hectare =
+    pinnedField ??
+    (canon.length === 1
+      ? canon[0]
+      : haFields.length === 1
+        ? haFields[0]
+        : undefined);
+  const shapeArea = all.find((f) => /^shape_+area$/i.test(f.name));
+  /* ⚠ Гектарын багана ТОДОРГОЙГҮЙ (хоёр буфер) бол
+     `SHAPE__Area` рүү УНАХГҮЙ: тэр цэгэн давхаргад алга,
+     байсан ч 2.2 дахин хөөрөгдсөн тул хоёр алдаа нэмэгднэ */
+  const ambiguous = !hectare && haFields.length > 1;
+  const areaField = ambiguous
+    ? null
+    : (hectare?.name ?? shapeArea?.name ?? null);
+  /** Талбайн багана нь гектараар бичигдсэн эсэх (эс бөгөөс м²) */
+  const areaInHa = Boolean(hectare);
 
   return {
     id,
@@ -386,6 +562,7 @@ async function loadLayerInfo(
     objectIdField: oidField,
     areaField,
     count,
+    areaInHa,
     pageSize: Math.max(1, Math.min(PAGE, Number(meta.maxRecordCount) || PAGE)),
     fields,
   };
@@ -454,6 +631,10 @@ function relabel(
 }
 
 type Raw = {
+  /* ArcGIS-ийн GeoJSON гаралт нь дугаарыг ӨӨРИЙН талбарт ч, `id`-д ч
+     бичиж болно — зөвхөн `properties`-ээс уншвал зарим давхарга дээр
+     бүх дүрс ЧИМЭЭГҮЙ хаягдана */
+  id?: number | string;
   properties: Record<string, unknown>;
   geometry: GeoJSON.Geometry | null;
 };
@@ -519,7 +700,62 @@ async function loadLayerRows(info: LayerInfo): Promise<LayerRows> {
       if (Number.isFinite(a)) area[uid] = a;
     }
   }
+  if (info.set.tidy) foldSpelling(rows, info);
   return { rows, area };
+}
+
+/**
+ * БИЧИГЛЭЛИЙН ХУВИЛБАРЫГ НЭГТГЭНЭ — зөвхөн ҮСГИЙН ТОМ, ЖИЖГЭЭР.
+ *
+ * Намгархаг газрын `газар_ашиглалтын_мэдээлэл` дээр "айлтай" (20) ба
+ * "Айлтай" (7), "айл суурьшсан" (21) ба "Айл суурьшсан" нь тусдаа
+ * ангилал болж, дөрвөн бодит утга ДОЛООН зурвас болж байв.
+ *
+ * ⚠ ЗӨВХӨН ТАТАХ МӨЧИД: диаграм, шүүлтүүр, бичлэгийн дэлгэрэнгүй
+ * гурвуулаа НЭГ утгыг харна. Зөвхөн дэлгэц дээр нэгтгэвэл товшиход
+ * шүүлтийн түлхүүр зөрж, үр дүн хоосон гарна.
+ * ⚠ КАНОНИК хэлбэр нь ХАМГИЙН ОЛОН ДАХИН тохиолдсон бичиглэл —
+ * цөөнхийн алдаа олонхыг дарж бичихгүй.
+ * ⚠ ТОМ ҮСГЭЭР эхэлсэн эсэхээр биш ТООГООР шийднэ: эх сурвалж
+ * аль хэлбэрийг зөв гэж үзэж байгааг давтамж нь хэлнэ.
+ * ⚠ Зөвхөн үсгийн хэлбэр ялгаатай утгуудыг нэгтгэнэ. "Байнгын" ба
+ * "Байнгын урсацтай" нь ӨӨР бичиглэл бөгөөд аль нь алийг товчилсон
+ * нь ТААМАГ тул ХӨНДӨХГҮЙ — эх сурвалжийн эзэн шийднэ (`values`).
+ */
+function foldSpelling(rows: Record<number, Row>, info: LayerInfo) {
+  const list = Object.values(rows);
+  if (list.length < 2) return;
+  for (const f of info.fields) {
+    if (f.type !== "String") continue;
+    /* Бичиглэл бүрийн давтамж */
+    const seen = new Map<string, number>();
+    for (const row of list) {
+      const v = row[f.name];
+      if (typeof v !== "string") continue;
+      const t = v.replace(/\s+/g, " ").trim();
+      if (!t) continue;
+      seen.set(t, (seen.get(t) ?? 0) + 1);
+    }
+    /* Жижиг үсгийн хэлбэр → хамгийн түгээмэл бичиглэл */
+    const canon = new Map<string, string>();
+    const best = new Map<string, number>();
+    for (const [text, n] of seen) {
+      const k = text.toLowerCase();
+      if (n > (best.get(k) ?? 0)) {
+        best.set(k, n);
+        canon.set(k, text);
+      }
+    }
+    /* Нэгтгэх зүйл байхгүй бол мөрүүдийг хөндөхгүй */
+    if (canon.size === seen.size) continue;
+    for (const row of list) {
+      const v = row[f.name];
+      if (typeof v !== "string") continue;
+      const t = v.replace(/\s+/g, " ").trim();
+      const hit = t && canon.get(t.toLowerCase());
+      if (hit && hit !== v) row[f.name] = hit;
+    }
+  }
 }
 
 async function loadLayerShapes(info: LayerInfo): Promise<GeoJSON.Feature[]> {
@@ -530,7 +766,7 @@ async function loadLayerShapes(info: LayerInfo): Promise<GeoJSON.Feature[]> {
     maxAllowableOffset: String(OFFSET),
     geometryPrecision: "5",
   })) {
-    const uid = Number(f.properties?.[oid]);
+    const uid = Number(f.properties?.[oid] ?? f.id);
     if (!Number.isFinite(uid) || !f.geometry) continue;
     shapes.push({
       type: "Feature",
@@ -565,7 +801,19 @@ type Group = { key: string; label: string; total: number; rows: Datum[] };
 export type Row = Record<string, unknown>;
 
 /** Шүүсэн мөрүүд дээр дахин тоолсон үр дүн */
-export type Counted = { values: Datum[]; groups?: Group[] };
+export type Counted = {
+  values: Datum[];
+  groups?: Group[];
+  /**
+   * Ангилал бүрийн НЭМЭЛТ утга — зурвасын ХУВААРЬТ ОРОХГҮЙ.
+   *
+   * Өөр НЭГЖТЭЙ хоёр дахь тоо (бичлэгийн тоо ↔ талбайн га) тул
+   * нэг хуваарьт оруулах нь "ижил нэгжтэй хэмжилт л нэг диаграмд
+   * харьцуулагдана" дүрмийг зөрчинө — нэрийн ард бүдэг
+   * бичвэрээр гарна ({@link Breakdown.note}).
+   */
+  notes?: Map<string, number>;
+};
 
 /** Нэг талбарын утгын задаргаа */
 export type Breakdown = {
@@ -608,6 +856,24 @@ export type Breakdown = {
   top?: number;
   /** Мөрүүд — `compare`-аас бусад бүх төрөлд */
   values: Datum[];
+  /**
+   * НЭМЭЛТ ХЭМЖИЛТ — мөрийн ард, зурвасын хуваарьаас ГАДУУР.
+   *
+   * Нэг талбар ХОЁР диаграм төрүүлэх нь элбэг: ангиллын
+   * БИЧЛЭГИЙН ТОО ба тэр ангиллаар хэмжсэн ТАЛБАЙ. Зэрэгцүүлбэл
+   * ИЖИЛ дөрвөн ангиллыг хоёр удаа зурна (хэрэглэгч, 2026-09-24:
+   * "хоёр бөгж давхардсан") — тиймээс хэмжилт нь тооллын
+   * диаграмд шингэж, мөр бүрийн нэрийн ард бүдэг бичвэрээр гарна.
+   *
+   * ⚠ Зурвас нь ЗӨВХӨН `values`-ыг хэмжинэ — хоёр тоо ӨӨР НЭГЖТЭЙ
+   * (коридорын самбартай нэг зарчим).
+   * ⚠ Хоёр тоо ЭСРЭГ эрэмбэтэй байж болно (хамгийн олон
+   * бичлэгтэй хэсэг нь хамгийн том талбайтай байх албагүй) — яг тэр
+   * зөрүү нь мэдээлэл тул хоёуланг зэрэг харуулна.
+   */
+  note?: { label: string; unit?: string };
+  /** Нэмэлт хэмжилтийн утга — {@link Counted.notes} */
+  notes?: Map<string, number>;
   /** `compare`: ангилал бүрийн доор хэмжилтүүд эгнэнэ */
   groups?: Group[];
   /**
@@ -900,22 +1166,77 @@ const ADMIN_FIELD =
  * таамаглаж орчуулахгүй. Кирилл aguulsan alias хөндөгдөхгүй.
  */
 const LATIN_WORDS: Record<string, string> = {
-  duureg: "дүүрэг", duureg_id: "дүүрэг", district: "дүүрэг",
-  khoroo: "хороо", horoo: "хороо", khoroo_id: "хороо",
-  aimag: "аймаг", sum: "сум", soum: "сум", bag: "баг",
-  ner: "нэр", name: "нэр", on: "он", year: "он", sar: "сар", month: "сар",
-  ognoo: "огноо", date: "огноо", too: "тоо", count: "тоо",
-  talbai: "талбай", area: "талбай", urt: "урт", length: "урт",
-  hemjee: "хэмжээ", turul: "төрөл", type: "төрөл", angilal: "ангилал",
-  code: "код", kod: "код", dugaar: "дугаар", hayag: "хаяг", address: "хаяг",
-  bus: "бүс", zone: "бүс", gazar: "газар", zam: "зам", barilga: "барилга",
-  ail: "айл", urh: "өрх", ersdel: "эрсдэл", tseg: "цэг", tsegiin: "цэгийн",
-  uyr: "үер", us: "ус", nogoon: "ногоон", baiguulamj: "байгууламж",
-  tailbar: "тайлбар", note: "тайлбар", tuluv: "төлөв", status: "төлөв",
-  eh: "эх", survalj: "сурвалж", source: "эх сурвалж", owner: "эзэмшигч",
-  ezemshigch: "эзэмшигч", gerchilgee: "гэрчилгээ", huchin: "хүчин", chadal: "чадал",
-  hemjilt: "хэмжилт", undur: "өндөр", height: "өндөр", urgun: "өргөн", width: "өргөн",
-  ga: "га", km: "км", m: "м",
+  duureg: "дүүрэг",
+  duureg_id: "дүүрэг",
+  district: "дүүрэг",
+  khoroo: "хороо",
+  horoo: "хороо",
+  khoroo_id: "хороо",
+  aimag: "аймаг",
+  sum: "сум",
+  soum: "сум",
+  bag: "баг",
+  ner: "нэр",
+  name: "нэр",
+  on: "он",
+  year: "он",
+  sar: "сар",
+  month: "сар",
+  ognoo: "огноо",
+  date: "огноо",
+  too: "тоо",
+  count: "тоо",
+  talbai: "талбай",
+  area: "талбай",
+  urt: "урт",
+  length: "урт",
+  hemjee: "хэмжээ",
+  turul: "төрөл",
+  type: "төрөл",
+  angilal: "ангилал",
+  code: "код",
+  kod: "код",
+  dugaar: "дугаар",
+  /* ⚠ `ID` нь латин товчлол — дэлгэц дээр товчлол гаргахгүй дүрмээр
+     задарна. `globalid` зэрэг нийлмэл үг нь НЭГ үг тул хөндөгдөхгүй
+     (үг нь `_`, зайгаар л салдаг) */
+  id: "дугаар",
+  hayag: "хаяг",
+  address: "хаяг",
+  bus: "бүс",
+  zone: "бүс",
+  gazar: "газар",
+  zam: "зам",
+  barilga: "барилга",
+  ail: "айл",
+  urh: "өрх",
+  ersdel: "эрсдэл",
+  tseg: "цэг",
+  tsegiin: "цэгийн",
+  uyr: "үер",
+  us: "ус",
+  nogoon: "ногоон",
+  baiguulamj: "байгууламж",
+  tailbar: "тайлбар",
+  note: "тайлбар",
+  tuluv: "төлөв",
+  status: "төлөв",
+  eh: "эх",
+  survalj: "сурвалж",
+  source: "эх сурвалж",
+  owner: "эзэмшигч",
+  ezemshigch: "эзэмшигч",
+  gerchilgee: "гэрчилгээ",
+  huchin: "хүчин",
+  chadal: "чадал",
+  hemjilt: "хэмжилт",
+  undur: "өндөр",
+  height: "өндөр",
+  urgun: "өргөн",
+  width: "өргөн",
+  ga: "га",
+  km: "км",
+  m: "м",
 };
 
 export function officialLabel(alias: string): string {
@@ -1066,7 +1387,7 @@ function spellUnit(unit: string): string {
   return unit;
 }
 
-function unitOf(alias: string): { unit: string; name: string } {
+export function unitOf(alias: string): { unit: string; name: string } {
   const at = alias.lastIndexOf(",");
   if (at < 0) return { unit: "", name: alias };
 
@@ -1331,7 +1652,19 @@ function tally(keys: string[][]): Datum[] {
  * хэсэг байсан гэсэн үг ("Ар, Өвөр гэсэн нэртэй ам") — тэр үед
  * задлахгүй.
  */
-function candidateOf(field: LayerField, raw: string[]): Candidate | null {
+function candidateOf(
+  field: LayerField,
+  raw: string[],
+  /**
+   * Бичлэгээс ТҮҮХИЙ ангиллын бичвэрийг уншина.
+   *
+   * ⚠ Тоон талбарыг ангилал болгох үед (`tidy`-ийн хоёр, гурван
+   * утгатай хуваарь) ЗААВАЛ өгнө: `categoryKey` нь зөвхөн бичвэр
+   * хүлээж авдаг тул тоог "Бүртгэгдээгүй" болгож, шүүлт нь диаграм
+   * дээр харагдах түлхүүртэй зөрнө.
+   */
+  read?: (row: Row) => string,
+): Candidate | null {
   if (!raw.length) return null;
 
   const single = raw.map((v) => [v]);
@@ -1461,10 +1794,11 @@ function candidateOf(field: LayerField, raw: string[]): Candidate | null {
   }
 
   const name = field.name;
+  const base = read ?? ((row: Row) => categoryKey(row[name]));
   const keyOf =
     multi && fold && sep
       ? (row: Row) => {
-          const v = categoryKey(row[name]);
+          const v = base(row);
           if (v === "Бүртгэгдээгүй") return [v];
           return [
             ...new Set(
@@ -1475,7 +1809,7 @@ function candidateOf(field: LayerField, raw: string[]): Candidate | null {
             ),
           ];
         }
-      : (row: Row) => [categoryKey(row[name])];
+      : (row: Row) => [base(row)];
 
   return { field, keys, keyOf, multi, values, score: scoreOf(values) };
 }
@@ -1926,6 +2260,38 @@ function measureCharts(
  * (2026-09-17). {@link SMALL}-аас цөөн мөрөнд зөвхөн цифрийн шалгуур
  * үлдэнэ — ангиллын танигчийн дүрэмтэй нэг зарчим.
  */
+/**
+ * КИРИЛЛ БИЧЛЭГТЭЙ БАГАНА ДАВУУ ЭРХТЭЙ.
+ *
+ * Эх сурвалж нэг зүйлийг ХОЁР бичигээр хадгалсан байх нь элбэг:
+ * байгаль хамгаалагчийн давхаргад `name` нь "Ganbat", `ner_mn` нь
+ * "Д.Ганбат". Структурын оноо нь хоёулаа ижил тул давхардлыг
+ * давхардалгүй утгын ТООГООР таслахад латин тал нь (32 утга)
+ * кириллыг (31) давж, дэлгэц дээр "Ganbat, Baterdene, Saruulbayr"
+ * гэж гарч байв (хэрэглэгч, 2026-09-24: "хүний нэрийг кириллээр").
+ *
+ * ⚠ Энэ нь ОРЧУУЛГА БИШ, ТАЛБАР СОНГОЛТ: хүний нэрийг латинаас
+ * кирилл рүү буулгах нь ТААМАГ (ү/ө/э ялгааг латин бичлэг
+ * хэлдэггүй — "Khurelsukh" нь Хүрэлсүх үү, Хурэлсух үү) бөгөөд
+ * буруу гарвал БОДИТ ХҮНИЙ НЭРИЙГ гуйвуулна. Эх сурвалж өөрөө
+ * кирилл багана өгсөн тул бид зөвхөн АЛИЙГ НЬ СОНГОХыг л шийднэ.
+ *
+ * ⚠ Латиныг ХАСАХГҮЙ, зөвхөн ТОРГоно: хаг, хөвд, мөөгний
+ * давхаргад зүйлийн нэр нь биномиал латин бөгөөд КИРИЛЛ
+ * ХУВИЛБАР БАЙХГҮЙ — тэнд латин багана цорын ганц нэрд тооцогдож
+ * шалгарсаар байна.
+ */
+const CYRILLIC = /[Ѐ-ӿ]/;
+
+/**
+ * Латин баганын шийтгэл.
+ *
+ * Структурын хувьд кирилл баганаас ГУРАВНЫ НЭГээс илүү сайн
+ * байж байж л латин шалгарна — хоёр багана НЭГ зүйлийн хоёр
+ * бичлэг бол оноо нь бараг ижил гардаг.
+ */
+const LATIN_NAME_PENALTY = 0.75;
+
 function nameScore(values: string[], weighBoiler = true): number {
   const digits =
     values.reduce((s, v) => s + (/\d/.test(v) ? 1 : 0), 0) / values.length;
@@ -1945,7 +2311,10 @@ function nameScore(values: string[], weighBoiler = true): number {
     ? Math.max(0, ...seen.values()) / values.length
     : 0;
 
-  return (1 - digits) * (1 - boiler);
+  /* Кирилл давуу эрхтэй — {@link CYRILLIC} */
+  const cyr = values.filter((v) => CYRILLIC.test(v)).length / values.length;
+
+  return (1 - digits) * (1 - boiler) * (cyr >= 0.5 ? 1 : LATIN_NAME_PENALTY);
 }
 
 /**
@@ -2048,11 +2417,40 @@ export function breakdowns(info: LayerInfo, data: LayerFeatures): Breakdown[] {
   /* ---- 1. Ангилал ---- */
   const cats: Candidate[] = [];
   for (const f of info.fields) {
-    if (f.type !== "String") continue;
-    const c = candidateOf(
-      f,
-      rows.map((r) => categoryKey(r[f.name])),
-    );
+    const text = f.type === "String";
+    /*
+      ⚠⚠ ХОЁР, ГУРВАН УТГАТАЙ ТООН ТАЛБАР нь ХЭМЖИЛТ БИШ АНГИЛАЛ
+      (`tidy`, 2026-09-25). Булгийн хамгаалалтын бүсийн `distance` нь
+      ердөө 50 ба 200 гэсэн хоёр утгатай атлаа тоон тул хэмжилт гэж
+      үзэгдэж, 495 бичлэгтэй давхарга НЭГ Ч диаграмгүй үлддэг байв:
+      нөгөө талбар нь `objectid_1` буюу дугаар.
+
+      ⚠ Дөрөв ба түүнээс олон утгатайг АВАХГҮЙ: тэр нь жинхэнэ тоолол
+      байх магадлалтай (булгийн "энгийн бүс хуваалцсан тоо" нь 1–4) —
+      ангилал болговол нийлбэр нь алдагдана.
+      ⚠ ХУАНЛИЙН талбарыг АВАХГҮЙ: он, сар нь аль хэдийн хугацааны
+      цуваа болдог тул ангилал болговол нэг зүйл хоёр диаграм болно.
+    */
+    const band =
+      !text &&
+      info.set.tidy === true &&
+      NUMERIC.test(f.type) &&
+      (() => {
+        const nums = rows
+          .map((r) => numberOf(r[f.name]))
+          .filter((v): v is number => v != null);
+        const uniq = new Set(nums);
+        return uniq.size >= 2 && uniq.size <= 3 && !calendarOf(f, nums);
+      })();
+    if (!text && !band) continue;
+    /* Тоон хуваарийг бичвэр болгох НЭГ дүрэм — диаграмын түлхүүр ба
+       шүүлтийн түлхүүр хоёр зөрөх ёсгүй */
+    const read = (row: Row) => {
+      if (text) return categoryKey(row[f.name]);
+      const n = numberOf(row[f.name]);
+      return n == null ? categoryKey(null) : String(n);
+    };
+    const c = candidateOf(f, rows.map(read), text ? undefined : read);
     if (c) cats.push(c);
   }
   cats.sort((a, b) => b.score - a.score);
@@ -2176,7 +2574,120 @@ export function breakdowns(info: LayerInfo, data: LayerFeatures): Breakdown[] {
     }
   }
 
+  const list = foldMeasures(out);
+  return info.set.tidy ? tidyCharts(list) : list;
+}
+
+/** Сарын диаграм гарахад шаардагдах БӨГЛӨГДСӨН сарын доод тоо */
+const MONTH_SPREAD = 5;
+
+/** Жилийн цуваанд БАГАНА тутамд ногдох бичлэгийн доод дундаж */
+const YEAR_DENSITY = 5;
+
+/**
+ * ДИАГРАМЫН ЦЭГЦ — {@link LayerSet.tidy} асаалттай бүрдэлд.
+ *
+ * Хоёр төрлийн шуугианыг хасна. Хоёулаа ногоон бүсийн арван найман
+ * давхаргыг 2026-09-25-нд токеноор шалгахад ИЛ гарсан:
+ *
+ * 1. **ХООСОН ХУГАЦААНЫ ЦУВАА.** "Суурилуулсан он" нь 30 бичлэгийг
+ *    арван нэгэн жилд тарааж 1 · 0 · 1 · 0 · 0 … гэсэн багана гаргаж
+ *    байв; "Бүртгэсэн огноо"-ны сарын диаграм нь арван хоёр сарын
+ *    ГУРАВТ л утгатай, есөн багана нь тэг. Ийм зураг чиг хандлага
+ *    БИШ — зөвхөн бичлэг цөөн гэдгийг л хэлнэ.
+ *    ⚠ Хугацааны талбар өөрөө хасагдахгүй: шүүлтүүрийн мөрөнд,
+ *    бичлэгийн дэлгэрэнгүйд хэвээр байна. Зөвхөн ДИАГРАМ гарахгүй.
+ * 2. **НЭРИЙН БАГАНААР ХЭМЖСЭН ДИАГРАМ ОЛОН.** Гадаргын усны
+ *    бүртгэлд "Нэр / Өндөр", "Нэр / pH", "Нэр / TDS", "Нэр /
+ *    Температур" гэсэн ДӨРӨВ зэрэг гарч, нэг давхарга АРВАН ХОЁР
+ *    диаграмтай болж байв. Нэр бүр НЭГ бичлэгтэй тул эдгээрийн
+ *    "дундаж" нь задаргаа биш, түүхий утгын эрэмбэлсэн жагсаалт —
+ *    нэг нь жишээ болоход хангалттай, дөрөв нь бодит задаргаануудыг
+ *    (усны төрөл, горим, сав газар) доош түлхэнэ.
+ *    ⚠ Эрэмбэ нь `breakdowns`-ийнхоороо тул ХАМГИЙН САЙН нь үлдэнэ.
+ */
+function tidyCharts(list: Breakdown[]): Breakdown[] {
+  const out: Breakdown[] = [];
+  let named = 0;
+  for (const b of list) {
+    /* Хураасан хэмжилт = нэрийн баганаар хэмжсэн диаграм */
+    if (b.top != null && (b.kind === "sum" || b.kind === "mean")) {
+      if (named >= 1) continue;
+      named += 1;
+    }
+    if (b.kind === "month") {
+      const filled = b.values.filter((d) => d.value > 0).length;
+      if (filled < MONTH_SPREAD) continue;
+    }
+    if (b.kind === "year" && b.values.length) {
+      const total = b.values.reduce((n, d) => n + d.value, 0);
+      if (total / b.values.length < YEAR_DENSITY) continue;
+    }
+    out.push(b);
+  }
   return out;
+}
+
+/**
+ * НЭГ ТАЛБАРЫН ХОЁР ДИАГРАМЫГ НЭГТГЭНЭ (2026-09-24).
+ *
+ * Ангилал бүр ХОЁР диаграм төрүүлдэг: "Хэсэг — бичлэгийн тоо"
+ * ба "Талбай, га — Хэсэг". Хоёулаа ИЖИЛ дөрвөн ангиллыг,
+ * ижил дарааллаар, ижил өнгөөр зурдаг тул баруун баганад хоёр
+ * бөгж дараалан сууж байв (хэрэглэгч, 2026-09-24: "хоёр бөгж
+ * давхардсан").
+ *
+ * Одоо хэмжилт нь тооллын диаграмд шингэнэ: зурвас нь БИЧЛЭГИЙН
+ * ТООГ хэмжиж, талбай нь нэрийн ард бүдэг бичвэрээр гарна
+ * (экологийн коридорын самбартай нэг шийдэл).
+ *
+ * ⚠ ЗӨВХӨН ИЖИЛ ТАЛБАРТАЙ хосыг нэгтгэнэ. Өөр талбарын
+ * хэмжилт (нэрийн баганаар хэмжсэн талбай) байрандаа үлдэнэ.
+ * ⚠ `compare` ХӨНДӨГДӨХГҮЙ: түүний мөр бүрд цуваанууд аль хэдийн
+ * эгнэсэн байдаг.
+ * ⚠ Хураасан (`top`) диаграмыг НЭГТГЭХГҮЙ: хоёрын үлдсэн мөр
+ * зөрвөл нэмэлт утга байхгүй мөрүүд гарна.
+ * ⚠ ШҮҮЛТ ТАВИХАД ХОЁУЛАНГ ДАХИН ТООЛНО — хоёр хуучин
+ * `recount` хэвээр дуудагдана.
+ */
+function foldMeasures(list: Breakdown[]): Breakdown[] {
+  /* Талбар бүрд ЭХНИЙ хэмжилтийн диаграм */
+  const measure = new Map<string, Breakdown>();
+  for (const b of list) {
+    if (b.kind !== "sum" && b.kind !== "mean") continue;
+    if (b.top != null) continue;
+    if (!measure.has(b.field)) measure.set(b.field, b);
+  }
+
+  const gone = new Set<string>();
+  const out = list.map((b) => {
+    if (b.kind !== "count" || b.top != null) return b;
+    const m = measure.get(b.field);
+    if (!m) return b;
+    gone.add(m.id);
+
+    const notesOf = (c: Counted) =>
+      new Map(c.values.map((d) => [d.key, d.value]));
+
+    return {
+      ...b,
+      /* Нэгж нь хэмжилтийн нэрийн таслалын ард (`"Талбай, га"`) —
+         мөр бүрд түүнийг бичвэл тоо нь өөрийгөө тайлбарлана */
+      /* Нэгжийг хэмжилтийн нэрнээс салгана ({@link unitOf}) — аль
+         хэдийн задалсан байдаг тул "мян.₮" товчлол дэлгэцэд гарахгүй */
+      note: {
+        label: m.measure ?? m.label,
+        unit: (m.measure ? unitOf(m.measure).unit : "") || undefined,
+      },
+      notes: notesOf(m),
+      recount: (rs: Row[]) => ({
+        ...b.recount(rs),
+        notes: notesOf(m.recount(rs)),
+      }),
+    };
+  });
+
+  return out.filter((b) => !gone.has(b.id));
 }
 
 /**
@@ -2218,10 +2729,15 @@ export function labelParts(info: LayerInfo, data: LayerFeatures): LayerLabels {
 }
 
 /** Олон өнцөгт давхаргын нийт талбай, га */
-export function totalHa(data: LayerFeatures): number {
-  let m2 = 0;
-  for (const v of Object.values(data.area)) m2 += v;
-  return m2 / 10000;
+export function totalHa(info: LayerInfo, data: LayerFeatures): number {
+  /* ⚠ `area` нь ТҮҮХИЙ утга хадгална — эх сурвалжийн
+     гектарын багана байвал га, эс бөгөөс `SHAPE__Area`-гийн м².
+     Бүгдийг 10,000-д хуваавал гектарын тоо 10 мянга дахин
+     бага гарна ({@link LayerInfo.areaInHa}) */
+  const k = info.areaInHa ? 1 : 1 / 10000;
+  let ha = 0;
+  for (const v of Object.values(data.area)) ha += v * k;
+  return ha;
 }
 
 /* --------------------------------------------------------------------------
@@ -2251,15 +2767,22 @@ const shapesCache = new Map<string, Promise<GeoJSON.Feature[]>>();
 /** Дуудагчийн `signal` тасрахад хүлээхээ болино — амлалт өөрөө үргэлжилнэ */
 function abortable<T>(p: Promise<T>, signal?: AbortSignal): Promise<T> {
   if (!signal) return p;
-  if (signal.aborted) return Promise.reject(new DOMException("Aborted", "AbortError"));
+  if (signal.aborted)
+    return Promise.reject(new DOMException("Aborted", "AbortError"));
   return new Promise<T>((resolve, reject) => {
     const onAbort = () => reject(new DOMException("Aborted", "AbortError"));
     signal.addEventListener("abort", onAbort, { once: true });
-    p.then(resolve, reject).finally(() => signal.removeEventListener("abort", onAbort));
+    p.then(resolve, reject).finally(() =>
+      signal.removeEventListener("abort", onAbort),
+    );
   });
 }
 
-function memo<T>(cache: Map<string, Promise<T>>, key: string, load: () => Promise<T>): Promise<T> {
+function memo<T>(
+  cache: Map<string, Promise<T>>,
+  key: string,
+  load: () => Promise<T>,
+): Promise<T> {
   let p = cache.get(key);
   if (!p) {
     p = load();
@@ -2269,11 +2792,21 @@ function memo<T>(cache: Map<string, Promise<T>>, key: string, load: () => Promis
   return p;
 }
 
-export function fetchLayerInfo(set: LayerSet, id: string, signal?: AbortSignal): Promise<LayerInfo> {
-  return abortable(memo(infoCache, serviceOf(set, id), () => loadLayerInfo(set, id)), signal);
+export function fetchLayerInfo(
+  set: LayerSet,
+  id: string,
+  signal?: AbortSignal,
+): Promise<LayerInfo> {
+  return abortable(
+    memo(infoCache, serviceOf(set, id), () => loadLayerInfo(set, id)),
+    signal,
+  );
 }
 
-const NO_SHAPES: GeoJSON.FeatureCollection = { type: "FeatureCollection", features: [] };
+const NO_SHAPES: GeoJSON.FeatureCollection = {
+  type: "FeatureCollection",
+  features: [],
+};
 
 /**
  * `onRows` нь атрибут ирмэгц (геометрээс ӨМНӨ) хоосон геометртэй
@@ -2290,9 +2823,12 @@ export function fetchLayerFeatures(
   const rows = memo(rowsCache, key, () => loadLayerRows(info));
   const shapes = memo(shapesCache, key, () => loadLayerShapes(info));
   if (onRows) {
-    void rows.then((r) => {
-      if (!signal?.aborted) onRows({ id: info.id, shapes: NO_SHAPES, ...r });
-    }, () => undefined);
+    void rows.then(
+      (r) => {
+        if (!signal?.aborted) onRows({ id: info.id, shapes: NO_SHAPES, ...r });
+      },
+      () => undefined,
+    );
   }
   return abortable(
     Promise.all([rows, shapes]).then(([r, features]) => ({

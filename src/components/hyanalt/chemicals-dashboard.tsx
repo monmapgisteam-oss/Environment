@@ -1142,7 +1142,9 @@ function RecordCard({
       state={panel}
       title="Бүртгэлийн бичилт"
       onClose={onClose}
-      className="top-2 right-2 bottom-8 w-[292px]"
+      /* Өндөр нь агуулгаараа — `bottom` бэхлэвэл цөөн талбартай
+         бичлэг дээр хоосон талбай үлдэнэ (2026-09-29) */
+      className="top-2 right-2 max-h-[calc(100%-2.5rem)] w-[292px]"
     >
 
       <div className="px-2.5 pt-2">
