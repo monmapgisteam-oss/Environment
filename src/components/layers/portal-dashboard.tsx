@@ -554,6 +554,8 @@ export function PortalLayersDashboard({
       rows: Row[];
       oids: Set<number>;
       charts: Breakdown[];
+      /** Мөр шүүлтэд нийцэх эсэх; `skip` нь алгасах шүүлтийн түлхүүрүүд */
+      passes: (row: Row, skip?: readonly string[]) => boolean;
     }[] = [];
 
     for (const id of on) {
@@ -567,11 +569,11 @@ export function PortalLayersDashboard({
          диаграмд ордог тул эхнийхийг нь авна — бүгд ижил */
       const keyBy = new Map<string, (row: Row) => string[]>();
       for (const b of hit.charts)
-        if (!keyBy.has(b.field)) keyBy.set(b.field, b.keyOf);
+        if (!keyBy.has(filterKey(b))) keyBy.set(filterKey(b), b.keyOf);
 
-      const passes = (row: Row, skip?: string) =>
+      const passes = (row: Row, skip: readonly string[] = []) =>
         fields.every((f) => {
-          if (f === skip) return true;
+          if (skip.includes(f)) return true;
           const keys = keyBy.get(f)?.(row);
           /* Дүрэм нь олдохгүй бол шүүхгүй — талбар нь диаграмаас
              алга болсон байж болно (давхарга дахин татагдсан) */
@@ -595,18 +597,18 @@ export function PortalLayersDashboard({
           const hit2 = cache.get(field);
           if (hit2) return hit2;
           const list = fields.includes(field)
-            ? Object.values(hit.data.rows).filter((r) => passes(r, field))
+            ? Object.values(hit.data.rows).filter((r) => passes(r, [field]))
             : rows;
           cache.set(field, list);
           return list;
         };
         charts = hit.charts.map((b) => ({
           ...b,
-          ...b.recount(without(b.field)),
+          ...b.recount(without(filterKey(b))),
         }));
       }
 
-      out.push({ id, hit, rows, oids, charts });
+      out.push({ id, hit, rows, oids, charts, passes });
     }
 
     return out;
@@ -708,6 +710,42 @@ export function PortalLayersDashboard({
     [],
   );
 
+  /**
+   * ХҮСНЭГТИЙН СОНГОЛТ — сэлгэхийн оронд ТОГТООНО.
+   *
+   * ⚠⚠ `pick` нь СЭЛГЭДЭГ (олон сонголтын горим) тул хөндлөн
+   * хүснэгтэд буруу ажиллаж байв: "А" мөр сонгоотой байхад (А, X)
+   * нүдийг дарахад `pick(мөр, "А")` нь А-г ХАСЧ, `pick(багана, "X")`
+   * нь X-ийг нэмнэ — хэрэглэгч "А × X" хүсээд зөвхөн "X" авна.
+   * ⚠ Хүснэгт нь ХОЁР ТЭНХЛЭГТЭЙ тул нүд нь "энэ хосыг үзүүл" гэсэн
+   * НЭГ санаа: хоёуланг нь тогтооно. Аль хэдийн яг тэр хос сонгоотой
+   * бол цуцална.
+   * ⚠ Мөр, баганын товшилт ч үүгээр явна: `rowSel`/`colSel` нь ганц
+   * утга харуулдаг тул олон сонголт зөвшөөрвөл хадгалагдсан утга ба
+   * дэлгэц дээр тодорсон утга ЗӨРНӨ. Олон утгаар шүүх нь шүүлтүүрийн
+   * мөрийн цэсэнд хэвээр.
+   */
+  const pickOnly = React.useCallback(
+    (id: string, pairs: readonly (readonly [string, string])[]) => {
+      setFilters((f) => {
+        const layer = { ...(f[id] ?? {}) };
+        const same = pairs.every(
+          ([k, v]) => (layer[k] ?? []).length === 1 && layer[k][0] === v,
+        );
+        for (const [k, v] of pairs) {
+          if (same) delete layer[k];
+          else layer[k] = [v];
+        }
+        return Object.keys(layer).length
+          ? { ...f, [id]: layer }
+          : Object.fromEntries(Object.entries(f).filter(([k]) => k !== id));
+      });
+      /* Сонгосон бичлэг шүүлтээс гадуур үлдэж болзошгүй */
+      setPicked(null);
+    },
+    [],
+  );
+
   /** Нэг оныг нэмэх, хасах — талбарын шүүлттэй ижил зан төлөв */
   const pickYear = React.useCallback((id: string, key: string | null) => {
     setSeries((v) => {
@@ -796,6 +834,22 @@ export function PortalLayersDashboard({
     цэг нь `points`-д — газрын зургийн дүүргэлтийн давхарга зөвхөн олон
     өнцөгт зурдаг, цэгийн давхарга нь тусдаа эх сурвалжтай.
   */
+  /*
+    ⚠⚠ СОНГОСОН ДҮРС ЗУРАГ ДЭЭР ГАНЦААРАА ҮЛДЭНЭ (хэрэглэгч,
+    2026-09-29: "filter хийхэд map дээр ганцхан сонгогдсон feature л
+    үлддэг байхаар хийгээрэй"). Бичлэг сонгогдсон үед бусад БҮХ дүрс,
+    цэг зурагдахаа болино — нөхөн сэргээлтийн самбартай нэг зан төлөв.
+    ⚠ Энэ нь ЗУРГИЙНХ, диаграмынх БИШ: сонголт нь шүүлт биш тул
+    диаграмын тоонууд ХЭВЭЭР үлдэнэ ("сонголт ≠ шүүлт" дүрэм). Эс
+    тэгвээс нэг бичлэг сонгомогц бүх диаграм нэг мөр болж хумигдана.
+    ⚠ БУЦАХ ГУРВАН ЗАМ: үлдсэн дүрсээ дахин товших, бичлэгийн цонхны
+    хаах товч, эсвэл өөр давхарга асаах/унтраах. Гурвуулаа
+    `setPicked(null)` дуудна.
+    ⚠ Нэмэлт давхарга (хил, нэгж талбар) нь СУУРЬ тул хөндөгдөхгүй —
+    сонгосон дүрс хаана байгааг тэдгээр нь хэлнэ.
+  */
+  const solo = picked;
+
   const shapes = React.useMemo<GeoJSON.FeatureCollection>(() => {
     const features: GeoJSON.Feature[] = [];
     for (const { id, hit, oids } of views) {
@@ -809,6 +863,7 @@ export function PortalLayersDashboard({
            зүйлийг харуулах ёстой */
         if (!oids.has(Number(f.id))) continue;
         const uid = base + Number(f.id);
+        if (solo != null && uid !== solo) continue;
         /* Ангиллын өнгө олдохгүй бол давхаргынхаа өнгөнд буцна —
            зурагдахгүй үлдэх нь бичлэг байхгүй мэт худал хэлнэ */
         const c =
@@ -827,7 +882,7 @@ export function PortalLayersDashboard({
       }
     }
     return { type: "FeatureCollection", features };
-  }, [views, toneOf, uidBase, colorField, palettes]);
+  }, [views, toneOf, uidBase, colorField, palettes, solo]);
 
   const points = React.useMemo<{ at: MapPoints; text: string[] }>(() => {
     const oid: number[] = [];
@@ -840,6 +895,7 @@ export function PortalLayersDashboard({
       for (const f of hit.data.shapes.features) {
         if (f.geometry?.type !== "Point") continue;
         if (!oids.has(Number(f.id))) continue;
+        if (solo != null && base + Number(f.id) !== solo) continue;
         const [x, y] = f.geometry.coordinates as [number, number];
         oid.push(base + Number(f.id));
         lon.push(x);
@@ -848,7 +904,7 @@ export function PortalLayersDashboard({
       }
     }
     return { at: { oid, lon, lat }, text };
-  }, [views, uidBase]);
+  }, [views, uidBase, solo]);
 
   const visible = React.useMemo(
     () => Uint32Array.from(points.at.oid, (_, i) => i),
@@ -1034,7 +1090,20 @@ export function PortalLayersDashboard({
       if (fit.length < 2) continue;
       const [col, row] = fit;
       const cell = new Map<string, number>();
-      for (const r of v.rows) {
+      /*
+        ⚠⚠ НҮДНҮҮД нь ХОЁР ХЭМЖЭЭСЭЭ АЛГАСЧ тоологдоно (2026-09-29).
+        Урьд нь ШҮҮГДСЭН мөрөөс (`v.rows`) тоолдог байсан тул мөр
+        сонгомогц бусад БҮХ нүд тэг болж, хүснэгт нурж байв — "юу
+        сонгосон" гэдгээ л харуулж, өөр рүү шилжих арга алга болно.
+        Энэ нь "диаграм бүр ӨӨРИЙНХӨӨ хэмжигдэхүүнийг алгасч шүүгдэнэ"
+        гэсэн ерөнхий дүрмийн яг тэр тохиолдол — зөвхөн хүснэгт нь
+        ХОЁР тэнхлэгтэй тул хоёуланг нь алгасна.
+        ⚠ Бусад талбарын шүүлт ХЭВЭЭР үйлчилнэ: дүүргээр шүүсний дараа
+        хүснэгт тэр дүүргийн дотор задарна.
+      */
+      const skip = [filterKey(row), filterKey(col)];
+      for (const r of Object.values(v.hit.data.rows)) {
+        if (!v.passes(r, skip)) continue;
         for (const rk of row.keyOf(r))
           for (const ck of col.keyOf(r)) {
             const k = `${rk}\u0000${ck}`;
@@ -1375,14 +1444,24 @@ export function PortalLayersDashboard({
               label: d.label,
             }))}
             cell={(r, c) => cross.cell.get(`${r}\u0000${c}`) ?? 0}
-            rowSel={(filters[id]?.[cross.row.field] ?? [])[0] ?? null}
-            colSel={(filters[id]?.[cross.col.field] ?? [])[0] ?? null}
-            onRow={(k) => pick(id, cross.row.field, k)}
-            onCol={(k) => pick(id, cross.col.field, k)}
-            onCell={(r, c) => {
-              pick(id, cross.row.field, r);
-              pick(id, cross.col.field, c);
-            }}
+            rowSel={(filters[id]?.[filterKey(cross.row)] ?? [])[0] ?? null}
+            colSel={(filters[id]?.[filterKey(cross.col)] ?? [])[0] ?? null}
+            onRow={(k) =>
+              k == null
+                ? pick(id, filterKey(cross.row), null)
+                : pickOnly(id, [[filterKey(cross.row), k]])
+            }
+            onCol={(k) =>
+              k == null
+                ? pick(id, filterKey(cross.col), null)
+                : pickOnly(id, [[filterKey(cross.col), k]])
+            }
+            onCell={(r, c) =>
+              pickOnly(id, [
+                [filterKey(cross.row), r],
+                [filterKey(cross.col), c],
+              ])
+            }
           />
         </CutCard>
       ) : null;
@@ -1480,8 +1559,8 @@ export function PortalLayersDashboard({
         const palette = lit ? palettes[id] : undefined;
         /* Энэ талбарын сонгогдсон утга. Нэрийг `on` гэж БҮҮ бич —
            тэр нь энэ файлд "асаалттай давхаргууд" гэсэн утгатай */
-        const chosen = sel[b.field] ?? null;
-        const onPick = (key: string | null) => pick(id, b.field, key);
+        const chosen = sel[filterKey(b)] ?? null;
+        const onPick = (key: string | null) => pick(id, filterKey(b), key);
 
         return (
           <CutCard
@@ -1726,6 +1805,66 @@ export function PortalLayersDashboard({
               ⚠ Өнгөт цэг нь тухайн давхаргын зургийн өнгө — товч нь
               зургийн тайлбар болж давхар ажиллана.
             */}
+            {/*
+              БҮСЭЭР ШҮҮХ (хэрэглэгч, 2026-09-29: "бүсээр шүүх хэсэг
+              нэмээрэй"). Олон давхаргатай цэсэд давхарга сонгох
+              БАГАНА байдаггүй (`openAll`) тул гурван бүс үргэлж
+              зэрэг зурагдаж, аль нэгийг нь тусад нь харах арга
+              байхгүй байв.
+
+              ⚠ Энэ нь "юуг харах вэ" гэсэн хяналт тул ГАРЧГИЙН
+              ХАЖУУД (`leading`) сууна — баруун талын шүүлтүүрийн
+              бүлэгт тавибал талбарын шүүлттэй андуурагдана
+              ({@link FilterBar}).
+              ⚠ ОЛОН СОНГОЛТ (`exclusive`-ийн радиогоос ялгаатай):
+              бүсүүд нь нэг системийн шатууд тул хоёуланг нь зэрэг
+              харах нь утгатай.
+              ⚠ СҮҮЛЧИЙН БҮСИЙГ УНТРААХГҮЙ: хоосон зураг нь сонголт
+              биш алдаа мэт уншигдана (`exclusive`-тэй нэг зарчим).
+              ⚠ Цэсний НЭР нь бүртгэлээс (`layerLabel`): хамгаалалтын
+              цэсэд "Бүс", булгийнхад "Хувилбар" — давхаргууд нь өөр
+              өөр зүйл тул нэг нэрээр нэрлэвэл аль нэгэнд нь худал.
+              ⚠ Хажуугийн тоо нь давхаргын БҮТЭН бичлэгийн тоо
+              (`count`), шүүгдсэнийх биш: "энэ бүсэд хэдэн дүрс байна"
+              гэдэг нь бүсийн шинж чанар.
+            */}
+            {!picker && !set.exclusive && set.layers.length > 1 ? (
+              <FilterMenu
+                label={set.layerLabel ?? "Давхарга"}
+                icon={Layers3}
+                value={
+                  on.length === 1
+                    ? (set.names[on[0]] ?? infos[on[0]]?.name ?? on[0])
+                    : on.length < set.layers.length
+                      ? `${on.length} / ${set.layers.length}`
+                      : undefined
+                }
+                active={on.length < set.layers.length}
+                onClear={
+                  on.length < set.layers.length
+                    ? () => setOn([...set.layers])
+                    : undefined
+                }
+              >
+                <PickList
+                  items={set.layers.map((id) => ({
+                    key: id,
+                    label: set.names[id] ?? infos[id]?.name ?? id,
+                    value: infos[id]?.count ?? 0,
+                  }))}
+                  selected={on}
+                  onPick={(key) => {
+                    /* `null` нь "бүгдийг цуцла" — энд бүх бүсийг буцаана */
+                    if (key == null) return setOn([...set.layers]);
+                    /* Ганц үлдсэнийг нь унтраахгүй: хоосон зураг нь
+                       сонголт биш алдаа мэт уншигдана */
+                    if (on.length === 1 && on[0] === key) return;
+                    toggle(key);
+                  }}
+                />
+              </FilterMenu>
+            ) : null}
+
             {set.exclusive ? (
               <div className="flex items-center gap-1" role="group" aria-label="Давхарга">
                 {set.layers.map((id) => {
@@ -1813,7 +1952,7 @@ export function PortalLayersDashboard({
               ) : null}
 
               {cuts.map((b) => {
-                const chosen = sel[b.field] ?? [];
+                const chosen = sel[filterKey(b)] ?? [];
                 return (
                   <FilterMenu
                     key={b.id}
@@ -1829,12 +1968,12 @@ export function PortalLayersDashboard({
                           : undefined
                     }
                     active={chosen.length > 0}
-                    onClear={() => pick(id, b.field, null)}
+                    onClear={() => pick(id, filterKey(b), null)}
                   >
                     <PickList
                       items={b.values}
                       selected={chosen}
-                      onPick={(key) => pick(id, b.field, key)}
+                      onPick={(key) => pick(id, filterKey(b), key)}
                       searchable={b.values.length > 8}
                     />
                   </FilterMenu>
@@ -2375,6 +2514,27 @@ function tipRows(
 /** Хугацааны цуваа мөн үү */
 function isTime(b: Breakdown): boolean {
   return b.kind === "year" || b.kind === "month";
+}
+
+/**
+ * ШҮҮЛТИЙН ТҮЛХҮҮР — талбарын нэр, гэхдээ ХУГАЦААНД нь `kind` нэмнэ.
+ *
+ * ⚠⚠ ОГНООНЫ ТАЛБАР ХОЁР ДИАГРАМ ТӨРҮҮЛНЭ: жилийн цуваа ба сарын
+ * хуваарилалт. Тэдний `keyOf` нь ӨӨР ("2020" ба "1-р сар") атлаа
+ * талбарын нэр нь НЭГ. Шүүлтийг зөвхөн талбарын нэрээр түлхүүрлэхэд
+ * `keyBy` нь эхний диаграмынхыг (он) авдаг тул **САРААР ШҮҮХЭД
+ * БҮХ МӨР УНАДАГ байв** — самбар бүхэлдээ хоосон болно (2026-09-29-нд
+ * синтетик датаар илрүүлэв: "1-р сар" → 0 мөр, диаграм нь 5 гэж
+ * бичсэн байхад).
+ * ⚠ Кодод "нэг талбарын диаграмууд бүгд ижил дүрэмтэй" гэж бичигдсэн
+ * таамаг байсан нь ангиллын диаграмд үнэн (тоолол ба хэмжилт нэг
+ * `keyOf` хуваалцана — тэд шүүлтээ ЗОРИУДААР хуваалцдаг) ч хугацаанд
+ * худал.
+ * ⚠ Цэсэнд (`menusOf`) хугацааны диаграм ОРДОГГҮЙ тул энэ нь зөвхөн
+ * диаграм дээрх товшилтод хамаарна.
+ */
+function filterKey(b: Breakdown): string {
+  return isTime(b) ? `${b.field}\u0000${b.kind}` : b.field;
 }
 
 /**

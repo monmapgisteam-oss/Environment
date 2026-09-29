@@ -18,6 +18,7 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import { FIREFLY } from "@/components/wells/colors";
 import type { BoundarySet } from "@/lib/boundaries";
 import { asset } from "@/lib/base-path";
+import { labelPoints } from "@/lib/extent";
 import { num } from "@/lib/utils";
 
 /* --------------------------------------------------------------------------
@@ -1078,6 +1079,12 @@ export function WellsMap({
           data: { type: "FeatureCollection", features: [] },
         });
 
+        /* Шошгын ЦЭГҮҮД — дүрс бүрд яг нэг ({@link labelPoints}) */
+        m.addSource("shape-labels", {
+          type: "geojson",
+          data: { type: "FeatureCollection", features: [] },
+        });
+
         /*
           Сарнисан гэрэл (bloom) — хүрээний ДООР, дүүргэлтийн ч доор.
 
@@ -1262,7 +1269,9 @@ export function WellsMap({
         m.addLayer({
           id: "shape-label",
           type: "symbol",
-          source: "shapes",
+          /* Хэрчим дээр шошго нь шугамаа дагах ёстой тул `shapes`
+             дээрээ үлдэнэ; бусад тохиолдолд дүрс бүрд НЭГ цэг */
+          source: modeRef.current.shapeLabelOnLine ? "shapes" : "shape-labels",
           minzoom: modeRef.current.shapeLabelZoom,
           filter: ["has", "t"],
           layout: {
@@ -2332,6 +2341,11 @@ export function WellsMap({
       гэж үзнэ (дуудагч тал `oid`-той тэнцүү `id` тавина).
     */
     (src as GeoJSONSource).setData(shapeData);
+    /* Шошгын цэгүүд дүрстэйгээ ХАМТ шинэчлэгдэнэ — эс тэгвээс шүүлт
+       тавихад алга болсон дүрсийн шошго зураг дээр үлдэнэ */
+    const lab = live.getSource("shape-labels");
+    if (lab && "setData" in lab)
+      (lab as GeoJSONSource).setData(labelPoints(shapeData));
   }, [live, shapeData]);
 
   /* Сонгогдсон талбайг тодруулах — `feature-state`-ээр, дахин зурахгүй */

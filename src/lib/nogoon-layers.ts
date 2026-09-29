@@ -249,7 +249,14 @@ function tabHues(layers: readonly string[]): number[] {
   return layers.map((_, i) => SPAN[0] + step * i);
 }
 
-function tab(key: string, title: string, layers: readonly string[]): LayerSet {
+function tab(
+  key: string,
+  title: string,
+  layers: readonly string[],
+  /* Олон давхаргатай цэсэд шүүлтүүрийн мөрөнд гарах нэр — бүс үү,
+     хувилбар уу гэдгийг цэс бүр өөрөө мэднэ ({@link LayerSet.layerLabel}) */
+  layerLabel?: string,
+): LayerSet {
   return {
     key: `nogoon-${key}`,
     title,
@@ -266,6 +273,7 @@ function tab(key: string, title: string, layers: readonly string[]): LayerSet {
        диаграмын толгойд, талбай нь бүсийн карт, диаграмд аль хэдийн
        бий — зурвас нь давхардал болно */
     overview: false,
+    layerLabel,
     openAll: true,
     /* Цэс бүр нэг сэдвийн давхаргатай тул шошго нь зургийг дарахгүй —
        харин ч "энэ бүс юу вэ" гэдэгт шууд хариулна */
@@ -279,15 +287,19 @@ export const NOGOON_TABS = {
   ]),
   /* Тэжээгдэл → хязгаарлалт → хориглолт: эх сурвалжийн гурван тусдаа
      давхарга боловч НЭГ системийн шатууд тул нэг зурагт нийлнэ */
-  bus: tab("bus", "Хамгаалалтын бүс", [
-    "N14_Tejeegdliin_muj",
-    "N14_Hyazgaarlaltiin_bus",
-    "N14_Horigloltiin_bus",
-  ]),
-  bulag: tab("bulag", "Булгийн хамгаалалтын бүс", [
-    "N06_Bulag_hamgaalaltiin_bus",
-    "N06_Bulag_hamgaalaltiin_bus_26",
-  ]),
+  bus: tab(
+    "bus",
+    "Хамгаалалтын бүс",
+    ["N14_Tejeegdliin_muj", "N14_Hyazgaarlaltiin_bus", "N14_Horigloltiin_bus"],
+    "Бүс",
+  ),
+  bulag: tab(
+    "bulag",
+    "Булгийн хамгаалалтын бүс",
+    ["N06_Bulag_hamgaalaltiin_bus", "N06_Bulag_hamgaalaltiin_bus_26"],
+    /* Хоёр давхарга нь хоёр ОНЫ хувилбар — бүс биш */
+    "Хувилбар",
+  ),
   tatam: tab("tatam", "Голын татам", ["N12_Tatam"]),
   namag: tab("namag", "Намгархаг газар", ["N08_namgarhag_uyr_ersdeltei_gazar"]),
   hudag: tab("hudag", "Нийслэлийн худаг", ["N02_Niislel_hudag"]),
