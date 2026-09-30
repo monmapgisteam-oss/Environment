@@ -1915,7 +1915,28 @@ export function WellsMap({
 
       /* Олон өнцөгт нь мөн товшигдоно — цэгтэй ижил `oid` дамжуулна */
       if (modeRef.current.shaped) {
+        /*
+          ⚠⚠ ЦЭГ нь ОЛОН ӨНЦӨГТӨӨС ДАВУУ ЭРХТЭЙ (2026-09-30, хэрэглэгч:
+          "map дээр булаг дээр дарахад булгийн pop up гарна,
+          хамгаалалтын бүсийнх биш").
+
+          MapLibre нь товшилтыг ДАВХАРГА ТУС БҮРД тусад нь дуугаргадаг
+          тул давхцсан цэг, дүрсэн дээр НЭГ товшилт ХОЁР хариу үүсгэнэ:
+          цэгийн бариул эхэлж (эрт бүртгэгдсэн), олон өнцөгтийнх нь
+          ДАРАА — улмаас сүүлчийнх нь дардаг. Булаг нь өөрийн
+          хамгаалалтын бүсийн ДОТОР сууна тул булаг дээр дарахад ҮРГЭЛЖ
+          бүс сонгогдож байв.
+
+          Цэг нь дүрсээс жижиг бөгөөд түүний дотор сууна тул давхцахад
+          хэрэглэгчийн хүссэн зүйл нь ЦЭГ: онолт нь илүү нарийн.
+        */
+        const onPoint = (pt: { x: number; y: number }) =>
+          !!m.getLayer(hitLayer) &&
+          m.queryRenderedFeatures([pt.x, pt.y], { layers: [hitLayer] }).length >
+            0;
+
         m.on("click", "shape-fill", (e) => {
+          if (onPoint(e.point)) return;
           const f = e.features?.[0];
           if (f) selectCb.current(Number(f.properties?.oid));
         });
@@ -1940,6 +1961,9 @@ export function WellsMap({
 
         m.on("mousemove", "shape-fill", (e) => {
           m.getCanvas().style.cursor = "pointer";
+          /* Цэг давхцаж байвал тайлбар нь ЦЭГИЙНХ — дүрсийн
+             тодруулгыг ч унтраана */
+          if (onPoint(e.point)) return setHot(null);
           const f = e.features?.[0];
           if (!f) return;
           setHot(f.id ?? null);
@@ -1958,11 +1982,13 @@ export function WellsMap({
           зөрчилдөхгүй.
         */
         m.on("click", "shape-line", (e) => {
+          if (onPoint(e.point)) return;
           const f = e.features?.[0];
           if (f) selectCb.current(Number(f.properties?.oid));
         });
         m.on("mousemove", "shape-line", (e) => {
           m.getCanvas().style.cursor = "pointer";
+          if (onPoint(e.point)) return setHot(null);
           const f = e.features?.[0];
           if (!f) return;
           setHot(f.id ?? null);

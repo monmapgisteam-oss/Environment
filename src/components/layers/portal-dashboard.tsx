@@ -694,6 +694,21 @@ export function PortalLayersDashboard({
       passes: (row: Row, skip?: readonly string[]) => boolean;
     }[] = [];
 
+    /*
+      ⚠⚠ ЗӨВХӨН ЗУРАГТ ГАРАХ ДАВХАРГЫН БИЧЛЭГ ШҮҮЛТ БОЛОХГҮЙ
+      ({@link LayerSet.mapOnly}, 2026-09-30). Тэр давхарга нь диаграмын
+      шугамд ОРООГҮЙ тул түүний бичлэгийг сонгоход бүх диаграм
+      ХООСОН болж, самбар эвдэрсэн мэт харагдаж байв — булгийн цэсэд
+      хамгаалалтын бүс дээр дарахад яг ингэдэг байлаа.
+      Цонх нь ХЭВЭЭР нээгдэнэ: `active` нь `loaded`-оос уншдаг тул
+      шүүлтээс үл хамаарна.
+    */
+    const chosen =
+      picked != null &&
+      set.mapOnly?.includes(set.layers[Math.floor(picked / STRIDE)] ?? "")
+        ? null
+        : picked;
+
     for (const id of on) {
       const hit = loaded[id];
       if (!hit) continue;
@@ -736,12 +751,12 @@ export function PortalLayersDashboard({
       */
       const base = set.layers.indexOf(id) * STRIDE;
       const only =
-        picked != null && picked >= base && picked < base + STRIDE
-          ? picked - base
+        chosen != null && chosen >= base && chosen < base + STRIDE
+          ? chosen - base
           : null;
       /* Өөр давхаргын бичлэг сонгогдсон бол энэ давхаргаас юу ч
          үлдэхгүй */
-      const muted = picked != null && only == null;
+      const muted = chosen != null && only == null;
 
       const rows: Row[] = [];
       const oids = new Set<number>();
@@ -785,7 +800,7 @@ export function PortalLayersDashboard({
     }
 
     return out;
-  }, [on, loaded, filters, picked, set.layers]);
+  }, [on, loaded, filters, picked, set.layers, set.mapOnly]);
 
   /**
    * ХАМГИЙН УРТ ДИАГРАМ ЗҮҮН БАГАНАД (хэрэглэгчийн хүсэлт, 2026-09-21:
@@ -1171,7 +1186,16 @@ export function PortalLayersDashboard({
     if (rowPick == null || rowPick !== picked) return null;
     const index = Math.floor(rowPick / STRIDE);
     const hit = loaded[set.layers[index] ?? ""];
-    const f = hit?.data.shapes.features.find((x) => Number(x.id) === rowPick);
+    /*
+      ⚠⚠ ДҮРСИЙН `id` нь ТҮҮХИЙ `objectid`, UID БИШ ({@link
+      loadLayerShapes}) — тиймээс `rowPick`-ээс давхаргын суурийг
+      ХАСНА. Урьд нь UID-тай шууд харьцуулдаг байсан тул ЭХНИЙ
+      давхаргад л ажиллаж (тэнд суурь нь тэг), хоёр дахиас хойш
+      ХЭЗЭЭ Ч таардаггүй байв: булгийн цэсэд цэгэн давхарга
+      индекс 1 тул диаграмын мөрөөс сонгоход зураг ойртдоггүй байлаа.
+    */
+    const oid = rowPick - index * STRIDE;
+    const f = hit?.data.shapes.features.find((x) => Number(x.id) === oid);
     if (!f) return null;
     const b = new Bounds();
     b.addGeometry(f.geometry);
