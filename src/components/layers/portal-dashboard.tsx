@@ -120,6 +120,36 @@ function categoryRamp(hue: number, n: number): string[] {
 }
 
 /**
+ * ДҮРСИЙН ХЭМЖЭЭ — зурагдах дарааллыг шийдэхэд.
+ *
+ * ⚠⚠ ҮҮРЛЭСЭН ДҮРС ДАРАГДАЖ БАЙВ (2026-09-30, хэрэглэгч зургаар:
+ * "өнгө ялгарч танигдахгүй бн"). Булгийн 50 м-ийн бүс нь 200 м-ийн
+ * бүсийнхээ ДОТОР бүтнээрээ сууна. Нэг `fill` давхаргад дүрсүүд эх
+ * сурвалжийн ДАРААЛЛААР зурагддаг тул том бүс сүүлд тохиовол жижгийг
+ * нь бүрэн хучиж, зөвхөн хүрээ нь үлдэнэ — хоёр өнгө байсан ч ганц
+ * өнгө харагдана.
+ * ⚠ Одоо ТОМ нь эхлээд, ЖИЖИГ нь ДЭЭР нь зурагдана. Давхцахгүй
+ * дүрсэнд ямар ч нөлөөгүй: зөвхөн давхцсан газрын дараалал тогтвортой
+ * болно (урьд нь эх сурвалжийн санамсаргүй дараалал байв).
+ * ⚠ Хэмжээ нь ХҮРЭЭНИЙ талбай — жинхэнэ талбай биш: дараалал тогтооход
+ * хангалттай бөгөөд үүрлэсэн дүрсэнд хоёр хэмжүүр ижил хариу өгнө.
+ * ⚠ Дүрс бүрд НЭГ УДАА бодогдоно (`WeakMap`): шүүлт тавих бүрд
+ * долоон мянган олон өнцөгтийн оройг дахин тоолох нь утгагүй.
+ */
+const SPANS = new WeakMap<GeoJSON.Feature, number>();
+
+function shapeSpan(f: GeoJSON.Feature): number {
+  const seen = SPANS.get(f);
+  if (seen != null) return seen;
+  const b = new Bounds();
+  b.addGeometry(f.geometry);
+  const e = b.get(0);
+  const span = e ? (e[2] - e[0]) * (e[3] - e[1]) : 0;
+  SPANS.set(f, span);
+  return span;
+}
+
+/**
  * ЦУВААНЫ өнгөний шатлал — диаграмд зориулсан.
  *
  * `categoryRamp` нь газрын зурагт зориулагдсан тул бараан үзүүр рүүгээ
@@ -1028,7 +1058,23 @@ export function PortalLayersDashboard({
    * ангилал хамгийн цайвар өнгөтэй болж, зураг дээр давамгайлна.
    */
   const palettes = React.useMemo(() => {
-    const out: Record<string, Map<string, string>> = {};
+    /*
+      ⚠⚠ ӨНГӨ ба ТҮЛХҮҮРИЙН ДҮРЭМ ХАМТ явна (2026-09-30, хэрэглэгч
+      зургаар: "өнгө ялгарч танигдахгүй бн").
+
+      Урьд нь зураг нь ангиллын түлхүүрээ `categoryKey(row[field])`
+      гэж ӨӨРӨӨ бодож байв — тэр нь диаграмын дүрмийн ГУРАВ ДАХЬ
+      хуулбар байсан бөгөөд ТООН талбар дээр зөрдөг: `categoryKey` нь
+      зөвхөн БИЧВЭР уншдаг тул `50` гэсэн тоо "Бүртгэгдээгүй" болж,
+      палитраас юу ч олдохгүй → бүх дүрс давхаргынхаа ганц тонд
+      буудаг. Булгийн хоёр бүс яг ингэж ИЖИЛ өнгөтэй болж байлаа.
+      ⚠ Одоо задаргааны ӨӨРИЙН `keyOf` хэрэглэнэ — диаграм, шүүлт,
+      зургийн өнгө ГУРВУУЛАА нэг дүрмээс ({@link Breakdown.keyOf}).
+    */
+    const out: Record<
+      string,
+      { colors: Map<string, string>; keyOf: (row: Row) => string[] }
+    > = {};
     for (const id of on) {
       const hit = loaded[id];
       const field = colorField(id);
@@ -1043,12 +1089,15 @@ export function PortalLayersDashboard({
       /* Бүртгэлээр заасан өнцөг ({@link LayerSet.valueHues}) шатлалыг
          дарна — гэрэлтэлт, ханалт нь давхаргынхтай адил хэвээр */
       const fixed = set.valueHues?.[id];
-      out[id] = new Map(
-        b.values.map((v, i) => {
-          const hue = fixed?.[v.key];
-          return [v.key, hue == null ? ramp[i] : toneOfHue(hue)];
-        }),
-      );
+      out[id] = {
+        keyOf: b.keyOf,
+        colors: new Map(
+          b.values.map((v, i) => {
+            const hue = fixed?.[v.key];
+            return [v.key, hue == null ? ramp[i] : toneOfHue(hue)];
+          }),
+        ),
+      };
     }
     return out;
   }, [on, loaded, colorField, hueOf, set.valueHues]);
@@ -1072,7 +1121,6 @@ export function PortalLayersDashboard({
       if (hit.info.geometry === "Point") continue;
       const base = uidBase(id);
       const flat = toneOf(id);
-      const field = colorField(id);
       const palette = palettes[id];
       for (const f of hit.data.shapes.features) {
         /* Шүүлтээс гарсан дүрс ЗУРАГДАХГҮЙ — диаграм ба зураг нэг
@@ -1081,10 +1129,10 @@ export function PortalLayersDashboard({
         const uid = base + Number(f.id);
         /* Ангиллын өнгө олдохгүй бол давхаргынхаа өнгөнд буцна —
            зурагдахгүй үлдэх нь бичлэг байхгүй мэт худал хэлнэ */
+        const row = hit.data.rows[Number(f.id)];
         const c =
-          field && palette
-            ? (palette.get(categoryKey(hit.data.rows[Number(f.id)]?.[field])) ??
-              flat)
+          palette && row
+            ? (palette.colors.get(palette.keyOf(row)[0] ?? "") ?? flat)
             : flat;
         /* Хоосон шошгыг ОГТ бичихгүй — давхаргын `has t` шүүлт үүнд
            тулгуурладаг тул хоосон мөр ч шошго болж зурагдана */
@@ -1096,8 +1144,10 @@ export function PortalLayersDashboard({
         });
       }
     }
+    /* ТОМ нь эхлээд — жижиг нь ДЭЭР нь ({@link shapeSpan}) */
+    features.sort((a, b) => shapeSpan(b) - shapeSpan(a));
     return { type: "FeatureCollection", features };
-  }, [views, toneOf, uidBase, colorField, palettes]);
+  }, [views, toneOf, uidBase, palettes]);
 
   const points = React.useMemo<{ at: MapPoints; text: string[] }>(() => {
     const oid: number[] = [];
@@ -1880,7 +1930,7 @@ export function PortalLayersDashboard({
          давтвал аль нь юуг сольж байгаа нь ойлгомжгүй болно */
         const driver = b.kind === "count" && !b.multi;
         const lit = colorField(id) === b.field;
-        const palette = lit ? palettes[id] : undefined;
+        const palette = lit ? palettes[id]?.colors : undefined;
         /* Энэ талбарын сонгогдсон утга. Нэрийг `on` гэж БҮҮ бич —
            тэр нь энэ файлд "асаалттай давхаргууд" гэсэн утгатай */
         const chosen = sel[filterKey(b)] ?? null;
@@ -2704,7 +2754,8 @@ export function PortalLayersDashboard({
                         ? breakdown.values.map((d) => ({
                             key: d.key,
                             label: d.label,
-                            color: palettes[id]?.get(d.key) ?? toneOf(id),
+                            color:
+                              palettes[id]?.colors.get(d.key) ?? toneOf(id),
                           }))
                         : [
                             {
