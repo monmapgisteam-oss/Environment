@@ -3215,27 +3215,35 @@ function AxisCard({
   const picked = selectedOf(axis.key);
 
   /*
-    ⚠⚠ **ДУЛААНЫ ХҮСНЭГТ** (хэрэглэгчийн сонголт, 2026-09-30, гурван
-    хувилбараас). Нүд бүр ӨӨРИЙН БАГАНЫН хамгийн их утгатай
-    харьцуулсан дэвсгэр өнгө авна — багана хоорондоо өөр нэгжтэй тул
-    нэг хуваарь хуваалцах боломжгүй.
-    ⚠ Нягтрал нь КВАДРАТ ЯЗГУУРААР ({@link Matrix}-тай нэг томьёо):
-    шугаман хуваарьт жижиг утгууд бараг өнгөгүй үлдэж, зөвхөн
-    тэргүүлэгч нь ялгардаг.
-    ⚠ Өнгө нь ДАВХАРГЫНХ (`tone`) — тууз, зураг, таних тэмдэгтэй нэг
-    эх сурвалж.
-    ⚠ ХЭМЖИГДЭЭГҮЙ нүд ӨНГӨГҮЙ үлдэнэ: бүдэг өнгө нь "бага утга"
-    гэсэн үг бөгөөд хэмжигдээгүйг тэгтэй адилтгах нь худал.
+    ⚠⚠ **ТЕГРҮҮЛЕГЧ УТГА ТОДОРНО — ДҮҮРГЕЛТГҮЙ**
+    (хэрэглэгч, 2026-09-30: "энэ стиль биш юм байна").
+    Нүд бүрд баганынхаа хэмжээгээр дэвсгэр өнгө өгсөн дулааны
+    хүснэгт БУЦААГДСАН — **дахин бүү давт**. Тэр нь
+    биотехникийн хүснэгтээс БУЦААГДСАН яг тэр шийдэл
+    (2026-09-21): дүүргэлт нь хүснэгтийг өнгөний БЛОК болгож,
+    тооноосоо илүү жин авдаг — дизайны 7 дүгээр дүрэм ("өнгө нь
+    зураас/цэг/икон дээр л гарна") яг энэ тухай.
+
+    ✅ Одоо өнгө нь БИЧВЕР дээр: багана бүрийн ТЕГРҮҮЛЕГЧ
+    утга давхаргынхаа өнгөөр, хагас тодоор бичигдэнэ; бусад нь
+    цэвэр тоо. "Аль ангилал ямар үзүүлэлтээр түрүнээд байна" гэдгийг
+    дулааны хүснэгттэй ижил хэлнэ — гэхдээ ганц тодорсон цэгээр,
+    бүтэн багана өнгөөр дүүрдэггүй.
+    ⚠ БҮГД ТЭНЦҮҮ БАЙВАЛ ТОДРУУЛГА ГАРАХГҮЙ: бүх нүд тодорсон
+    багана нь "тэргүүлэгч" гэдгийг заахаа болино.
+    ⚠ ГАНЦ МӨРТЭЙ диаграмд бас ГАРАХГҮЙ — өөртэй нь
+    харьцуулах зүйл байхгүй.
   */
-  const peak = new Map(
-    cols.map((c) => [c.key, Math.max(1, ...[...c.by.values()])]),
+  const lead = new Map<string, number | null>(
+    cols.map((c) => {
+      const vs = [...c.by.values()];
+      if (vs.length < 2) return [c.key, null];
+      const top = Math.max(...vs);
+      return [c.key, vs.every((v) => v === top) ? null : top];
+    }),
   );
-  const tintOf = (c: Col, v: number | undefined) =>
-    v == null
-      ? undefined
-      : `color-mix(in oklab, ${tone} ${Math.round(
-          10 + Math.sqrt(v / (peak.get(c.key) ?? 1)) * 55,
-        )}%, transparent)`;
+  const isLead = (c: Col, v: number | undefined) =>
+    v != null && lead.get(c.key) === v;
   const cell = (v: number | undefined) =>
     v == null ? <span className="text-ink-3">—</span> : num(Math.round(v));
 
@@ -3268,7 +3276,7 @@ function AxisCard({
               {cols.map((c) => (
                 <th
                   key={c.key}
-                  className="sticky top-0 z-10 border-b border-line-2 bg-paper-2 px-2 py-2 text-right align-bottom"
+                  className="sticky top-0 z-10 border-b border-line-2 border-l border-l-line bg-paper-2 px-2 py-2 text-right align-bottom"
                 >
                   <span className="eyebrow block leading-tight text-ink-3">
                     {c.name}
@@ -3297,29 +3305,36 @@ function AxisCard({
                       onPick(axis.key, on ? null : r.key);
                     }
                   }}
-                  /* ⚠ Сонголт, hover нь НЭРИЙН нүдэнд тодорно: өнгөт
-                     нүднүүд мөрийн дэвсгэрийг дардаг тул мөрд тавьбал
-                     эхний баганад л харагдана */
-                  className="group cursor-pointer"
+                  className={cn(
+                    "cursor-pointer transition-colors hover:bg-paper-hi",
+                    on && "bg-paper-hi",
+                  )}
                   style={{ opacity: picked && !on ? 0.45 : 1 }}
                 >
                   <td
                     className={cn(
-                      "border-b border-line px-2 py-2.5 text-[12px] leading-tight transition-colors group-hover:bg-paper-hi",
-                      on ? "bg-paper-hi font-medium text-ink" : "text-ink-2",
+                      "border-b border-line px-2 py-2.5 text-[12px] leading-tight",
+                      on ? "font-medium text-ink" : "text-ink-2",
                     )}
                   >
                     {r.label}
                   </td>
-                  {cols.map((c) => (
-                    <td
-                      key={c.key}
-                      className="num border-b border-line px-2 py-2.5 text-right text-[12.5px] text-ink"
-                      style={{ background: tintOf(c, c.by.get(r.key)) }}
-                    >
-                      {cell(c.by.get(r.key))}
-                    </td>
-                  ))}
+                  {cols.map((c) => {
+                    const v = c.by.get(r.key);
+                    const top = isLead(c, v);
+                    return (
+                      <td
+                        key={c.key}
+                        className={cn(
+                          "num border-b border-line border-l border-l-line px-2 py-2.5 text-right text-[12.5px]",
+                          top ? "font-medium" : "text-ink",
+                        )}
+                        style={top ? { color: tone } : undefined}
+                      >
+                        {cell(v)}
+                      </td>
+                    );
+                  })}
                 </tr>
               );
             })}
@@ -3332,7 +3347,7 @@ function AxisCard({
               {cols.map((c) => (
                 <td
                   key={c.key}
-                  className="num sticky bottom-0 border-t border-line-2 bg-paper-2 px-2 py-2 text-right text-[12.5px] font-medium text-ink"
+                  className="num sticky bottom-0 border-t border-line-2 border-l border-l-line bg-paper-2 px-2 py-2 text-right text-[12.5px] font-medium text-ink"
                 >
                   {c.total == null ? "" : num(Math.round(c.total))}
                 </td>
