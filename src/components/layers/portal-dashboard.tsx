@@ -41,7 +41,7 @@ import {
   type Extent,
   type MapPoints,
 } from "@/components/wells/map";
-import { oklchHex } from "@/components/wells/colors";
+import { FIREFLY, oklchHex } from "@/components/wells/colors";
 import { Bounds } from "@/lib/extent";
 import {
   breakdowns,
@@ -1003,6 +1003,10 @@ export function PortalLayersDashboard({
     (id: string): string | null => {
       if (id in colorBy) return colorBy[id];
       if (environment) return null;
+      /* Бүртгэл нь ангиллын өнгийг хаасан давхарга ({@link
+         LayerSet.plain}) — ганц тонгоор зурагдаж, таних тэмдэгт НЭГ
+         мөр болно */
+      if (set.plain?.includes(id)) return null;
       /* Олон утгатай задаргаа өнгө жолоодохгүй: нэг дүрс хоёр
          ангилалд харьяалагдвал аль өнгийг нь өгөх вэ гэдэг хариултгүй */
       const first = loaded[id]?.charts.find(
@@ -1012,7 +1016,7 @@ export function PortalLayersDashboard({
         ? first.field
         : null;
     },
-    [colorBy, loaded, environment],
+    [colorBy, loaded, environment, set.plain],
   );
 
   /**
@@ -1036,10 +1040,18 @@ export function PortalLayersDashboard({
       const b = hit.charts.find((c) => c.field === field && c.kind === "count");
       if (!b) continue;
       const ramp = categoryRamp(hueOf(id), b.values.length);
-      out[id] = new Map(b.values.map((v, i) => [v.key, ramp[i]]));
+      /* Бүртгэлээр заасан өнцөг ({@link LayerSet.valueHues}) шатлалыг
+         дарна — гэрэлтэлт, ханалт нь давхаргынхтай адил хэвээр */
+      const fixed = set.valueHues?.[id];
+      out[id] = new Map(
+        b.values.map((v, i) => {
+          const hue = fixed?.[v.key];
+          return [v.key, hue == null ? ramp[i] : toneOfHue(hue)];
+        }),
+      );
     }
     return out;
-  }, [on, loaded, colorField, hueOf]);
+  }, [on, loaded, colorField, hueOf, set.valueHues]);
 
   /*
     Асаалттай давхаргуудыг НЭГ цуглуулгад нийлүүлнэ.
@@ -2698,7 +2710,20 @@ export function PortalLayersDashboard({
                             {
                               key: id,
                               label: hit.info.name,
-                              color: toneOf(id),
+                              /*
+                                ⚠⚠ ЦЭГЭН давхаргын өнгө нь ДАВХАРГЫН
+                                ТОН БИШ. Зураг дээр цэг нь firefly
+                                палитраар зурагддаг (`FIREFLY`,
+                                тогтмол цэнхэр) — давхаргын өнцөг нь
+                                зөвхөн ДҮРС (fill, line) дээр
+                                хэрэглэгддэг. Тонг нь тайлбарт
+                                бичвэл дэлгэц дээр байхгүй өнгийг
+                                нэрлэсэн болно.
+                              */
+                              color:
+                                hit.info.geometry === "Point"
+                                  ? FIREFLY.mid
+                                  : toneOf(id),
                             },
                           ],
                     };
