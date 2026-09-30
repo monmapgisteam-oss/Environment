@@ -246,8 +246,14 @@ export function Composition({
             >
               <i aria-hidden className="h-2.5 w-2.5 rounded-[2px]" style={{ background: colorOf(d.key) }} />
               <span className={cn(selected === d.key ? "font-medium text-ink" : "text-ink-2")}>{d.label}</span>
+              {/*
+                ⚠ ХУВЬ нь ЗУРВАСТАЙГАА ИЖИЛ НАРИЙВЧЛАЛТАЙ. Урьд нь
+                зурвас дээр "52%", хажууд нь "52.3%" гэж НЭГ тоо хоёр
+                өөр хэлбэрээр гарч, аль нь зөв бэ гэсэн эргэлзээ
+                төрүүлж байв.
+              */}
               <span className="num text-ink-3">
-                {num(d.value)} · {((d.value / total) * 100).toFixed(1)}%
+                {num(d.value)} · {((d.value / total) * 100).toFixed(0)}%
               </span>
             </button>
           );
@@ -276,12 +282,23 @@ export function Table<T>({
   keyOf,
   selected,
   onSelect,
+  footer,
 }: {
   rows: T[];
   columns: Column<T>[];
   keyOf: (row: T) => string;
   selected: string | null;
   onSelect: (k: string | null) => void;
+  /**
+   * НИЙТ ДҮНГИЙН мөр — багана бүрд нэг нүд.
+   *
+   * ⚠ Хүснэгтийн ЁРООЛД наалдана: багана бүрийн дүн ЯГ өөрийнхөө
+   * баганын доор эгнэх нь гарчигт урт бичвэр болгон хавсаргахаас
+   * хамаагүй тодорхой.
+   * ⚠ Нэмэгддэггүй багана (дундаж) нь ХООСОН үлдэнэ — дунджуудын
+   * нийлбэр утгагүй тоо.
+   */
+  footer?: React.ReactNode[];
 }) {
   const maxes = React.useMemo(
     () => columns.map((c) => (c.meter ? Math.max(1, ...rows.map((r) => c.meter!(r))) : 0)),
@@ -354,6 +371,23 @@ export function Table<T>({
             );
           })}
         </tbody>
+        {footer ? (
+          <tfoot className="sticky bottom-0 z-10 bg-paper-2">
+            <tr>
+              {columns.map((c, i) => (
+                <td
+                  key={c.key}
+                  className={cn(
+                    "border-t border-line-2 px-2 py-1.5 font-medium",
+                    c.num ? "num text-right text-ink" : "text-ink-2",
+                  )}
+                >
+                  {footer[i]}
+                </td>
+              ))}
+            </tr>
+          </tfoot>
+        ) : null}
       </table>
     </div>
   );

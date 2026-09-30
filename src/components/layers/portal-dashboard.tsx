@@ -59,7 +59,12 @@ import {
   type LayerInfo,
 } from "@/lib/portal-layers";
 import { cn, num } from "@/lib/utils";
-import { Composition, Matrix, type Key } from "@/components/unelgee/viz";
+import {
+  Composition,
+  Matrix,
+  Segments,
+  type Key,
+} from "@/components/unelgee/viz";
 import {
   TopicBreakdown,
   TopicMapLegend,
@@ -283,7 +288,9 @@ export function PortalLayersDashboard({
   /* Явж буй хүсэлтүүд — ref, учир нь зурагдалтад нөлөөлдөггүй. Төлөвд
      барьвал effect-ийн биед `setState` дуудагдаж шаталсан зурагдалт
      үүснэ; ачаалж буй эсэх нь дам гарах утга (доорх `loading`) */
-  const inFlight = React.useRef<Set<string>>(new Set());
+  /* Давхарга бүрийн ТАТАЦ ба түүнийг таслах эрх — эффектийн
+     цэвэрлэгээнд БИШ, давхаргад харьяалагдана */
+  const inFlight = React.useRef<Map<string, AbortController>>(new Map());
 
   /*
     Давхарга бүрийг ЯМАР ТАЛБАРААР өнгөт болгох вэ.
@@ -549,31 +556,63 @@ export function PortalLayersDashboard({
        уншина — хуучин давхаргууд жагсаалтад үлдэх ёсгүй */
   }, [set]);
 
-  /* Асаалттай боловч татагдаагүй давхаргыг татна */
+  /*
+    Асаалттай боловч татагдаагүй давхаргыг татна.
+
+    ⚠⚠ **ЭФФЕКТ ӨӨРИЙНХӨӨ ГЕОМЕТРИЙГ ТАСАЛДАГ БАЙВ** (2026-09-30,
+    хэрэглэгч: "map хараарай" — зураг дээр цэг ч, дүрс ч байхгүй,
+    "Дүрсийн хүрээ ирсэнгүй").
+
+    Давхарга ХОЁР ҮЕ ШАТААР ирдэг: эхлээд атрибут (`place(partial)`),
+    дараа нь геометртэй бүтэн хувилбар. Гэтэл эхний `place` нь
+    `setLoaded` дуудаж `loaded`-ийг ШИНЭЧИЛДЭГ бөгөөд тэр нь ЭНЭ
+    эффектийн хамаарлын жагсаалтад байсан — улмаас:
+      1. атрибут ирнэ → `setLoaded` → дахин зурагдалт;
+      2. эффект дахин ажиллахын ӨМНӨ ЦЭВЭРЛЭГЭЭ нь `ac.abort()`
+         дуудаж, ЯГ ТЭР давхаргын ГЕОМЕТРИЙН хүсэлтийг таслана;
+      3. татац `AbortError`-оор унаж, `catch` нь түүнийг чимээгүй
+         алгасна (алдаа биш гэж үзээд);
+      4. дахин ажиллахад `loaded[id]` аль хэдийн тавигдсан тул
+         давхарга `want`-д ОРОХГҮЙ — геометр ХЭЗЭЭ Ч ирэхгүй.
+
+    ⚠ Иймээс диаграм, тоо бүрэн зурагдаж байхад зураг хоосон үлддэг
+    байв — "0 бичлэг" биш харин "бичлэг бий, дүрс алга" гэсэн яг тэр
+    завсрын төлөв. Кэш ХАЛУУН үед (нэг сесс дотор цэс рүү дахин
+    орох) хоёр амлалт зэрэг шийдэгддэг тул геометр амжиж суудаг —
+    тиймээс алдаа "заримдаа ажиллаад заримдаа үгүй" мэт харагдаж,
+    2026-09-24, 09-25-нд хоёр ч удаа ӨӨР шалтгаан хайлгасан
+    (`shape-case`, `mapNote`).
+
+    ✅ Одоо таслах эрх нь ЭФФЕКТИЙН ЦЭВЭРЛЭГЭЭНД БИШ, ДАВХАРГАД
+    харьяалагдана: давхарга бүр өөрийн `AbortController`-тэй
+    (`inFlight`), цэвэрлэгээ юу ч таслахгүй. Таслалт зөвхөн ХОЁР
+    тохиолдолд — давхарга унтрах, самбар салах.
+  */
   React.useEffect(() => {
+    const flight = inFlight.current;
     const want = on.filter(
-      (id) => infos[id] && !loaded[id] && !inFlight.current.has(id),
+      (id) => infos[id] && !loaded[id] && !flight.has(id),
     );
     if (!want.length) return;
 
-    const ac = new AbortController();
-    let alive = true;
-    /* Цэвэрлэгээнд хэрэглэх тул олонлогоо ХУВЬСАГЧИД авна — `ref.current`
-       нь цэвэрлэгээ ажиллах үед өөр обьект болсон байж болно */
-    const flight = inFlight.current;
-    for (const id of want) flight.add(id);
+    const started = new Map<string, AbortController>();
+    for (const id of want) {
+      const ac = new AbortController();
+      started.set(id, ac);
+      flight.set(id, ac);
+    }
     setBusy((b) => {
       const next = { ...b };
       for (const id of want) next[id] = true;
       return next;
     });
 
-    for (const id of want) {
+    for (const [id, ac] of started) {
       const info = infos[id];
       /* Атрибут ирмэгц (геометрээс өмнө) диаграм, жагсаалтыг зурна;
          геометр ирэхэд ижил бичлэг зураг дээр нэмэгдэнэ */
       const place = (data: LayerFeatures) => {
-        if (!alive) return;
+        if (ac.signal.aborted) return;
         setLoaded((m) => {
           /* Хэсэгчилсэн (атрибут) ба бүтэн (геометртэй) хувилбар НЭГ
              мөрийн обьектыг хуваалцдаг тул задаргааг дахин тооцохгүй —
@@ -594,12 +633,14 @@ export function PortalLayersDashboard({
       fetchLayerFeatures(info, ac.signal, place)
         .then(place)
         .catch((e: Error) => {
-          if (!alive || e.name === "AbortError") return;
+          if (ac.signal.aborted || e.name === "AbortError") return;
           setFailed((f) => ({ ...f, [id]: e.message }));
           setOn((s) => s.filter((x) => x !== id));
         })
         .finally(() => {
-          flight.delete(id);
+          /* Зөвхөн ӨӨРИЙНХӨӨ бүртгэлийг авна: давхарга унтраагаад
+             дахин асаасан бол шинэ controller сууж байж болно */
+          if (flight.get(id) === ac) flight.delete(id);
           setBusy((b) => {
             if (!b[id]) return b;
             const next = { ...b };
@@ -608,13 +649,27 @@ export function PortalLayersDashboard({
           });
         });
     }
-
-    return () => {
-      alive = false;
-      ac.abort();
-      for (const id of want) flight.delete(id);
-    };
+    /* ⚠ ЦЭВЭРЛЭГЭЭ ТАСЛАХГҮЙ — дээрх тайлбарыг үзнэ үү */
   }, [on, infos, loaded]);
+
+  /* Унтраасан давхаргын татацыг таслана — үр дүн нь хэрэггүй болсон */
+  React.useEffect(() => {
+    const flight = inFlight.current;
+    for (const [id, ac] of flight) {
+      if (on.includes(id)) continue;
+      ac.abort();
+      flight.delete(id);
+    }
+  }, [on]);
+
+  /* Самбар салахад бүх татац таслагдана */
+  React.useEffect(() => {
+    const flight = inFlight.current;
+    return () => {
+      for (const ac of flight.values()) ac.abort();
+      flight.clear();
+    };
+  }, []);
 
   /*
     ХАРАГДАЦ — асаалттай давхарга бүр шүүлтээрээ дамжсан хувилбар.
@@ -750,7 +805,10 @@ export function PortalLayersDashboard({
    * бараг хоосон үлдээнэ.
    */
   const split = React.useMemo(() => {
-    if (picker || !showCharts) return null;
+    /* ⚠ `tidy` бүрдэлд давхаргын БҮХ задаргаа НЭГ картад нийлдэг
+       ({@link AxisCard}) тул хуваах зүйл байхгүй. Хуваавал тэр карт
+       хоёр багананд тасарч, хэрэглэгчийн хүссэн нэгтгэл алдагдана. */
+    if (picker || !showCharts || set.tidy) return null;
     let best: { id: string; chart: string; size: number } | null = null;
     let total = 0;
     for (const v of views) {
@@ -777,7 +835,7 @@ export function PortalLayersDashboard({
     }
     if (!best || total < 2 || best.size < 8) return null;
     return best;
-  }, [picker, showCharts, views]);
+  }, [picker, showCharts, views, set.tidy]);
 
   /* Сонгосон УТГА бүрийг тоолно, талбарыг биш: "3 идэвхтэй" гэдэг нь
      гурван утга сонгосныг хэлэх ёстой */
@@ -1498,6 +1556,8 @@ export function PortalLayersDashboard({
     withCross = false,
   ) =>
     views.map(({ id, hit, charts, rows, oids }) => {
+      /* ЗӨВХӨН ЗУРАГТ гарах давхарга ({@link LayerSet.mapOnly}) */
+      if (set.mapOnly?.includes(id)) return null;
       const tone = toneOf(id);
       /* Задаргаа БҮГД энд: цуваа, харьцуулалт хоёрыг зургийн
          доод зурваст тавьж байсныг хэрэглэгч буцаав (2026-09-15)
@@ -1700,7 +1760,58 @@ export function PortalLayersDashboard({
 
       if (!cuts.length && !areaCard && !crossCard) return null;
 
+      /*
+        ⚠⚠ **ДАВХАРГЫН БҮХ ЗАДАРГАА НЭГ КАРТАД** ({@link AxisCard}).
+        Тэнхлэг бүр өөрийн карттай байсан тул нэг давхаргын мэдээлэл
+        багана даяар тарж, хооронд нь харьцуулах гэвэл дээш доош гүйх
+        хэрэгтэй байв. Одоо нэг карт, дотор нь тэнхлэг сэлгэгч.
+        ⚠ Бүлэглэлт нь ШҮҮЛТИЙН ТҮЛХҮҮРЭЭР (`filterKey`), талбарын
+        нэрээр БИШ: огнооны талбар он ба сар гэсэн ХОЁР ӨӨР дүрэмтэй
+        диаграм төрүүлдэг.
+        ⚠ ХУГАЦАА ба ХУРААСАН (`top`) диаграм ОРОХГҮЙ: эхнийх нь
+        тасралтгүй тэнхлэгтэй, хоёр дахийнх нь мөрүүд бусадтайгаа
+        зөрнө — тэд өөрсдийн карттай хэвээр.
+        ⚠ ГАНЦ тэнхлэг, ГАНЦ диаграмтай бол хүснэгт болгохгүй: нэг
+        баганат хүснэгт нь зурвасаас юу ч илүү хэлэхгүй.
+      */
+      const axes: { key: string; label: string; list: Breakdown[] }[] = [];
+      if (set.tidy)
+        for (const b of cuts) {
+          /* ⚠ ХУРААСАН (`top`) диаграм ХАСАГДАХГҮЙ: тэр нь ӨӨРИЙН
+             тэнхлэг болж сэлгэгчид орно — мөрүүд нь зөвхөн НЭГ
+             тэнхлэгийн ДОТОР таарах шаардлагатай. Хугацаа нь харин
+             тасралтгүй тэнхлэгтэй тул хүснэгтэд таарахгүй. */
+          if (isTime(b)) continue;
+          const k = filterKey(b);
+          const at = axes.find((a) => a.key === k);
+          if (at) at.list.push(b);
+          else axes.push({ key: k, label: b.label, list: [b] });
+        }
+      const oneCard =
+        axes.length > 1 || (axes.length === 1 && axes[0].list.length > 1);
+      const inAxis = new Set(oneCard ? axes.flatMap((a) => a.list.map((b) => b.id)) : []);
+
       const cards = cuts.map((b, i) => {
+        if (inAxis.has(b.id)) {
+          /* Эхний гишүүн дээр л нэг удаа зурна */
+          if (axes[0].list[0].id !== b.id) return null;
+          return (
+            <AxisCard
+              key={`${id}:axes`}
+              axes={axes}
+              tone={tone}
+              first={i === 0 && !crossCard}
+              records={rows.length}
+              word={set.record}
+              selectedOf={(axis) => (sel[axis] ?? [])[0] ?? null}
+              onPick={(axis, key) =>
+                key == null
+                  ? pick(id, axis, null)
+                  : pickOnly(id, [[axis, key]])
+              }
+            />
+          );
+        }
         /* Өнгийг зөвхөн ТООЛЛЫН диаграм жолоодно — нэг талбарын бүх
          диаграм ижил өнгө хуваалцдаг тул товчийг хаа сайгүй
          давтвал аль нь юуг сольж байгаа нь ойлгомжгүй болно */
@@ -1906,6 +2017,46 @@ export function PortalLayersDashboard({
         </React.Fragment>
       );
     });
+
+  /*
+    Ангиллын задаргааны багана — ҮРГЭЛЖ ЗУРГИЙН БАРУУН ТАЛД.
+
+    ⚠⚠ Зургийн ДООР, бүтэн өргөнөөр тавьж үзээд БУЦААСАН (хэрэглэгч,
+    2026-09-30: "чарт мапын доор бишээ баруун талд нь"). Дахин бүү
+    давт: "дэлгэцийн уртааш таарсан" гэсэн шаардлагыг доош зөөж биш,
+    баруун баганыг ӨРГӨСГӨЖ (560px) хангана.
+  */
+  const chartsBlock = showCharts ? (
+            <div className="flex min-h-0 flex-col gap-2 overflow-y-auto">
+              {views.length === 0 ||
+              (environment && views.every((view) => !view.charts.length)) ? (
+                <Card className="min-h-[120px] flex-1">
+                  <Head title="Задаргаа" />
+                  <div className="hatch flex flex-1 items-center justify-center px-4">
+                    <p className="text-center text-[12px] leading-relaxed text-ink-3">
+                      {environment && on.some((id) => !loaded[id] && !failed[id])
+                        ? "Сонгосон давхаргын мэдээллийг ачаалж байна…"
+                        : environment && views.length
+                          ? "Ангиллаар харьцуулах мэдээлэл байхгүй. Газрын зураг дээрх бүртгэлээс дэлгэрэнгүйг үзнэ үү."
+                          : picker
+                            ? "Давхарга асаахад задаргаа нь энд гарна."
+                            : "Задаргаа гарахуйц талбар олдсонгүй."}
+                    </p>
+                  </div>
+                </Card>
+              ) : null}
+  
+              {zoneCard}
+  
+              {chartCards(
+                (id, b) => !(split && id === split.id && b.id === split.chart),
+                /* Талбайн карт ҮРГЭЛЖ баруун баганад, давхаргынхаа
+                   туузан дор */
+                () => true,
+                true,
+              )}
+            </div>
+  ) : null;
 
   return (
     <div
@@ -2235,11 +2386,22 @@ export function PortalLayersDashboard({
       ) : null}
 
       <Columns
-        id={`layers-${set.key}`}
+        /* ⚠ Өргөн нь `localStorage.cols.<id>`-д сууна: анхдагчийг
+           өөрчлөхөд түлхүүрийг мөн солихгүй бол нэг удаа самбар
+           нээсэн хэрэглэгчийн хуучин өргөн шинийг дарна (биотехникийн
+           `biotech-2`-той нэг зарчим) */
+        id={`layers-${set.key}${set.tidy ? "-w" : ""}`}
         left={picker ? (environment ? 228 : 286) : split ? 320 : undefined}
         /* Бүлэглэсэн багана энд сууна — 300px дээр гурван оны
          харьцуулалт зураас болно. Хэрэглэгч чирж өөрчилнө */
-        right={showCharts ? (environment ? 370 : 350) : undefined}
+        /* ⚠⚠ `tidy` бүрдэлд БАРУУН БАГАНА ӨРГӨН (хэрэглэгч,
+           2026-09-30: "чарт мапын доор бишээ баруун талд нь"). Тэнд
+           давхаргын бүх задаргаа НЭГ таван баганат хүснэгт болсон тул
+           350px дээр гарчиг бүр гурван мөр болж шахагддаг. Чирж
+           өөрчилнө. */
+        right={
+          showCharts ? (set.tidy ? 560 : environment ? 370 : 350) : undefined
+        }
         className="min-h-0 flex-1"
       >
         {/* ---- ЗҮҮН: давхаргын жагсаалт, эсвэл хамгийн урт диаграм ---- */}
@@ -2611,40 +2773,10 @@ export function PortalLayersDashboard({
             Суурь зураг: Esri · Дата: ArcGIS Enterprise · хүрээг ~10 метрээр
             ерөнхийлсөн
           </p>
+
         </div>
 
-        {/* ---- БАРУУН: ангиллын задаргаа ---- */}
-        {showCharts && (
-          <div className="flex min-h-0 flex-col gap-2 overflow-y-auto">
-            {views.length === 0 ||
-            (environment && views.every((view) => !view.charts.length)) ? (
-              <Card className="min-h-[120px] flex-1">
-                <Head title="Задаргаа" />
-                <div className="hatch flex flex-1 items-center justify-center px-4">
-                  <p className="text-center text-[12px] leading-relaxed text-ink-3">
-                    {environment && on.some((id) => !loaded[id] && !failed[id])
-                      ? "Сонгосон давхаргын мэдээллийг ачаалж байна…"
-                      : environment && views.length
-                        ? "Ангиллаар харьцуулах мэдээлэл байхгүй. Газрын зураг дээрх бүртгэлээс дэлгэрэнгүйг үзнэ үү."
-                        : picker
-                          ? "Давхарга асаахад задаргаа нь энд гарна."
-                          : "Задаргаа гарахуйц талбар олдсонгүй."}
-                  </p>
-                </div>
-              </Card>
-            ) : null}
-
-            {zoneCard}
-
-            {chartCards(
-              (id, b) => !(split && id === split.id && b.id === split.chart),
-              /* Талбайн карт ҮРГЭЛЖ баруун баганад, давхаргынхаа
-                 туузан дор */
-              () => true,
-              true,
-            )}
-          </div>
-        )}
+        {chartsBlock}
       </Columns>
     </div>
   );
@@ -2978,17 +3110,241 @@ function tickOf(
 }
 
 /**
- * Диаграмын карт.
+ * ДАВХАРГЫН БҮХ ЗАДАРГАА — НЭГ КАРТ.
  *
- * Толгойд ГАНЦ мөр: диаграмын өөрийн нэр зүүн талд, үйлдэл баруун
- * талд. Давхаргын нэр энд БИЧИГДЭХГҮЙ — тэр нь картуудын дээрх
- * тууз дээр нэг удаа хэлэгдсэн (`band`). Хоёуланг нь бичвэл 420px
- * толгойд хоёр гарчиг багтахгүй, диаграмын нэр нь таслагдана.
+ * ⚠⚠ Хэрэглэгч (2026-09-30): "одоо байгаа 2 чартыг нийлүүлээд маш
+ * ойлгомжтой сайн чарт хийе. Нийт булгийн тоо бас харагдах ёстой шүү."
  *
- * Өндөр нь агуулгаараа тодорхойлогдох ч ДЭЭД ХЯЗГААРТАЙ: нэг урт
- * жагсаалт бүхэл баганыг эзэлбэл доорх задаргаанууд нүднээс алга
- * болно.
+ * Гурван зүйл нэг картад нийлнэ:
+ * 1. **ТЭНХЛЭГ СЭЛГЭГЧ** — давхарга хэдэн ч задаргаатай байсан НЭГ
+ *    карт (дүүрэг · хороо …). Урьд нь задаргаа бүр өөрийн карттай
+ *    байсан тул нэг давхаргын мэдээлэл багана даяар тарж, хооронд нь
+ *    харьцуулах гэвэл дээш доош гүйх хэрэгтэй байв.
+ * 2. **ХҮСНЭГТ** — мөр нь ангилал, багана нь хэмжилт бүр; нүд бүр
+ *    ӨӨРИЙН баганын хамгийн их утгатай харьцуулсан зураастай (багана
+ *    хоорондоо өөр НЭГЖТЭЙ тул нэг хуваарь хуваалцах боломжгүй).
+ * 3. **НИЙТ ДҮНГИЙН МӨР** — ёроолд наалдсан, багана бүрийн дүн
+ *    өөрийнхөө баганын доор. "Нийт булгийн тоо" гэдэг нь яг энэ:
+ *    хэмжилтийн баганын дүн.
+ *    ⚠ ДУНДЖИЙН багана ХООСОН үлдэнэ — дунджуудын нийлбэр утгагүй
+ *    тоо (бөгж, эзлэх хувийг дунджид хэрэглэдэггүйтэй нэг зарчим).
+ *
+ * ⚠ ЗӨВХӨН `tidy` бүрдэлд — ой, амьтан, үнэлгээ ХӨНДӨГДӨХГҮЙ.
+ * ⚠ Идэвхтэй тэнхлэг нь ДАМ гарна: шүүлтээр задаргаа алга болвол
+ * эхнийх рүү өөрөө буцна (эффектээр төлөв цэвэрлэхгүй).
+ * ⚠ Мөр СОНГОХ нь ТОГТООНО, сэлгэхгүй (`pickOnly`): хүснэгт ГАНЦ
+ * сонгогдсон утга харуулдаг тул олон сонголт зөвшөөрвөл хадгалагдсан
+ * ба тодорсон утга ЗӨРНӨ.
  */
+function AxisCard({
+  axes,
+  tone,
+  first,
+  records,
+  word,
+  selectedOf,
+  onPick,
+}: {
+  axes: { key: string; label: string; list: Breakdown[] }[];
+  tone: string;
+  first: boolean;
+  /** Давхаргын нийт бичлэг — тооллын баганын дүн */
+  records: number;
+  /** Бичлэгийг юу гэж нэрлэх ({@link LayerSet.record}) */
+  word?: { one: string; count: string };
+  selectedOf: (axis: string) => string | null;
+  onPick: (axis: string, key: string | null) => void;
+}) {
+  const one = word?.one ?? "бичлэг";
+  const countLabel = word?.count ?? "Бичлэг";
+  const [want, setWant] = React.useState(axes[0]?.key ?? "");
+  const axis = axes.find((a) => a.key === want) ?? axes[0];
+  if (!axis) return null;
+
+  const count = axis.list.find((b) => b.kind === "count") ?? axis.list[0];
+
+  /**
+   * Нэг баганын тодорхойлолт.
+   *
+   * ⚠⚠ НЭР ба НЭГЖ ХОЁР МӨРӨНД ({@link unitOf}). Урьд нь бүтэн нэрийг
+   * нэг нүдэнд шахаж "ЭНГИЙН ХАМГААЛАЛТЫН БҮС (200 М), ГА" гэж ГУРВАН
+   * мөр болгодог байсан тул толгой нь хүснэгтээ дардаг байв. Нэгжийг
+   * доор нь жижиг саарал мөр болгоход нэр нь хоёр мөрөнд багтаж,
+   * нэгж нь тодорхой хэвээр үлдэнэ.
+   */
+  type Col = {
+    key: string;
+    name: string;
+    unit: string;
+    by: Map<string, number>;
+    total: number | null;
+  };
+
+  const cols: Col[] = [];
+  const add = (key: string, label: string, by: Map<string, number>, sums: boolean) => {
+    const cut = unitOf(label);
+    cols.push({
+      key,
+      name: cut.unit ? cut.name : label,
+      unit: cut.unit,
+      by,
+      total: sums ? [...by.values()].reduce((s, v) => s + v, 0) : null,
+    });
+  };
+
+  for (const b of axis.list) {
+    const by = new Map(b.values.map((d) => [d.key, d.value]));
+    if (b.measure) {
+      const cut = unitOf(b.measure);
+      cols.push({
+        key: b.id,
+        name: cut.unit ? cut.name : b.measure,
+        unit: [cut.unit, b.kind === "mean" ? "дундаж" : ""]
+          .filter(Boolean)
+          .join(" · "),
+        by,
+        total: b.kind === "mean" ? null : [...by.values()].reduce((s, v) => s + v, 0),
+      });
+    } else {
+      add(b.id, countLabel, by, true);
+    }
+    /* Нийлсэн хэмжилт ({@link foldMeasures}) — өөрийн багана */
+    if (b.notes && b.note) add(`${b.id}:note`, b.note.label, b.notes, true);
+  }
+
+  const picked = selectedOf(axis.key);
+
+  /*
+    ⚠⚠ **ДУЛААНЫ ХҮСНЭГТ** (хэрэглэгчийн сонголт, 2026-09-30, гурван
+    хувилбараас). Нүд бүр ӨӨРИЙН БАГАНЫН хамгийн их утгатай
+    харьцуулсан дэвсгэр өнгө авна — багана хоорондоо өөр нэгжтэй тул
+    нэг хуваарь хуваалцах боломжгүй.
+    ⚠ Нягтрал нь КВАДРАТ ЯЗГУУРААР ({@link Matrix}-тай нэг томьёо):
+    шугаман хуваарьт жижиг утгууд бараг өнгөгүй үлдэж, зөвхөн
+    тэргүүлэгч нь ялгардаг.
+    ⚠ Өнгө нь ДАВХАРГЫНХ (`tone`) — тууз, зураг, таних тэмдэгтэй нэг
+    эх сурвалж.
+    ⚠ ХЭМЖИГДЭЭГҮЙ нүд ӨНГӨГҮЙ үлдэнэ: бүдэг өнгө нь "бага утга"
+    гэсэн үг бөгөөд хэмжигдээгүйг тэгтэй адилтгах нь худал.
+  */
+  const peak = new Map(
+    cols.map((c) => [c.key, Math.max(1, ...[...c.by.values()])]),
+  );
+  const tintOf = (c: Col, v: number | undefined) =>
+    v == null
+      ? undefined
+      : `color-mix(in oklab, ${tone} ${Math.round(
+          10 + Math.sqrt(v / (peak.get(c.key) ?? 1)) * 55,
+        )}%, transparent)`;
+  const cell = (v: number | undefined) =>
+    v == null ? <span className="text-ink-3">—</span> : num(Math.round(v));
+
+  return (
+    <CutCard
+      title={count.label}
+      tone={tone}
+      first={first}
+      weight={cardWeight(count)}
+      meta={`${num(records)} ${one} · ${
+        count.top ? `эхний ${count.top}` : `${num(count.values.length)} ангилал`
+      }`}
+      action={
+        axes.length > 1 ? (
+          <Segments
+            options={axes.map((a) => ({ id: a.key, label: a.label }))}
+            value={axis.key}
+            onChange={setWant}
+          />
+        ) : undefined
+      }
+    >
+      <div className="min-h-0 flex-1 overflow-auto">
+        <table className="w-full border-separate border-spacing-0">
+          <thead>
+            <tr>
+              <th className="sticky top-0 z-10 border-b border-line-2 bg-paper-2 px-2 py-2 text-left align-bottom">
+                <span className="eyebrow text-ink-3">{axis.label}</span>
+              </th>
+              {cols.map((c) => (
+                <th
+                  key={c.key}
+                  className="sticky top-0 z-10 border-b border-line-2 bg-paper-2 px-2 py-2 text-right align-bottom"
+                >
+                  <span className="eyebrow block leading-tight text-ink-3">
+                    {c.name}
+                  </span>
+                  {c.unit ? (
+                    <span className="mt-0.5 block text-[9.5px] leading-none text-ink-3 lowercase">
+                      {c.unit}
+                    </span>
+                  ) : null}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {count.values.map((r) => {
+              const on = picked === r.key;
+              return (
+                <tr
+                  key={r.key}
+                  tabIndex={0}
+                  aria-selected={on}
+                  onClick={() => onPick(axis.key, on ? null : r.key)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      onPick(axis.key, on ? null : r.key);
+                    }
+                  }}
+                  /* ⚠ Сонголт, hover нь НЭРИЙН нүдэнд тодорно: өнгөт
+                     нүднүүд мөрийн дэвсгэрийг дардаг тул мөрд тавьбал
+                     эхний баганад л харагдана */
+                  className="group cursor-pointer"
+                  style={{ opacity: picked && !on ? 0.45 : 1 }}
+                >
+                  <td
+                    className={cn(
+                      "border-b border-line px-2 py-2.5 text-[12px] leading-tight transition-colors group-hover:bg-paper-hi",
+                      on ? "bg-paper-hi font-medium text-ink" : "text-ink-2",
+                    )}
+                  >
+                    {r.label}
+                  </td>
+                  {cols.map((c) => (
+                    <td
+                      key={c.key}
+                      className="num border-b border-line px-2 py-2.5 text-right text-[12.5px] text-ink"
+                      style={{ background: tintOf(c, c.by.get(r.key)) }}
+                    >
+                      {cell(c.by.get(r.key))}
+                    </td>
+                  ))}
+                </tr>
+              );
+            })}
+          </tbody>
+          <tfoot>
+            <tr>
+              <td className="sticky bottom-0 border-t border-line-2 bg-paper-2 px-2 py-2 text-[11.5px] font-medium text-ink-2">
+                Нийт
+              </td>
+              {cols.map((c) => (
+                <td
+                  key={c.key}
+                  className="num sticky bottom-0 border-t border-line-2 bg-paper-2 px-2 py-2 text-right text-[12.5px] font-medium text-ink"
+                >
+                  {c.total == null ? "" : num(Math.round(c.total))}
+                </td>
+              ))}
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </CutCard>
+  );
+}
+
 function CutCard({
   title,
   tone,
