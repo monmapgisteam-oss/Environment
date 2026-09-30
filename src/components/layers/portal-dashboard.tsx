@@ -690,6 +690,11 @@ export function PortalLayersDashboard({
       rows: Row[];
       oids: Set<number>;
       charts: Breakdown[];
+      /**
+       * Энэ давхарга ШҮҮГДСЭН эсэх — талбарын шүүлт, эсвэл бичлэгийн
+       * сонголт. Ойртолтын хүрээг тооцоход хэрэгтэй ({@link focus}).
+       */
+      narrowed: boolean;
       /** Мөр шүүлтэд нийцэх эсэх; `skip` нь алгасах шүүлтийн түлхүүрүүд */
       passes: (row: Row, skip?: readonly string[]) => boolean;
     }[] = [];
@@ -796,7 +801,15 @@ export function PortalLayersDashboard({
         }));
       }
 
-      out.push({ id, hit, rows, oids, charts, passes });
+      out.push({
+        id,
+        hit,
+        rows,
+        oids,
+        charts,
+        narrowed: muted || only != null || fields.length > 0,
+        passes,
+      });
     }
 
     return out;
@@ -1149,10 +1162,24 @@ export function PortalLayersDashboard({
   */
   const focus = React.useMemo<Extent | null>(() => {
     if (!views.length) return null;
+    /*
+      ⚠⚠ ШҮҮГДЭЭГҮЙ ДАВХАРГА ХҮРЭЭНД ОРОХГҮЙ (2026-09-30, хэрэглэгч:
+      "zoom in хийхгүй бн").
+
+      Булгийн цэсэд хамгаалалтын бүс нь `mapOnly` тул ямар ч шүүлтэд
+      хумигддаггүй — 495 бүс нь хотыг бүхэлд нь хамардаг учраас
+      булгийг шүүсэн ч ХҮРЭЭ ХЭВЭЭР үлдэж, зураг хөдөлдөггүй байв.
+      Шүүлт тавьсны дараа "үлдсэн бүхэн" гэдэг нь ХУМИГДСАН давхаргын
+      дүрсүүд — хумигдаагүй нь тэр асуултад хариулах зүйлгүй.
+      ⚠ Шүүлтгүй үед БҮГД орно: анхны харагдац бүх давхаргыг багтаана.
+    */
+    const cut = views.some((v) => v.narrowed);
     const b = new Bounds();
-    for (const { hit, oids } of views)
+    for (const { hit, oids, narrowed } of views) {
+      if (cut && !narrowed) continue;
       for (const f of hit.data.shapes.features)
         if (oids.has(Number(f.id))) b.addGeometry(f.geometry);
+    }
     return b.get(0.004);
   }, [views]);
 
@@ -3493,11 +3520,28 @@ function RecordPanel({
       */
       className="top-2 right-2 max-h-[calc(100%-2.5rem)] w-[288px]"
     >
+      {/*
+        ⚠⚠ ХООСОН ТАЛБАР Ч ГАРНА (2026-09-30, хэрэглэгч: "pop up-д
+        тайлбар field байхгүй бн").
+
+        Урьд нь утгагүй мөрийг чимээгүй алгасдаг байсан тул "энэ
+        талбар байдаг ч бөглөгдөөгүй" гэдгийг дэлгэцээс мэдэх арга
+        БАЙХГҮЙ: булгийн тайлбар хоосон байсан тул мөр нь огт
+        гардаггүй, улмаас талбар нь үгүй мэт харагдаж байв.
+        ⚠ Химийн бодисын атрибутын хүснэгттэй ЯГ НЭГ шийдвэр
+        (2026-09-23: "хоосон ч хамаагүй бүх column буюу field надад
+        хэрэгтэй, би харж байгаад хүмүүс нь бөглүүрэй гээд хэлэх гээд
+        байна") — хоосон байдал нь ӨӨРӨӨ мэдээлэл.
+        ⚠ Хоосныг "—" гэж БҮДЭГ өнгөөр хэлнэ: бөглөгдсөн утгуудаас
+        нүдээр шууд салах ёстой.
+        ⚠ Самбарын бие дотроо гүйнэ тул олон талбартай давхарга
+        (худгийн паспорт) ч багтана.
+      */}
       <dl className="divide-y divide-line overflow-y-auto">
         {info.fields.map((f) => {
           const v = row[f.name];
           const text = typeof v === "string" ? v.trim() : v;
-          if (text === "" || text == null) return null;
+          const empty = text === "" || text == null;
           const isNum = typeof text === "number" && Number.isFinite(text);
           return (
             <div key={f.name} className="flex gap-2 px-2.5 py-1.5">
@@ -3506,11 +3550,12 @@ function RecordPanel({
               </dt>
               <dd
                 className={cn(
-                  "min-w-0 flex-1 text-[11.5px] leading-snug text-ink-2",
+                  "min-w-0 flex-1 text-[11.5px] leading-snug",
+                  empty ? "text-ink-3" : "text-ink-2",
                   isNum && "num",
                 )}
               >
-                {fieldText(f.alias, text)}
+                {empty ? "—" : fieldText(f.alias, text)}
               </dd>
             </div>
           );
