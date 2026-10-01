@@ -35,10 +35,20 @@
      олон шугамтай график — мянган жорлонд ч есөөс илүүгүй график.
   6. Атласын өндөр нь хэрэгцээтэй мөрөөр (2-ын зэрэгт).
 
-  ⚠⚠ Блок 2 м гүн тул нүхний ёроол (1.5–2.5 м) ба түүнээс доошхи
-  бохирдол (гүний ус хүртэл) 3D-д ХАРАГДАХГҮЙ — хөндлөн огтлолын
-  диаграм нь 0–200 см-ийг л харуулна. Энэ нь хөрсний дээд давхарга дахь
-  бохирдлын ТАРХАЛТ; гүний усны асуудлыг "Нэвчилтийн симуляци" харуулна.
+  ⚠⚠ ГҮНИЙ УС ХҮРТЭЛ (хэрэглэгч 2026-10-01: "ene 2iig ajluulahad bohirdol
+  dooshoo newchij buig harna shuu … zuselt zurah 2-iig hiihed bohirdol
+  simulation haragdmaar bn"). Хөрсний блок 2 м гүн, нүхний ёроол 1.5–2.5 м
+  тул доош нэвчих хэсэг (гүний ус хүртэл, хэдэн метрээс 40 м) блокт
+  ОГТ харагддаггүй байв. Одоо:
+    · 3D-д хана бүрийн ДООР түр "гүний хэсэг" (`curtain`) — блокийн
+      ёроолоос гүний ус хүртэл; жорлон бүрийн зураас тэнд үргэлжилж,
+      гүний усны түвшин цэнхэр шугамаар. ⚠ ӨӨР ӨСГӨЛТ: 2 м хүртэл ×800
+      (блокийнх), 2 м-ээс доош ×`DEEP_X` (100) — нэг ×800-аар бол 20 м
+      гүн 16 км болно. Дэлгэц дээр хоёулаа ИЛ бичигдэнэ.
+    · 2D: зам дагуух 0 м → гүний ус хүртэлх тор (`deep`) — `PlumeSection`.
+  ⚠⚠ ЗАМ ОЛОН ХЭРЧИМТЭЙ: шулуун зүсэлт (нэг хэрчим) эсвэл зурсан талбайн
+  ХҮРЭЭ (`setRing` — хана бүр нэг хэрчим, хасагдах тал нь ГАДАГШ).
+  Хүрээний хэрчимд жорлонг зөвхөн [0, L]-д авна — булангийн давхардал.
 */
 import { defaultParams, fetchLatrineSim, simulate, type SimData, type SimParams } from "@/lib/latrine-sim";
 import { RE3, RN3, rampC, type Species } from "@/lib/latrine-sim-3d";
@@ -59,7 +69,15 @@ export const ROWS = 20;
 /** Тогтмол өргөнтэй зураасны өнгөний ангилал ба зузаан (цэг) */
 const BINS = 8;
 const STROKE_PT = 3;
+/** 2 м-ээс доош босоо өсгөлт — 1 м гүн = 100 м (блокийнх ×800) */
+export const DEEP_X = 100;
+/** Гүний хэсгийн дээд хязгаар, м */
+const DEEP_MAX = 40;
+/** 2D тор: зам дагуу сэмпл, гүнээр мөр */
+const DS = 300;
+const DR = 160;
 
+type Pt = [number, number];
 type Field = {
   nr: number;
   nz: number;
@@ -72,7 +90,24 @@ type Field = {
   qN: Uint8Array[];
   qE: Uint8Array[];
 };
-type OnCut = { i: number; s: number; d: number; key: string };
+type Seg = { a: Pt; b: Pt; rem: number; L: number; s0: number };
+type OnCut = { i: number; seg: number; s: number; d: number; key: string };
+
+/** 2D хөндлөн огтлол — 0 м-ээс гүний ус хүртэл */
+export type DeepSection = {
+  /** (сэмпл × мөр): 0 — хоосон, 1 — нүх, 2…255 — бохирдол */
+  grid: Uint8Array;
+  samples: number;
+  rows: number;
+  /** Торын доод гүн, м */
+  depth: number;
+  /** Сэмпл бүрийн гүний усны гүн, м (жорлонгүй бол NaN) */
+  gw: Float32Array;
+  /** Замын урт, м */
+  length: number;
+  /** Хүрээний булангууд (замын зай, м) — шулуун зүсэлтэд хоосон */
+  corners: number[];
+};
 
 export type PlumeState = {
   /** Зүсэлт дээрх жорлон */
@@ -82,9 +117,11 @@ export type PlumeState = {
   total: number;
   /** Цагийн агшны тоо */
   steps: number;
-  /** Хөндлөн огтлолын диаграмд: (сэмпл × `ROWS`) — 0 бол бохирдолгүй, 1…255 ангилал */
+  /** Хөндлөн огтлолын диаграмд: (сэмпл × `ROWS`) — 0 бол бохирдолгүй, 1…255 ангилал. Зөвхөн шулуун зүсэлтэд. */
   grid: Uint8Array | null;
   samples: number;
+  /** Гүний ус хүртэлх 2D тор */
+  deep: DeepSection | null;
 };
 
 type Deps = {
@@ -95,6 +132,7 @@ type Deps = {
   Graphic: new (p?: object) => unknown;
   layer: { removeAll: () => void; add: (g: unknown) => void };
   zAt: (lon: number, lat: number) => number;
+  valid: (lon: number, lat: number) => boolean;
   exs: () => number;
   mLon: number;
   mLat: number;
@@ -105,15 +143,18 @@ type Deps = {
 export function createPlumes(dep: Deps) {
   let data: SimData | null = null;
   const cache = new Map<string, Field | null>();
-  let cut: { a: [number, number]; b: [number, number]; rem: number; L: number; lat: OnCut[] } | null = null;
+  let path: { segs: Seg[]; P: number; ring: boolean; lat: OnCut[] } | null = null;
   let t = 0;
   let species: Species = "N";
   let gen = 0;
   const steps = Math.floor((YEARS * 365) / STEP_DAYS) + 1;
-  void fetchLatrineSim().then((d) => {
-    data = d;
-    if (cut) void compute();
-  });
+  void fetchLatrineSim().then(
+    (d) => {
+      data = d;
+      if (path) void compute();
+    },
+    () => {},
+  );
 
   const keyOf = (p: SimParams) => {
     const gw = Math.round(p.gw * 2) / 2;
@@ -126,22 +167,33 @@ export function createPlumes(dep: Deps) {
     return { ...p, years: YEARS, gw, hh: Math.round(p.hh * 2) / 2, pit: Math.min(p.pit, gw) };
   }
 
-  /** Зүсэлт дээрх жорлонгууд — шугамын дагуух байрлал `s`, шугамаас зай `d` (м) */
-  function pick(a: [number, number], b: [number, number]): OnCut[] {
+  const segOf = (a: Pt, b: Pt, rem: number, s0: number): Seg => ({
+    a, b, rem, s0, L: Math.hypot((b[0] - a[0]) * dep.mLon, (b[1] - a[1]) * dep.mLat),
+  });
+
+  /** Зам дээрх жорлонгууд — хэрчмийн дагуух байрлал `s`, шугамаас зай `d` (м) */
+  function pick(): OnCut[] {
     const d = data!;
-    const ux = (b[0] - a[0]) * dep.mLon;
-    const uy = (b[1] - a[1]) * dep.mLat;
-    const L = Math.hypot(ux, uy);
     const out: OnCut[] = [];
-    for (let i = 0; i < d.n; i++) {
-      const x = (d.lon[i] - a[0]) * dep.mLon;
-      const y = (d.lat[i] - a[1]) * dep.mLat;
-      const s = (x * ux + y * uy) / L;
-      if (s < -RMAX || s > L + RMAX) continue;
-      const off = (x * uy - y * ux) / L;
-      if (Math.abs(off) > RMAX) continue;
-      out.push({ i, s, d: Math.abs(off), key: "" });
-    }
+    path!.segs.forEach((g, k) => {
+      if (g.L < 1) return;
+      const ux = (g.b[0] - g.a[0]) * dep.mLon;
+      const uy = (g.b[1] - g.a[1]) * dep.mLat;
+      const lo = path!.ring ? 0 : -RMAX;
+      const hi = path!.ring ? g.L : g.L + RMAX;
+      for (let i = 0; i < d.n; i++) {
+        /* ⚠ Порталтай холбогдоогүй жорлон NaN — харьцуулалт бүгд худал
+           тул шүүлтийг ДАВЖ гарах байсан */
+        if (!Number.isFinite(d.lon[i])) continue;
+        const x = (d.lon[i] - g.a[0]) * dep.mLon;
+        const y = (d.lat[i] - g.a[1]) * dep.mLat;
+        const s = (x * ux + y * uy) / g.L;
+        if (s < lo || s > hi) continue;
+        const off = (x * uy - y * ux) / g.L;
+        if (Math.abs(off) > RMAX) continue;
+        out.push({ i, seg: k, s, d: Math.abs(off), key: "" });
+      }
+    });
     out.sort((p, q) => p.d - q.d);
     out.length = Math.min(out.length, MAX_LAT);
     for (const o of out) o.key = keyOf(paramsOf(o.i));
@@ -162,24 +214,24 @@ export function createPlumes(dep: Deps) {
     };
   }
 
-  function emit(grid: Uint8Array | null) {
-    const keys = cut ? new Set(cut.lat.map((o) => o.key)) : new Set<string>();
+  function emit(grid: Uint8Array | null, deep: DeepSection | null) {
+    const keys = path ? new Set(path.lat.map((o) => o.key)) : new Set<string>();
     let done = 0;
     for (const k of keys) if (cache.has(k)) done++;
-    dep.onState({ count: cut?.lat.length ?? 0, done, total: keys.size, steps, grid, samples: 201 });
+    dep.onState({ count: path?.lat.length ?? 0, done, total: keys.size, steps, grid, samples: 201, deep });
   }
 
   async function compute() {
-    if (!cut || !data) return;
+    if (!path || !data) return;
     const my = ++gen;
-    cut.lat = pick(cut.a, cut.b);
+    path.lat = pick();
     paint();
-    const todo = [...new Set(cut.lat.map((o) => o.key))].filter((k) => !cache.has(k));
+    const todo = [...new Set(path.lat.map((o) => o.key))].filter((k) => !cache.has(k));
     for (const k of todo) {
       /* ⚠ Үндсэн урсгалыг түгжихгүйн тулд түлхүүр бүрийн өмнө нэг хүрээ өгнө */
       await new Promise((r) => setTimeout(r, 0));
-      if (my !== gen || !cut) return;
-      const o = cut.lat.find((x) => x.key === k)!;
+      if (my !== gen || !path) return;
+      const o = path.lat.find((x) => x.key === k)!;
       cache.set(k, fieldOf(paramsOf(o.i)));
       /* ⚠ Бүрд нь зурвал мянган жорлонгийн атлас × зуу гаруй түлхүүр —
          400 мс тутамд нэг л удаа */
@@ -205,40 +257,71 @@ export function createPlumes(dep: Deps) {
   function paint() {
     last = performance.now();
     dep.layer.removeAll();
-    if (!cut || !data) return emit(null);
+    if (!path || !data) return emit(null, null);
     const ramp = species === "N" ? RN3 : RE3;
+    const e = dep.exs();
+    /* Гүн (м) → зурагт өндөр: 2 м хүртэл блокийн өсгөлт, доош нь `DEEP_X` */
+    const zOf = (top: number, zm: number) => (zm <= 2 ? top - zm * 100 * e : top - 200 * e - (zm - 2) * DEEP_X);
+    /* хэрчим бүрийн нэгж вектор (метр) ба хасагдсан тал руу шилжилт */
+    const geo = path.segs.map((g) => {
+      const ux = g.L ? ((g.b[0] - g.a[0]) * dep.mLon) / g.L : 0;
+      const uy = g.L ? ((g.b[1] - g.a[1]) * dep.mLat) / g.L : 0;
+      const rr = (g.rem * Math.PI) / 180;
+      const ox = Math.sin(rr);
+      const oy = Math.cos(rr);
+      const at = (s: number, k: number): Pt => [g.a[0] + (ux * s + ox * k) / dep.mLon, g.a[1] + (uy * s + oy * k) / dep.mLat];
+      return { at };
+    });
+
     /* ⚠ Зураг бүрд ШИНЭ canvas: SDK текстурыг эх обьектоор нь кэшлэдэг тул
        нэгийг нь дахин будахад цаг солигдсон ч хуучин зураг үлдэнэ */
     /* ⚠ Өндөр нь ХЭРЭГЦЭЭТЭЙ мөрөөр (2-ын зэрэгт) — зуу орчим жорлонд
        1024 × 128. Бүтэн 1024² нь тоглуулах алхам бүрд дахин ачаалагдаж
        нэг алхам ~300 мс болгож байв. */
-    const cells = cut.lat.filter((o) => cache.get(o.key)).length;
+    const cells = path.lat.filter((o) => cache.get(o.key)).length;
     const AH = Math.max(64, 2 ** Math.ceil(Math.log2(Math.max(1, Math.ceil(cells / PER_ROW)) * CH)));
     const atlas = document.createElement("canvas");
     atlas.width = ATLAS;
     atlas.height = AH;
     const actx = atlas.getContext("2d")!;
     const img = actx.createImageData(ATLAS, AH);
-    const grid = new Uint8Array(201 * ROWS);
-    const { a, b, rem, L } = cut;
+    /* Хуучин 0–2 м-ийн тор — зөвхөн шулуун зүсэлтийн хөндлөн огтлолд */
+    const grid = path.ring ? null : new Uint8Array(201 * ROWS);
+    const L0 = path.segs[0].L;
+    const P = path.P;
     const pos: number[] = [];
     const uv: number[] = [];
     const faces: number[] = [];
-    /* шугамын нэгж вектор (метр) ба хасагдсан тал руу 0.8 м */
-    const ux = ((b[0] - a[0]) * dep.mLon) / L;
-    const uy = ((b[1] - a[1]) * dep.mLat) / L;
-    const remR = (rem * Math.PI) / 180;
-    const ox = Math.sin(remR) * 0.8;
-    const oy = Math.cos(remR) * 0.8;
-    const at = (s: number, k = 1): [number, number] => [a[0] + (ux * s + ox * k) / dep.mLon, a[1] + (uy * s + oy * k) / dep.mLat];
-    const e = dep.exs();
     /* ангилал тутмын олон шугам: 0 — нүх, 1…BINS — бохирдлын түвшин */
     const strokes: number[][][][] = Array.from({ length: BINS + 1 }, () => []);
-    const rowM = DEPTH_CM / 100 / ROWS;
+    const binOf = (q: number) => (q < 0 ? 0 : q > 0 ? 1 + Math.min(BINS - 1, Math.floor(((q - 1) / 255) * BINS)) : -1);
+
+    /* Гүний хэсгийн доод хязгаар — зам дээрх хамгийн гүн гүний ус */
+    let depth = 2.5;
+    for (const o of path.lat) {
+      const f = cache.get(o.key);
+      if (f) depth = Math.max(depth, Math.min(DEEP_MAX, f.gw));
+    }
+    /* ⚠ Бага зай: хамгийн гүн гүний усны тэмдэг доод ирмэгт тасарч байв */
+    depth = Math.min(DEEP_MAX * 1.06, depth * 1.06 + 0.3);
+    const deep: DeepSection = {
+      grid: new Uint8Array(DS * DR),
+      samples: DS,
+      rows: DR,
+      depth,
+      gw: new Float32Array(DS).fill(NaN),
+      length: P,
+      corners: path.ring ? path.segs.slice(1).map((g) => g.s0) : [],
+    };
+    /* гүний усны шугам: (замын зай, цэг) — дараалуулан, тасалдалтай */
+    const gwPts: { s: number; seg: number; p: number[] }[] = [];
+
     let n = 0;
-    cut.lat.forEach((o) => {
+    path.lat.forEach((o) => {
       const f = cache.get(o.key);
       if (!f) return;
+      const g = geo[o.seg];
+      const sg = path!.segs[o.seg];
       const cell = n++;
       const cx = (cell % PER_ROW) * CW;
       const cy = Math.floor(cell / PER_ROW) * CH;
@@ -260,34 +343,51 @@ export function createPlumes(dep: Deps) {
           }
         }
       }
-      /* хөндлөн огтлолын диаграмд: төвийн баганын утга, сэмпл бүрд их нь */
-      const si = Math.max(0, Math.min(200, Math.round((o.s / L) * 200)));
-      const col: number[] = [];
-      for (let rI = 0; rI < ROWS; rI++) {
-        const q = sample(f, 0, o.d, ((rI + 0.5) / ROWS) * (DEPTH_CM / 100), t);
-        const g = q < 0 ? 0 : q;
-        if (g > grid[si * ROWS + rI]) grid[si * ROWS + rI] = g;
-        col.push(q < 0 ? 0 : q > 0 ? 1 + Math.min(BINS - 1, Math.floor(((q - 1) / 255) * BINS)) : -1);
+      /* хуучин хөндлөн огтлолын диаграмд: төвийн баганын утга, сэмпл бүрд их нь */
+      if (grid) {
+        const si = Math.max(0, Math.min(200, Math.round((o.s / L0) * 200)));
+        for (let rI = 0; rI < ROWS; rI++) {
+          const q = sample(f, 0, o.d, ((rI + 0.5) / ROWS) * (DEPTH_CM / 100), t);
+          const gq = q < 0 ? 0 : q;
+          if (gq > grid[si * ROWS + rI]) grid[si * ROWS + rI] = gq;
+        }
       }
-      /* тогтмол өргөнтэй зураас — ижил ангиллын дараалсан мөрүүд нэг хэрчим */
-      if (o.s >= 0 && o.s <= L) {
-        const [lon, lat] = at(o.s, 1.1);
+      /* 2D гүний тор — замын зай дахь сэмплд */
+      const ps = sg.s0 + Math.max(0, Math.min(sg.L, o.s));
+      const di = Math.max(0, Math.min(DS - 1, Math.round((ps / Math.max(1, P)) * (DS - 1))));
+      for (let r = 0; r < DR; r++) {
+        const q = sample(f, 0, o.d, ((r + 0.5) / DR) * depth, t);
+        const code = q < 0 ? 1 : q > 0 ? 2 + Math.min(253, Math.floor(((q - 1) / 254) * 253)) : 0;
+        if (code > deep.grid[di * DR + r]) deep.grid[di * DR + r] = code;
+      }
+      if (!(f.gw >= deep.gw[di])) deep.gw[di] = f.gw;
+
+      /* тогтмол өргөнтэй зураас: 0–2 м-д 10 см, доош нь 25 см алхмаар,
+         гүний ус хүртэл — ижил ангиллын дараалсан мөрүүд нэг хэрчим */
+      if (o.s >= 0 && o.s <= sg.L) {
+        const [lon, lat] = g.at(o.s, 1.1);
         const top = dep.zAt(lon, lat);
-        for (let r0 = 0; r0 < ROWS; ) {
+        const zs: number[] = [];
+        for (let z = 0; z < 2 - 1e-6; z += 0.1) zs.push(z);
+        for (let z = 2; z < f.gw - 1e-6; z += 0.25) zs.push(z);
+        zs.push(Math.max(f.gw, 2));
+        const cls = zs.slice(0, -1).map((z, k) => binOf(sample(f, 0, o.d, (z + zs[k + 1]) / 2, t)));
+        for (let r0 = 0; r0 < cls.length; ) {
           let r1 = r0 + 1;
-          while (r1 < ROWS && col[r1] === col[r0]) r1++;
-          if (col[r0] >= 0)
-            strokes[col[r0]].push([
-              [lon, lat, top - r0 * rowM * 100 * e],
-              [lon, lat, top - r1 * rowM * 100 * e],
+          while (r1 < cls.length && cls[r1] === cls[r0]) r1++;
+          if (cls[r0] >= 0)
+            strokes[cls[r0]].push([
+              [lon, lat, zOf(top, zs[r0])],
+              [lon, lat, zOf(top, zs[r1])],
             ]);
           r0 = r1;
         }
+        gwPts.push({ s: ps, seg: o.seg, p: [lon, lat, zOf(top, f.gw)] });
       }
       if (!any) return;
-      /* дөрвөлжин: шугамын дагуу s ± R (блокийн хүрээнд тайрна), дээд нь гадарга */
+      /* дөрвөлжин: шугамын дагуу s ± R (хэрчмийн хүрээнд тайрна), дээд нь гадарга */
       const s0 = Math.max(0, o.s - f.R);
-      const s1 = Math.min(L, o.s + f.R);
+      const s1 = Math.min(sg.L, o.s + f.R);
       if (s1 <= s0) return;
       const u0 = (cx + ((s0 - (o.s - f.R)) / (2 * f.R)) * CW) / ATLAS;
       const u1 = (cx + ((s1 - (o.s - f.R)) / (2 * f.R)) * CW) / ATLAS;
@@ -298,7 +398,7 @@ export function createPlumes(dep: Deps) {
         [s0, u0],
         [s1, u1],
       ]) {
-        const [lon, lat] = at(s);
+        const [lon, lat] = g.at(s, 0.8);
         const top = dep.zAt(lon, lat);
         pos.push(lon, lat, top, lon, lat, top - DEPTH_CM * e);
         uv.push(uu, v0, uu, v1);
@@ -306,7 +406,50 @@ export function createPlumes(dep: Deps) {
       faces.push(base, base + 1, base + 3, base, base + 3, base + 2);
     });
     actx.putImageData(img, 0, 0);
-    emit(grid);
+    emit(grid, n ? deep : null);
+    if (!n) return;
+
+    /*
+      ГҮНИЙ ХЭСЭГ — хана бүрийн доор, блокийн ёроолоос `depth` хүртэл.
+      ⚠ Зөвхөн хөрсний блок байгаа газарт (`valid`): блокоос гадуур ханан
+      дор өлгөөтэй хэсэг нь агаарт хөвнө.
+      ⚠ Хасагдсан тал руу 0.8 м — зураас (1.1 м) түүний ӨМНӨ, камер талд.
+    */
+    if (depth > 2) {
+      const cp: number[] = [];
+      const cf: number[] = [];
+      path.segs.forEach((sg, k) => {
+        if (sg.L < 1) return;
+        const step = Math.max(20, sg.L / 120);
+        const m = Math.ceil(sg.L / step);
+        let prev = -1;
+        for (let j = 0; j <= m; j++) {
+          const s = (sg.L * j) / m;
+          const [lon, lat] = geo[k].at(s, 0.8);
+          if (!dep.valid(lon, lat)) {
+            prev = -1;
+            continue;
+          }
+          const top = dep.zAt(lon, lat);
+          const idx = cp.length / 3;
+          cp.push(lon, lat, zOf(top, 2), lon, lat, zOf(top, depth));
+          if (prev >= 0) cf.push(prev, prev + 1, idx + 1, prev, idx + 1, idx);
+          prev = idx;
+        }
+      });
+      if (cf.length)
+        dep.layer.add(
+          new dep.Graphic({
+            geometry: new dep.Mesh({
+              spatialReference: dep.SR,
+              vertexAttributes: { position: new Float64Array(cp) },
+              components: [new dep.MeshComponent({ faces: new Uint32Array(cf), material: new dep.MeshMaterial({ color: [74, 62, 50, 1], doubleSided: true }) })],
+            }),
+            symbol: { type: "mesh-3d", symbolLayers: [{ type: "fill", material: { color: [255, 255, 255, 1] } }] },
+          }),
+        );
+    }
+
     strokes.forEach((paths, bin) => {
       if (!paths.length) return;
       const c = bin === 0 ? [29, 20, 12] : rampC(ramp, (bin - 0.5) / BINS);
@@ -320,6 +463,30 @@ export function createPlumes(dep: Deps) {
         }),
       );
     });
+
+    /* Гүний усны түвшин — хөрш жорлонгуудыг холбоно, ⚠ 60 м-ээс их
+       завсар ба хэрчмийн заагаар ТАСАЛНА: байхгүй түвшинг байгаа мэт
+       зурахгүй (voxel-ийн гүний усны шугамтай нэг сургамж) */
+    gwPts.sort((p, q) => p.s - q.s);
+    const gwPaths: number[][][] = [];
+    let cur: number[][] = [];
+    gwPts.forEach((g, k) => {
+      const p = gwPts[k - 1];
+      if (p && (g.s - p.s > 60 || g.seg !== p.seg)) {
+        if (cur.length > 1) gwPaths.push(cur);
+        cur = [];
+      }
+      cur.push(g.p);
+    });
+    if (cur.length > 1) gwPaths.push(cur);
+    if (gwPaths.length)
+      dep.layer.add(
+        new dep.Graphic({
+          geometry: { type: "polyline", paths: gwPaths, hasZ: true, spatialReference: dep.SR },
+          symbol: { type: "line-3d", symbolLayers: [{ type: "line", size: 2, material: { color: [95, 168, 255, 0.95] } }] },
+        }),
+      );
+
     if (!faces.length) return;
     const mesh = new dep.Mesh({
       spatialReference: dep.SR,
@@ -341,16 +508,43 @@ export function createPlumes(dep: Deps) {
   }
 
   return {
-    /** Шинэ зүсэлт; `rem` — хасагдсан талын азимут */
-    setCut(a: [number, number], b: [number, number], rem: number) {
-      const L = Math.hypot((b[0] - a[0]) * dep.mLon, (b[1] - a[1]) * dep.mLat);
-      cut = { a, b, rem, L, lat: [] };
+    /** Шинэ шулуун зүсэлт; `rem` — хасагдсан талын азимут */
+    setCut(a: Pt, b: Pt, rem: number) {
+      const g = segOf(a, b, rem, 0);
+      path = { segs: [g], P: g.L, ring: false, lat: [] };
+      void compute();
+    },
+    /**
+     * Зурсан талбайн хүрээ — хана бүр нэг хэрчим. Хасагдах (харагч) тал нь
+     * ГАДАГШ: олон өнцөгтийн эргэлтийн чиглэлээс гаднах нормалийг авна.
+     */
+    setRing(P: Pt[]) {
+      let area = 0;
+      for (let i = 0, j = P.length - 1; i < P.length; j = i++) area += (P[j][0] - P[i][0]) * (P[j][1] + P[i][1]);
+      /* area > 0 — цагийн зүүний ЭСРЭГ (энэ томьёонд: Σ (xⱼ − xᵢ)(yⱼ + yᵢ),
+         j нь өмнөх орой); уртраг, өргөрөгийн эерэг масштаб тэмдгийг хадгална */
+      const ccw = area > 0;
+      const segs: Seg[] = [];
+      let s0 = 0;
+      for (let i = 0; i < P.length; i++) {
+        const a = P[i];
+        const b = P[(i + 1) % P.length];
+        const ux = (b[0] - a[0]) * dep.mLon;
+        const uy = (b[1] - a[1]) * dep.mLat;
+        /* цагийн зүүний эсрэг үед дотор нь ЗҮҮН талд → гаднах нь баруун нормаль (uy, −ux) */
+        const [nx, ny] = ccw ? [uy, -ux] : [-uy, ux];
+        const rem = (Math.atan2(nx, ny) * 180) / Math.PI;
+        const g = segOf(a, b, (rem + 360) % 360, s0);
+        segs.push(g);
+        s0 += g.L;
+      }
+      path = { segs, P: s0, ring: true, lat: [] };
       void compute();
     },
     /** Хасагдсан тал солигдсон — дахин бодохгүй, зөвхөн дахин зурна */
     setSide(rem: number) {
-      if (!cut) return;
-      cut.rem = rem;
+      if (!path || path.ring) return;
+      path.segs[0].rem = rem;
       paint();
     },
     setTime(i: number) {
@@ -363,9 +557,9 @@ export function createPlumes(dep: Deps) {
     },
     clear() {
       gen++;
-      cut = null;
+      path = null;
       dep.layer.removeAll();
-      emit(null);
+      emit(null, null);
     },
     steps,
   };

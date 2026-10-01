@@ -1125,6 +1125,10 @@ export async function createSoilScene(opts: {
     if (P && REAL) setEnv("clean");
     else rebuild();
     applyClip();
+    /* ⚠ Зурсан талбайн хана бүр зүсэлт шиг — ханын дагуух жорлонгийн
+       бохирдол нүүрэнд, гүний ус хүртэл доор нь ({@link createPlumes}) */
+    if (P) plumes.setRing(P);
+    else plumes.clear();
     sync();
   }
   vBtn.addEventListener("click", () => {
@@ -1856,6 +1860,7 @@ export async function createSoilScene(opts: {
     Mesh, MeshComponent, MeshMaterial, MeshTexture, Graphic,
     layer: plumeL,
     zAt,
+    valid: validAt,
     exs,
     mLon,
     mLat,

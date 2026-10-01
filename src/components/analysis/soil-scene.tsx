@@ -11,7 +11,8 @@ import { SOIL_EXAGGERATION, SOIL_MODULES, createSoilScene, type PickInfo, type S
 import { SectionCard } from "@/components/analysis/soil-section";
 import { RE3, RN3, loadThree, rampC, type Species } from "@/lib/latrine-sim-3d";
 import { SimSide, SimStage, useLatrineSim } from "@/components/analysis/latrine-sim";
-import { STEP_DAYS, type PlumeState } from "@/lib/soil-plumes";
+import { DEEP_X, STEP_DAYS, type PlumeState } from "@/lib/soil-plumes";
+import { PlumeSection } from "@/components/analysis/plume-section";
 
 /* --------------------------------------------------------------------------
    ГУРВАН ХЭМЖЭЭСТ ЗҮСЭЛТ — хөрсний профайлын блок
@@ -126,54 +127,64 @@ export function SoilScene() {
   return (
     <div className="flex h-full min-h-0 flex-col">
       <Columns layout="flex" id="soil-scene" right={340} className="min-h-0 flex-1">
-        {/* ── Гурван хэмжээст харагдац ───────────────────────────── */}
-        <div className="soil-scene-view relative min-h-0 flex-1 overflow-hidden rounded-xs border border-line bg-paper-3">
-          <div ref={holder} className="absolute inset-0" />
-          {state === "ready" ? (
-            <>
-              {/* ⚠⚠ Өсгөлтийн коэффициент ИЛ бичигдэнэ — налуу байгаагаас эгц
+        {/* ── Гурван хэмжээст харагдац + доор нь гүний ус хүртэлх диаграм ── */}
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2">
+          <div className="soil-scene-view relative min-h-0 flex-1 overflow-hidden rounded-xs border border-line bg-paper-3">
+            <div ref={holder} className="absolute inset-0" />
+            {state === "ready" ? (
+              <>
+                {/* ⚠⚠ Өсгөлтийн коэффициент ИЛ бичигдэнэ — налуу байгаагаас эгц
                   харагдахыг нуух боломжгүй. Гулсуур хасагдсан тул энд л үлдэв. */}
-              <span className="pointer-events-none absolute bottom-2 left-2 rounded-xs bg-paper/80 px-2 py-1 text-[10.5px] text-ink-2 backdrop-blur-sm">
-                Босоо өсгөлт ×{SOIL_EXAGGERATION} · Товшиход профайл · Жорлон товшиход нэвчилтийн симуляци · Alt + товшиход тэр цэгээр
-                зүсэлт
-              </span>
-              {shown ? (
-                <PlumeBar
-                  state={plumes!}
-                  t={t}
-                  species={species}
-                  playing={playing}
-                  onT={(v) => {
-                    setPlaying(false);
-                    setT(v);
-                  }}
-                  onSpecies={setSpecies}
-                  onPlay={() => {
-                    if (!playing && t >= steps - 1) setT(0);
-                    setPlaying((v) => !v);
-                  }}
-                />
-              ) : null}
-              {note ? (
-                <span className="absolute top-2 left-2 rounded-xs border border-(--ochre) bg-paper/85 px-2 py-1 text-[11px] text-ink backdrop-blur-sm">
-                  {note}
+                <span className="pointer-events-none absolute bottom-2 left-2 rounded-xs bg-paper/80 px-2 py-1 text-[10.5px] text-ink-2 backdrop-blur-sm">
+                  Босоо өсгөлт ×{SOIL_EXAGGERATION}
+                  {/* ⚠ Гүний хэсэг өөр өсгөлттэй — гарч ирэх бүрд ИЛ хэлнэ */}
+                  {shown && plumes?.deep && plumes.deep.depth > 2 ? `, 2 м-ээс доош ×${DEEP_X}` : ""} · Товшиход профайл · Жорлон товшиход
+                  нэвчилтийн симуляци · Alt + товшиход тэр цэгээр зүсэлт
                 </span>
-              ) : null}
-            </>
-          ) : (
-            <div className="absolute inset-0 flex items-center justify-center gap-2 px-6">
-              {busy ? (
-                <>
-                  <Loader2 size={16} className="animate-spin text-ink-3" />
-                  <span className="text-[12px] text-ink-2">Хөрсний блок ачаалж байна</span>
-                </>
-              ) : (
-                <span className="max-w-[420px] text-center text-[12px] text-ink-2">{typeof state === "object" ? state.error : ""}</span>
-              )}
+                {shown ? (
+                  <PlumeBar
+                    state={plumes!}
+                    t={t}
+                    species={species}
+                    playing={playing}
+                    onT={(v) => {
+                      setPlaying(false);
+                      setT(v);
+                    }}
+                    onSpecies={setSpecies}
+                    onPlay={() => {
+                      if (!playing && t >= steps - 1) setT(0);
+                      setPlaying((v) => !v);
+                    }}
+                  />
+                ) : null}
+                {note ? (
+                  <span className="absolute top-2 left-2 rounded-xs border border-(--ochre) bg-paper/85 px-2 py-1 text-[11px] text-ink backdrop-blur-sm">
+                    {note}
+                  </span>
+                ) : null}
+              </>
+            ) : (
+              <div className="absolute inset-0 flex items-center justify-center gap-2 px-6">
+                {busy ? (
+                  <>
+                    <Loader2 size={16} className="animate-spin text-ink-3" />
+                    <span className="text-[12px] text-ink-2">Хөрсний блок ачаалж байна</span>
+                  </>
+                ) : (
+                  <span className="max-w-[420px] text-center text-[12px] text-ink-2">{typeof state === "object" ? state.error : ""}</span>
+                )}
+              </div>
+            )}
+            {/* ⚠ Анх товшсоноос хойш УСТАХГҮЙ — буцаад дахин нээхэд шууд гарна */}
+            {simSel >= 0 ? <SimStage sim={sim} open={simOpen} onBack={closeSim} /> : null}
+          </div>
+          {/* ⚠ Симуляци нээлттэй үед нуугдана — тэр нь нэг жорлонгийнх */}
+          {shown && plumes?.deep && !simOpen ? (
+            <div className="h-[210px] shrink-0">
+              <PlumeSection deep={plumes.deep} species={species} count={plumes.count} years={((t * STEP_DAYS) / 365).toFixed(1)} />
             </div>
-          )}
-          {/* ⚠ Анх товшсоноос хойш УСТАХГҮЙ — буцаад дахин нээхэд шууд гарна */}
-          {simSel >= 0 ? <SimStage sim={sim} open={simOpen} onBack={closeSim} /> : null}
+          ) : null}
         </div>
 
         {/* ── Сонгосон цэг, хуулга · симуляцид ТОХИРГОО ───────────── */}
@@ -246,7 +257,7 @@ function PlumeBar(props: {
   return (
     <div className="elevated absolute right-2 bottom-2 z-10 w-[380px] rounded-xs border border-line bg-paper/92 px-2.5 py-2 backdrop-blur-sm">
       <div className="flex items-baseline justify-between gap-2">
-        <span className="text-[11.5px] font-semibold text-ink">ЗҮСЭЛТ ДЭЭРХ БОХИРДОЛ</span>
+        <span className="text-[11.5px] font-semibold text-ink">БОХИРДЛЫН НЭВЧИЛТ</span>
         <span className="num text-[11px] text-ink-3">{state.count.toLocaleString()} нүхэн жорлон</span>
       </div>
       <div className="mt-1.5 flex items-center gap-2">
