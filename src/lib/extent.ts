@@ -177,3 +177,90 @@ export function pointOf(
 
   return { lon, lat };
 }
+
+/*
+  ДҮРС БҮРД НЭГ ШОШГО (2026-09-29, хэрэглэгч: "дээд эх үүсвэр сонгоход
+  яагаад 2 feature давхардаж үлдээд байна?").
+
+  ⚠⚠ MapLibre нь олон хэсэгтэй дүрсийн ХЭСЭГ БҮРД шошго тавьдаг.
+  Хориглолтын бүсийн №18 нь хоёр хэсэгтэй тул зураг дээр "1,392 га"
+  гэж ХОЁР удаа гарч, нэг бичлэг хоёр болж уншигдаж байв (диаграмд
+  ганц мөр). Тоо нь ч ХУДАЛ: шошго нь БҮХ дүрсийн талбайг бичдэг
+  атлаа хэсэг нь түүний зөвхөн нэг хэсгийг эзэлнэ.
+
+  Тиймээс шошгыг тусдаа ЦЭГЭН эх сурвалжаас зурна: дүрс бүрд яг нэг
+  цэг, ХАМГИЙН ТОМ хэсгийнх нь төв дээр.
+
+  ⚠ Талбайн жинтэй (shoelace) төв — оройнуудын энгийн дунджаар авбал
+  олон оройтой үзүүр рүүгээ татагдана.
+  ⚠ Хэрчмийн давхаргад (`shapeLabelOnLine`) энэ нь ХЭРЭГЛЭГДЭХГҮЙ:
+  тэнд шошго нь шугамаа дагаж (`line-center`) суух ёстой.
+*/
+function ringArea(ring: GeoJSON.Position[]): number {
+  let s = 0;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++)
+    s += (ring[j][0] + ring[i][0]) * (ring[j][1] - ring[i][1]);
+  return Math.abs(s / 2);
+}
+
+function ringCentre(ring: GeoJSON.Position[]): GeoJSON.Position {
+  let x = 0, y = 0, a = 0;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const f = ring[j][0] * ring[i][1] - ring[i][0] * ring[j][1];
+    a += f;
+    x += (ring[j][0] + ring[i][0]) * f;
+    y += (ring[j][1] + ring[i][1]) * f;
+  }
+  /* Талбай нь тэг (шулуун дээр хэвтсэн оройнууд) бол дунджаар */
+  if (!a) {
+    for (const p of ring) { x += p[0]; y += p[1]; }
+    return [x / ring.length, y / ring.length];
+  }
+  return [x / (3 * a), y / (3 * a)];
+}
+
+/** Дүрсийн ХАМГИЙН ТОМ хэсгийн төв; олдохгүй бол `null` */
+function mainPoint(g: GeoJSON.Geometry | null): GeoJSON.Position | null {
+  if (!g) return null;
+  if (g.type === "Point") return g.coordinates;
+  if (g.type === "Polygon") return g.coordinates[0] ? ringCentre(g.coordinates[0]) : null;
+  if (g.type === "MultiPolygon") {
+    let best: GeoJSON.Position | null = null;
+    let big = -1;
+    for (const poly of g.coordinates) {
+      const ring = poly[0];
+      if (!ring?.length) continue;
+      const a = ringArea(ring);
+      if (a > big) { big = a; best = ringCentre(ring); }
+    }
+    return best;
+  }
+  if (g.type === "LineString") return g.coordinates[Math.floor(g.coordinates.length / 2)] ?? null;
+  if (g.type === "MultiLineString") {
+    let best: GeoJSON.Position | null = null;
+    let big = -1;
+    for (const line of g.coordinates) {
+      if (line.length > big) { big = line.length; best = line[Math.floor(line.length / 2)] ?? null; }
+    }
+    return best;
+  }
+  return null;
+}
+
+/** Шошгын цэгүүд — дүрс бүрд ЯГ НЭГ */
+export function labelPoints(fc: GeoJSON.FeatureCollection): GeoJSON.FeatureCollection {
+  const features: GeoJSON.Feature[] = [];
+  for (const f of fc.features) {
+    const t = f.properties?.t;
+    if (typeof t !== "string" || !t) continue;
+    const at = mainPoint(f.geometry);
+    if (!at) continue;
+    features.push({
+      type: "Feature",
+      id: f.id,
+      properties: { t },
+      geometry: { type: "Point", coordinates: at },
+    });
+  }
+  return { type: "FeatureCollection", features };
+}

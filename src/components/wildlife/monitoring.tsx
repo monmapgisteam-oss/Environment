@@ -111,7 +111,15 @@ export function MonitoringWorkspace() {
   );
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-2.5">
+    /*
+      ⚠ ҮНДЭС нь `h-full`, `flex-1` БИШ (2026-09-22, хэрэглэгч: "дэлгэцэнд нь
+      тааруул"). Эцэг `.department-workspace-content` нь grid-ийн нүд,
+      flex биш — тэнд `flex-1` ЮУ Ч ХИЙХГҮЙ, өндөр нь агуулгаараа
+      хэмжигдэж, доторх самбарын `h-full` таарах зүйлгүй болж минжний
+      самбар дэлгэцийн доод талыг хоосон үлдээдэг байв. Бусад бүх самбарын
+      үндэс `h-full` — энэ сан тэдний оронд суудаг тул ижил байх ёстой.
+    */
+    <div className="flex h-full min-h-0 flex-col gap-2.5">
       <TabGroups
         groups={SURVEYS}
         value={survey}

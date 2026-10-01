@@ -788,7 +788,7 @@ function Tooltip({
 
 export function RowChart({
   data, tone = "var(--data)", colorOf, selected, onSelect, max: maxOverride, base = 0, format = num, guide,
-  dense = false, note, clamp = false,
+  dense = false, note, clamp = false, share = false, inline = false,
 }: {
   data: Datum[]; tone?: string; colorOf?: (d: Datum) => string; selected?: Selection;
   onSelect?: (key: string | null) => void; max?: number; base?: number;
@@ -827,20 +827,48 @@ export function RowChart({
    * сууддаг тул нэг эгнээний тайралт түүнийг ч мөн хамарна.
    */
   clamp?: boolean;
+  /**
+   * Мөр бүрийн ЭЗЛЭХ ХУВЬ — тооных нь ард, бүдэг өнгөөр.
+   *
+   * ⚠ Хувь нь ЗӨВХӨН БҮХЭЛ нь мэдэгдэж байгаа үед утгатай. Дуудагч
+   * тал гурван тохиолдолд ӨГӨХГҮЙ: дундаж (хувийн дундажууд нийлээд
+   * бүхэл болдоггүй), олон утгат задаргаа (нэг бичлэг хэд хэдэн
+   * ангилалд орох тул нийлбэр нь бүхлээс их), хураасан жагсаалт
+   * (харагдаж буй мөрүүд бүхлийг хамраагүй). Энэ нь бөгжийг
+   * хэрэглэхгүй гурван тохиолдолтой ЯГ ИЖИЛ жагсаалт.
+   */
+  share?: boolean;
+  /**
+   * НЭГ ЭГНЭЭНИЙ мөр — нэр · зурвас · утга зэрэгцэнэ.
+   *
+   * Ердийн бүтэц нь нэрийг ЗУРВАСНЫ ДЭЭР тавьдаг тул мөр 28px
+   * болдог; нэг эгнээнд 23px (арван найман мөр 502 → 413px).
+   *
+   * ⚠ ЗӨВХӨН нэр нь ТАНИГЧ үед: дугаар, код, дүүргийн нэр. Урт
+   * ангиллын нэр 92px-ийн баганад тайрагдана (бүтэн нь `title`-д) —
+   * нэр нь өөрөө уншигдах ёстой диаграмд `dense` үлдээ.
+   * ⚠ `clamp` ДАВХАР хэрэггүй: тайралт аль хэдийн багтсан.
+   * ⚠ `share`-тэй ХАМТ бүү хэрэглэ.
+   */
+  inline?: boolean;
 }) {
   const max = maxOverride ?? Math.max(...data.map((d) => d.value), 1);
+  /* Хувийн суурь — БҮХ мөрийн нийлбэр (хамгийн их утга БИШ) */
+  const whole = data.reduce((sum, d) => sum + d.value, 0);
+  const pct = (v: number) =>
+    whole > 0 ? `${Math.round((v / whole) * 100)}%` : "";
   const span = Math.max(max - base, 1e-9);
   const at = (v: number) => Math.max(0, Math.min(1, (v - base) / span)) * 100;
   const guideAt = guide != null && guide > base && guide < max ? at(guide) : null;
   if (!data.length) return <div className="chart-empty">Үзүүлэлт байхгүй</div>;
   return (
-    <div className={cn("row-chart", dense && "is-dense", clamp && "is-clamped")}>
+    <div className={cn("row-chart", dense && "is-dense", clamp && "is-clamped", inline && "is-inline")}>
       {data.map((d) => {
         const active = nothingPicked(selected) || picked(selected, d.key);
         const isSelected = picked(selected, d.key);
         const color = colorOf ? colorOf(d) : tone;
         return <button key={d.key} type="button" disabled={!onSelect} aria-pressed={onSelect ? isSelected : undefined} title={`${d.label} · ${format(d.value)}`} onClick={() => onSelect?.(clickValue(selected, d.key))} className={cn("row-chart-item", isSelected && "is-selected")} style={{ opacity: active ? 1 : .35 }}>
-          <span className="row-chart-heading"><span className="row-chart-label">{colorOf && <i aria-hidden="true" style={{ background: color }} />}{d.label}{note ? <em>{note(d)}</em> : null}</span><strong>{format(d.value)}</strong></span>
+          <span className="row-chart-heading"><span className="row-chart-label">{colorOf && <i aria-hidden="true" style={{ background: color }} />}{d.label}{note ? <em>{note(d)}</em> : null}</span><strong>{format(d.value)}</strong>{share ? <b className="row-chart-share">{pct(d.value)}</b> : null}</span>
           <span className="row-chart-track">
             <span className="row-chart-track-inner">
               <span style={{ width: `${guideAt != null ? Math.min(at(d.value), guideAt) : at(d.value)}%`, background: color }} />

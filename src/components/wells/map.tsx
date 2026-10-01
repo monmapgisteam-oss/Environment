@@ -19,6 +19,7 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import { FIREFLY } from "@/components/wells/colors";
 import type { BoundarySet } from "@/lib/boundaries";
 import { asset } from "@/lib/base-path";
+import { labelPoints } from "@/lib/extent";
 import { num } from "@/lib/utils";
 
 /* --------------------------------------------------------------------------
@@ -124,6 +125,17 @@ export type MapOverlay = {
     byGrid?: number[];
   };
   line: { color: string; opacity: number; width: number };
+  /**
+   * ДАТА ДАВХАРГЫН ДЭЭР зурагдах эсэх.
+   *
+   * ⚠ Нэмэлт давхарга нь ерөнхийдөө СУУРЬ тул доор нь суудаг (хил,
+   * бүсийн тор). Гэвч заримдаа тэр нь өөрөө ДАТА байна: бүстэй
+   * давхцсан нэгж талбар нь бүсийн дүүргэлтийн ДООР орвол огт
+   * харагдахгүй (хэрэглэгч, 2026-09-29: "parcel 3 бүсийнхээ дээр
+   * харагдана шүү").
+   * ⚠ ШОШГЫН ДООР үлдэнэ: бичвэр нь үргэлж хамгийн дээр.
+   */
+  above?: boolean;
 };
 
 /* --------------------------------------------------------------------------
@@ -508,6 +520,7 @@ export function WellsMap({
   extent = false,
   onExtent,
   onZoom,
+  onView,
   focus = null,
   cluster = true,
   clusterMaxZoom = 15,
@@ -519,6 +532,7 @@ export function WellsMap({
   onHover,
   onProbe,
   firefly,
+  colors,
   highlight = null,
   overlays,
   field,
@@ -546,6 +560,15 @@ export function WellsMap({
    * `zoomend` дээр л дуудагдана — чирэх явцад биш, зогссоны дараа.
    */
   onZoom?: (zoom: number) => void;
+  /**
+   * ХАРАГДАХ ХҮРЭЭ — `moveend` дээр л дуудагдана.
+   *
+   * Урьд нь зураг зөвхөн `onZoom` дуугаргадаг байсан тул хүрээг дуудагч
+   * тал мэдэх аргагүй байв. ⚠ Чирэх ЯВЦАД дуугарахгүй: дуудагч тал
+   * сервер рүү асуулга явуулдаг (нэгж талбар) тул хулгана хөдлөх бүрд
+   * дуугарвал хүсэлтийн үер болно.
+   */
+  onView?: (box: Extent, zoom: number) => void;
   /** Сонголтын хүрээ — өөрчлөгдөх бүрд зураг тийш нь ойртоно (zoom action) */
   focus?: Extent | null;
   /**
@@ -624,6 +647,20 @@ export function WellsMap({
    * газрын зураг дээр ус мэт уншигдана.
    */
   firefly?: { glow: string; mid: string; core: string };
+  /**
+   * Цэг бүрийн АНГИЛЛЫН өнгө (hex), индекс нь `points`-тэй ижил.
+   *
+   * Өгөгдсөн цэг гурван давхаргаараа (сарнисан гэрэл → бие → цөм) тэр
+   * өнгөөр зурагдана (олон өнгөт `grades.firefly: "graded"`-тэй нэг хэл);
+   * өгөгдөөгүй цэг `firefly` өнгөндөө үлдэнэ. Зэрэглэсэн горимоос ялгаатай
+   * нь РАДИУС тогтмол — ангилал бол эрэмбэгүй тул хэмжээгээр илэрхийлэх
+   * зүйлгүй.
+   *
+   * ⚠ Ангилал ЦӨӨН үед л хэрэглэ ({@link lib/tone-ramp.ts}) — биеийн доор
+   * бараан цагираг нэмэгдэнэ, эс тэгвээс ногоон, шар өнгө хиймэл дагуулын
+   * газарт уусна (олон өнгөт шатлалтай ижил шалтгаан).
+   */
+  colors?: ArrayLike<string | undefined>;
   /**
    * Тодруулах цэгийн байрлал `[lon, lat]`. Өгвөл тэр цэгийг гэрэлтэх
    * цаграгаар тойруулна.
@@ -850,6 +887,45 @@ export function WellsMap({
   const [live, setLive] = React.useState<MapLibreMap | null>(null);
 
   /*
+    ⚠⚠ WEBGL КОНТЕКСТ АЛДАГДАЖ БОЛНО (2026-09-29, хэрэглэгч: "мапууд
+    заримдаа харагдахгүй, асаж унтраах байдал").
+
+    Зураг GPU-г шууд хэрэглдэг тул хөтөч контекстийг ХЯЛБАРААР
+    алдагдуулдаг: драйвер дахин ачаалах, төхөөрөмж унтаад сэрэх, GPU
+    нөөц багасах, зэрэг контекст хэтрэх. Тэгвэл туван ЦАГААН болж,
+    алдаа нь ЗӨВХӨН консольд бичигддэг байв.
+
+    ✅ MapLibre ӨӨРӨӨ СЭРГЭЭЖ ЧАДДАГ (эх кодоор шалгасан):
+    `webglcontextrestored` дээр алдагдах мөчийн стайлыг
+    `setStyle(…, {diff: false})`-ээр буцааж тавьдаг. GeoJSON эх
+    сурвалжийн `setData` дата нь `serialize()`-д үлддэг (`_data.geojson`)
+    тул цэг, дүрс алдагдахгүй. Тиймээс сэргэхийг ҮРГЭЛЖ ХҮЛЭЭНЭ —
+    шууд дахин байгуулбал татагдсан дата дэмий хаягдана.
+
+    ⚠⚠ ГЭХДЭЭ СЭРГЭХ нь БАТЛААГДААГҮЙ: төхөөрөмж нөөцөө буцааж өгөөгүй
+    бол `webglcontextrestored` ХЭЗЭЭ Ч ирэхгүй. Тэр тохиолдолд зургийг
+    БҮХЭЛДЭЭ дахин байгуулна (`gen` → асаах эффектийн deps) — шинэ зам
+    бичихгүй, аль хэдийн туршигдсан замаараа бүх давхарга, шүүлт,
+    тэмдэг буцаж угсарна.
+  */
+  const [gen, setGen] = React.useState(0);
+  const [lost, setLost] = React.useState(false);
+  /** Контекст сэргэхийг хүлээж буй хугацаалагч */
+  const revive = React.useRef<number | null>(null);
+  /*
+    СҮҮЛИЙН КАМЕР — дахин байгуулахад байрлалыг сэргээнэ.
+    ⚠ ЗӨВХӨН контекст алдагдсанаас болсон дахин байгуулалтад хэрэглэнэ
+    (`rebuilt`). Таб солих, хэлтэс солих зэрэг ЖИРИЙН дахин суулгалтад
+    байрлал сэргээхгүй — тэр нь 26 самбарын анхны харагдацыг өөрчлөх
+    бөгөөд хүсээгүй зүйл.
+  */
+  const camera = React.useRef<{
+    center: [number, number];
+    zoom: number;
+  } | null>(null);
+  const rebuilt = React.useRef(false);
+
+  /*
     Хамгийн сүүлийн callback-ийг ref-д хадгална. Ингэснээр газрын зургийг
     үүсгэх effect нэг л удаа ажиллаж, дотроо үргэлж шинэ функц дуудна.
   */
@@ -858,6 +934,7 @@ export function WellsMap({
   const probeCb = React.useRef(onProbe);
   const extentCb = React.useRef(onExtent);
   const zoomCb = React.useRef(onZoom);
+  const viewCb = React.useRef(onView);
   /** Анх үүсгэх үеийн суурь зураг — effect-ийг дахин ажиллуулахгүйн тулд ref */
   const basemapRef = React.useRef(basemap);
   /** Эх сурвалж үүсгэх үед л уншигдах тохиргоо */
@@ -874,6 +951,7 @@ export function WellsMap({
     shapeGlow: Boolean(shapes?.glow),
     shapeColor: shapes?.color,
     fire: firefly ?? FIREFLY,
+    tinted: Boolean(colors),
     shapeLabelZoom: shapes?.labelZoom ?? 0,
     shapeFlow: Boolean(shapes?.flow),
     shapeLabelOnLine: shapes?.labelPlacement === "line-center",
@@ -901,6 +979,9 @@ export function WellsMap({
     zoomCb.current = onZoom;
   }, [onZoom]);
   React.useEffect(() => {
+    viewCb.current = onView;
+  }, [onView]);
+  React.useEffect(() => {
     hoverCb.current = onHover;
   }, [onHover]);
   React.useEffect(() => {
@@ -918,11 +999,16 @@ export function WellsMap({
     if (!holder.current || map.current) return;
     ensureWorker();
 
+    /* Контекст алдагдсанаас болж дахин байгуулж байгаа бол байрлалыг
+       сэргээнэ — хэрэглэгч хаана байснаа алдах ёсгүй */
+    const back = rebuilt.current ? camera.current : null;
+    rebuilt.current = false;
+
     const m = new MapLibreMap({
       container: holder.current,
       style: baseStyle(basemapRef.current),
-      center: [106.9, 47.9],
-      zoom: 9,
+      center: back?.center ?? [106.9, 47.9],
+      zoom: back?.zoom ?? 9,
       /*
         ⚠ ДЭЭД ОЙРТОЛТЫГ хязгаарлана. Суурь зургийн бодит хамрах
         хүрээнээс цааш ойртвол MapLibre сүүлчийн хавтанг улам бүр
@@ -938,6 +1024,35 @@ export function WellsMap({
     // MapLibre-ийн алдаа консол руу дуугаралгүй өнгөрдөг тул ил гаргана
     m.on("error", (e) => {
       console.error("[map]", e.error?.message ?? e);
+    });
+
+    /* Байрлал сэргэсэн бол өгөгдлийн хүрээнд ДАХИН тааруулахгүй */
+    if (back) fitted.current = true;
+
+    /*
+      КОНТЕКСТ АЛДАГДАХ — туван цагаан болж болно. MapLibre өөрөө
+      сэргээж чаддаг тул түүнийг ХҮЛЭЭНЭ; ирэхгүй бол зургийг бүхэлдээ
+      дахин байгуулна.
+      ⚠ 3 СЕКУНД: драйвер дахин ачаалахад сэргэлт секунд шахам
+      зарцуулдаг тул хэт богино бол датаа дэмий дахин татна; хэт урт
+      бол хэрэглэгч цагаан туван хараад сууна.
+    */
+    m.on("webglcontextlost", () => {
+      setLost(true);
+      if (revive.current != null) window.clearTimeout(revive.current);
+      revive.current = window.setTimeout(() => {
+        revive.current = null;
+        rebuilt.current = true;
+        setGen((n) => n + 1);
+      }, 3000);
+    });
+
+    m.on("webglcontextrestored", () => {
+      if (revive.current != null) window.clearTimeout(revive.current);
+      revive.current = null;
+      setLost(false);
+      /* Стайл шинээр тавигдсан тул хэмжээг дахин авна */
+      m.resize();
     });
 
     // Томруулах товч байхгүй — дугуй эргүүлэх, хос товшилтоор ажиллана
@@ -1012,6 +1127,12 @@ export function WellsMap({
       */
       if (modeRef.current.shaped) {
         m.addSource("shapes", {
+          type: "geojson",
+          data: { type: "FeatureCollection", features: [] },
+        });
+
+        /* Шошгын ЦЭГҮҮД — дүрс бүрд яг нэг ({@link labelPoints}) */
+        m.addSource("shape-labels", {
           type: "geojson",
           data: { type: "FeatureCollection", features: [] },
         });
@@ -1097,7 +1218,42 @@ export function WellsMap({
           filter: ["in", ["geometry-type"], ["literal", ["Polygon", "MultiPolygon"]]],
           paint: {
             "fill-color": ["coalesce", ["get", "c"], modeRef.current.shapeColor ?? SHAPE_FALLBACK] as unknown as ExpressionSpecification,
-            "fill-opacity": ["case", SHAPE_LIT, 0.55, 0.28],
+            "fill-opacity": ["case", SHAPE_LIT, 0.68, 0.42],
+          },
+        });
+
+        /*
+          БАРААН КАСИНГ — хүрээний ДООР (2026-09-24, хэрэглэгч:
+          "map дээр югд юу ч гарч ирэхгүй байна").
+
+          Давхаргын өнгө нь хэлтсийн өнцөгөөс гардаг бөгөөд ангиллын
+          шатлалын цайвар үзүүр нь L 0.88 — хиймэл дагуулын ургамал,
+          цас дээр бараг цагаан болж уусна. Цэгэн давхаргад яг энэ
+          шалтгаанаар `wells-ring` нэмэгдсэн — энэ нь түүний олон
+          өнцөгт хувилбар.
+
+          ⚠ Касинг нь ХҮРЭЭНИЙ ӨНГӨД ХӨРӨНДӨХГҮЙ: түүний ДООР сууж,
+          хоёр талаараа л цухуйна — өнгө нь ангиллаа заасаар байж,
+          зөвхөн ирмэг нь дэвсгэрээс сална.
+          ⚠ Горимоос ҮЛ ХАМААРНА: тогтмол rgba — платформын токен
+          зураг дотор орохгүй ("газрын зураг хоёр горимд ижил" дүрэм).
+        */
+        m.addLayer({
+          id: "shape-case",
+          type: "line",
+          source: "shapes",
+          layout: { "line-join": "round" },
+          paint: {
+            "line-color": "rgba(8,14,20,.55)",
+            "line-width": [
+              "interpolate",
+              ["linear"],
+              ["zoom"],
+              8,
+              ["case", SHAPE_LIT, 4.6, 2.8],
+              14,
+              ["case", SHAPE_LIT, 6.4, 4.2],
+            ] as unknown as ExpressionSpecification,
           },
         });
 
@@ -1165,7 +1321,9 @@ export function WellsMap({
         m.addLayer({
           id: "shape-label",
           type: "symbol",
-          source: "shapes",
+          /* Хэрчим дээр шошго нь шугамаа дагах ёстой тул `shapes`
+             дээрээ үлдэнэ; бусад тохиолдолд дүрс бүрд НЭГ цэг */
+          source: modeRef.current.shapeLabelOnLine ? "shapes" : "shape-labels",
           minzoom: modeRef.current.shapeLabelZoom,
           filter: ["has", "t"],
           layout: {
@@ -1579,6 +1737,11 @@ export function WellsMap({
         төвөөсөө захад хүртэл бүрэн сарних гэсэн үг. Тиймээс гадна давхаргын
         радиус томрох тусам гэрэл нь ч зөөлөрнө.
       */
+      /* Ангиллын өнгө (`colors` проп, `c`) өгөгдсөн цэг гурван давхаргаараа тэр
+         өнгөөр; бусад нь firefly-ийн анхдагч өнгөнд */
+      const tint = (fallback: string): ExpressionSpecification =>
+        ["coalesce", ["get", "c"], fallback] as unknown as ExpressionSpecification;
+
       m.addLayer({
         id: "wells-glow",
         type: "circle",
@@ -1586,11 +1749,28 @@ export function WellsMap({
         filter: ["!", ["has", "point_count"]],
         paint: {
           "circle-radius": ["interpolate", ["linear"], ["zoom"], 8, 7, 12, 11, 16, 18],
-          "circle-color": modeRef.current.fire.glow,
+          "circle-color": tint(modeRef.current.fire.glow),
           "circle-blur": 1,
           "circle-opacity": 0.38,
         },
       });
+
+      /* Ангиллын өнгөтэй үед биеийн доор БАРААН ЦАГИРАГ — олон өнгөт
+         шатлалтай нэг шалтгаан: ногоон, шар нь хиймэл дагуулын газарт уусдаг */
+      if (modeRef.current.tinted) {
+        m.addLayer({
+          id: "wells-ring",
+          type: "circle",
+          source: "wells",
+          filter: ["!", ["has", "point_count"]],
+          paint: {
+            "circle-radius": ["interpolate", ["linear"], ["zoom"], 8, 4.4, 12, 6.6, 16, 10.8],
+            "circle-opacity": 0,
+            "circle-stroke-width": 1.1,
+            "circle-stroke-color": "rgba(8,14,20,.7)",
+          },
+        });
+      }
 
       m.addLayer({
         id: "wells-halo",
@@ -1599,7 +1779,7 @@ export function WellsMap({
         filter: ["!", ["has", "point_count"]],
         paint: {
           "circle-radius": ["interpolate", ["linear"], ["zoom"], 8, 3.6, 12, 5.6, 16, 9.5],
-          "circle-color": modeRef.current.fire.mid,
+          "circle-color": tint(modeRef.current.fire.mid),
           "circle-blur": 0.6,
           "circle-opacity": 0.6,
         },
@@ -1616,7 +1796,7 @@ export function WellsMap({
         filter: ["!", ["has", "point_count"]],
         paint: {
           "circle-radius": ["interpolate", ["linear"], ["zoom"], 8, 1.5, 12, 2.3, 16, 4],
-          "circle-color": modeRef.current.fire.core,
+          "circle-color": tint(modeRef.current.fire.core),
           "circle-opacity": 0.95,
         },
       });
@@ -1787,7 +1967,28 @@ export function WellsMap({
 
       /* Олон өнцөгт нь мөн товшигдоно — цэгтэй ижил `oid` дамжуулна */
       if (modeRef.current.shaped) {
+        /*
+          ⚠⚠ ЦЭГ нь ОЛОН ӨНЦӨГТӨӨС ДАВУУ ЭРХТЭЙ (2026-09-30, хэрэглэгч:
+          "map дээр булаг дээр дарахад булгийн pop up гарна,
+          хамгаалалтын бүсийнх биш").
+
+          MapLibre нь товшилтыг ДАВХАРГА ТУС БҮРД тусад нь дуугаргадаг
+          тул давхцсан цэг, дүрсэн дээр НЭГ товшилт ХОЁР хариу үүсгэнэ:
+          цэгийн бариул эхэлж (эрт бүртгэгдсэн), олон өнцөгтийнх нь
+          ДАРАА — улмаас сүүлчийнх нь дардаг. Булаг нь өөрийн
+          хамгаалалтын бүсийн ДОТОР сууна тул булаг дээр дарахад ҮРГЭЛЖ
+          бүс сонгогдож байв.
+
+          Цэг нь дүрсээс жижиг бөгөөд түүний дотор сууна тул давхцахад
+          хэрэглэгчийн хүссэн зүйл нь ЦЭГ: онолт нь илүү нарийн.
+        */
+        const onPoint = (pt: { x: number; y: number }) =>
+          !!m.getLayer(hitLayer) &&
+          m.queryRenderedFeatures([pt.x, pt.y], { layers: [hitLayer] }).length >
+            0;
+
         m.on("click", "shape-fill", (e) => {
+          if (onPoint(e.point)) return;
           const f = e.features?.[0];
           if (f) selectCb.current(Number(f.properties?.oid));
         });
@@ -1812,6 +2013,9 @@ export function WellsMap({
 
         m.on("mousemove", "shape-fill", (e) => {
           m.getCanvas().style.cursor = "pointer";
+          /* Цэг давхцаж байвал тайлбар нь ЦЭГИЙНХ — дүрсийн
+             тодруулгыг ч унтраана */
+          if (onPoint(e.point)) return setHot(null);
           const f = e.features?.[0];
           if (!f) return;
           setHot(f.id ?? null);
@@ -1830,11 +2034,13 @@ export function WellsMap({
           зөрчилдөхгүй.
         */
         m.on("click", "shape-line", (e) => {
+          if (onPoint(e.point)) return;
           const f = e.features?.[0];
           if (f) selectCb.current(Number(f.properties?.oid));
         });
         m.on("mousemove", "shape-line", (e) => {
           m.getCanvas().style.cursor = "pointer";
+          if (onPoint(e.point)) return setHot(null);
           const f = e.features?.[0];
           if (!f) return;
           setHot(f.id ?? null);
@@ -1889,18 +2095,42 @@ export function WellsMap({
       zoomCb.current?.(m.getZoom());
       m.on("zoomend", () => zoomCb.current?.(m.getZoom()));
 
+      /* Харагдах хүрээ — анхны утгыг мөн нэг удаа өгнө */
+      const view = () => {
+        const b = m.getBounds();
+        viewCb.current?.(
+          [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()],
+          m.getZoom(),
+        );
+      };
+      view();
+      m.on("moveend", view);
+
+      /* Байрлалыг тэмдэглэж явна — дахин байгуулахад хэрэгтэй */
+      const mark = () => {
+        const c = m.getCenter();
+        camera.current = { center: [c.lng, c.lat], zoom: m.getZoom() };
+      };
+      mark();
+      m.on("moveend", mark);
+
       m.resize();
 
+      setLost(false);
       setLive(m);
     });
 
     return () => {
+      if (revive.current != null) {
+        window.clearTimeout(revive.current);
+        revive.current = null;
+      }
       m.remove();
       map.current = null;
       fitted.current = false;
       setLive(null);
     };
-  }, []);
+  }, [gen]);
 
   /* ---------------- Засаг захиргааны хил ---------------- */
   React.useEffect(() => {
@@ -2095,6 +2325,7 @@ export function WellsMap({
       const props: Record<string, unknown> = { oid: oid[i] };
       if (weights) props.w = weights[i];
       else if (grades) props.g = grades.values[i];
+      if (colors?.[i]) props.c = colors[i];
       /* Хоосон шошгыг ОГТ бичихгүй — давхаргын `has t` шүүлт үүнд
          тулгуурлаж, шошгогүй цэгийг алгасна */
       if (text?.[i]) props.t = text[i];
@@ -2158,7 +2389,7 @@ export function WellsMap({
         );
       }
     }
-  }, [live, points, visible, weights, grades, labels, values]);
+  }, [live, points, visible, weights, grades, labels, values, colors]);
 
   /*
     Шошгын ХЯЗГААР нь амьд.
@@ -2199,6 +2430,11 @@ export function WellsMap({
       гэж үзнэ (дуудагч тал `oid`-той тэнцүү `id` тавина).
     */
     (src as GeoJSONSource).setData(shapeData);
+    /* Шошгын цэгүүд дүрстэйгээ ХАМТ шинэчлэгдэнэ — эс тэгвээс шүүлт
+       тавихад алга болсон дүрсийн шошго зураг дээр үлдэнэ */
+    const lab = live.getSource("shape-labels");
+    if (lab && "setData" in lab)
+      (lab as GeoJSONSource).setData(labelPoints(shapeData));
   }, [live, shapeData]);
 
   /* Сонгогдсон талбайг тодруулах — `feature-state`-ээр, дахин зурахгүй */
@@ -2225,26 +2461,52 @@ export function WellsMap({
      түүний өмнө оруулна. */
   React.useEffect(() => {
     if (!live) return;
+    /*
+      ⚠⚠ УСТГАГДСАН ЗУРАГ. `live` нь ТӨЛӨВ тул зургийг дахин байгуулах
+      үед (WebGL сэргээлт, Fast Refresh) цэвэрлэгээний `setLive(null)`
+      нь ЯГ ТЭР commit-д хүчин төгөлдөр БОЛОХГҮЙ: React бүх эффектийн
+      цэвэрлэгээг түрүүлж дуудаад (`m.remove()`), дараа нь эффектүүдийг
+      ХУУЧИН хаалтаараа ажиллуулна.
+      `getSource`, `getLayer` нь `?.`-тай тул `undefined` буцаадаг ч
+      `getStyle()` нь мөн `undefined` буцаах бөгөөд түүний `.layers`-ыг
+      уншихад САМБАР БҮХЭЛДЭЭ УНАНА (2026-09-29-нд ногоон бүсийн
+      хуудсан дээр гарсан: "Cannot read properties of undefined").
+    */
+    const style = live.getStyle();
+    if (!style) return;
     const list = overlays ?? [];
     const wanted = new Set(list.map((o) => `ov-${o.id}`));
 
     // Хасагдсаныг цэвэрлэнэ
-    for (const layer of live.getStyle().layers) {
+    for (const layer of style.layers) {
       if (!layer.id.startsWith("ov-")) continue;
       const base = layer.id.replace(/-(fill|line)$/, "");
       if (wanted.has(base)) continue;
       if (live.getLayer(layer.id)) live.removeLayer(layer.id);
     }
-    for (const id of Object.keys(live.getStyle().sources)) {
+    for (const id of Object.keys(style.sources)) {
       if (id.startsWith("ov-") && !wanted.has(id)) live.removeSource(id);
     }
 
-    const below = live.getLayer("bnd-country") ? "bnd-country" : undefined;
+    const under = live.getLayer("bnd-country") ? "bnd-country" : undefined;
+    /* Дата давхаргын ДЭЭР, гэхдээ шошгоны ДООР */
+    const over = live.getLayer("shape-label") ? "shape-label" : undefined;
 
     for (const o of list) {
       const src = `ov-${o.id}`;
-      if (!live.getSource(src)) {
+      const had = live.getSource(src);
+      if (!had) {
         live.addSource(src, { type: "geojson", data: o.data });
+      } else if ("setData" in had) {
+        /*
+          ⚠⚠ БАЙГАА ЭХ СУРВАЛЖИЙН ДАТАГ ШИНЭЧЛЭНЭ. Урьд нь `addSource`
+          нь ЗӨВХӨН эх сурвалж байхгүй үед дуудагдаж, `setData` огт
+          дуудагддаггүй байв. Хил, бүсийн давхаргууд нэг удаа татагдаад
+          хөдөлдөггүй тул алдаа далд үлдсэн — НЭГЖ ТАЛБАР нь харагдах
+          хүрээ бүрд ДАХИН татагддаг тул шууд илэрлээ: эхний тор
+          зурагдаад зураг хөдлөхөд шинэ дүрс ОГТ гарахгүй байв.
+        */
+        (had as GeoJSONSource).setData(o.data);
       }
 
       if (o.fill && !live.getLayer(`${src}-fill`)) {
@@ -2270,7 +2532,7 @@ export function WellsMap({
                 : (o.fill.opacity ?? 0.08),
             },
           },
-          below,
+          o.above ? over : under,
         );
       }
 
@@ -2287,7 +2549,7 @@ export function WellsMap({
               "line-width": o.line.width,
             },
           },
-          below,
+          o.above ? over : under,
         );
       }
     }
@@ -2502,6 +2764,22 @@ export function WellsMap({
   return (
     <div className="relative h-full w-full">
       <div ref={holder} className="h-full w-full" />
+      {/*
+        ТАСАЛДЛЫГ ИЛ ХЭЛНЭ. Урьд нь контекст алдагдахад туван цагаан
+        болж, алдаа нь ЗӨВХӨН консольд бичигддэг тул хэрэглэгчид ЗУРАГ
+        ЭВДЭРСЭН мэт харагдаж байв — платформын "чимээгүй бүтэлгүйтэл
+        гаргахгүй" дүрмийн зөрчил.
+        ⚠ Нэг мөр, арга зүйн тайлбар БИШ: болсон зүйлийг л хэлнэ.
+        ⚠ `--ochre` (анхааруулга), `--clay` БИШ: дүрслэл сэргэх
+        боломжтой тул ноцтой биш.
+      */}
+      {lost ? (
+        <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
+          <p className="elevated max-w-[320px] rounded-xs border border-line bg-paper/92 px-4 py-3 text-center text-[12.5px] leading-relaxed text-ochre backdrop-blur-md">
+            Газрын зургийн дүрслэл тасалдав. Сэргээж байна.
+          </p>
+        </div>
+      ) : null}
       {dim === "3d" && <SceneOverlay />}
       {dim === "2d" && <ZoomButtons map={map} />}
       <DimensionToggle value={dim} onChange={setDim} />

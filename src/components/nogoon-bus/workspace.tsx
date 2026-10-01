@@ -93,16 +93,16 @@ const TABS = [
     icon: Trees,
   },
   {
-    id: "tatam",
-    label: "Голын татам",
-    note: "Татмын хүрээ",
-    icon: Waves,
-  },
-  {
     id: "bulag",
     label: "Булгийн хамгаалалтын бүс",
     note: "Хоёр хувилбар · 2026",
     icon: Droplet,
+  },
+  {
+    id: "tatam",
+    label: "Голын татам",
+    note: "Татмын хүрээ",
+    icon: Waves,
   },
   {
     id: "namag",
@@ -186,6 +186,14 @@ const TABS = [
     icon: FileCheck,
   },
   {
+    id: "tooluur",
+    label: "Тоолуурын мэдээ",
+    /* `wtype` домэйн хоёр утгатай */
+    note: "Цэвэр ус · хаягдал ус",
+    full: "Усны тоолуурын мэдээ",
+    icon: Gauge,
+  },
+  {
     id: "ergelt",
     label: "Эргэлтийн усан сан",
     /* `turul` домэйн: эргүүлэн ашиглалт ба цэвэрлэх байгууламж */
@@ -201,14 +209,6 @@ const TABS = [
     note: "Байгуулсан · төсөл · төлөвлөсөн",
     icon: Dam,
   },
-  {
-    id: "tooluur",
-    label: "Тоолуурын мэдээ",
-    /* `wtype` домэйн хоёр утгатай */
-    note: "Цэвэр ус · хаягдал ус",
-    full: "Усны тоолуурын мэдээ",
-    icon: Gauge,
-  },
 ] as const;
 
 type TabId = (typeof TABS)[number]["id"];
@@ -219,8 +219,8 @@ const IDS = TABS.map((t) => t.id);
 const SETS: Record<TabId, (typeof NOGOON_TABS)[keyof typeof NOGOON_TABS]> = {
   hamgaalagch: NOGOON_TABS.hamgaalagch,
   bus: NOGOON_TABS.bus,
-  tatam: NOGOON_TABS.tatam,
   bulag: NOGOON_TABS.bulag,
+  tatam: NOGOON_TABS.tatam,
   namag: NOGOON_TABS.namag,
   hudag: NOGOON_TABS.hudag,
   passport: NOGOON_TABS.passport,
@@ -229,9 +229,9 @@ const SETS: Record<TabId, (typeof NOGOON_TABS)[keyof typeof NOGOON_TABS]> = {
   geree: NOGOON_TABS.geree,
   zuwshuurul: NOGOON_TABS.zuwshuurul,
   dugnelt: NOGOON_TABS.dugnelt,
+  tooluur: NOGOON_TABS.tooluur,
   ergelt: NOGOON_TABS.ergelt,
   tsuurum: NOGOON_TABS.tsuurum,
-  tooluur: NOGOON_TABS.tooluur,
 };
 
 export function NogoonBusWorkspace() {
