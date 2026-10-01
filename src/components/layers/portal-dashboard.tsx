@@ -10,6 +10,7 @@ import {
   Palette,
   Ruler,
   Shapes,
+  Sigma,
   Tag,
 } from "lucide-react";
 import {
@@ -18,6 +19,7 @@ import {
   PieChart,
   RowChart,
 } from "@/components/charts";
+import { oklchHex } from "@/components/wells/colors";
 import { BasemapGallery } from "@/components/map/basemap-gallery";
 import { MapTip, MapTipRow, useMapTip } from "@/components/map/hover-tip";
 import { MapPanel, useMapPanel } from "@/components/map/panel";
@@ -66,39 +68,6 @@ const LayerMap = dynamic(
   },
 );
 
-/**
- * OKLCH → hex.
- *
- * MapLibre `oklch()` уншдаггүй бөгөөд өнгийг ажиллах үед (ангиллын тоо
- * мэдэгдсэний дараа) үүсгэх шаардлагатай тул хөрвүүлэлтийг энд хийнэ.
- * Хэрэв муж халисан бол 0…1-д хавчина — OKLCH нь sRGB-ээс өргөн.
- */
-function oklchHex(L: number, C: number, H: number): string {
-  const h = (H * Math.PI) / 180;
-  const a = C * Math.cos(h);
-  const b = C * Math.sin(h);
-  const l = (L + 0.3963377774 * a + 0.2158037573 * b) ** 3;
-  const m = (L - 0.1055613458 * a - 0.0638541728 * b) ** 3;
-  const s = (L - 0.0894841775 * a - 1.291485548 * b) ** 3;
-
-  const lin = [
-    4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s,
-    -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s,
-    -0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s,
-  ];
-
-  return `#${lin
-    .map((v) => {
-      const g =
-        v <= 0.0031308
-          ? 12.92 * v
-          : 1.055 * Math.max(v, 0) ** (1 / 2.4) - 0.055;
-      return Math.round(Math.min(1, Math.max(0, g)) * 255)
-        .toString(16)
-        .padStart(2, "0");
-    })
-    .join("")}`;
-}
 
 /**
  * Давхаргын үндсэн өнгө — жагсаалт, толгойн зураас, ганц өнгөт горим.
@@ -533,17 +502,64 @@ export function PortalLayersDashboard({
    */
   const split = React.useMemo(() => {
     if (picker || !showCharts) return null;
-    let best: { id: string; chart: string; size: number } | null = null;
+
+    const keys = new Set<string>();
+
+    /*
+      ⚠⚠ БҮРТГЭЛИЙН ТЭРГҮҮЛЭХ ДИАГРАМ (`LayerSet.lead`, хэрэглэгчийн
+      хүсэлт 2026-09-28: "Зөвшөөрлийн төлөв зүүн панел руу хамгийн
+      дээр нь байршуул"). Доорх "хамгийн урт нь зүүн тийш" дүрэм нь
+      УНШИГДАЦЫН шийдвэр (урт жагсаалт нарийн баганад багтдаггүй)
+      болохоос ЧУХЛЫН эрэмбэ биш — хоёр зүсэмтэй "Зөвшөөрлийн төлөв"
+      тэр дүрмээр хэзээ ч зүүн тийш гарахгүй атлаа хяналтын гол
+      үзүүлэлт нь тэр.
+    */
+    const lead = set.lead ?? [];
+    if (lead.length)
+      for (const v of views)
+        for (const b of v.charts)
+          if (lead.includes(b.field)) keys.add(`${v.id}:${b.id}`);
+
+    let best: { id: string; chart: string; size: number; label: string } | null =
+      null;
     let total = 0;
     for (const v of views)
       for (const b of v.charts) {
         total += 1;
         if (!best || b.values.length > best.size)
-          best = { id: v.id, chart: b.id, size: b.values.length };
+          best = { id: v.id, chart: b.id, size: b.values.length, label: b.label };
       }
-    if (!best || total < 2 || best.size < 8) return null;
-    return best;
-  }, [picker, showCharts, views]);
+    if (!best || total < 2 || best.size < 8) return keys.size ? keys : null;
+
+    keys.add(`${best.id}:${best.chart}`);
+
+    /*
+      ⚠⚠ ЗАСАГ ЗАХИРГААНЫ ШАТУУД ХАМТ ЗӨӨГДӨНӨ (хэрэглэгчийн хүсэлт,
+      2026-09-28: "Сум, дүүрэг-ийг зүүн панелийн Баг, хороо-гийн дээр
+      байрлуул"). Хамгийн урт диаграм нь хороо байхад дүүрэг нь нөгөө
+      баганад үлдэж, нэг тэнхлэгийн хоёр шат дэлгэцийн хоёр талд
+      тарж байв.
+
+      ⚠ ЗӨВХӨН ӨРГӨН шатыг авна (`r < rank`): нарийныг нь чирвэл
+      баганын урт өсөх ба хамгийн урт диаграм зүүн талд байх гэсэн
+      анхны шалтгаан алдагдана.
+
+      ⚠ Дараалал нь `charts`-ынхаа эрэмбийг ДАГАНА — `breakdowns` нь
+      оноогоор эрэмбэлдэг бөгөөд өргөн шат нь нарийнаасаа өмнө
+      гардаг тул зүүн багана өөрөө "дүүрэг → хороо" болно. Энд дахин
+      эрэмбэлбэл өнгөний эх (эхний задаргаа) сонгогдох дүрэмтэй
+      зөрчилдөж магадгүй.
+    */
+    const rank = adminRank(best.label);
+    if (rank != null) {
+      const view = views.find((v) => v.id === best.id);
+      for (const b of view?.charts ?? []) {
+        const r = adminRank(b.label);
+        if (r != null && r < rank) keys.add(`${best.id}:${b.id}`);
+      }
+    }
+    return keys;
+  }, [picker, showCharts, views, set.lead]);
 
   /* Сонгосон УТГА бүрийг тоолно, талбарыг биш: "3 идэвхтэй" гэдэг нь
      гурван утга сонгосныг хэлэх ёстой */
@@ -782,6 +798,79 @@ export function PortalLayersDashboard({
     return { layers: views.length, records, ha: m2 / 10000 };
   }, [views]);
 
+  /**
+   * НЭМЭЛТ ҮЗҮҮЛЭЛТ — диаграмуудаас ӨӨРСДӨӨ гарна.
+   *
+   * ⚠⚠ Зурвас ихэнх давхарга дээр ГАНЦ нүдтэй үлддэг байв (хэрэглэгч
+   * 2026-09-28: "indicator хэрэгтэй байна"). "Идэвхтэй давхарга" нь
+   * зөвхөн сонгох жагсаалттай цонхонд, "Талбай, га" нь зөвхөн олон
+   * өнцөгтөд гардаг тул аюултай хог хаягдал зэрэг ЦЭГЭН давхарга дээр
+   * "Шүүлтэд тохирох бүртгэл" ганцаараа бүтэн өргөнийг эзэлж байлаа.
+   *
+   * Хоёр төрөл нэмэгдэнэ, аль аль нь диаграмын АЛЬ ХЭДИЙН тооцсон
+   * утгаас гардаг тул шинэ таамаг ОРОХГҮЙ:
+   *
+   * 1. **Хэмжилтийн НИЙЛБЭР** — талбай, эзэлхүүн, төлбөр. Зурвасан
+   *    диаграм нь задаргааг хэлдэг ч НИЙТ дүнг хэлдэггүй.
+   * 2. **Хугацааны МУЖ** — жилийн цуваа бүрийн эхэн, төгсгөл.
+   *
+   * ⚠ Нийлбэрийг ЗӨВХӨН `sum` төрлөөс авна: `mean` (хувь, өндөршил,
+   * агууламж) нь нэмэгдэхгүй, `count` нь бүртгэлийн тоог давтана.
+   * ⚠ ХУРААСАН диаграмыг алгасна (`top`): харагдаж буй мөрүүдийн
+   * нийлбэр нь бүтэн дүн БИШ тул үзүүлэлт худал хэлнэ.
+   * ⚠ Нэг хэмжилт хэд хэдэн зүсэлтээр диаграм болдог тул нэрээр нь
+   * ДАВХАРДЛЫГ хасна.
+   * ⚠⚠ **ТАЛБАЙ ХОЁР УДАА ГАРАХГҮЙ.** "Талбай, га" нүд нь ГЕОМЕТРЭЭС
+   * бодогддог; эх сурвалж мөн өөрийн талбайн баганатай байдаг (ойн
+   * хэсэглэл дээр 122,236 ба 122,262 гэсэн бараг ижил хоёр тоо
+   * зэрэгцэж, аль нь зөв болох нь уншигдахгүй байв). Талбайн нүд
+   * гарсан үед га нэгжтэй хэмжилтийг зурваст ОРУУЛАХГҮЙ — тэр нь
+   * өөрийн диаграмтай хэвээр.
+   * ⚠ Хоёроор хязгаарлана: зурвас нь дөрвөөс олон нүдтэй бол тус бүр
+   * нь нарийсаж, урт шошго гурван мөр болно.
+   */
+  const extras = React.useMemo(() => {
+    const out: { key: string; label: string; value: string; time: boolean }[] =
+      [];
+    const seen = new Set<string>();
+
+    for (const v of views)
+      for (const b of v.charts) {
+        if (b.kind !== "sum" || b.top || !b.measure) continue;
+        if (stats.ha > 0 && /(^|,\s*)га$/i.test(b.measure)) continue;
+        if (seen.has(b.measure)) continue;
+        seen.add(b.measure);
+        const total = b.values.reduce((sum, d) => sum + d.value, 0);
+        if (!(total > 0)) continue;
+        out.push({
+          key: `${v.id}:${b.id}`,
+          label: b.measure,
+          value: num(Math.round(total)),
+          time: false,
+        });
+      }
+
+    for (const v of views)
+      for (const b of v.charts) {
+        if (b.kind !== "year") continue;
+        /* Хоосон жил ч тэг утгаар цуваанд ордог тул муж нь БҮРТГЭЛТЭЙ
+           хоёр үзүүрээр тогтоно */
+        const filled = b.values.filter((d) => d.value > 0);
+        if (filled.length < 2) continue;
+        const from = filled[0].label;
+        const to = filled[filled.length - 1].label;
+        if (from === to) continue;
+        out.push({
+          key: `${v.id}:${b.id}`,
+          label: b.label,
+          value: `${from}–${to}`,
+          time: true,
+        });
+      }
+
+    return out.slice(0, 2);
+  }, [views, stats.ha]);
+
   /*
     Доод зурваст орох диаграмууд — давхарга бүрийн хугацааны цуваа.
 
@@ -857,8 +946,20 @@ export function PortalLayersDashboard({
          бүгдийг нь зэрэг харах боломжгүй байв. Нэг баганад
          босоо цуварсан нь бүгдийг нь нэг чиглэлд гүйлгэж
          үзэхэд хялбар. */
-      /* Хуваалтын дагуу зөвхөн энэ баганад харьяалагдах диаграм */
-      const cuts = charts.filter((b) => keep(id, b));
+      /*
+        Хуваалтын дагуу зөвхөн энэ баганад харьяалагдах диаграм.
+
+        ⚠ Бүртгэлийн тэргүүлэх талбарууд (`LayerSet.lead`) ЖАГСААСАН
+        дарааллаараа эхэнд эгнэнэ; бусад нь өөрсдийн оноогоор
+        эрэмбэлэгдсэн хэвээр (`sort` нь тогтвортой).
+      */
+      const leadAt = (b: Breakdown) => {
+        const at = set.lead?.indexOf(b.field) ?? -1;
+        return at < 0 ? Number.MAX_SAFE_INTEGER : at;
+      };
+      const cuts = charts
+        .filter((b) => keep(id, b))
+        .sort((a, b) => leadAt(a) - leadAt(b));
       const sel = filters[id] ?? {};
 
       /*
@@ -869,8 +970,21 @@ export function PortalLayersDashboard({
         гарчиг нь баруун тийш дүүжлэгдсэн харагддаг байв. Тууз
         нь бүлгийг нэг дор зарлаж, карт бүрийн толгой өөрийн
         диаграмын нэрээр л эхэлнэ.
+
+        ⚠⚠ ГАНЦ ДАВХАРГАТАЙ ҮЕД ТУУЗ ГАРАХГҮЙ (хэрэглэгчийн шийдвэр,
+        2026-09-29: "Аюултай хог хаягдал гэсэн баруун зүүн панелийн
+        дээр байгааг делет"). Түүний ЦОРЫН ГАНЦ үүрэг нь "энэ карт
+        АЛЬ давхаргынх вэ" гэдгийг хэлэх — давхарга ганц байхад тэр
+        асуулт байхгүй бөгөөд нэр нь дээр нь шүүлтүүрийн мөрөнд аль
+        хэдийн бичигдсэн байдаг (харилцан үгүйсгэх товч, эсвэл
+        `LayerSet.title`). Хоёр баганын толгойд давтагдаж, бүртгэлийн
+        тоог үзүүлэлтийн зурваснаас дахин хэлж байв.
+
+        ⚠ ХОЁР БА ТҮҮНЭЭС ОЛОН давхарга асаалттай үед ХЭВЭЭР: ойн
+        хэлтэст долоон давхарга нэг баганад цувардаг тул аль карт
+        алийнх нь тэндээс л уншигдана.
       */
-      const band = (
+      const band = views.length < 2 ? null : (
         <div
           key={`${id}:band`}
           className="flex shrink-0 items-center gap-2 pt-1 pb-0.5"
@@ -911,7 +1025,7 @@ export function PortalLayersDashboard({
         return (
           <CutCard
             key={`${id}:${b.id}`}
-            title={environment ? topicChartTitle(b, id) : chartTitle(b)}
+            title={environment ? topicChartTitle(b) : chartTitle(b)}
             tone={tone}
             first={i === 0}
             action={
@@ -1002,9 +1116,15 @@ export function PortalLayersDashboard({
               */
               <AreaChart
                 data={b.values}
+                /* ⚠ `fill` нь картынхаа ҮЛДСЭН өндрийг эзэлнэ; `height`
+                   нь доод хязгаар ба `viewBox`-ийн харьцаа болж үлдэнэ
+                   — богино дэлгэц дээр он бичсэн доод мөр тасрахаа
+                   болино */
+                fill
                 height={108}
                 tone={tone}
-                unit="бичлэг"
+                /* Hover самбарын нэгж — мөн "бичлэг" БИШ */
+                unit="бүртгэл"
                 selected={chosen}
                 onSelect={onPick}
                 labels
@@ -1246,10 +1366,15 @@ export function PortalLayersDashboard({
         ) : null}
         <Stat
           icon={Shapes}
+          /* ⚠ "Бичлэг" нь МЭДЭЭЛЛИЙН САНГИЙН үг — эцсийн хэрэглэгч
+             агуулах, зөвшөөрөл, цэгийг хардаг болохоос "бичлэг"
+             хардаггүй. Платформ өөрөө "бүртгэл" гэдэг үгтэй
+             (доорх `environment` хувилбар түүнийг аль хэдийн
+             хэрэглэдэг) тул хоёуланг нэг үгэнд оруулав */
           label={
             environment
               ? "Сонгосон давхаргын бүртгэл"
-              : "Шүүлтэд тохирох бичлэг"
+              : "Шүүлтэд тохирох бүртгэл"
           }
           value={
             environment && on.some((id) => !loaded[id] && !failed[id])
@@ -1272,6 +1397,14 @@ export function PortalLayersDashboard({
             }
           />
         ) : null}
+        {extras.map((e) => (
+          <Stat
+            key={e.key}
+            icon={e.time ? CalendarRange : Sigma}
+            label={e.label}
+            value={e.value}
+          />
+        ))}
       </div>
       {environment && on.length > 1 ? (
         <p className="ue-chart-note">
@@ -1290,12 +1423,12 @@ export function PortalLayersDashboard({
       >
         {/* ---- ЗҮҮН: давхаргын жагсаалт, эсвэл хамгийн урт диаграм ---- */}
         {!picker && split ? (
-          <div className="flex min-h-0 flex-col gap-2.5 overflow-y-auto">
-            {chartCards((id, b) => id === split.id && b.id === split.chart)}
+          <div className="flex min-h-0 flex-col gap-2 overflow-y-auto">
+            {chartCards((id, b) => split.has(`${id}:${b.id}`))}
           </div>
         ) : null}
         {picker ? (
-          <div className="flex min-h-0 flex-col gap-2.5">
+          <div className="flex min-h-0 flex-col gap-2">
             <Card className="min-h-[140px] flex-1">
               <Head title="Давхарга">
                 <span className="num text-[11.5px] text-ink-3">
@@ -1352,7 +1485,10 @@ export function PortalLayersDashboard({
                         ) : (
                           <span className="num mt-1 block truncate text-[10.5px] leading-none text-ink-3">
                             {info
-                              ? `${num(info.count)} бичлэг · ${GEOMETRY_LABEL[info.geometry] ?? info.geometry}`
+                              ? /* ⚠ "бичлэг" нь мэдээллийн сангийн үг —
+                                   дэлгэцэд ХЭЗЭЭ Ч гарахгүй (хэлний
+                                   дүрэм). Платформын үг нь "бүртгэл". */
+                                `${num(info.count)} бүртгэл · ${GEOMETRY_LABEL[info.geometry] ?? info.geometry}`
                               : "Уншиж байна…"}
                           </span>
                         )}
@@ -1373,7 +1509,7 @@ export function PortalLayersDashboard({
         ) : null}
 
         {/* ---- БАРУУН: зураг, доор нь диаграмын зурвас ---- */}
-        <div className="flex min-h-0 flex-col gap-2.5">
+        <div className="flex min-h-0 flex-col gap-2">
           <Card className="relative min-h-[300px] flex-1 overflow-hidden">
             <div className="relative h-full w-full">
               {/*
@@ -1569,7 +1705,7 @@ export function PortalLayersDashboard({
 
         {/* ---- БАРУУН: ангиллын задаргаа ---- */}
         {showCharts && (
-          <div className="flex min-h-0 flex-col gap-2.5 overflow-y-auto">
+          <div className="flex min-h-0 flex-col gap-2 overflow-y-auto">
             {views.length === 0 ||
             (environment && views.every((view) => !view.charts.length)) ? (
               <Card className="min-h-[120px] flex-1">
@@ -1588,9 +1724,7 @@ export function PortalLayersDashboard({
               </Card>
             ) : null}
 
-            {chartCards(
-              (id, b) => !(split && id === split.id && b.id === split.chart),
-            )}
+            {chartCards((id, b) => !split?.has(`${id}:${b.id}`))}
           </div>
         )}
       </Columns>
@@ -1747,6 +1881,35 @@ function isPie(b: Breakdown): boolean {
 const PIE_MAX = 4;
 
 /**
+ * Засаг захиргааны шатлал — ӨРГӨНӨӨС НАРИЙН руу.
+ *
+ * Эх сурвалж нэг давхаргад хэд хэдэн шатыг зэрэг бичдэг (`aimag`,
+ * `duureg`, `horoo`) бөгөөд тэдгээр нь бие даасан задаргаанууд биш
+ * НЭГ ТЭНХЛЭГИЙН нарийвчлалын шатууд. Тиймээс тэдгээр нь хамт сууж,
+ * өргөнөөс нарийн руу эрэмбэлэгдэх ёстой: дүүрэг дээр нь, хороо
+ * доор нь. Эсрэгээр байрлуулбал хэрэглэгч нарийныг нь эхэлж уншаад
+ * хүрээгээ дараа нь олдог.
+ *
+ * ⚠ Кирилл дээр `\b` ажилладаггүй тул үгийг ЗАЙГААР хүрээлж таана —
+ * эс тэгвээс "Багц" доторх "баг", "Сумын дарга" доторх "сум" зэрэг
+ * санамсаргүй таарал үүснэ ({@link src/lib/chemsystem.ts}-ийн
+ * `placeOf`-той нэг арга).
+ */
+const ADMIN_WORDS: string[][] = [
+  ["аймаг", "нийслэл", "aimag"],
+  ["сум", "дүүрэг", "soum", "duureg"],
+  ["баг", "хороо", "bag", "horoo", "khoroo"],
+];
+
+function adminRank(label: string): number | null {
+  const t = ` ${label.toLocaleLowerCase("mn").replace(/[^0-9a-zа-яөүё]+/gi, " ").trim()} `;
+  for (let i = 0; i < ADMIN_WORDS.length; i += 1) {
+    if (ADMIN_WORDS[i].some((w) => t.includes(` ${w} `))) return i;
+  }
+  return null;
+}
+
+/**
  * Диаграмын гарчиг.
  *
  * Гарчиг нь ХОЁР асуултад хариулах ёстой: юуг хэмжсэн бэ, юугаар нь
@@ -1764,10 +1927,23 @@ function chartTitle(b: Breakdown): string {
   const cut = b.top ? ` (эхний ${b.top})` : "";
 
   switch (b.kind) {
-    /* Тоолол нь өөрийн нэргүй хэмжигдэхүүн — "юуны тоо" гэдгийг
-       заавал хэлнэ, эс тэгвээс талбайн диаграмаас ялгарахгүй */
+    /*
+      ⚠⚠ "— бичлэгийн тоо" ДАГАВАР ХАСАГДСАН (хэрэглэгчийн шийдвэр,
+      2026-09-28: "энэ чартуудын дээр байгаа бичлэгийн тоо — del,
+      хэзээ ч албан ёсны webapp хийж байгаа тохиолдолд тэгж бичихгүй").
+
+      ⚠ Энэ нь дэлгэц дээр гарах бичвэрийн дүрэм: "бичлэг" гэдэг нь
+      МЭДЭЭЛЛИЙН САНГИЙН үг — эцсийн хэрэглэгч агуулах, зөвшөөрөл,
+      цэгийг хардаг болохоос "бичлэг" хардаггүй. Арга зүйн тайлбар
+      дэлгэцэд гаргахгүй дүрэмтэй нэг гэр бүл.
+
+      ⚠ Тоолол ба хэмжилт нь ХЭВЭЭР ялгагдана: нийлбэр, дундаж нь
+      гарчгийнхаа ЭХЭНД хэмжигдэхүүнээ бичдэг ("Талбай, га — Дүүрэг")
+      тул нүцгэн нэр нь өөрөө тоолол гэдгийг хэлнэ. Зурвасын утга нь
+      ч бүхэл тоо байна.
+    */
     case "count":
-      return `${b.label} — бичлэгийн тоо`;
+      return `${b.label}${cut}`;
     case "sum":
       return `${b.measure ?? ""} — ${b.label}${cut}`;
     /* Дундаж нь нийлбэрээс ЭРС өөр утга — гарчигт нь ил хэлэхгүй бол
@@ -1777,18 +1953,35 @@ function chartTitle(b: Breakdown): string {
     case "compare":
       return `Харьцуулалт, ${b.measure ?? ""} — ${b.label}${cut}`;
     /*
-      Хугацааны талбар ихэвчлэн ӨӨРӨӨ нэрэндээ хэлчихсэн байдаг ("Он",
-      "Сар") тул араас нь дахин хавсаргавал "Сар, сараар" гэсэн утгагүй
-      давталт үүсэнэ. Нэрэнд нь байвал зөвхөн хуваарилалтыг л нэрлэнэ.
+      ⚠⚠ ОГНООНЫ ТАЛБАР ӨӨРИЙН НЭРЭЭРЭЭ ГАРНА (хэрэглэгчийн шийдвэр,
+      2026-09-28: "тусгай зөвшөөрөл авсан огноо болго гэх мэтээр
+      чартын нэрсийг албаны болго").
+
+      Нэр нь аль хэдийн огноо гэдгээ хэлчихсэн байвал араас нь
+      "жилээр", "жилийн хуваарилалт" гэж хавсаргах нь албан нэршлийг
+      мэдээллийн сангийн тайлбар болгоно — "Тусгай зөвшөөрөл авсан
+      огноо, жилээр" гэж уншигдана. Тэнхлэг нь өөрөө онуудыг бичдэг
+      тул давталт нь мэдээлэл ч нэмэхгүй.
+
+      ⚠ Огноо гэж нэрлээгүй талбар (жишээ нь "Бүртгэл") дээр
+      хуваарилалтыг ЗААВАЛ хэлнэ — эс тэгвээс тоолол мөн үү, жил мөн
+      үү гэдэг нь гарчигнаас уншигдахгүй.
+      ⚠ САРЫН диаграм ДАГАВАРТАЙ хэвээр тул нэг талбарын жил, сарын
+      хоёр карт ялгагдана ("… огноо" ба "… огноо, сараар").
     */
     case "year":
-      return /он|жил|year/i.test(b.label)
-        ? `${b.label} — жилийн хуваарилалт`
-        : `${b.label}, жилээр`;
+      return /огноо|он|жил|year|date/i.test(b.label)
+        ? `${b.label}${cut}`
+        : `${b.label}, жилээр${cut}`;
+    /* Сар нь ЖИЛТЭЙ ижил дүрэмтэй: нэр нь өөрөө "сар" гэж хэлсэн бол
+       дагавар нэмэхгүй. Ингэснээр нэг давхаргын "Он" ба "Сар" хоёр
+       карт тэгш харагдана; харин НЭГ талбарын жил, сарын хоёр карт
+       (аврагдсан амьтдын "Огноо") ялгагдсан хэвээр — тэр нэрэнд
+       "сар" гэсэн үг байхгүй тул дагавраа авна. */
     case "month":
       return /сар|month/i.test(b.label)
-        ? `${b.label} — сарын хуваарилалт`
-        : `${b.label}, сараар`;
+        ? `${b.label}${cut}`
+        : `${b.label}, сараар${cut}`;
     default:
       return b.label;
   }

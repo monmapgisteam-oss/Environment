@@ -9,7 +9,14 @@ export function ComingSoon({
   eyebrow: string;
   title: string;
   description: string;
-  items: string[];
+  /*
+    ⚠ СОНГОЛТТОЙ. Модулийн бүрэлдэхүүнийг урьдчилан МЭДЭХГҮЙ үед
+    жагсаалт бичих нь таамаг болно — платформын "таамаглаж бүү бич"
+    дүрэм (`departments.ts`-ийн модулийн жагсаалтыг яг тэр шалтгаанаар
+    устгуулсан). Өгөөгүй бол зөвхөн "Боловсруулж байна" гэсэн
+    тэмдэглэгээ үлдэнэ.
+  */
+  items?: readonly string[];
 }) {
   return (
     <div className="mx-auto max-w-[1400px] space-y-6">
@@ -26,16 +33,18 @@ export function ComingSoon({
           <span className="rounded-xs border border-line-2 bg-paper-2 px-2 py-1 text-[11.5px] tracking-[0.14em] text-ink-3 uppercase">
             Боловсруулж байна
           </span>
-          <div className="grid max-w-[640px] gap-1.5 sm:grid-cols-2">
-            {items.map((it) => (
-              <div
-                key={it}
-                className="rounded-xs border border-line bg-paper-2 px-3 py-2 text-left text-[13px] text-ink-2"
-              >
-                {it}
-              </div>
-            ))}
-          </div>
+          {items?.length ? (
+            <div className="grid max-w-[640px] gap-1.5 sm:grid-cols-2">
+              {items.map((it) => (
+                <div
+                  key={it}
+                  className="rounded-xs border border-line bg-paper-2 px-3 py-2 text-left text-[13px] text-ink-2"
+                >
+                  {it}
+                </div>
+              ))}
+            </div>
+          ) : null}
         </div>
       </Panel>
     </div>

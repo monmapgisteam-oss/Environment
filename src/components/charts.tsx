@@ -385,6 +385,17 @@ function smoothPath(pts: { x: number; y: number }[]) {
   return d;
 }
 
+/*
+  `fill` горимын диаграмын ХАМГИЙН БАГА өндөр.
+
+  `height` нь энд доод хязгаар БОЛОХГҮЙ: тэр нь 108px бөгөөд картын
+  доод хязгаартаа (160px) шахагдсан үед бие нь 124px л үлддэг тул
+  тэнхлэгийн шошготойгоо багтахгүй, карт өөрөө гүйдэг. 72px нь шугам
+  танигдсаар байх хамгийн бага өндөр — зайтай үед диаграм 108-аас ч
+  дээш сунана.
+*/
+const FILL_MIN = 72;
+
 export function AreaChart({
   data,
   height = 96,
@@ -394,6 +405,7 @@ export function AreaChart({
   formatTick,
   unit = "бүртгэл",
   labels = false,
+  fill = false,
 }: {
   data: Datum[];
   height?: number;
@@ -411,6 +423,24 @@ export function AreaChart({
    * (`BarChart labels`-тэй ижил үндэслэл).
    */
   labels?: boolean;
+  /**
+   * Диаграм КАРТЫНХАА ҮЛДСЭН ӨНДРИЙГ эзлэх эсэх.
+   *
+   * ⚠⚠ Тогтмол өндөр нь богино дэлгэц дээр КАРТЫГ ГҮЙЛГЭДЭГ: бие нь
+   * 108px диаграм + тэнхлэгийн шошгыг багтаах зайгүй болмогц он
+   * бичсэн доод мөр нь тасардаг (хэрэглэгч 2026-09-29: "доторх зайг
+   * нь янзлаад scroll-гүй болго").
+   *
+   * Асаахад `height` нь ХОЁР үүрэгтэй болно: `viewBox`-ийн харьцаа
+   * БА доод хязгаар. Бодит өндөр нь картаас хамаарна.
+   *
+   * ⚠ Ингэж болох нь `preserveAspectRatio="none"` ба ХУВИАР
+   * байрлуулсан цэг, шошгоос гарна: SVG нь босоогоороо сунах ба
+   * `vectorEffect="non-scaling-stroke"` нь шугамын зузааныг барина,
+   * цэг ба тоо нь контейнерийнхээ бодит өндрөөс хувиа боддог тул
+   * ямар ч өндөрт зөв суудалдаа үлдэнэ.
+   */
+  fill?: boolean;
 }) {
   const gid = React.useId().replace(/:/g, "");
   const [hover, setHover] = React.useState<number | null>(null);
@@ -462,10 +492,10 @@ export function AreaChart({
   const tilt = data.length > 8 && ticks.some((t) => t.length >= 4);
 
   return (
-    <div>
+    <div className={cn(fill && "flex h-full flex-col")}>
       <div
-        className="relative"
-        style={{ height }}
+        className={cn("relative", fill && "min-h-0 flex-1")}
+        style={fill ? { minHeight: FILL_MIN } : { height }}
         onMouseLeave={() => setHover(null)}
       >
         <svg

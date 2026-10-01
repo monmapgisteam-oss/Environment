@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { Loader2 } from "lucide-react";
+import { esriModules } from "@/lib/arcgis-sdk";
 import { MESHES } from "@/lib/scene";
 
 /* --------------------------------------------------------------------------
@@ -12,12 +13,10 @@ import { MESHES } from "@/lib/scene";
    горим нь 2D зургийн ДЭЭГҮҮР тусдаа давхарга: MapLibre доор нь
    хэвээр амьд үлдэж, 2D руу буцахад тэр даруй гарна.
 
-   ⚠ SDK-г NPM-ЭЭР СУУЛГААГҮЙ (`@arcgis/core` 80 MB), Esri-ийн CDN-ээс
-   ЗӨВХӨН 3D товч дарахад ачаална. 2D хэрэглэгч нэг ч байт илүү
-   татахгүй; багцын хэмжээ өөрчлөгдөхгүй. CDN-ийн 4.33 хувилбар — 5.x
-   нь CDN дээр хараахан байхгүй (2026-09-17-нд шалгасан, 404).
-   Суурь зураг (`satellite`), дэлхийн өндөршил (`world-elevation`) мөн
-   Esri-ийн нээлттэй үйлчилгээ.
+   ⚠ SDK-г {@link src/lib/arcgis-sdk.ts} НЭГ Л УДАА ачаална —
+   нэвчилтийн 3D зүсэлт ч мөн түүнийг дуудна. Суурь зураг
+   (`satellite`), дэлхийн өндөршил (`world-elevation`) нь Esri-ийн
+   нээлттэй үйлчилгээ.
 
    ⚠ Гурван торон загвар НЭЭЛТТЭЙ хуваалцагдсан (токенгүй хариулна,
    2026-09-17-нд шалгасан) тул нэвтрэлтийн холболт хэрэггүй. Хаагдвал
@@ -28,44 +27,6 @@ import { MESHES } from "@/lib/scene";
    тэдгээр нь 3D-ийн цорын ганц агуулга тул 2D-ийн одоогийн байрлалыг
    дагах нь ихэвчлэн хоосон газар харуулна.
    -------------------------------------------------------------------------- */
-
-const API = "https://js.arcgis.com/4.33/";
-
-type Require = (modules: string[], ready: (...mods: unknown[]) => void) => void;
-
-declare global {
-  interface Window {
-    require?: Require;
-  }
-}
-
-let loading: Promise<Require> | null = null;
-
-/** SDK-г нэг л удаа татна — дараагийн 3D нээлт шууд */
-function loadApi(): Promise<Require> {
-  if (window.require) return Promise.resolve(window.require);
-  loading ??= new Promise<Require>((resolve, reject) => {
-    const dark = document.documentElement.dataset.theme !== "light";
-    const css = document.createElement("link");
-    css.rel = "stylesheet";
-    css.href = `${API}esri/themes/${dark ? "dark" : "light"}/main.css`;
-    document.head.appendChild(css);
-
-    const js = document.createElement("script");
-    js.src = `${API}init.js`;
-    js.async = true;
-    js.onload = () => {
-      if (window.require) resolve(window.require);
-      else reject(new Error("ArcGIS SDK ачаалагдсангүй"));
-    };
-    js.onerror = () => {
-      loading = null;
-      reject(new Error("ArcGIS SDK татагдсангүй — сүлжээгээ шалгана уу"));
-    };
-    document.head.appendChild(js);
-  });
-  return loading;
-}
 
 type SceneViewLike = {
   destroy: () => void;
@@ -87,20 +48,16 @@ export function SceneOverlay() {
     let view: SceneViewLike | null = null;
     let alive = true;
 
-    loadApi()
+    esriModules<[
+      new (p: object) => object,
+      new (p: object) => SceneViewLike,
+      new (p: object) => LayerLike,
+    ]>(["esri/Map", "esri/views/SceneView", "esri/layers/IntegratedMeshLayer"])
       .then(
-        (require) =>
+        ([EsriMap, SceneView, IntegratedMeshLayer]) =>
           new Promise<void>((resolve, reject) => {
-            require(
-              ["esri/Map", "esri/views/SceneView", "esri/layers/IntegratedMeshLayer"],
-              (...mods: unknown[]) => {
-                if (!alive || !holder.current) return resolve();
-                try {
-                  const [EsriMap, SceneView, IntegratedMeshLayer] = mods as [
-                    new (p: object) => object,
-                    new (p: object) => SceneViewLike,
-                    new (p: object) => LayerLike,
-                  ];
+            if (!alive || !holder.current) return resolve();
+            try {
                   const layers = MESHES.map(
                     (m) => new IntegratedMeshLayer({ url: m.url, title: m.name }),
                   );
@@ -134,11 +91,9 @@ export function SceneOverlay() {
                       resolve();
                     })
                     .catch(reject);
-                } catch (e) {
-                  reject(e);
-                }
-              },
-            );
+            } catch (e) {
+              reject(e);
+            }
           }),
       )
       .catch((e: unknown) => {

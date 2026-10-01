@@ -185,6 +185,46 @@ export type LayerSet = {
    */
   skipField?: RegExp;
   /**
+   * ТАЛБАРЫН АЛБАН НЭР — эх сурвалжийн алиасыг ДАРЖ БИЧНЭ.
+   *
+   * ⚠⚠ Эх сурвалж алиасаа ЗАМ хэлбэрээр бичих нь бий: хог хаягдлын
+   * давхаргад "Тусгай зөвшөөрлийн огноо - Авсан огноо", "Га талбай -
+   * Нийт га талбай" гэж бүлгийнхээ нэрийг угтвар болгосон байдаг.
+   * Тэр нь мэдээллийн сангийн баганын зам болохоос албан нэршил
+   * БИШ — диаграмын гарчигт тэр чигээрээ гарахад "Тусгай
+   * зөвшөөрлийн огноо - Авсан огноо, жилээр" гэсэн уншигдахгүй
+   * толгой болдог (хэрэглэгч 2026-09-28).
+   *
+   * ⚠ Энэ нь ОРЧУУЛГА БИШ, бичиглэлийн засвар: утга, хамрах хүрээ нь
+   * ХЭВЭЭР ("Авсан огноо" → "Тусгай зөвшөөрөл авсан огноо"). Эх
+   * сурвалжийн нэрлэсэн зүйлийг өөр зүйл болгож БҮҮ нэрлэ.
+   *
+   * ⚠ Талбарын нэрээр (`name`) түлхүүрлэнэ, алиасаар БИШ — алиас нь
+   * эх сурвалж дээр өөрчлөгдөж болно.
+   *
+   * ⚠ ЭНЭ НЭГ ЦЭГЭЭС бүгд уншина: диаграмын гарчиг, шүүлтүүрийн цэс,
+   * хөвөгч тайлбар, бичлэгийн дэлгэрэнгүй, хэмжилтийн нэгж. Тусад нь
+   * дэлгэц дээр солибол шүүлтийн түлхүүр зөрнө.
+   */
+  fields?: Record<string, string>;
+  /**
+   * ЗҮҮН БАГАНАД, ХАМГИЙН ДЭЭР гарах диаграмуудын талбар.
+   *
+   * ⚠ Ердийн үед зүүн баганыг ДАТА өөрөө шийддэг: хамгийн олон
+   * мөртэй диаграм тэнд очно ({@link split}). Тэр дүрэм нь уншигдацын
+   * (урт жагсаалт нарийн баганад багтдаггүй) болохоос ЧУХЛЫН эрэмбэ
+   * биш — хэлтсийн гол асуулт өөр диаграмд байж болно.
+   *
+   * Аюултай хог хаягдал дээр тийм: "Зөвшөөрлийн төлөв" нь хоёрхон
+   * зүсэмтэй тул урт диаграмын дүрмээр хэзээ ч зүүн тийш гарахгүй
+   * атлаа хяналтын ГОЛ үзүүлэлт (хэрэглэгчийн хүсэлт, 2026-09-28).
+   *
+   * ⚠ Талбарын нэрээр түлхүүрлэнэ ({@link fields}-тэй ижил), жагсаасан
+   * ДАРААЛЛААР нь эгнэнэ. Бусад диаграм тэдний доор, өөрсдийн
+   * эрэмбээрээ үлдэнэ.
+   */
+  lead?: string[];
+  /**
    * ЛАТИНААР буусан домэйны утгыг харагдах хэлбэрт нь буулгана.
    *
    * ⚠ Энэ нь ОРЧУУЛГА БИШ, бичиглэлийн засвар: эх сурвалж монгол үгээ
@@ -382,7 +422,10 @@ async function loadLayerInfo(
     )
     .map((f) => ({
       name: f.name,
-      alias: officialLabel((f.alias ?? "").trim() || f.name),
+      /* Хэлтсийн өгсөн албан нэр эх сурвалжийн алиасыг дарна */
+      alias:
+        set.fields?.[f.name] ??
+        officialLabel((f.alias ?? "").trim() || f.name),
       type: f.type.replace("esriFieldType", ""),
     }));
 
@@ -852,6 +895,40 @@ function numberOf(raw: unknown): number | null {
   if (raw == null || raw === "") return null;
   const n = Number(raw);
   return Number.isFinite(n) ? n : null;
+}
+
+/**
+ * ⚠⚠ ХЭМЖИЛТ БИЧВЭР БАГАНАД, МУЖААР бичигдсэн байж болно.
+ *
+ * Эх сурвалж хэмжилтээ бүрэн нарийвчлалтай мэдэхгүй үед мужаар
+ * тэмдэглэдэг: хяналтын энгийн хог хаягдлын `niit_ga` нь "90–92",
+ * "40–45", "90" гэсэн БИЧВЭР утгатай (талбарын төрөл нь `String`).
+ * Ийм багана тоон шалгуурт орохгүй тул гурван хогийн цэгийн ТАЛБАЙ
+ * хаана ч харагдахгүй, давхарга нэг ч диаграмгүй үлдэж байв
+ * (хэрэглэгч 2026-09-28: "энд чарт байхгүй юу").
+ *
+ * ⚠ Мужийн ДУНДАЖИЙГ авна — хоёр үзүүрийн аль нэгийг сонгох нь
+ * таамаг, дунд нь хоёуланд ижил ойрхон. Гарсан тоо нь ОЙРОЛЦОО
+ * гэдгийг гарчиг `≈` тэмдгээр ил хэлнэ (тарвагын нийлбэртэй нэг
+ * зарчим). Эх бичвэр нь бичлэгийн дэлгэрэнгүйд бүтнээрээ үлдэнэ.
+ *
+ * ⚠ ЗӨВХӨН бүх бөглөсөн нүд нь тоо, БА ядаж нэг нь муж байвал энэ
+ * дүрэм ажиллана ({@link pickMeasures}) — цэвэр тоон бичвэр багана
+ * нь код, дугаар байж болох тул хөндөгдөхгүй.
+ */
+const RANGE_TEXT = /^(\d+(?:[.,]\d+)?)(?:\s*[–—-]\s*(\d+(?:[.,]\d+)?))?$/;
+
+function rangeOf(raw: unknown): { value: number; approx: boolean } | null {
+  if (typeof raw !== "string") return null;
+  const m = RANGE_TEXT.exec(raw.replace(/\s+/g, " ").trim());
+  if (!m) return null;
+  const lo = Number(m[1].replace(",", "."));
+  if (!Number.isFinite(lo)) return null;
+  if (m[2] == null) return { value: lo, approx: false };
+  const hi = Number(m[2].replace(",", "."));
+  /* Буурах муж нь муж биш — огноо, код байж магадгүй */
+  if (!Number.isFinite(hi) || hi < lo) return null;
+  return { value: (lo + hi) / 2, approx: true };
 }
 
 /**
@@ -1717,6 +1794,10 @@ type Measure = {
   name: string;
   /** Нэмэх нь утгагүй — дунджаар авна */
   share: boolean;
+  /** Түүхий нүдийг тоо болгоно — бичвэр дэх муж ч уншигдана */
+  read: (raw: unknown) => number | null;
+  /** Утга нь МУЖИЙН дунджаар гарсан эсэх — гарчигт `≈` гарна */
+  approx: boolean;
   values: (number | null)[];
 };
 
@@ -1735,7 +1816,9 @@ function pickMeasures(
 
   for (const f of info.fields) {
     if (out.length >= MAX_MEASURE_FIELDS) break;
-    if (!NUMERIC.test(f.type)) continue;
+    /* Бичвэр багана нь МУЖ бүхий хэмжилт байж болно ({@link rangeOf}) */
+    const numeric = NUMERIC.test(f.type);
+    if (!numeric && f.type !== "String") continue;
     const skip = info.set.skipMeasure;
     if (skip?.test(f.alias) || skip?.test(f.name)) continue;
     /* Координат нь тоо боловч хэмжигдэхүүн БИШ — геометрийн хуулбар */
@@ -1746,9 +1829,29 @@ function pickMeasures(
     /* Дугаарлалт нь тоо боловч хэмжигдэхүүн БИШ — нэрээр нь ч таана */
     if (ID_FIELD.test(f.name) || ID_FIELD.test(f.alias)) continue;
 
-    const values = rows.map((r) => numberOf(r[f.name]));
+    const read = numeric
+      ? numberOf
+      : (raw: unknown) => rangeOf(raw)?.value ?? null;
+
+    const values = rows.map((r) => read(r[f.name]));
     const present = values.filter((v): v is number => v != null);
     if (present.length < MIN_VALUES) continue;
+
+    /*
+      Бичвэр баганад ХОЁР нөхцөл: бөглөсөн нүд БҮГД тоо байх (нэг ч
+      үг холилдвол энэ нь хэмжилт биш ангилал), БА ядаж нэг нь МУЖ
+      байх. Сүүлийнх нь давхар хамгаалалт: цэвэр тоон бичвэр багана
+      нь код, дугаар, он байж болох тул хөндөхгүй.
+    */
+    let approx = false;
+    if (!numeric) {
+      const filled = rows
+        .map((r) => r[f.name])
+        .filter((v) => typeof v === "string" && v.trim() !== "");
+      if (present.length !== filled.length) continue;
+      approx = filled.some((v) => rangeOf(v)?.approx);
+      if (!approx) continue;
+    }
     if (looksLikeId(present)) continue;
     /* Бүгд ижил утгатай бол задаргаа биш тогтмол */
     if (new Set(present).size < 2) continue;
@@ -1773,7 +1876,7 @@ function pickMeasures(
       INTENSIVE_FIELD.test(f.alias) ||
       PER_UNIT.test(f.alias);
 
-    out.push({ field: f, unit, name, share, values });
+    out.push({ field: f, unit, name, share, read, approx, values });
   }
 
   return out;
@@ -1789,7 +1892,7 @@ function rollUp(
   const n = new Map<string, number>();
 
   for (const r of rows) {
-    const v = numberOf(r[m.field.name]);
+    const v = m.read(r[m.field.name]);
     if (v == null) continue;
     /* Хэмжилтийг ЗӨВХӨН эхний ангилалд ононо — олон утгатай зүсэлт
        дээр нийлбэр давхардахаас сэргийлнэ */
@@ -1806,6 +1909,19 @@ function rollUp(
       value: m.share ? v / (n.get(k) || 1) : v,
     }))
     .sort((a, b) => b.value - a.value);
+}
+
+/**
+ * Хэмжилтийн дэлгэц дээрх нэр.
+ *
+ * Нэгжийг эх сурвалжийн нэрнээс салгаж, задалсан хэлбэрээр нь дахин
+ * угсарна — эс тэгвээс "мян.₮" товчлол дэлгэц дээр гарна. Муж бүхий
+ * бичвэрээс гарсан утга `≈` тэмдэгтэй: тоо нь эх сурвалжийн хоёр
+ * үзүүрийн дунд.
+ */
+function measureName(m: Measure): string {
+  const base = m.unit ? `${m.name}, ${m.unit}` : m.field.alias;
+  return m.approx ? `${base} ≈` : base;
 }
 
 /**
@@ -1916,7 +2032,7 @@ function measureCharts(
       field: by.name,
       label: by.alias,
       kind: "compare",
-      measure: unit,
+      measure: list.some((m) => m.approx) ? `${unit} ≈` : unit,
       top: cutsAt(list[0]),
       keyOf,
       recount: count,
@@ -1939,9 +2055,7 @@ function measureCharts(
       field: by.name,
       label: by.alias,
       kind: m.share ? "mean" : "sum",
-      /* Эх сурвалжийн нэрийг ШУУД биш, задалсан нэгжтэй нь дахин
-         угсарна — эс тэгвээс "мян.₮" товчлол дэлгэц дээр гарна */
-      measure: m.unit ? `${m.name}, ${m.unit}` : m.field.alias,
+      measure: measureName(m),
       top: cutsAt(m),
       keyOf,
       recount: count,

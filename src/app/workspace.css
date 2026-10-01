@@ -41,7 +41,16 @@
 .workspace-main { padding-left: clamp(20px, 2.4vw, 48px); padding-right: clamp(20px, 2.4vw, 48px); }
 .workspace-dock { position: fixed; inset: 0 auto 0 0; z-index: 60; width: 104px; display: flex; flex-direction: column; align-items: center; background: var(--dock-bg); color: var(--dock-ink); border-right: 1px solid var(--dock-line); }
 .dock-brand { display: grid; place-items: center; width: 48px; height: 48px; min-height: 48px; margin: 20px 0 17px; border-radius: 50%; background: var(--dock-active-bg); color: var(--dock-active-ink); }
-.dock-nav { width: 100%; padding: 0 12px; overflow-y: auto; scrollbar-width: none; }
+/*
+  Хажуугийн зурвасын доторх зай 12px-ээс 10px (2026-09-29): "Дүн
+  шинжилгээ" мөрийн хоёр дахь эгнээ ("шинжилгээ") 10px үсгээр ЯГ 79px
+  буюу товчны бүтэн өргөнийг эзэлж, хоёр ирмэгт наалдаж байв — халиагүй
+  ч шахагдсан харагдана. 10px зай нь мөр бүрийг 83px болгож, тэр үгэнд
+  хоёр талдаа 2px амьсгал өгнө.
+  ⚠ ҮСГИЙН ХЭМЖЭЭГ БУУЛГААГҮЙ: платформын нягт сүлжээний доод хязгаар
+  нь 10px бөгөөд энэ бол хамгийн жижиг бичвэр.
+*/
+.dock-nav { width: 100%; padding: 0 10px; overflow-y: auto; scrollbar-width: none; }
 .dock-link { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; min-height: 57px; margin: 3px 0; border-radius: 13px; color: var(--dock-ink-2); font-size: 10px; font-weight: 500; transition: color 160ms, background 160ms; }
 .dock-link:hover { color: var(--dock-ink); background: var(--dock-hover); }
 .dock-link.active { background: var(--dock-active-bg); color: var(--dock-active-ink); }
@@ -355,8 +364,34 @@
 .analytics-stat-icon { display: grid; place-items: center; width: 38px; height: 38px; flex-shrink: 0; border-radius: 10px; background: var(--paper-3); color: var(--moss); }
 .analytics-stat-label { display: block; margin-bottom: 5px; font-size: 10px; line-height: 1.4; color: var(--ink-3); }
 .analytics-stat-value { font-size: 23px; line-height: 1.2; font-weight: 600; letter-spacing: -.04em; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
-.analytics-chart-head { display: flex; flex-shrink: 0; align-items: center; justify-content: space-between; gap: 10px; padding: 14px 16px; border-bottom: 1px solid var(--line); }
-.analytics-chart-head h2 { min-width: 0; flex: 1; font-size: 12px; font-weight: 600; line-height: 1.6; }
+/*
+  ДИАГРАМЫН КАРТЫН ТОЛГОЙ НАМ (хэрэглэгчийн хүсэлт, 2026-09-28:
+  "ийм title картын өндрийг багасга").
+
+  Толгой нь нэг мөр бичвэр ба палитрын товчноос л тогтдог атлаа
+  47px эзэлж байв: доторх зай 14px × 2, мөрийн өндөр 1.6. Нэг
+  баганад гурав, дөрвөн карт цувардаг тул тэр нь диаграмуудаас
+  зуу гаруй пикселийг авч байсан хэрэг.
+
+  ⚠ ҮСГИЙН ХЭМЖЭЭ 12px ХЭВЭЭР — платформын нягт сүлжээний муж
+  (11–13px) бөгөөд гарчиг нь картын цорын ганц нэр. Хэмнэлт нь
+  ЗАЙНААС гарна (`RowChart dense`-тэй нэг зарчим).
+  ⚠ Палитрын товч (19px) нь одоо толгойн өндрийг тогтоодог тул
+  доторх зайг 9px-ээс доош буулгах нь юу ч өгөхгүй.
+*/
+.analytics-chart-head { display: flex; flex-shrink: 0; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 16px; border-bottom: 1px solid var(--line); }
+/*
+  ДИАГРАМЫН ГАРЧИГ ТОМ ҮСГЭЭР (хэрэглэгчийн хүсэлт, 2026-09-29:
+  "чартын title uppercase шүү"). Үнэлгээний хэлтэст аль хэдийн
+  мөрддөг албан нэршлийн дүрэм — одоо порталын хуваалцсан самбар
+  бүрд (ой, амьтан, ногоон бүс, хяналт, үнэлгээ) нэг мөр болов.
+
+  ⚠ ТОМ ҮСЭГ нь КИРИЛЛ дээр нягт харагддаг тул 0.02em зай нэмэв —
+  `.eyebrow`-ийн өргөн зайг ХУУЛААГҮЙ: тэр нь 10px тэмдэглэгээ, энэ
+  нь 12px гарчиг бөгөөд хоёр нь эрэмбээрээ ялгарах ёстой.
+  ⚠ Үсгийн хэмжээ, жин ХЭВЭЭР (12px / 600).
+*/
+.analytics-chart-head h2 { min-width: 0; flex: 1; font-size: 12px; font-weight: 600; line-height: 1.4; text-transform: uppercase; letter-spacing: .02em; }
 /*
   КАРТУУД БАГАНАДАА БАГТАНА (хэрэглэгч, 2026-09-21: "багтаа").
 
@@ -375,14 +410,40 @@
   хэмжигдэх тул 360px-ийн хязгаар тэнд ХЭВЭЭР — эс тэгвээс
   хорин мөртэй диаграм хуудсыг утасны дэлгэцээр сунгана.
 */
-.analytics-chart-body { padding: 14px 12px; min-height: 0; overflow-y: auto; }
+/*
+  ⚠⚠ ДОТОРХ ЗАЙ 14px-ээс 10px, ДООД ХЯЗГААР 168px-ЭЭС 164px
+  (хэрэглэгчийн хүсэлт, 2026-09-29: "доторх зайг нь янзлаад
+  scroll-гүй болго").
+
+  Тоо нь САНАМСАРГҮЙ БИШ — талбайн диаграмын картыг ЯГ багтаана:
+  толгой 36 + доторх зай 10 × 2 + диаграм 108 = **164px**.
+  Урьд нь 14px зайтай байсан тул тэр карт 172px шаардаж, 168px-ийн
+  доод хязгаар дээр ҮРГЭЛЖ дөрвөн пикселээр гүйдэг байв — хөтчөөр
+  хэмжихэд гурван карт бүгд `scrollHeight > clientHeight`.
+
+  ⚠ Баганын доод хязгаар 524px-ээс **508px** болов (3 × 164 + хоёр
+  завсар 8px) тул богино дэлгэц дээр багана өөрөө гүйх босго ч
+  доошиллоо.
+  ⚠ ҮСГИЙН ХЭМЖЭЭ, МӨРИЙН ӨНДӨР ХӨНДӨГДӨӨГҮЙ: хэмнэлт нь ЗӨВХӨН
+  зайнаас гарна (`RowChart dense`, толгойн өндөртэй нэг зарчим).
+*/
+.analytics-chart-body { padding: 10px 12px; min-height: 0; overflow-y: auto; }
 @media (max-width: 1279px) {
   .analytics-chart-body { max-height: 360px; }
 }
 @media (min-width: 1280px) {
-  .analytics-chart-card { flex: 1 1 auto; min-height: 168px; }
+  .analytics-chart-card { flex: 1 1 auto; min-height: 160px; }
   .analytics-chart-body { flex: 1 1 auto; }
 }
+/* ХӨРСНИЙ ЗҮСЭЛТИЙН ХАЖУУГИЙН БАГАНА.
+
+   ⚠ Картууд баганынхаа өндрийг ХУВААЛЦАХГҮЙ, агуулгаараа авна:
+   монолитын зураг 400px өндөртэй тул хуваасан өндөрт багтахгүй,
+   картынхаа дотор чимээгүй тасарч байв. Гүйлт нь БАГАНАД — гурван
+   картад тус тусад нь биш. */
+.soil-side .analytics-chart-card { flex: 0 0 auto; min-height: 0; }
+.soil-side .analytics-chart-body { overflow: visible; max-height: none; }
+
 @media (max-width: 640px) {
   .analytics-overview { gap: 6px; }
   .analytics-stat { padding: 10px; gap: 0; }
@@ -417,3 +478,112 @@
 .district-row > td:first-child { box-shadow: inset 3px 0 0 var(--tint); }
 .district-row:hover { background: var(--paper-hi); }
 .district-row.is-picked { background: color-mix(in oklab, var(--data) 14%, transparent); }
+
+/* Давхаргын иконы цонх — порталын давхаргуудыг 3D-д асаана. Орчны
+   цонхтой нэг загвар (`.soil-env`); мөр бүр өнгөт цэгтэй — тэр нь
+   зураг дээрх тэмдгийн өнгө тул цонх нь тайлбарын үүрэг давхар гүйцэтгэнэ. */
+.soil-scene-view .soil-layers { width: 220px; }
+.soil-scene-view .soil-layer-row { display: flex; align-items: center; gap: 8px; }
+/* Ангилалтай давхаргын хуулга — товчны доор, товшигдохгүй */
+.soil-scene-view .soil-layer-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 2px 8px 6px 26px;
+}
+.soil-scene-view .soil-layer-legend-head {
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.soil-scene-view .soil-layer-legend-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--ink-2);
+}
+.soil-scene-view .soil-layer-dot {
+  width: 9px;
+  height: 9px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px var(--line-2);
+}
+.soil-scene-view .soil-layer-opt .soil-env-note { padding-left: 17px; }
+/* Жорлонгийн хуулга — 3D-ийн тэмдэгтэй ижил бүхээг: өнгөт их бие, бараан дээвэр */
+.soil-scene-view .soil-layer-box { width: 9px; height: 11px; border-radius: 1px; border-top: 3px solid #3e2e22; }
+
+/* Орчны сонголт — зүсэлтийн иконы дээрх цонх. Радио мөр: нэг удаад
+   нэг орчин, идэвхтэй нь зүүн ирмэгийн 2px зураасаар (дүүргэлтгүй). */
+/* ⚠ Esri-ийн цонх `box-sizing`-ийг content-box болгодог тул ЗААВАЛ
+   border-box: эс тэгвээс `width: 100%` товч дээр дотоод зай, хүрээ
+   нэмэгдэж цонхны баруун ирмэгээс ~18px хальж байв (хэрэглэгч 2026-10-01). */
+.soil-scene-view .soil-env,
+.soil-scene-view .soil-env * { box-sizing: border-box; }
+.soil-scene-view .soil-env {
+  width: 232px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  --calcite-color-brand: var(--tone);
+}
+.soil-scene-view .soil-env-head {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  padding: 0 2px 2px;
+}
+.soil-scene-view .soil-env-opt {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  width: 100%;
+  min-width: 0;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  box-shadow: inset 2px 0 0 transparent;
+}
+.soil-scene-view .soil-env-opt:hover { background: var(--paper-hi); }
+.soil-scene-view .soil-env-opt.is-on {
+  border-color: var(--line-2);
+  box-shadow: inset 2px 0 0 var(--tone);
+}
+.soil-scene-view .soil-env-label { font-size: 12px; font-weight: 600; color: var(--ink); }
+.soil-scene-view .soil-env-note { font-size: 11px; color: var(--ink-3); white-space: normal; overflow-wrap: anywhere; }
+
+/* ӨӨРИЙН ЗҮСЭЛТИЙН ХЭРЭГСЭЛ — орчны цонхтой нэг загвар (`.soil-env`).
+   Esri-ийн `Slice` виджет хасагдсан тул түүний CSS засварууд (хассан
+   давхаргын жагсаалт нуух, 300px-ийг дарах, хоосон цонх нуух) бүгд
+   хамт устсан. */
+/* ⚠ Өргөн нь `.soil-env`-ийнх (232px) — 220px-д "Зурах"-ын тайлбар хоёр мөр болдог */
+.soil-scene-view .soil-cut-actions { display: flex; gap: 4px; }
+.soil-scene-view .soil-cut-btn {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 5px 6px;
+  border: 1px solid var(--line-2);
+  border-radius: 2px;
+  background: transparent;
+  font-size: 11.5px;
+  color: var(--ink);
+  cursor: pointer;
+}
+.soil-scene-view .soil-cut-btn:hover:not(:disabled) { background: var(--paper-hi); }
+.soil-scene-view .soil-cut-btn:disabled { color: var(--ink-3); opacity: 0.55; cursor: default; }
+/* Бариул дээр заагч үйлдлээ хэлнэ: гол нь зөөх, үзүүр нь өргөн */
+.soil-scene-view .is-grab .esri-view-surface,
+.soil-scene-view .is-grab canvas { cursor: move; }
+.soil-scene-view .is-size .esri-view-surface,
+.soil-scene-view .is-size canvas { cursor: ew-resize; }
+/* Шугам зурах үед зураг дээрх заагч загалмай болно */
+.soil-scene-view .is-drawing .esri-view-surface,
+.soil-scene-view .is-drawing canvas { cursor: crosshair; }

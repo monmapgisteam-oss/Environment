@@ -22,11 +22,16 @@ export function recordUnit(id: string) {
   return "бүртгэл";
 }
 
-export function topicChartTitle(b: Breakdown, id: string) {
+export function topicChartTitle(b: Breakdown) {
   const limit = b.top ? ` · эхний ${b.top}` : "";
-  const unit = recordUnit(id);
-  const countLabel = unit === "нэгж талбар" ? "нэгж талбарын тоо" : unit === "цэцэрлэгт хүрээлэн" ? "цэцэрлэгт хүрээлэнгийн тоо" : `${unit}ийн тоо`;
-  if (b.kind === "count") return `${b.label} · ${countLabel}${limit}`;
+  /*
+    ⚠⚠ ТООЛЛЫН ДАГАВАР ГАРЧИГТ БИЧИГДЭХГҮЙ (хэрэглэгчийн шийдвэр,
+    2026-09-28). Хуваалцсан самбарын `chartTitle`-аас хасагдсан ч энэ
+    хэлтэс өөрийн гарчиг угсардаг тул "Дүүрэг · бүртгэлийн тоо" гэж
+    гарсаар байв. Нийлбэр, дундаж нь ЭХЭНДЭЭ хэмжигдэхүүнээ бичдэг
+    тул нүцгэн нэр нь өөрөө тоолол гэдгийг хэлнэ.
+  */
+  if (b.kind === "count") return `${b.label}${limit}`;
   if (b.kind === "mean") return `${b.measure ?? "Үзүүлэлт"} · дундаж, ${b.label}${limit}`;
   if (b.kind === "sum") return `${b.measure ?? "Үзүүлэлт"} · ${b.label}${limit}`;
   return `${b.label}${limit}`;

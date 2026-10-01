@@ -8,10 +8,33 @@ import { asset } from "@/lib/base-path";
 import { UserChip } from "@/components/auth/user-chip";
 import { WorkspaceSearch } from "./workspace-search";
 
+/*
+  Зам заагчийн нэр — ХЭЛТСИЙН БУС хуудсуудынх.
+
+  ⚠ Урьд нь зөвхөн `/sources` бичигдсэн байсан тул `/reports`,
+  `/alerts`, `/map`, `/settings` дөрвүүлээ "Ерөнхий самбар" гэж
+  ХУДЛАА бичигддэг байв (2026-09-29-нд "Дүн шинжилгээ" нэмэхэд
+  нүдэнд ил болов).
+
+  ⚠ Нэр нь хуудас бүрийн ӨӨРИЙН `metadata.title`-тай ЯГ таарна —
+  хоёр газар өөрөөр бичвэл хөтчийн таб, зам заагч хоёр зөрнө.
+*/
+const PAGE_NAMES: [string, string][] = [
+  ["/analysis", "Дүн шинжилгээ"],
+  ["/sources", "Дата эх сурвалж"],
+  ["/reports", "Тайлан"],
+  ["/alerts", "Дохиолол"],
+  ["/map", "Газрын зураг"],
+  ["/settings", "Тохиргоо"],
+];
+
 export function Header() {
   const path = usePathname();
   const department = DEPARTMENTS.find((d) => path.startsWith(`/departments/${d.slug}`));
-  const title = department?.name ?? (path.startsWith("/sources") ? "Дата эх сурвалж" : "Ерөнхий самбар");
+  const title =
+    department?.name ??
+    PAGE_NAMES.find(([at]) => path.startsWith(at))?.[1] ??
+    "Ерөнхий самбар";
   return (
     <header className="workspace-header">
       <div className="workspace-identity min-w-0">
