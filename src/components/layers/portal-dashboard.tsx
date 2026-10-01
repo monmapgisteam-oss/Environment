@@ -11,6 +11,7 @@ import {
   Palette,
   Ruler,
   Shapes,
+  Sigma,
   Tag,
 } from "lucide-react";
 import {
@@ -500,7 +501,8 @@ export function PortalLayersDashboard({
   /* Төлөв нь ДАМ гарна: эффектээс `set*` дуудахыг
      `react-hooks/set-state-in-effect` хориглодог */
   const zoneReady = zoneParcels.key === zoneKey;
-  const shownZoneParcels = parcelsOn && zoneReady ? zoneParcels.tile : NO_PARCELS;
+  const shownZoneParcels =
+    parcelsOn && zoneReady ? zoneParcels.tile : NO_PARCELS;
   const zoneBusy = parcelsOn && zoneRings.length > 0 && !zoneReady;
 
   const onView = React.useCallback(
@@ -514,9 +516,8 @@ export function PortalLayersDashboard({
     улаан нь ДАТА (бүстэй давхцсан). Улаан нь дээр нь суух ёстой.
   */
   const overlays = React.useMemo(() => {
-    const list: NonNullable<
-      React.ComponentProps<typeof LayerMap>["overlays"]
-    > = [];
+    const list: NonNullable<React.ComponentProps<typeof LayerMap>["overlays"]> =
+      [];
     if (shownParcels.data.features.length)
       list.push({
         id: "parcel",
@@ -620,9 +621,7 @@ export function PortalLayersDashboard({
   */
   React.useEffect(() => {
     const flight = inFlight.current;
-    const want = on.filter(
-      (id) => infos[id] && !loaded[id] && !flight.has(id),
-    );
+    const want = on.filter((id) => infos[id] && !loaded[id] && !flight.has(id));
     if (!want.length) return;
 
     const started = new Map<string, AbortController>();
@@ -867,33 +866,83 @@ export function PortalLayersDashboard({
        ({@link AxisCard}) тул хуваах зүйл байхгүй. Хуваавал тэр карт
        хоёр багананд тасарч, хэрэглэгчийн хүссэн нэгтгэл алдагдана. */
     if (picker || !showCharts || set.tidy) return null;
-    let best: { id: string; chart: string; size: number } | null = null;
+
+    const keys = new Set<string>();
+
+    /*
+      ⚠⚠ БҮРТГЭЛИЙН ТЭРГҮҮЛЭХ ДИАГРАМ (`LayerSet.lead`, хэрэглэгчийн
+      хүсэлт 2026-09-28: "Зөвшөөрлийн төлөв зүүн панел руу хамгийн
+      дээр нь байршуул"). Доорх "хамгийн урт нь зүүн тийш" дүрэм нь
+      УНШИГДАЦЫН шийдвэр (урт жагсаалт нарийн баганад багтдаггүй)
+      болохоос ЧУХЛЫН эрэмбэ биш — хоёр зүсэмтэй "Зөвшөөрлийн төлөв"
+      тэр дүрмээр хэзээ ч зүүн тийш гарахгүй атлаа хяналтын гол
+      үзүүлэлт нь тэр.
+    */
+    const lead = set.lead ?? [];
+    if (lead.length)
+      for (const v of views)
+        for (const b of v.charts)
+          if (lead.includes(b.field)) keys.add(`${v.id}:${b.id}`);
+
+    let best: {
+      id: string;
+      chart: string;
+      size: number;
+      label: string;
+    } | null = null;
     let total = 0;
     for (const v of views) {
       for (const b of v.charts) {
         total += 1;
         if (!best || b.values.length > best.size)
-          best = { id: v.id, chart: b.id, size: b.values.length };
+          best = {
+            id: v.id,
+            chart: b.id,
+            size: b.values.length,
+            label: b.label,
+          };
       }
       /*
         ⚠⚠ "Дүрс тус бүрийн талбай" карт ӨРСӨЛДӨХГҮЙ (2026-09-29,
         хэрэглэгч: "энэ чартыг шахаад хязгаарлалтын бүс чартын доор
         оруулъя"). 2026-09-25-нд тэр нь `split`-д орж, хориглолтын
-        бүсийн арван найман мөр ЗҮҮН баганад гардаг байсан —
-        улмаас давхаргынхаа ТУУЗААС, бүлгийнхээ бусад картаас салж,
-        аль бүсийнх болох нь зөвхөн гарчгаасаа уншигддаг байв.
-        Одоо гурван бүсийн карт баруун баганад ДАВХАРГЫН ДАРААЛЛААР
-        цувна (тэжээгдэл → хязгаарлалт → хориглолт).
-        ⚠ Гүйлгүүр буцаж гарахгүй: мөр нь `inline`-аар 28 → 23px
-        болж (502 → 413px), үлдсэнийг `flex-shrink` ба `--card-min`
-        барина — карт багтаагүй бол ӨӨРӨӨ гүйнэ, багана биш.
+        бүсийн арван найман мөр ЗҮҮН баганад гардаг байсан — улмаас
+        давхаргынхаа ТУУЗААС, бүлгийнхээ бусад картаас салж, аль
+        бүсийнх болох нь зөвхөн гарчгаасаа уншигддаг байв. Одоо
+        гурван бүсийн карт баруун баганад ДАВХАРГЫН ДАРААЛЛААР цувна.
         ⚠ Задаргааны диаграм (`Breakdown`) `split`-д ХЭВЭЭР
         өрсөлдөнө: тэдгээр нь давхаргын дарааллыг үүрдэггүй.
       */
     }
-    if (!best || total < 2 || best.size < 8) return null;
-    return best;
-  }, [picker, showCharts, views, set.tidy]);
+    if (!best || total < 2 || best.size < 8) return keys.size ? keys : null;
+
+    keys.add(`${best.id}:${best.chart}`);
+
+    /*
+      ⚠⚠ ЗАСАГ ЗАХИРГААНЫ ШАТУУД ХАМТ ЗӨӨГДӨНӨ (хэрэглэгчийн хүсэлт,
+      2026-09-28: "Сум, дүүрэг-ийг зүүн панелийн Баг, хороо-гийн дээр
+      байрлуул"). Хамгийн урт диаграм нь хороо байхад дүүрэг нь нөгөө
+      баганад үлдэж, нэг тэнхлэгийн хоёр шат дэлгэцийн хоёр талд
+      тарж байв.
+
+      ⚠ ЗӨВХӨН ӨРГӨН шатыг авна (`r < rank`): нарийныг нь чирвэл
+      баганын урт өсөх ба хамгийн урт диаграм зүүн талд байх гэсэн
+      анхны шалтгаан алдагдана.
+
+      ⚠ Дараалал нь `charts`-ынхаа эрэмбийг ДАГАНА — `breakdowns` нь
+      оноогоор эрэмбэлдэг бөгөөд өргөн шат нь нарийнаасаа өмнө
+      гардаг тул зүүн багана өөрөө "дүүрэг → хороо" болно.
+    */
+    const rank = adminRank(best.label);
+    if (rank != null) {
+      const view = views.find((v) => v.id === best.id);
+      for (const b of view?.charts ?? []) {
+        const r = adminRank(b.label);
+        if (r != null && r < rank) keys.add(`${best.id}:${b.id}`);
+      }
+    }
+    return keys;
+  }, [picker, showCharts, views, set.lead, set.tidy]);
 
   /* Сонгосон УТГА бүрийг тоолно, талбарыг биш: "3 идэвхтэй" гэдэг нь
      гурван утга сонгосныг хэлэх ёстой */
@@ -1467,6 +1516,79 @@ export function PortalLayersDashboard({
     return { layers: views.length, records, ha };
   }, [views]);
 
+  /**
+   * НЭМЭЛТ ҮЗҮҮЛЭЛТ — диаграмуудаас ӨӨРСДӨӨ гарна.
+   *
+   * ⚠⚠ Зурвас ихэнх давхарга дээр ГАНЦ нүдтэй үлддэг байв (хэрэглэгч
+   * 2026-09-28: "indicator хэрэгтэй байна"). "Идэвхтэй давхарга" нь
+   * зөвхөн сонгох жагсаалттай цонхонд, "Талбай, га" нь зөвхөн олон
+   * өнцөгтөд гардаг тул аюултай хог хаягдал зэрэг ЦЭГЭН давхарга дээр
+   * "Шүүлтэд тохирох бүртгэл" ганцаараа бүтэн өргөнийг эзэлж байлаа.
+   *
+   * Хоёр төрөл нэмэгдэнэ, аль аль нь диаграмын АЛЬ ХЭДИЙН тооцсон
+   * утгаас гардаг тул шинэ таамаг ОРОХГҮЙ:
+   *
+   * 1. **Хэмжилтийн НИЙЛБЭР** — талбай, эзэлхүүн, төлбөр. Зурвасан
+   *    диаграм нь задаргааг хэлдэг ч НИЙТ дүнг хэлдэггүй.
+   * 2. **Хугацааны МУЖ** — жилийн цуваа бүрийн эхэн, төгсгөл.
+   *
+   * ⚠ Нийлбэрийг ЗӨВХӨН `sum` төрлөөс авна: `mean` (хувь, өндөршил,
+   * агууламж) нь нэмэгдэхгүй, `count` нь бүртгэлийн тоог давтана.
+   * ⚠ ХУРААСАН диаграмыг алгасна (`top`): харагдаж буй мөрүүдийн
+   * нийлбэр нь бүтэн дүн БИШ тул үзүүлэлт худал хэлнэ.
+   * ⚠ Нэг хэмжилт хэд хэдэн зүсэлтээр диаграм болдог тул нэрээр нь
+   * ДАВХАРДЛЫГ хасна.
+   * ⚠⚠ **ТАЛБАЙ ХОЁР УДАА ГАРАХГҮЙ.** "Талбай, га" нүд нь ГЕОМЕТРЭЭС
+   * бодогддог; эх сурвалж мөн өөрийн талбайн баганатай байдаг (ойн
+   * хэсэглэл дээр 122,236 ба 122,262 гэсэн бараг ижил хоёр тоо
+   * зэрэгцэж, аль нь зөв болох нь уншигдахгүй байв). Талбайн нүд
+   * гарсан үед га нэгжтэй хэмжилтийг зурваст ОРУУЛАХГҮЙ — тэр нь
+   * өөрийн диаграмтай хэвээр.
+   * ⚠ Хоёроор хязгаарлана: зурвас нь дөрвөөс олон нүдтэй бол тус бүр
+   * нь нарийсаж, урт шошго гурван мөр болно.
+   */
+  const extras = React.useMemo(() => {
+    const out: { key: string; label: string; value: string; time: boolean }[] =
+      [];
+    const seen = new Set<string>();
+
+    for (const v of views)
+      for (const b of v.charts) {
+        if (b.kind !== "sum" || b.top || !b.measure) continue;
+        if (stats.ha > 0 && /(^|,\s*)га$/i.test(b.measure)) continue;
+        if (seen.has(b.measure)) continue;
+        seen.add(b.measure);
+        const total = b.values.reduce((sum, d) => sum + d.value, 0);
+        if (!(total > 0)) continue;
+        out.push({
+          key: `${v.id}:${b.id}`,
+          label: b.measure,
+          value: num(Math.round(total)),
+          time: false,
+        });
+      }
+
+    for (const v of views)
+      for (const b of v.charts) {
+        if (b.kind !== "year") continue;
+        /* Хоосон жил ч тэг утгаар цуваанд ордог тул муж нь БҮРТГЭЛТЭЙ
+           хоёр үзүүрээр тогтоно */
+        const filled = b.values.filter((d) => d.value > 0);
+        if (filled.length < 2) continue;
+        const from = filled[0].label;
+        const to = filled[filled.length - 1].label;
+        if (from === to) continue;
+        out.push({
+          key: `${v.id}:${b.id}`,
+          label: b.label,
+          value: `${from}–${to}`,
+          time: true,
+        });
+      }
+
+    return out.slice(0, 2);
+  }, [views, stats.ha]);
+
   /*
     Доод зурваст орох диаграмууд — давхарга бүрийн хугацааны цуваа.
 
@@ -1678,8 +1800,20 @@ export function PortalLayersDashboard({
          бүгдийг нь зэрэг харах боломжгүй байв. Нэг баганад
          босоо цуварсан нь бүгдийг нь нэг чиглэлд гүйлгэж
          үзэхэд хялбар. */
-      /* Хуваалтын дагуу зөвхөн энэ баганад харьяалагдах диаграм */
-      const cuts = charts.filter((b) => keep(id, b));
+      /*
+        Хуваалтын дагуу зөвхөн энэ баганад харьяалагдах диаграм.
+
+        ⚠ Бүртгэлийн тэргүүлэх талбарууд (`LayerSet.lead`) ЖАГСААСАН
+        дарааллаараа эхэнд эгнэнэ; бусад нь өөрсдийн оноогоор
+        эрэмбэлэгдсэн хэвээр (`sort` нь тогтвортой).
+      */
+      const leadAt = (b: Breakdown) => {
+        const at = set.lead?.indexOf(b.field) ?? -1;
+        return at < 0 ? Number.MAX_SAFE_INTEGER : at;
+      };
+      const cuts = charts
+        .filter((b) => keep(id, b))
+        .sort((a, b) => leadAt(a) - leadAt(b));
       const sel = filters[id] ?? {};
 
       /*
@@ -1690,32 +1824,46 @@ export function PortalLayersDashboard({
         гарчиг нь баруун тийш дүүжлэгдсэн харагддаг байв. Тууз
         нь бүлгийг нэг дор зарлаж, карт бүрийн толгой өөрийн
         диаграмын нэрээр л эхэлнэ.
+
+        ⚠⚠ ГАНЦ ДАВХАРГАТАЙ ҮЕД ТУУЗ ГАРАХГҮЙ (хэрэглэгчийн шийдвэр,
+        2026-09-29: "Аюултай хог хаягдал гэсэн баруун зүүн панелийн
+        дээр байгааг делет"). Түүний ЦОРЫН ГАНЦ үүрэг нь "энэ карт
+        АЛЬ давхаргынх вэ" гэдгийг хэлэх — давхарга ганц байхад тэр
+        асуулт байхгүй бөгөөд нэр нь дээр нь шүүлтүүрийн мөрөнд аль
+        хэдийн бичигдсэн байдаг (харилцан үгүйсгэх товч, эсвэл
+        `LayerSet.title`). Хоёр баганын толгойд давтагдаж, бүртгэлийн
+        тоог үзүүлэлтийн зурваснаас дахин хэлж байв.
+
+        ⚠ ХОЁР БА ТҮҮНЭЭС ОЛОН давхарга асаалттай үед ХЭВЭЭР: ойн
+        хэлтэст долоон давхарга нэг баганад цувардаг тул аль карт
+        алийнх нь тэндээс л уншигдана.
       */
       /*
         ⚠ ТУУЗ нь ДООРХ картдаа наалдана (2026-09-29, "зайг
         цэгцлэе"). Баганын `gap` нь 10px тул `pt-1 pb-0.5` үед
         дээр 14px, доор 12px болж тууз хоёр картын ДУНД хөвж,
-        аль бүлгийг зарлаж буй нь эргэлзээтэй байв. Одоо дээр
-        18px, доор 4px — хамаарал нь зайнаасаа уншигдана.
+        аль бүлгийг зарлаж буй нь эргэлзээтэй байв. Одоо `pt-1
+        -mb-1.5` — дээр 12px, доор 2px: хамаарал зайнаасаа уншигдана.
       */
-      const band = (
-        <div
-          key={`${id}:band`}
-          className="-mb-1.5 flex shrink-0 items-center gap-2 pt-1"
-        >
-          <span
-            aria-hidden
-            className="h-3 w-[3px] shrink-0 rounded-[1px]"
-            style={{ background: tone }}
-          />
-          <span className="eyebrow min-w-0 flex-1 truncate text-ink-2">
-            {hit.info.name}
-          </span>
-          <span className="num shrink-0 text-[10.5px] text-ink-3">
-            {num(rows.length)}
-          </span>
-        </div>
-      );
+      const band =
+        views.length < 2 ? null : (
+          <div
+            key={`${id}:band`}
+            className="-mb-1.5 flex shrink-0 items-center gap-2 pt-1"
+          >
+            <span
+              aria-hidden
+              className="h-3 w-[3px] shrink-0 rounded-[1px]"
+              style={{ background: tone }}
+            />
+            <span className="eyebrow min-w-0 flex-1 truncate text-ink-2">
+              {hit.info.name}
+            </span>
+            <span className="num shrink-0 text-[10.5px] text-ink-3">
+              {num(rows.length)}
+            </span>
+          </div>
+        );
 
       /* Задаргаа гарахгүй давхарга баганад ОРОХГҮЙ — хоосон
          карт ч, бичлэгийн жагсаалт ч зай эзлэхээс өөр юу ч
@@ -1822,54 +1970,55 @@ export function PortalLayersDashboard({
       */
       const soloDup = areas.length === 1 && zones.length > 1;
       const base = uidBase(id);
-      const areaCard = areas.length && !soloDup ? (
-        <CutCard
-          key={`${id}:area`}
-          title={
-            areas.length > AREA_TOP
-              ? `Талбай, га — дүрс тус бүрээр (эхний ${AREA_TOP})`
-              : "Талбай, га — дүрс тус бүрээр"
-          }
-          tone={tone}
-          first={!cuts.length && !crossCard}
-          meta={`${num(Math.round(areas.reduce((n, d) => n + d.value, 0)))} га · ${num(areas.length)} дүрс`}
-          /* Ганц мөр нь ердөө нэг тоо — түүнд бусад картын өндөр
+      const areaCard =
+        areas.length && !soloDup ? (
+          <CutCard
+            key={`${id}:area`}
+            title={
+              areas.length > AREA_TOP
+                ? `Талбай, га — дүрс тус бүрээр (эхний ${AREA_TOP})`
+                : "Талбай, га — дүрс тус бүрээр"
+            }
+            tone={tone}
+            first={!cuts.length && !crossCard}
+            meta={`${num(Math.round(areas.reduce((n, d) => n + d.value, 0)))} га · ${num(areas.length)} дүрс`}
+            /* Ганц мөр нь ердөө нэг тоо — түүнд бусад картын өндөр
              хэрэггүй; үлдсэн зай нь урт диаграмд очно */
-          weight={
-            areas.length === 1
-              ? 1
-              : Math.max(3, Math.min(areas.length, AREA_TOP))
-          }
-        >
-          {areas.length === 1 ? (
-            /* Ганц дүрсийг өөртэй нь харьцуулах зүйл байхгүй тул
+            weight={
+              areas.length === 1
+                ? 1
+                : Math.max(3, Math.min(areas.length, AREA_TOP))
+            }
+          >
+            {areas.length === 1 ? (
+              /* Ганц дүрсийг өөртэй нь харьцуулах зүйл байхгүй тул
                зурвас БИШ, тоогоороо шууд хэлнэ */
-            <p className="num px-0.5 py-1 text-[13px] text-ink">
-              {num(Math.round(areas[0].value))} га
-            </p>
-          ) : (
-            <RowChart
-              data={areas.slice(0, AREA_TOP)}
-              tone={tone}
-              format={(v) => num(Math.round(v))}
-              inline
-              selected={
-                picked != null && picked >= base && picked < base + STRIDE
-                  ? String(picked - base)
-                  : null
-              }
-              onSelect={(k) => {
-                const uid = k == null ? null : base + Number(k);
-                setPicked(uid);
-                setRowPick(uid);
-              }}
-              /* Хураасан үед хувь ГАРАХГҮЙ: харагдаж буй мөрүүд
+              <p className="num px-0.5 py-1 text-[13px] text-ink">
+                {num(Math.round(areas[0].value))} га
+              </p>
+            ) : (
+              <RowChart
+                data={areas.slice(0, AREA_TOP)}
+                tone={tone}
+                format={(v) => num(Math.round(v))}
+                inline
+                selected={
+                  picked != null && picked >= base && picked < base + STRIDE
+                    ? String(picked - base)
+                    : null
+                }
+                onSelect={(k) => {
+                  const uid = k == null ? null : base + Number(k);
+                  setPicked(uid);
+                  setRowPick(uid);
+                }}
+                /* Хураасан үед хувь ГАРАХГҮЙ: харагдаж буй мөрүүд
                  бүхлийг хамраагүй тул "хэдэн хувь" гэдэг худал болно */
-              share={false}
-            />
-          )}
-        </CutCard>
-      ) : null;
+                share={false}
+              />
+            )}
+          </CutCard>
+        ) : null;
 
       if (!cuts.length && !areaCard && !crossCard) return null;
 
@@ -1902,7 +2051,9 @@ export function PortalLayersDashboard({
         }
       const oneCard =
         axes.length > 1 || (axes.length === 1 && axes[0].list.length > 1);
-      const inAxis = new Set(oneCard ? axes.flatMap((a) => a.list.map((b) => b.id)) : []);
+      const inAxis = new Set(
+        oneCard ? axes.flatMap((a) => a.list.map((b) => b.id)) : [],
+      );
 
       const cards = cuts.map((b, i) => {
         if (inAxis.has(b.id)) {
@@ -1918,9 +2069,7 @@ export function PortalLayersDashboard({
               word={set.record}
               selectedOf={(axis) => (sel[axis] ?? [])[0] ?? null}
               onPick={(axis, key) =>
-                key == null
-                  ? pick(id, axis, null)
-                  : pickOnly(id, [[axis, key]])
+                key == null ? pick(id, axis, null) : pickOnly(id, [[axis, key]])
               }
             />
           );
@@ -1939,7 +2088,7 @@ export function PortalLayersDashboard({
         return (
           <CutCard
             key={`${id}:${b.id}`}
-            title={environment ? topicChartTitle(b, id) : chartTitle(b)}
+            title={environment ? topicChartTitle(b) : chartTitle(b)}
             tone={tone}
             first={i === 0 && !crossCard}
             weight={cardWeight(b)}
@@ -2034,9 +2183,15 @@ export function PortalLayersDashboard({
               */
               <AreaChart
                 data={b.values}
+                /* ⚠ `fill` нь картынхаа ҮЛДСЭН өндрийг эзэлнэ; `height`
+                   нь доод хязгаар ба `viewBox`-ийн харьцаа болж үлдэнэ
+                   — богино дэлгэц дээр он бичсэн доод мөр тасрахаа
+                   болино */
+                fill
                 height={108}
                 tone={tone}
-                unit="бичлэг"
+                /* Hover самбарын нэгж — мөн "бичлэг" БИШ */
+                unit="бүртгэл"
                 selected={chosen}
                 onSelect={onPick}
                 labels
@@ -2140,35 +2295,35 @@ export function PortalLayersDashboard({
     баруун баганыг ӨРГӨСГӨЖ (560px) хангана.
   */
   const chartsBlock = showCharts ? (
-            <div className="flex min-h-0 flex-col gap-2 overflow-y-auto">
-              {views.length === 0 ||
-              (environment && views.every((view) => !view.charts.length)) ? (
-                <Card className="min-h-[120px] flex-1">
-                  <Head title="Задаргаа" />
-                  <div className="hatch flex flex-1 items-center justify-center px-4">
-                    <p className="text-center text-[12px] leading-relaxed text-ink-3">
-                      {environment && on.some((id) => !loaded[id] && !failed[id])
-                        ? "Сонгосон давхаргын мэдээллийг ачаалж байна…"
-                        : environment && views.length
-                          ? "Ангиллаар харьцуулах мэдээлэл байхгүй. Газрын зураг дээрх бүртгэлээс дэлгэрэнгүйг үзнэ үү."
-                          : picker
-                            ? "Давхарга асаахад задаргаа нь энд гарна."
-                            : "Задаргаа гарахуйц талбар олдсонгүй."}
-                    </p>
-                  </div>
-                </Card>
-              ) : null}
-  
-              {zoneCard}
-  
-              {chartCards(
-                (id, b) => !(split && id === split.id && b.id === split.chart),
-                /* Талбайн карт ҮРГЭЛЖ баруун баганад, давхаргынхаа
+    <div className="flex min-h-0 flex-col gap-2 overflow-y-auto">
+      {views.length === 0 ||
+      (environment && views.every((view) => !view.charts.length)) ? (
+        <Card className="min-h-[120px] flex-1">
+          <Head title="Задаргаа" />
+          <div className="hatch flex flex-1 items-center justify-center px-4">
+            <p className="text-center text-[12px] leading-relaxed text-ink-3">
+              {environment && on.some((id) => !loaded[id] && !failed[id])
+                ? "Сонгосон давхаргын мэдээллийг ачаалж байна…"
+                : environment && views.length
+                  ? "Ангиллаар харьцуулах мэдээлэл байхгүй. Газрын зураг дээрх бүртгэлээс дэлгэрэнгүйг үзнэ үү."
+                  : picker
+                    ? "Давхарга асаахад задаргаа нь энд гарна."
+                    : "Задаргаа гарахуйц талбар олдсонгүй."}
+            </p>
+          </div>
+        </Card>
+      ) : null}
+
+      {zoneCard}
+
+      {chartCards(
+        (id, b) => !split?.has(`${id}:${b.id}`),
+        /* Талбайн карт ҮРГЭЛЖ баруун баганад, давхаргынхаа
                    туузан дор */
-                () => true,
-                true,
-              )}
-            </div>
+        () => true,
+        true,
+      )}
+    </div>
   ) : null;
 
   return (
@@ -2282,7 +2437,8 @@ export function PortalLayersDashboard({
                     if (key == null) return showLayers(all);
                     /* Шүүлтгүй байхад эхний товшилт нь ЗӨВХӨН тэр бүсийг
                        үлдээнэ — "дарахаар асна" */
-                    if (on.length === set.layers.length) return showLayers([key]);
+                    if (on.length === set.layers.length)
+                      return showLayers([key]);
                     const next = on.includes(key)
                       ? on.filter((x) => x !== key)
                       : [...on, key];
@@ -2295,7 +2451,11 @@ export function PortalLayersDashboard({
             ) : null}
 
             {set.exclusive ? (
-              <div className="flex items-center gap-1" role="group" aria-label="Давхарга">
+              <div
+                className="flex items-center gap-1"
+                role="group"
+                aria-label="Давхарга"
+              >
                 {set.layers.map((id) => {
                   const isOn = on.includes(id);
                   return (
@@ -2463,10 +2623,15 @@ export function PortalLayersDashboard({
           ) : null}
           <Stat
             icon={Shapes}
+            /* ⚠ "Бичлэг" нь МЭДЭЭЛЛИЙН САНГИЙН үг — эцсийн хэрэглэгч
+               агуулах, зөвшөөрөл, цэгийг хардаг болохоос "бичлэг"
+               хардаггүй. Платформ өөрөө "бүртгэл" гэдэг үгтэй
+               (доорх `environment` хувилбар түүнийг аль хэдийн
+               хэрэглэдэг) тул хоёуланг нэг үгэнд оруулав */
             label={
               environment
                 ? "Сонгосон давхаргын бүртгэл"
-                : "Шүүлтэд тохирох бичлэг"
+                : "Шүүлтэд тохирох бүртгэл"
             }
             value={
               environment && on.some((id) => !loaded[id] && !failed[id])
@@ -2489,6 +2654,14 @@ export function PortalLayersDashboard({
               }
             />
           ) : null}
+          {extras.map((e) => (
+            <Stat
+              key={e.key}
+              icon={e.time ? CalendarRange : Sigma}
+              label={e.label}
+              value={e.value}
+            />
+          ))}
         </div>
       )}
       {environment && on.length > 1 ? (
@@ -2521,7 +2694,7 @@ export function PortalLayersDashboard({
         {!picker && split ? (
           <div className="flex min-h-0 flex-col gap-2 overflow-y-auto">
             {chartCards(
-              (id, b) => id === split.id && b.id === split.chart,
+              (id, b) => split.has(`${id}:${b.id}`),
               /* Талбайн карт зүүн тийш ГАРАХГҮЙ — давхаргынхаа
                  бүлэгт үлдэнэ ({@link split}) */
               () => false,
@@ -2529,7 +2702,7 @@ export function PortalLayersDashboard({
           </div>
         ) : null}
         {picker ? (
-          <div className="flex min-h-0 flex-col gap-2.5">
+          <div className="flex min-h-0 flex-col gap-2">
             <Card className="min-h-[140px] flex-1">
               <Head title="Давхарга">
                 <span className="num text-[11.5px] text-ink-3">
@@ -2586,7 +2759,10 @@ export function PortalLayersDashboard({
                         ) : (
                           <span className="num mt-1 block truncate text-[10.5px] leading-none text-ink-3">
                             {info
-                              ? `${num(info.count)} бичлэг · ${GEOMETRY_LABEL[info.geometry] ?? info.geometry}`
+                              ? /* ⚠ "бичлэг" нь мэдээллийн сангийн үг —
+                                   дэлгэцэд ХЭЗЭЭ Ч гарахгүй (хэлний
+                                   дүрэм). Платформын үг нь "бүртгэл". */
+                                `${num(info.count)} бүртгэл · ${GEOMETRY_LABEL[info.geometry] ?? info.geometry}`
                               : "Уншиж байна…"}
                           </span>
                         )}
@@ -2607,7 +2783,7 @@ export function PortalLayersDashboard({
         ) : null}
 
         {/* ---- БАРУУН: зураг, доор нь диаграмын зурвас ---- */}
-        <div className="flex min-h-0 flex-col gap-2.5">
+        <div className="flex min-h-0 flex-col gap-2">
           <Card className="relative min-h-[300px] flex-1 overflow-hidden">
             <div className="relative h-full w-full">
               {/*
@@ -2886,7 +3062,10 @@ export function PortalLayersDashboard({
                       .filter((m): m is string => Boolean(m))
                       .slice(0, 2)
                       .map((message) => (
-                        <p key={message} className="num mt-1.5 text-[11px] leading-snug text-ink-3">
+                        <p
+                          key={message}
+                          className="num mt-1.5 text-[11px] leading-snug text-ink-3"
+                        >
                           {message}
                         </p>
                       ))}
@@ -2900,9 +3079,9 @@ export function PortalLayersDashboard({
             Суурь зураг: Esri · Дата: ArcGIS Enterprise · хүрээг ~10 метрээр
             ерөнхийлсөн
           </p>
-
         </div>
 
+        {/* ---- БАРУУН: ангиллын задаргаа ---- */}
         {chartsBlock}
       </Columns>
     </div>
@@ -3079,6 +3258,38 @@ function isPie(b: Breakdown): boolean {
 const PIE_MAX = 4;
 
 /**
+ * Засаг захиргааны шатлал — ӨРГӨНӨӨС НАРИЙН руу.
+ *
+ * Эх сурвалж нэг давхаргад хэд хэдэн шатыг зэрэг бичдэг (`aimag`,
+ * `duureg`, `horoo`) бөгөөд тэдгээр нь бие даасан задаргаанууд биш
+ * НЭГ ТЭНХЛЭГИЙН нарийвчлалын шатууд. Тиймээс тэдгээр нь хамт сууж,
+ * өргөнөөс нарийн руу эрэмбэлэгдэх ёстой: дүүрэг дээр нь, хороо
+ * доор нь. Эсрэгээр байрлуулбал хэрэглэгч нарийныг нь эхэлж уншаад
+ * хүрээгээ дараа нь олдог.
+ *
+ * ⚠ Кирилл дээр `\b` ажилладаггүй тул үгийг ЗАЙГААР хүрээлж таана —
+ * эс тэгвээс "Багц" доторх "баг", "Сумын дарга" доторх "сум" зэрэг
+ * санамсаргүй таарал үүснэ ({@link src/lib/chemsystem.ts}-ийн
+ * `placeOf`-той нэг арга).
+ */
+const ADMIN_WORDS: string[][] = [
+  ["аймаг", "нийслэл", "aimag"],
+  ["сум", "дүүрэг", "soum", "duureg"],
+  ["баг", "хороо", "bag", "horoo", "khoroo"],
+];
+
+function adminRank(label: string): number | null {
+  const t = ` ${label
+    .toLocaleLowerCase("mn")
+    .replace(/[^0-9a-zа-яөүё]+/gi, " ")
+    .trim()} `;
+  for (let i = 0; i < ADMIN_WORDS.length; i += 1) {
+    if (ADMIN_WORDS[i].some((w) => t.includes(` ${w} `))) return i;
+  }
+  return null;
+}
+
+/**
  * Диаграмын гарчиг.
  *
  * Гарчиг нь ХОЁР асуултад хариулах ёстой: юуг хэмжсэн бэ, юугаар нь
@@ -3096,10 +3307,23 @@ function chartTitle(b: Breakdown): string {
   const cut = b.top ? ` (эхний ${b.top})` : "";
 
   switch (b.kind) {
-    /* Тоолол нь өөрийн нэргүй хэмжигдэхүүн — "юуны тоо" гэдгийг
-       заавал хэлнэ, эс тэгвээс талбайн диаграмаас ялгарахгүй */
+    /*
+      ⚠⚠ "— бичлэгийн тоо" ДАГАВАР ХАСАГДСАН (хэрэглэгчийн шийдвэр,
+      2026-09-28: "энэ чартуудын дээр байгаа бичлэгийн тоо — del,
+      хэзээ ч албан ёсны webapp хийж байгаа тохиолдолд тэгж бичихгүй").
+
+      ⚠ Энэ нь дэлгэц дээр гарах бичвэрийн дүрэм: "бичлэг" гэдэг нь
+      МЭДЭЭЛЛИЙН САНГИЙН үг — эцсийн хэрэглэгч агуулах, зөвшөөрөл,
+      цэгийг хардаг болохоос "бичлэг" хардаггүй. Арга зүйн тайлбар
+      дэлгэцэд гаргахгүй дүрэмтэй нэг гэр бүл.
+
+      ⚠ Тоолол ба хэмжилт нь ХЭВЭЭР ялгагдана: нийлбэр, дундаж нь
+      гарчгийнхаа ЭХЭНД хэмжигдэхүүнээ бичдэг ("Талбай, га — Дүүрэг")
+      тул нүцгэн нэр нь өөрөө тоолол гэдгийг хэлнэ. Зурвасын утга нь
+      ч бүхэл тоо байна.
+    */
     case "count":
-      return `${b.label} — бичлэгийн тоо`;
+      return `${b.label}${cut}`;
     case "sum":
       return `${b.measure ?? ""} — ${b.label}${cut}`;
     /* Дундаж нь нийлбэрээс ЭРС өөр утга — гарчигт нь ил хэлэхгүй бол
@@ -3109,18 +3333,35 @@ function chartTitle(b: Breakdown): string {
     case "compare":
       return `Харьцуулалт, ${b.measure ?? ""} — ${b.label}${cut}`;
     /*
-      Хугацааны талбар ихэвчлэн ӨӨРӨӨ нэрэндээ хэлчихсэн байдаг ("Он",
-      "Сар") тул араас нь дахин хавсаргавал "Сар, сараар" гэсэн утгагүй
-      давталт үүсэнэ. Нэрэнд нь байвал зөвхөн хуваарилалтыг л нэрлэнэ.
+      ⚠⚠ ОГНООНЫ ТАЛБАР ӨӨРИЙН НЭРЭЭРЭЭ ГАРНА (хэрэглэгчийн шийдвэр,
+      2026-09-28: "тусгай зөвшөөрөл авсан огноо болго гэх мэтээр
+      чартын нэрсийг албаны болго").
+
+      Нэр нь аль хэдийн огноо гэдгээ хэлчихсэн байвал араас нь
+      "жилээр", "жилийн хуваарилалт" гэж хавсаргах нь албан нэршлийг
+      мэдээллийн сангийн тайлбар болгоно — "Тусгай зөвшөөрөл авсан
+      огноо, жилээр" гэж уншигдана. Тэнхлэг нь өөрөө онуудыг бичдэг
+      тул давталт нь мэдээлэл ч нэмэхгүй.
+
+      ⚠ Огноо гэж нэрлээгүй талбар (жишээ нь "Бүртгэл") дээр
+      хуваарилалтыг ЗААВАЛ хэлнэ — эс тэгвээс тоолол мөн үү, жил мөн
+      үү гэдэг нь гарчигнаас уншигдахгүй.
+      ⚠ САРЫН диаграм ДАГАВАРТАЙ хэвээр тул нэг талбарын жил, сарын
+      хоёр карт ялгагдана ("… огноо" ба "… огноо, сараар").
     */
     case "year":
-      return /он|жил|year/i.test(b.label)
-        ? `${b.label} — жилийн хуваарилалт`
-        : `${b.label}, жилээр`;
+      return /огноо|он|жил|year|date/i.test(b.label)
+        ? `${b.label}${cut}`
+        : `${b.label}, жилээр${cut}`;
+    /* Сар нь ЖИЛТЭЙ ижил дүрэмтэй: нэр нь өөрөө "сар" гэж хэлсэн бол
+       дагавар нэмэхгүй. Ингэснээр нэг давхаргын "Он" ба "Сар" хоёр
+       карт тэгш харагдана; харин НЭГ талбарын жил, сарын хоёр карт
+       (аврагдсан амьтдын "Огноо") ялгагдсан хэвээр — тэр нэрэнд
+       "сар" гэсэн үг байхгүй тул дагавраа авна. */
     case "month":
       return /сар|month/i.test(b.label)
-        ? `${b.label} — сарын хуваарилалт`
-        : `${b.label}, сараар`;
+        ? `${b.label}${cut}`
+        : `${b.label}, сараар${cut}`;
     default:
       return b.label;
   }
@@ -3308,7 +3549,12 @@ function AxisCard({
   };
 
   const cols: Col[] = [];
-  const add = (key: string, label: string, by: Map<string, number>, sums: boolean) => {
+  const add = (
+    key: string,
+    label: string,
+    by: Map<string, number>,
+    sums: boolean,
+  ) => {
     const cut = unitOf(label);
     cols.push({
       key,
@@ -3330,7 +3576,10 @@ function AxisCard({
           .filter(Boolean)
           .join(" · "),
         by,
-        total: b.kind === "mean" ? null : [...by.values()].reduce((s, v) => s + v, 0),
+        total:
+          b.kind === "mean"
+            ? null
+            : [...by.values()].reduce((s, v) => s + v, 0),
       });
     } else {
       add(b.id, countLabel, by, true);

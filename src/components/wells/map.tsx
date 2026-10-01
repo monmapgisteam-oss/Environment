@@ -12,6 +12,7 @@ import {
   type FilterSpecification,
   type GeoJSONSource,
   type IControl,
+  type ImageSource,
   type StyleSpecification,
 } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
@@ -335,6 +336,10 @@ function gradedRadius(stops: [number, string][], scale: number): ExpressionSpeci
  * Бөөгнөрлийн тоог бичихэд фонтын glyph хэрэгтэй. Растер хавтан ганцаараа
  * glyph өгдөггүй тул нийтэд нээлттэй OpenMapTiles-ийн фонтын үйлчилгээг заана.
  */
+/** 1×1 тунгалаг PNG — растер эх сурвалжийн анхны дүүргэгч */
+const BLANK_PNG =
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+
 const GLYPHS = "https://fonts.openmaptiles.org/{fontstack}/{range}.pbf";
 
 /** MapLibre-ийн дээд ойртолт — давхаргын zoom мужийн дээд хязгаарт */
@@ -525,10 +530,12 @@ export function WellsMap({
   pickedMark = null,
   pulseColor,
   onHover,
+  onProbe,
   firefly,
   colors,
   highlight = null,
   overlays,
+  field,
   shapes,
   grades,
   weights,
@@ -625,6 +632,14 @@ export function WellsMap({
    */
   onHover?: (oid: number | null, at?: { x: number; y: number }) => void;
   /**
+   * Хулганы доорх ГАЗАРЗҮЙН ЦЭГ — обьект байгаа эсэхээс үл хамаарна.
+   *
+   * `onHover` нь зөвхөн дата обьект дээр ажилладаг тул растер талбар
+   * ({@link field}) дээр юу ч мэдэгдэхгүй: тэнд обьект байхгүй, зөвхөн
+   * тор бий. Дуудагч тал солбицлоос нүдээ өөрөө олно.
+   */
+  onProbe?: (at: { lon: number; lat: number; x: number; y: number } | null) => void;
+  /**
    * Цэгийн давхаргын өнгөний гурвал. Өгөөгүй бол платформын цэнхэр
    * firefly. ЗӨВХӨН анхны зурагдалтад уншигдана.
    *
@@ -660,6 +675,28 @@ export function WellsMap({
    * бөөгнөрөл нь тэдгээрээр далдлагдахгүй.
    */
   overlays?: MapOverlay[];
+  /**
+   * ТООЦООЛЛЫН ТАЛБАР — тогтмол торон дээр бодогдсон утгыг растераар
+   * зурна (үерийн ус, азотын агууламж). Суурь зургийн ДЭЭР, хилийн
+   * ДООР суух тул зам, хилийн шугам уншигдсаар байна.
+   *
+   * ⚠⚠ ЗУРАГ МЕРКАТОРЫН ТОРОНД БЭЛТГЭГДЭНЭ. Тооцооллын тор нь UTM
+   * дээр жигд ч газарзүйн солбицолд бага зэрэг эргэлддэг: дөрвөн
+   * булангаар нь шууд байрлуулахад **87 метрийн** зөрүү гарна
+   * (хэмжсэн). Тиймээс дуудагч тал пиксел бүрийг эргүүлж торын нүд рүү
+   * буулгаж зурах ба энд өгөх нь ердийн хавтгай тэгш өнцөгт болно.
+   *
+   * ⚠ `image` нь ДАХИН ХЭРЭГЛЭГДДЭГ обьект тул шинэчлэлийг `tick`
+   * тоолуураар мэдэгдэнэ — агуулга нь солигдсон ч ижил заагч ирнэ.
+   */
+  field?: {
+    /** Зүүн, өмнөд, баруун, хойд ирмэг */
+    bounds: [number, number, number, number];
+    image: ImageData | null;
+    /** Агуулга шинэчлэгдсэнийг мэдэгдэх тоолуур */
+    tick: number;
+    opacity?: number;
+  };
   /**
    * ДАТА олон өнцөгт (талбай, тусгай зөвшөөрөл, эвдэрсэн газар).
    *
@@ -894,6 +931,7 @@ export function WellsMap({
   */
   const selectCb = React.useRef(onSelect);
   const hoverCb = React.useRef(onHover);
+  const probeCb = React.useRef(onProbe);
   const extentCb = React.useRef(onExtent);
   const zoomCb = React.useRef(onZoom);
   const viewCb = React.useRef(onView);
@@ -946,6 +984,9 @@ export function WellsMap({
   React.useEffect(() => {
     hoverCb.current = onHover;
   }, [onHover]);
+  React.useEffect(() => {
+    probeCb.current = onProbe;
+  }, [onProbe]);
   /* Өнгө тодорхойлогчийг ref-д барина — эс тэгвээс дуудагч тал шинэ
      функц дамжуулах бүрд бүх тэмдэглэгээ дахин үүснэ */
   const pulseColorRef = React.useRef(pulseColor);
@@ -1913,6 +1954,17 @@ export function WellsMap({
       });
       m.on("mouseleave", hitLayer, () => hoverCb.current?.(null));
 
+      /* Зургийн ЯМАР Ч цэг дээрх солбицол — растер талбарт зориулав */
+      m.on("mousemove", (e) => {
+        probeCb.current?.({
+          lon: e.lngLat.lng,
+          lat: e.lngLat.lat,
+          x: e.point.x,
+          y: e.point.y,
+        });
+      });
+      m.on("mouseout", () => probeCb.current?.(null));
+
       /* Олон өнцөгт нь мөн товшигдоно — цэгтэй ижил `oid` дамжуулна */
       if (modeRef.current.shaped) {
         /*
@@ -2502,6 +2554,68 @@ export function WellsMap({
       }
     }
   }, [live, overlays]);
+
+  /* ---------------- Тооцооллын талбар (растер) ----------------
+     Суурь зургийн ДЭЭР, хилийн ДООР: тооцоолсон утга нь газрын
+     зургийг халхлах ёсгүй, хил нь харагдсаар байх ёстой. */
+  const fieldBounds = field?.bounds;
+  React.useEffect(() => {
+    if (!live) return;
+    if (!fieldBounds) {
+      if (live.getLayer("field")) live.removeLayer("field");
+      if (live.getSource("field")) live.removeSource("field");
+      return;
+    }
+    const [w, s, e, n] = fieldBounds;
+    const corners: [
+      [number, number], [number, number], [number, number], [number, number],
+    ] = [
+      [w, n],
+      [e, n],
+      [e, s],
+      [w, s],
+    ];
+    const src = live.getSource("field") as ImageSource | undefined;
+    if (src) {
+      src.setCoordinates(corners);
+      return;
+    }
+    live.addSource("field", {
+      type: "image",
+      /* 1×1 тунгалаг зураг — эх сурвалж үүсгэхэд зураг шаардлагатай ч
+         жинхэнэ агуулга нь доорх эффектээс `updateImage`-ээр ирнэ */
+      url: BLANK_PNG,
+      coordinates: corners,
+    });
+    live.addLayer(
+      {
+        id: "field",
+        type: "raster",
+        source: "field",
+        paint: {
+          "raster-opacity": 0.88,
+          /* Шинэ кадр бүрд бүдгэрч тодрох нь анивчилт болно */
+          "raster-fade-duration": 0,
+          /* Нүд бүр нэг утга — жигдрүүлбэл ангиллын зааг замхарна */
+          "raster-resampling": "nearest",
+        },
+      },
+      live.getLayer("bnd-soum") ? "bnd-soum" : undefined,
+    );
+  }, [live, fieldBounds]);
+
+  const fieldTick = field?.tick;
+  const fieldImage = field?.image;
+  const fieldOpacity = field?.opacity ?? 0.88;
+  React.useEffect(() => {
+    if (!live || !fieldImage) return;
+    const src = live.getSource("field") as ImageSource | undefined;
+    if (!src) return;
+    src.updateImage({ image: fieldImage });
+    if (live.getLayer("field")) {
+      live.setPaintProperty("field", "raster-opacity", fieldOpacity);
+    }
+  }, [live, fieldImage, fieldTick, fieldOpacity]);
 
   /* ---------------- Тодруулгын цагираг ---------------- */
   React.useEffect(() => {

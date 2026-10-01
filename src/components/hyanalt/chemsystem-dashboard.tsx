@@ -988,7 +988,7 @@ function AttrTable({
 
         {rows.length === 0 ? (
           <div className="hatch m-3 rounded-xs border border-dashed border-line-2 px-3 py-6 text-center text-[11.5px] text-ink-3">
-            Тохирох бичлэг олдсонгүй
+            Тохирох бүртгэл олдсонгүй
           </div>
         ) : null}
       </div>
@@ -1071,7 +1071,7 @@ function Panel({
 
       {empty ? (
         <div className="hatch m-3 rounded-xs border border-dashed border-line-2 px-3 py-6 text-center text-[11.5px] text-ink-3">
-          Тохирох бичлэг олдсонгүй
+          Тохирох бүртгэл олдсонгүй
         </div>
       ) : (
         <ul

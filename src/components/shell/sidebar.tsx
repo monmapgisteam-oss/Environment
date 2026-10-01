@@ -2,7 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ArrowUpRight, Database, LayoutGrid, Leaf } from "lucide-react";
+import {
+  ArrowUpRight,
+  ChartNoAxesCombined,
+  Database,
+  LayoutGrid,
+  Leaf,
+} from "lucide-react";
 import { DEPARTMENTS } from "@/lib/departments";
 import { cn, isActivePath } from "@/lib/utils";
 
@@ -49,6 +55,15 @@ export function Sidebar() {
           );
         })}
         <div className="dock-divider" />
+        {/*
+          ⚠ ДҮН ШИНЖИЛГЭЭ нь ЭХ СУРВАЛЖИЙН ДЭЭР (хэрэглэгчийн заасан
+          байрлал, 2026-09-29). Хэлтсүүдийн ДАРААХ бүлэгт сууна:
+          дээрх бүлэг нь нэг хэлтсийн ажлын талбар бол эдгээр хоёр нь
+          хэлтсээс ҮЛ ХАМААРАХ, бүх системийн хэмжээний хуудсууд.
+        */}
+        <Link href="/analysis" title="Дүн шинжилгээ" className={cn("dock-link", isActivePath(path, "/analysis", true) && "active")} aria-current={isActivePath(path, "/analysis", true) ? "page" : undefined}>
+          <ChartNoAxesCombined size={20} /><span>Дүн шинжилгээ</span>
+        </Link>
         <Link href="/sources" title="Дата эх сурвалж" className={cn("dock-link", isActivePath(path, "/sources", true) && "active")} aria-current={isActivePath(path, "/sources", true) ? "page" : undefined}>
           <Database size={20} /><span>Эх сурвалж</span>
         </Link>
