@@ -11,6 +11,16 @@ export function num(value: number, digits = 0) {
   return mnNum.format(Number(value.toFixed(digits)));
 }
 
+/**
+ * Харьцааны хуваарь "1:9 540" — гурван нэрлэх орноор бөөрөнхийлнө (1:9 543
+ * биш). 2D зураг ({@link src/components/wells/map.tsx}) ба хөрсний зүсэлт
+ * хоёул эндээс — нэг хуваарь хоёр газар өөрөөр бичигдэх ёсгүй.
+ */
+export function ratioText(denominator: number) {
+  const step = Math.pow(10, Math.max(0, Math.floor(Math.log10(denominator)) - 2));
+  return `1:${num(Math.round(denominator / step) * step)}`;
+}
+
 export function pct(value: number, digits = 1) {
   return `${value > 0 ? "+" : ""}${value.toFixed(digits)}%`;
 }

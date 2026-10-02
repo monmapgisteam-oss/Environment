@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { Layers, Loader2, Pause, Play } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, ratioText } from "@/lib/utils";
 import { Columns } from "@/components/ui/resizable-columns";
 import { Card, Field } from "@/components/analysis/ui";
 import { esriModules } from "@/lib/arcgis-sdk";
@@ -42,6 +42,18 @@ type State = "loading" | "ready" | { error: string };
 export function SoilScene() {
   const holder = React.useRef<HTMLDivElement>(null);
   const scene = React.useRef<Handle | null>(null);
+  /* ⚠ Харьцааны хуваарь камер хөдлөх бүрд өөрчлөгдөнө — төлөвт барьвал
+     самбар бүхлээрээ дахин зурагдана тул DOM руу шууд бичнэ (2D зургийн
+     `RatioScaleControl`-той нэг зарчим) */
+  const scaleEl = React.useRef<HTMLSpanElement | null>(null);
+  /* ⚠ Хөдөлгүүр анхны утгаа блок зурагдахаас ӨМНӨ дуугаргадаг — тэр үед
+     заалтын элемент хараахан байхгүй тул сүүлийн бичвэрийг барьж, элемент
+     гарч ирэхэд тавина */
+  const scaleText = React.useRef("");
+  const scaleRef = React.useCallback((el: HTMLSpanElement | null) => {
+    scaleEl.current = el;
+    if (el) el.textContent = scaleText.current;
+  }, []);
 
   const [state, setState] = React.useState<State>("loading");
   const [pick, setPick] = React.useState<PickInfo | null>(null);
@@ -73,6 +85,10 @@ export function SoilScene() {
           onNote: setNote,
           onSection: setSection,
           onPlumes: setPlumes,
+          onScale: (d) => {
+            scaleText.current = d ? ratioText(d) : "";
+            if (scaleEl.current) scaleEl.current.textContent = scaleText.current;
+          },
           onLatrine: (i) => {
             setSimSel(i);
             setSimOpen(true);
@@ -136,6 +152,8 @@ export function SoilScene() {
                 {/* ⚠⚠ Өсгөлтийн коэффициент ИЛ бичигдэнэ — налуу байгаагаас эгц
                   харагдахыг нуух боломжгүй. Гулсуур хасагдсан тул энд л үлдэв. */}
                 <span className="pointer-events-none absolute bottom-2 left-2 rounded-xs bg-paper/80 px-2 py-1 text-[10.5px] text-ink-2 backdrop-blur-sm">
+                  {/* Харьцаа нь хэвтээ тэнхлэгийнх; газар харагдахгүй үед хоосон */}
+                  <span ref={scaleRef} className="num font-semibold text-ink empty:hidden after:font-normal after:text-ink-2 after:content-['_·_']" />
                   Босоо өсгөлт ×{SOIL_EXAGGERATION}
                   {/* ⚠ Гүний хэсэг өөр өсгөлттэй — гарч ирэх бүрд ИЛ хэлнэ */}
                   {shown && plumes?.deep && plumes.deep.depth > 2 ? `, 2 м-ээс доош ×${DEEP_X}` : ""} · Товшиход профайл · Жорлон товшиход

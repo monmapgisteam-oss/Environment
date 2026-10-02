@@ -144,12 +144,18 @@ export async function createSoilScene(opts: {
   /** Зүсэлт дээрх жорлонгийн бохирдлын төлөв */
   onPlumes: (s: PlumeState) => void;
   /**
+   * Харьцааны хуваарь (1:N-ийн N), дэлгэцийн ТӨВ дээр; газар харагдахгүй
+   * (тэнгэр рүү харсан) үед `null`. Камер хөдлөх бүрд дуугарна тул дуудагч
+   * тал DOM руу ШУУД бичнэ — төлөвт барьвал самбар бүхлээрээ дахин зурагдана.
+   */
+  onScale?: (denominator: number | null) => void;
+  /**
    * Нүхэн жорлон (цэг эсвэл хайрцаг) товшигдсон — симуляцийн багцын
    * ИНДЕКС (`latrine-sim.bin`-ийн дараалал; давхаргын `oid` = индекс + 1)
    */
   onLatrine: (i: number) => void;
 }): Promise<SoilScene> {
-  const { container, data, onPick, onNote, onSection, onPlumes, onLatrine } = opts;
+  const { container, data, onPick, onNote, onSection, onPlumes, onLatrine, onScale } = opts;
   const [EsriMap, SceneView, GraphicsLayer, Graphic, Mesh, MeshComponent, MeshMaterial, MeshTexture,
     SliceAnalysis, SlicePlane, Expand, Point, Extent, reactiveUtils, FeatureLayer] = opts.mods as [
     C, C, C<GLayer>, C, C, C, C, C, C, C, C<Widget>, C, C, Reactive, C<FLayer>,
@@ -524,7 +530,7 @@ export async function createSoilScene(opts: {
     scale: number;
     stationary: boolean;
     whenLayerView: (l: unknown) => Promise<{ filter: unknown }>;
-    camera: { position: { longitude: number; latitude: number } };
+    camera: { position: { longitude: number; latitude: number }; tilt: number; heading: number };
   };
 
   const themeObs = new MutationObserver(() => {
@@ -2316,6 +2322,50 @@ export async function createSoilScene(opts: {
        харагдахгүй"). */
     return s ? [s.position?.x, s.position?.y, s.position?.z, s.heading, s.tilt, s.width, s.height].join() : a ? "хоосон" : "";
   }, updateCap);
+
+  /* ── Харьцааны хуваарь (1:N) ──────────────────────────────────────
+     Хэрэглэгч 2026-10-01: "hursni zuselt map deer scale haruul 1:1000".
+     2D зургийн `RatioScaleControl`-той НЭГ арга: томьёогоор биш зургаас
+     асууж, дэлгэцийн төвийн мөрөнд 100px зайтай хоёр цэгийг газарт буулгаад
+     бодит зайг хэмжинэ.
+     ⚠⚠ `view.scale`-ыг ШУУД ХЭРЭГЛЭХГҮЙ: харагдац Web Mercator-ийн орон
+     зайд ажилладаг тул тэр нь Mercator нэгжээр — Улаанбаатарт бодит газраас
+     1/cos(φ) ≈ 1.49 дахин том (`mercK`-ийн тэмдэглэлийг үз).
+     ⚠ Газар нь өсгөлтгүй рельеф тул тоо нь ХЭВТЭЭ хуваарь; босоо өсгөлт
+     (×800) нь тусдаа, доод мөрөнд ил бичигдэнэ.
+     ⚠ Налуу харагдацад хуваарь дэлгэцийн дагуу өөрчлөгддөг тул ТӨВИЙНХ
+     — 2D зургийн дүрэмтэй ижил. */
+  const M_PER_CSS_PX = 0.0254 / 96;
+  const scaleNow = (): number | null => {
+    const w = container.clientWidth;
+    const y = container.clientHeight / 2;
+    const a = view.toMap({ x: w / 2 - 50, y });
+    const b = view.toMap({ x: w / 2 + 50, y });
+    if (!a || !b) return null;
+    const m = distM([a.longitude, a.latitude], [b.longitude, b.latitude]);
+    return Number.isFinite(m) && m > 0 ? m / 100 / M_PER_CSS_PX : null;
+  };
+  if (onScale) {
+    /* ⚠ Камерын байрлал, хазайлтыг ч мөрдөнө: зөвхөн `view.scale` нь
+       чирэх, эргүүлэхэд өөрчлөгдөхгүй ч төвийн хуваарь өөрчлөгддөг */
+    /* ⚠⚠ `view.camera` нь харагдац БЭЛЭН болохоос өмнө `undefined` байж
+       болно (бодит GPU-тэй хөтөчид ингэж унаж, хөрсний зүсэлт бүхэлдээ
+       ачаалагдахгүй байв — толгойгүй Chrome-д тааралдаагүй) */
+    const cam = () => {
+      const c = view.camera as Partial<typeof view.camera> | undefined;
+      const p = c?.position;
+      return p ? [view.scale, p.longitude, p.latitude, c?.tilt, c?.heading].join() : "";
+    };
+    const safeScale = () => {
+      try {
+        return scaleNow();
+      } catch {
+        return null;
+      }
+    };
+    onScale(safeScale());
+    stopWatchers.push(reactiveUtils.watch(cam, () => onScale(safeScale())));
+  }
 
   /* ── Товшилт → цэгийн профайл ──────────────────────────────────── */
   const PAT = Object.fromEntries(

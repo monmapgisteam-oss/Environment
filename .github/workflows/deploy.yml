@@ -55,6 +55,51 @@ jobs:
         with:
           path: out
 
+  # Байгууллагын сервер (environment.ub.gov.mn) дээрх хувилбар.
+  #
+  # ⚠ GitHub серверт ТҮЛХЭХГҮЙ — сервер өөрөө ТАТНА. Төрийн серверийн
+  # SSH интернэтээс нээлттэй байх ёсгүй; харин сервер GitHub руу гарч
+  # чадна. Энэ ажил бүтээлтийг `server-build` салаа руу хадгалж, сервер
+  # дээрх `scripts/server-update.sh` түүнийг 5 минут
+  # тутам татаж nginx-ийн хавтас руу хуулна (`docs/server-deploy.md`).
+  #
+  # ⚠ ЗАМГҮЙ бүтээнэ (`NEXT_PUBLIC_BASE_PATH` хоосон): сайт хостын
+  # үндсэн хаяг дээр суудаг, GitHub Pages шиг `/Environment` дор биш.
+  # Нэг бүтээлтийг хоёуланд хэрэглэх боломжгүй — зам нь багцад
+  # бичигддэг.
+  #
+  # ⚠ Салаа нь ҮРГЭЛЖ НЭГ commit-тэй (force push) — түүх хуримтлагдаж
+  # серверийн татац жил ирэх тусам удаашрахгүй.
+  server:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Build static export (server root)
+        env:
+          NEXT_PUBLIC_BASE_PATH: ""
+          CHEMSYSTEM_KEY: ${{ secrets.CHEMSYSTEM_KEY }}
+          NEXT_PUBLIC_ARCGIS_APP_ID: ${{ vars.NEXT_PUBLIC_ARCGIS_APP_ID || secrets.NEXT_PUBLIC_ARCGIS_APP_ID }}
+        run: npm run build
+      - name: Publish to server-build branch
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cd out
+          # Сервер дээр аль хувилбар суусныг шалгах ганц зам
+          printf '%s\n%s\n' "$GITHUB_SHA" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > version.txt
+          git init -q -b server-build
+          git add -A
+          git -c user.name=github-actions -c user.email=github-actions@users.noreply.github.com \
+            commit -qm "Серверийн хувилбар ${GITHUB_SHA::7}"
+          git push -qf "https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}.git" server-build
+
   deploy:
     needs: build
     runs-on: ubuntu-latest
