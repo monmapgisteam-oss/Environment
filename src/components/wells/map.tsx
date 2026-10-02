@@ -20,7 +20,7 @@ import { FIREFLY } from "@/components/wells/colors";
 import type { BoundarySet } from "@/lib/boundaries";
 import { asset } from "@/lib/base-path";
 import { labelPoints } from "@/lib/extent";
-import { num } from "@/lib/utils";
+import { ratioText } from "@/lib/utils";
 
 /* --------------------------------------------------------------------------
    Масштабын ХАРЬЦАА (1:10 000)
@@ -34,12 +34,6 @@ import { num } from "@/lib/utils";
  * утга гэдгийг санах хэрэгтэй.
  */
 const M_PER_CSS_PX = 0.0254 / 96;
-
-/** Гурван нэрлэх орноор бөөрөнхийлнө: 1:9 543 биш 1:9 540 */
-function roundScale(d: number) {
-  const step = Math.pow(10, Math.max(0, Math.floor(Math.log10(d)) - 2));
-  return Math.round(d / step) * step;
-}
 
 /**
  * Масштабын харьцааг zoom болгоно (1:60 000 → z 11.69).
@@ -75,7 +69,7 @@ class RatioScaleControl implements IControl {
     const span = 100;
     const meters = m.unproject([0, y]).distanceTo(m.unproject([span, y]));
     if (!Number.isFinite(meters) || meters <= 0) return;
-    el.textContent = `1:${num(roundScale(meters / span / M_PER_CSS_PX))}`;
+    el.textContent = ratioText(meters / span / M_PER_CSS_PX);
   };
 
   onAdd(map: MapLibreMap) {
