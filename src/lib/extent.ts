@@ -204,7 +204,9 @@ function ringArea(ring: GeoJSON.Position[]): number {
 }
 
 function ringCentre(ring: GeoJSON.Position[]): GeoJSON.Position {
-  let x = 0, y = 0, a = 0;
+  let x = 0,
+    y = 0,
+    a = 0;
   for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
     const f = ring[j][0] * ring[i][1] - ring[i][0] * ring[j][1];
     a += f;
@@ -213,7 +215,10 @@ function ringCentre(ring: GeoJSON.Position[]): GeoJSON.Position {
   }
   /* Талбай нь тэг (шулуун дээр хэвтсэн оройнууд) бол дунджаар */
   if (!a) {
-    for (const p of ring) { x += p[0]; y += p[1]; }
+    for (const p of ring) {
+      x += p[0];
+      y += p[1];
+    }
     return [x / ring.length, y / ring.length];
   }
   return [x / (3 * a), y / (3 * a)];
@@ -223,7 +228,8 @@ function ringCentre(ring: GeoJSON.Position[]): GeoJSON.Position {
 function mainPoint(g: GeoJSON.Geometry | null): GeoJSON.Position | null {
   if (!g) return null;
   if (g.type === "Point") return g.coordinates;
-  if (g.type === "Polygon") return g.coordinates[0] ? ringCentre(g.coordinates[0]) : null;
+  if (g.type === "Polygon")
+    return g.coordinates[0] ? ringCentre(g.coordinates[0]) : null;
   if (g.type === "MultiPolygon") {
     let best: GeoJSON.Position | null = null;
     let big = -1;
@@ -231,36 +237,98 @@ function mainPoint(g: GeoJSON.Geometry | null): GeoJSON.Position | null {
       const ring = poly[0];
       if (!ring?.length) continue;
       const a = ringArea(ring);
-      if (a > big) { big = a; best = ringCentre(ring); }
+      if (a > big) {
+        big = a;
+        best = ringCentre(ring);
+      }
     }
     return best;
   }
-  if (g.type === "LineString") return g.coordinates[Math.floor(g.coordinates.length / 2)] ?? null;
+  if (g.type === "LineString")
+    return g.coordinates[Math.floor(g.coordinates.length / 2)] ?? null;
   if (g.type === "MultiLineString") {
     let best: GeoJSON.Position | null = null;
     let big = -1;
     for (const line of g.coordinates) {
-      if (line.length > big) { big = line.length; best = line[Math.floor(line.length / 2)] ?? null; }
+      if (line.length > big) {
+        big = line.length;
+        best = line[Math.floor(line.length / 2)] ?? null;
+      }
     }
     return best;
   }
   return null;
 }
 
-/** Шошгын цэгүүд — дүрс бүрд ЯГ НЭГ */
-export function labelPoints(fc: GeoJSON.FeatureCollection): GeoJSON.FeatureCollection {
+/** Дүрсийн ХАМГИЙН ТОМ хэсгийн талбай (зэрэгцүүлэхэд л хэрэгтэй) */
+function mainArea(g: GeoJSON.Geometry | null): number {
+  if (!g) return 0;
+  if (g.type === "Polygon")
+    return g.coordinates[0] ? Math.abs(ringArea(g.coordinates[0])) : 0;
+  if (g.type === "MultiPolygon") {
+    let big = 0;
+    for (const poly of g.coordinates) {
+      const a = poly[0] ? Math.abs(ringArea(poly[0])) : 0;
+      if (a > big) big = a;
+    }
+    return big;
+  }
+  if (g.type === "LineString") return g.coordinates.length;
+  if (g.type === "MultiLineString")
+    return g.coordinates.reduce((n, l) => Math.max(n, l.length), 0);
+  return 0;
+}
+
+/**
+ * Шошгын цэгүүд — дүрс бүрд ЯГ НЭГ.
+ *
+ * `unique` үед НЭГ БИЧВЭРТ яг нэг: ижил нэртэй бүх дүрсээс ХАМГИЙН
+ * ТОМЫГ нь сонгоно.
+ *
+ * ⚠⚠ Яагаад: ангиллын багана шошго болох үед ({@link
+ * LayerSet.labelBy}) нэг нэр олон дүрсэд давтагдана — татамын
+ * "Хэрлэн" нь 23 дүрст. MapLibre нь зөвхөн ДАВХЦСАН шошгыг хасдаг
+ * болохоос ижил бичвэрийг нэгтгэдэггүй тул зураг дээр "Хэрлэн" арав
+ * гаруй удаа тарж бичигдэж байв (хэрэглэгч, 2026-10-02: "ингэж олон
+ * харагдахгүй, 1 л харагдахад болно").
+ * ⚠ ХАМГИЙН ТОМ дүрс дээр: шошго нь сав газрын гол биеийг заана,
+ * захын жижиг тасархай дээр биш.
+ * ⚠ Нэр нь бичлэг бүрд ӨӨР давхаргад (ердийн тохиолдол) энэ нь юу ч
+ * өөрчлөхгүй — тийм учраас зөвхөн дуудагчийн хүсэлтээр асна.
+ */
+export function labelPoints(
+  fc: GeoJSON.FeatureCollection,
+  unique = false,
+): GeoJSON.FeatureCollection {
   const features: GeoJSON.Feature[] = [];
+  const best = new Map<
+    string,
+    { at: GeoJSON.Position; area: number; id: GeoJSON.Feature["id"] }
+  >();
   for (const f of fc.features) {
     const t = f.properties?.t;
     if (typeof t !== "string" || !t) continue;
     const at = mainPoint(f.geometry);
     if (!at) continue;
+    if (!unique) {
+      features.push({
+        type: "Feature",
+        id: f.id,
+        properties: { t },
+        geometry: { type: "Point", coordinates: at },
+      });
+      continue;
+    }
+    const area = mainArea(f.geometry);
+    const seen = best.get(t);
+    if (!seen || area > seen.area) best.set(t, { at, area, id: f.id });
+  }
+  for (const [t, b] of best)
     features.push({
       type: "Feature",
-      id: f.id,
+      id: b.id,
       properties: { t },
-      geometry: { type: "Point", coordinates: at },
+      geometry: { type: "Point", coordinates: b.at },
     });
-  }
   return { type: "FeatureCollection", features };
 }

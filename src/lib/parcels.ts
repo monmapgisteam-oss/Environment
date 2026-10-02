@@ -69,6 +69,15 @@ export type ParcelTile = {
   data: GeoJSON.FeatureCollection;
   /** Хязгаарт хүрсэн эсэх — харагдаж буй нь бүгд БИШ */
   capped: boolean;
+  /**
+   * ХЭТ ОЛОН тул ОГТ татаагүй — давхцлын тоо нь `total`-д.
+   *
+   * ⚠ Хагас татсан торыг харуулахаас татахгүй нь ДЭЭР: дутуу тор нь
+   * "эдгээр л давхцаж байна" гэсэн ХУДАЛ зураг гаргана.
+   */
+  tooMany?: boolean;
+  /** Давхцлын БҮТЭН тоо (татсан эсэхээс үл хамаарна) */
+  total?: number;
 };
 
 const EMPTY: ParcelTile = {
@@ -150,9 +159,16 @@ export async function countParcelsIn(
   rings: GeoJSON.Position[][],
   signal?: AbortSignal,
 ): Promise<number> {
+  const shape = JSON.stringify({ rings, spatialReference: { wkid: 4326 } });
+  /* ⚠ Тоолол нь ХЭМЖСЭНЭЭР 0.9–5.2 секунд (татамын 37 цагираг дээр) —
+     давхарга унтрааж асаах, таб солих бүрд дахин асуух нь дэмий */
+  return remember(countCache, shape, () => countOn(shape, signal));
+}
+
+async function countOn(shape: string, signal?: AbortSignal): Promise<number> {
   const body = new URLSearchParams({
     where: "1=1",
-    geometry: JSON.stringify({ rings, spatialReference: { wkid: 4326 } }),
+    geometry: shape,
     geometryType: "esriGeometryPolygon",
     inSR: "4326",
     spatialRel: "esriSpatialRelIntersects",
@@ -167,6 +183,144 @@ export async function countParcelsIn(
   return json.count ?? 0;
 }
 
+/**
+ * ДАВХЦАХ НЭГЖ ТАЛБАРЫН ЗАДАРГАА — сервер дээр бүлэглэж тоолно.
+ *
+ * "Татамд хэдэн газар орсон бэ" гэдэгт {@link countParcelsIn} хариулдаг
+ * бол энэ нь "ТЭР ГАЗРУУД ЮУ ВЭ" гэдгийг хэлнэ: эрхийн хэлбэр (өмчлөх ·
+ * эзэмших · ашиглах), газрын зориулалт. Экологийн коридорын самбарын
+ * "давхцаж буй нэгж талбарын зориулалт"-тай НЭГ асуулт.
+ *
+ * ⚠⚠ ХӨТӨЧ РҮҮ НЭГ Ч ДҮРС ТАТАХГҮЙ: `groupByFieldsForStatistics` нь
+ * бүлэг тутмын тоог л буцаана (хэдэн арван мөр). Давхцал 88 мянган
+ * нэгж талбар байж болохыг бодоход энэ нь цорын ганц зам.
+ * ⚠ ГЕОМЕТРИЙГ ХЯЛБАРЧЛАХГҮЙ: хялбарчлал нь ЗӨВХӨН дүрслэлийн татацад
+ * ({@link simplifyRings}) — хил дээрх нэгж талбар орох, гарах нь тоог
+ * гуйвуулна.
+ * ⚠ `POST`: татамын цагираг URL-д багтахгүй.
+ */
+export type ParcelCut = {
+  field: string;
+  label: string;
+  rows: { key: string; value: number }[];
+};
+
+/**
+ * ЗАДАРГАА БОЛОХ ТАЛБАРУУД — бүртгэлээр, ТААМГААР БИШ.
+ *
+ * ⚠ Байгаа эсэхийг давхаргын ӨӨРИЙН тодорхойлолтоос шалгана
+ * ({@link definition}) — байхгүй талбарыг гуйвал портал бүтэн
+ * асуулгыг татгалзаж, карт чимээгүй хоосон үлдэнэ.
+ * ⚠ Эрхийн хэлбэрийн талбар эх сурвалж дээр `rigth_type` гэж
+ * бичигдсэн (үсэг нь сольсон); зөв бичиглэлийг нь ч хүлээж авна —
+ * аль нэг нь л олдоно.
+ */
+const CUTS: readonly { field: string; label: string }[] = [
+  { field: "rigth_type", label: "Эрхийн хэлбэр" },
+  { field: "right_type", label: "Эрхийн хэлбэр" },
+  { field: "landuse_de", label: "Газрын зориулалт" },
+];
+
+/** Скелет карт зурахад хэрэгтэй — татац ирэхээс өмнө ч нэр мэдэгдэнэ */
+export const PARCEL_CUT_LABELS = ["Эрхийн хэлбэр", "Газрын зориулалт"];
+
+/** Нэг ангилалд харуулах дээд мөр — урт жагсаалт картаа халина */
+const CUT_TOP = 12;
+
+let defP: Promise<{ oid: string; fields: Set<string> }> | null = null;
+
+/** Давхаргын тодорхойлолт — НЭГ УДАА (талбарын нэр, дугаарын багана) */
+function definition() {
+  defP ??= arcgisJson<{
+    objectIdField?: string;
+    fields?: { name?: string }[];
+  }>(`${SERVICE}?f=json`, "Нэгж талбарын тодорхойлолт")
+    .then((j) => ({
+      oid: j.objectIdField ?? "objectid",
+      fields: new Set((j.fields ?? []).map((f) => f.name ?? "")),
+    }))
+    .catch((e: unknown) => {
+      /* Унасан амлалтыг үлдээвэл алдаа МӨНХӨРНӨ */
+      defP = null;
+      throw e;
+    });
+  return defP;
+}
+
+export async function parcelCuts(
+  rings: GeoJSON.Position[][],
+  signal?: AbortSignal,
+): Promise<ParcelCut[]> {
+  const shape = JSON.stringify({ rings, spatialReference: { wkid: 4326 } });
+  return remember(cutCache, shape, () => cutsOn(shape, signal));
+}
+
+async function cutsOn(
+  shape: string,
+  signal?: AbortSignal,
+): Promise<ParcelCut[]> {
+  const def = await definition();
+  const want: { field: string; label: string }[] = [];
+  for (const c of CUTS) {
+    if (!def.fields.has(c.field)) continue;
+    /* Нэг нэрийн хоёр бичиглэлээс ЭХНИЙХ нь л орно */
+    if (want.some((w) => w.label === c.label)) continue;
+    want.push(c);
+  }
+  const got = await Promise.all(
+    want.map((c) =>
+      groupOn(shape, c.field, def.oid, signal)
+        /* Нэг задаргаа унавал нөгөөх нь ХЭВЭЭР — эдгээр нь нэмэлт
+           мэдээлэл тул самбарыг унагаахгүй */
+        .catch(() => []),
+    ),
+  );
+  return want
+    .map((c, i) => ({ ...c, rows: got[i] }))
+    .filter((c) => c.rows.length > 0);
+}
+
+async function groupOn(
+  shape: string,
+  field: string,
+  oid: string,
+  signal?: AbortSignal,
+): Promise<{ key: string; value: number }[]> {
+  const body = new URLSearchParams({
+    where: "1=1",
+    geometry: shape,
+    geometryType: "esriGeometryPolygon",
+    inSR: "4326",
+    spatialRel: "esriSpatialRelIntersects",
+    groupByFieldsForStatistics: field,
+    outStatistics: JSON.stringify([
+      { statisticType: "count", onStatisticField: oid, outStatisticFieldName: "n" },
+    ]),
+    returnGeometry: "false",
+    f: "json",
+  });
+  const json = await arcgisJson<{
+    features?: { attributes?: Record<string, unknown> }[]
+  }>(`${SERVICE}/query`, "Нэгж талбарын задаргаа", {
+    method: "POST",
+    body,
+    signal,
+  });
+  const rows: { key: string; value: number }[] = [];
+  for (const f of json.features ?? []) {
+    const a = f.attributes ?? {};
+    const raw = a[field];
+    const value = Number(a.n);
+    if (!Number.isFinite(value) || value <= 0) continue;
+    rows.push({
+      /* Хоосон нүд нь ангилал БИШ — платформын нэршлээр ил хэлнэ */
+      key: typeof raw === "string" && raw.trim() ? raw.trim() : "Бүртгэгдээгүй",
+      value,
+    });
+  }
+  rows.sort((a, b) => b.value - a.value);
+  return rows.slice(0, CUT_TOP);
+}
 
 /**
  * ӨГӨГДСӨН ДҮРСТЭЙ ДАВХЦАХ нэгж талбаруудыг ГЕОМЕТРТЭЙ нь татна.
@@ -190,12 +344,70 @@ export async function countParcelsIn(
  */
 const CAP_ON = 24 * PAGE;
 
+/**
+ * САНАХ ОЙН КЭШ — нэг хүрээг хоёр удаа асуухгүй.
+ *
+ * ⚠⚠ Яагаад: орон зайн асуулга нь ӨӨРӨӨ үнэтэй (хэмжсэн — геометр
+ * огт буцаахгүй хуудас ч **0.37 секунд**; татац нь нэмэлт 0.1 л).
+ * Тиймээс буцаж ирэх, урагш хойш чирэх үед дахин асуух нь шууд
+ * хэдэн секунд алдана.
+ * ⚠ Түлхүүр нь геометрийн БИЧВЭР: тайрсан цагираг ижил бол хариу ч
+ * ижил. Хязгаарлагдмал урттай (`CACHE_MAX`) — хамгийн эртнийхийг
+ * хаяна; нэгж талбарын дүрс санах ойд хуримтлах ёсгүй.
+ * ⚠ Амлалтаар кэшлэнэ: зэрэг хоёр дуудалт нэг хүсэлт болно.
+ */
+const CACHE_MAX = 12;
+const onCache = new Map<string, Promise<ParcelTile>>();
+const countCache = new Map<string, Promise<number>>();
+const cutCache = new Map<string, Promise<ParcelCut[]>>();
+
+function remember<T>(
+  cache: Map<string, Promise<T>>,
+  key: string,
+  make: () => Promise<T>,
+): Promise<T> {
+  const hit = cache.get(key);
+  if (hit) return hit;
+  const p = make().catch((e: unknown) => {
+    /* Унасан амлалтыг кэшид үлдээвэл алдаа МӨНХӨРНӨ */
+    cache.delete(key);
+    throw e;
+  });
+  cache.set(key, p);
+  if (cache.size > CACHE_MAX) cache.delete(cache.keys().next().value as string);
+  return p;
+}
+
 export async function fetchParcelsOn(
   rings: GeoJSON.Position[][],
   signal?: AbortSignal,
+  /**
+   * Үүнээс олон давхцал гарвал ОГТ ТАТАХГҮЙ — зөвхөн тоог нь буцаана
+   * ({@link ParcelTile.tooMany}). Дуудагч тал "ойртоно уу" гэж хэлнэ.
+   */
+  limit = CAP_ON,
+  /**
+   * Хуудас ирэх бүрд ХУРИМТЛАГДСАН үр дүнг дуудагчид хэлнэ — 37
+   * хуудсыг бүгдийг хүлээхгүйгээр эхнийхийг нь шууд зурахад.
+   */
+  onPartial?: (tile: ParcelTile) => void,
 ): Promise<ParcelTile> {
   if (!rings.length) return EMPTY;
   const shape = JSON.stringify({ rings, spatialReference: { wkid: 4326 } });
+  /* ⚠ Кэшид ЗӨВХӨН бүтэн үр дүн сууна: кэш оновол хэсэгчилсэн
+     мэдэгдэлгүйгээр шууд бүтнээрээ ирнэ.
+     ⚠ Унасан, таслагдсан хүсэлт кэшид ҮЛДЭХГҮЙ ({@link remember}) */
+  return remember(onCache, `${limit}:${shape}`, () =>
+    fetchOn(shape, limit, signal, onPartial),
+  );
+}
+
+async function fetchOn(
+  shape: string,
+  limit: number,
+  signal?: AbortSignal,
+  onPartial?: (tile: ParcelTile) => void,
+): Promise<ParcelTile> {
   const base = () => {
     const b = new URLSearchParams({
       where: "1=1",
@@ -211,14 +423,16 @@ export async function fetchParcelsOn(
   const head = base();
   head.set("returnCountOnly", "true");
   head.set("f", "json");
-  const total = (
-    await arcgisJson<{ count?: number }>(`${SERVICE}/query`, "Нэгж талбар", {
-      method: "POST",
-      body: head,
-      signal,
-    })
-  ).count ?? 0;
+  const total =
+    (
+      await arcgisJson<{ count?: number }>(`${SERVICE}/query`, "Нэгж талбар", {
+        method: "POST",
+        body: head,
+        signal,
+      })
+    ).count ?? 0;
   if (!total) return EMPTY;
+  if (total > limit) return { ...EMPTY, tooMany: true, total };
 
   const want = Math.min(total, CAP_ON);
   const pages: Promise<GeoJSON.Feature[]>[] = [];
@@ -241,10 +455,34 @@ export async function fetchParcelsOn(
       ).then((j) => j.features ?? []),
     );
   }
+  /*
+    ⚠⚠ ХУУДАС ИРЭХ БҮРД ШУУД ХЭЛНЭ (`onPartial`, 2026-10-02, хэрэглэгч:
+    "уншилтыг хурдан болгоорой удаан байна шүү").
+
+    Нийт хугацааг БОГИНОСГОХ боломжгүй — сервер 2,000 бичлэг бүрд
+    ~0.3 секунд зарцуулдаг (хэмжсэн; геометр огт буцаахгүй хуудас ч
+    0.37 с тул татац нь гол зардал БИШ, орон зайн асуулга нь мөн).
+    Гэхдээ 37 хуудсыг БҮГДИЙГ хүлээлгэхийн оронд ирснийг нь шууд
+    зурвал эхний нэгж талбар нэг секундын дотор гарна.
+    ⚠ Дараалал нь хамаагүй: нэгж талбар бүр бие даасан дүрс.
+  */
+  let done: GeoJSON.Feature[] = [];
+  if (onPartial)
+    for (const p of pages)
+      void p.then((fs) => {
+        done = [...done, ...fs];
+        if (!signal?.aborted)
+          onPartial({
+            data: { type: "FeatureCollection", features: done },
+            capped: total > CAP_ON,
+            total,
+          });
+      });
   const got = await Promise.all(pages);
   return {
     data: { type: "FeatureCollection", features: got.flat() },
     capped: total > CAP_ON,
+    total,
   };
 }
 
@@ -263,6 +501,148 @@ export function mergeParcels(tiles: readonly ParcelTile[]): ParcelTile {
     }
   }
   return { data: { type: "FeatureCollection", features }, capped };
+}
+
+/**
+ * АСУУЛГЫН ГЕОМЕТРИЙГ ХЯЛБАРЧИЛНА (Douglas–Peucker).
+ *
+ * ⚠⚠ Орон зайн асуулгын зардал нь асуулгын олон өнцөгтийн ОРОЙН
+ * ТООНООС хамаарна. Хэмжсэн (татамын тайрсан 5 цагираг, 2,000
+ * бичлэгийн хуудас):
+ *
+ *   11,395 орой (хялбарчлаагүй) → 0.51 с
+ *    6,648 (11 м)               → 0.36 с
+ *    4,030 (56 м)               → 0.31 с
+ *      707 (223 м)              → 0.21 с
+ *
+ * ⚠ Хүлцэл нь ДЭЛГЭЦИЙН ПИКСЕЛЭЭР тавигдана (~1.5 px): тэр нь
+ * харагдах масштабт үл мэдэгдэх алдаа бөгөөд ойртох тусам өөрөө
+ * нарийсна. Хил дээрх хэдэн нэгж талбар орох/гарах нь болзошгүй —
+ * ТООЛОЛД хэрэглэхгүй, зөвхөн ДҮРСЛЭЛИЙН татацад.
+ * ⚠ Гурваас цөөн оройтой үлдвэл цагирагийг хаяна.
+ */
+export function simplifyRings(
+  rings: GeoJSON.Position[][],
+  tol: number,
+): GeoJSON.Position[][] {
+  if (tol <= 0) return rings;
+  const far = (
+    p: GeoJSON.Position,
+    a: GeoJSON.Position,
+    b: GeoJSON.Position,
+  ) => {
+    const [x, y] = p;
+    let [ax, ay] = a;
+    const [bx, by] = b;
+    let dx = bx - ax;
+    let dy = by - ay;
+    if (dx || dy) {
+      const t = ((x - ax) * dx + (y - ay) * dy) / (dx * dx + dy * dy);
+      if (t > 1) {
+        ax = bx;
+        ay = by;
+      } else if (t > 0) {
+        ax += dx * t;
+        ay += dy * t;
+      }
+    }
+    dx = x - ax;
+    dy = y - ay;
+    return dx * dx + dy * dy;
+  };
+  const out: GeoJSON.Position[][] = [];
+  for (const ring of rings) {
+    if (ring.length < 5) {
+      out.push(ring);
+      continue;
+    }
+    const keep = new Array<boolean>(ring.length).fill(false);
+    keep[0] = true;
+    keep[ring.length - 1] = true;
+    const stack: [number, number][] = [[0, ring.length - 1]];
+    while (stack.length) {
+      const [i, j] = stack.pop()!;
+      let best = -1;
+      let at = -1;
+      for (let k = i + 1; k < j; k += 1) {
+        const d = far(ring[k], ring[i], ring[j]);
+        if (d > best) {
+          best = d;
+          at = k;
+        }
+      }
+      if (best > tol * tol && at > 0) {
+        keep[at] = true;
+        stack.push([i, at], [at, j]);
+      }
+    }
+    const kept = ring.filter((_, i) => keep[i]);
+    if (kept.length >= 4) out.push(kept);
+  }
+  return out;
+}
+
+/**
+ * ЦАГИРГИЙГ ХАРАГДАХ ХҮРЭЭГЭЭР ТАЙРНА (Sutherland–Hodgman).
+ *
+ * ⚠⚠ Яагаад: Туулын татамтай **87,947** нэгж талбар давхцдаг
+ * (2026-10-02-нд токеноор хэмжсэн) — бүгдийг татвал хэдэн арван
+ * мегабайт болж, хотын төв бүхэлдээ улаан тор болно. Харагдах
+ * хүрээгээр тайрснаар сервер зөвхөн дэлгэц дээрхийг буцаана.
+ *
+ * ⚠ Тайралт нь СЕРВЕРИЙН ажлыг хөнгөлнө, дүрслэлийг өөрчлөхгүй:
+ * хүрээнээс гадуурх нэгж талбар ямар ч байсан харагдахгүй.
+ * ⚠ Тэгш өнцөгт нь ГҮДГЭР тул Sutherland–Hodgman ЯГ зөв: дөрвөн
+ * ирмэг тус бүрээр дараалан тайрна.
+ * ⚠ Цагираг бүрийг ТУСАД НЬ тайрна — нүх нь ч мөн тайрагдана.
+ */
+export function clipRings(
+  rings: GeoJSON.Position[][],
+  box: [number, number, number, number],
+): GeoJSON.Position[][] {
+  const [w, s, e, n] = box;
+  /* Ирмэг бүр: цэг дотор талд үлдэх эсэх, огтлолцлын цэг */
+  const edges: [
+    (p: GeoJSON.Position) => boolean,
+    (a: GeoJSON.Position, b: GeoJSON.Position) => GeoJSON.Position,
+  ][] = [
+    [
+      (p) => p[0] >= w,
+      (a, b) => [w, a[1] + ((b[1] - a[1]) * (w - a[0])) / (b[0] - a[0])],
+    ],
+    [
+      (p) => p[0] <= e,
+      (a, b) => [e, a[1] + ((b[1] - a[1]) * (e - a[0])) / (b[0] - a[0])],
+    ],
+    [
+      (p) => p[1] >= s,
+      (a, b) => [a[0] + ((b[0] - a[0]) * (s - a[1])) / (b[1] - a[1]), s],
+    ],
+    [
+      (p) => p[1] <= n,
+      (a, b) => [a[0] + ((b[0] - a[0]) * (n - a[1])) / (b[1] - a[1]), n],
+    ],
+  ];
+  const out: GeoJSON.Position[][] = [];
+  for (const ring of rings) {
+    let poly = ring;
+    for (const [inside, cross] of edges) {
+      const next: GeoJSON.Position[] = [];
+      for (let i = 0; i < poly.length; i += 1) {
+        const a = poly[i];
+        const b = poly[(i + 1) % poly.length];
+        const ina = inside(a);
+        const inb = inside(b);
+        if (ina) next.push(a);
+        if (ina !== inb) next.push(cross(a, b));
+      }
+      poly = next;
+      if (!poly.length) break;
+    }
+    /* Гурван цэгээс цөөн нь талбайгүй — хаяна */
+    if (poly.length >= 3) out.push([...poly, poly[0]]);
+  }
+  return out;
 }
 
 /** Олон дүрсийн цагиргуудыг НЭГ асуулгад нийлүүлнэ */

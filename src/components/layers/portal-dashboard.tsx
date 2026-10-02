@@ -24,8 +24,13 @@ import {
 import { BasemapGallery } from "@/components/map/basemap-gallery";
 import {
   countParcelsIn,
+  PARCEL_CUT_LABELS,
+  parcelCuts,
+  type ParcelCut,
   fetchParcelsIn,
   fetchParcelsOn,
+  clipRings,
+  simplifyRings,
   NO_PARCELS,
   PARCEL_SCALE,
   ringsOf,
@@ -137,6 +142,109 @@ function categoryRamp(hue: number, n: number): string[] {
  * ⚠ Дүрс бүрд НЭГ УДАА бодогдоно (`WeakMap`): шүүлт тавих бүрд
  * долоон мянган олон өнцөгтийн оройг дахин тоолох нь утгагүй.
  */
+/**
+ * ДАВХЦАХ НЭГЖ ТАЛБАРЫГ ЗАДЛАХ ТЭНХЛЭГ ({@link LayerSet.parcelBy}).
+ *
+ * Давхаргын дүрсүүдийг заасан талбарын утгаар бүлэглэнэ: бүлэг бүр
+ * нэг хүсэлт болж, сервер давхцлыг тоолно.
+ *
+ * ⚠ Бүлгийн түлхүүр нь задаргааны ӨӨРИЙН `keyOf` — диаграм, шүүлт,
+ * өнгө гурвуулаа нэг эх сурвалжаас.
+ * ⚠ Дараалал нь задаргаанаас: тоогоороо эрэмбэлэгдсэн хэвээр.
+ * ⚠ Цэвэр функц тул модулийн түвшинд — бүрэлдэхүүн доторх давталт,
+ * эрт буцалт хоёр нь React Compiler-ийн мемоизацийг тасалдаг.
+ */
+function parcelAxisOf(
+  field: string | undefined,
+  on: readonly string[],
+  loaded: Record<string, Loaded>,
+): {
+  id: string;
+  label: string;
+  order: string[];
+  groups: Map<string, GeoJSON.Feature[]>;
+} | null {
+  if (!field) return null;
+  for (const id of on) {
+    const hit = loaded[id];
+    if (!hit || hit.info.geometry === "Point") continue;
+    const b = hit.charts.find((c) => c.field === field && c.kind === "count");
+    if (!b) continue;
+    /*
+      ⚠⚠ ГЕОМЕТР ХОЖИМ ИРНЭ: давхарга атрибутаараа эхлээд ирдэг
+      ({@link fetchLayerFeatures}) тул дүрсээр нь шүүвэл карт хэдэн
+      секунд огт үүсэхгүй. Ангиллын НЭР, ДАРААЛАЛ нь задаргаанаас
+      (атрибут) гардаг тул картыг шууд үүсгээд, тооллыг нь дүрс ирэхэд
+      бодно (хэрэглэгч, 2026-10-02: "нэгж талбарын chart байнга
+      харагдана шүү").
+    */
+    const groups = new Map<string, GeoJSON.Feature[]>();
+    for (const f of hit.data.shapes.features) {
+      const row = hit.data.rows[Number(f.id)];
+      if (!row) continue;
+      for (const key of b.keyOf(row))
+        groups.set(key, [...(groups.get(key) ?? []), f]);
+    }
+    return {
+      id,
+      label: b.label,
+      order: b.values.map((v) => v.key),
+      groups,
+    };
+  }
+  return null;
+}
+
+/**
+ * БҮСТЭЙ ДАВХЦСАН НЭГЖ ТАЛБАРЫН ДЭЭД ХЭМЖЭЭ — нэг татацад.
+ *
+ * ⚠⚠ Туулын татамтай **87,947** нэгж талбар давхцдаг (2026-10-02-нд
+ * токеноор хэмжсэн): бүгдийг татвал хэдэн арван мегабайт, хотын төв
+ * бүхэлдээ улаан тор болж доорх хиймэл дагуул, татам хоёулаа дарагдана.
+ *
+ * Тиймээс цагирагийг ХАРАГДАХ ХҮРЭЭГЭЭР тайрч ({@link clipRings}), үр
+ * дүн нь энэ хязгаараас хэтэрвэл ОГТ ТАТАХГҮЙ — зөвхөн тоог нь хэлж
+ * "ойртоно уу" гэнэ. Хагас татсан тор нь "эдгээр л давхцаж байна"
+ * гэсэн ХУДАЛ зураг гаргана.
+ *
+ * ⚠ ХЭМЖСЭН (2026-10-02, бодит үйлчилгээ): дүүргийн харагдац (~6 км)
+ * нь **5,195 нэгж талбар · 0.6 секунд · 1.4 МБ**; 1:120 000 (~44 км)
+ * нь **72,713 · ≈14 МБ · 37 хуудас**.
+ *
+ * ⚠ Хязгаар нь ХАМГААЛАЛТ болохоос ХААЛТ биш: хаалтыг масштаб
+ * ({@link ZONE_SCALE}) тавина. Энэ нь зөвхөн "татам бүхэлдээ
+ * харагдаж байхад 88 мянгыг татах" тохиолдлоос сэргийлнэ.
+ */
+const ZONE_LIMIT = 80000;
+
+/**
+ * БҮСТЭЙ ДАВХЦСАН НЭГЖ ТАЛБАР ЭНЭ МАСШТАБААС ХАРАГДАНА.
+ *
+ * ⚠ Хязгаарыг ойртолтоор БИШ ХАРЬЦААГААР: зургийн буланд гарах заалт
+ * мөн харьцаагаар бичигддэг тул хэрэглэгч хэдээс эхлэн гарахыг
+ * тэндээс шууд уншина (шошго, суурь нэгж талбартай нэг зарчим).
+ *
+ * ⚠⚠ **1:120 000-ААС 1:30 000 БОЛСОН** (хэрэглэгчийн шийдвэр,
+ * 2026-10-02: "удаан байна шүү" → хурдыг сонгов). Зааг нь ХУРДЫГ
+ * ШУУД тодорхойлно — татац нь давхцлын ТООНООС хамаарна (2026-10-02-нд
+ * бодит үйлчилгээн дээр хэмжсэн):
+ *
+ * | Масштаб | Өргөн | Давхцал | Хугацаа |
+ * |---|---|---|---|
+ * | 1:120 000 | 44 км | 72,713 | ≈22 с · 37 хуудас · 14 МБ |
+ * | 1:60 000 | 22 км | 38,161 | ≈12 с |
+ * | **1:30 000** | 11 км | **11,366** | **≈1.8 с** |
+ * | 1:13 000 | 5 км | 3,990 | ≈1.2 с |
+ *
+ * ⚠ Сервер хуудас бүрд ~0.3 секунд зарцуулдаг бөгөөд ЗЭРЭГЦЭЭГ нэмэх
+ * нь тус болохгүй (хэмжсэн: 37 хуудас зэрэг 32.5 с, 6-аар бүлэглэхэд
+ * 32.9 с) — хурдны цорын ганц хөшүүрэг нь ЗААГ.
+ * ⚠ Хол байхад давхцлын тоо нь ДИАГРАМААР гарсаар байна ("Давхцаж
+ * буй нэгж талбар — Сав газар") тул тоон хариулт алдагдахгүй: зөвхөн
+ * зураг дээрх тор нь ойртсон үед гарна.
+ */
+const ZONE_SCALE = 30_000;
+
 const SPANS = new WeakMap<GeoJSON.Feature, number>();
 
 function shapeSpan(f: GeoJSON.Feature): number {
@@ -392,7 +500,9 @@ export function PortalLayersDashboard({
     дуусаагүй байхад шинэ хөдөлгөөн гарвал хуучныг ТАСАЛНА
     (`AbortController`) — эс тэгвээс хоцорсон хариу шинийг дарж бичнэ.
   */
-  const [parcelsOn, setParcelsOn] = React.useState(false);
+  /* Анхны төлөв нь БҮРТГЭЛЭЭС ({@link LayerSet.parcels}): самбар нь
+     цэс бүрд `key`-ээр дахин үүсдэг тул цэс солиход шинээр уншигдана */
+  const [parcelsOn, setParcelsOn] = React.useState(set.parcels === true);
   /*
     ⚠⚠ ТОВЧ нь ӨӨРӨӨ ТИЙШ АВААЧНА (хэрэглэгч, 2026-09-25: "миний
     өгсөн parcel-ийг харуулж чадахгүй байгаа юм уу").
@@ -416,6 +526,26 @@ export function PortalLayersDashboard({
   } | null>(null);
   const parcelZoom = React.useMemo(() => zoomForScale(PARCEL_SCALE), []);
   const close = view != null && view.zoom >= parcelZoom;
+  /*
+    БҮСТЭЙ ДАВХЦСАН нэгж талбарын хаалт — 1:120 000 (хэрэглэгч,
+    2026-10-02: "1:120 000-с харагддаг болгоё parcel").
+
+    ⚠ СУУРЬ нэгж талбарынхаас (1:13 000) ХОЛ: давхцсан нь бүхэл
+    хотыг биш, зөвхөн татамын дотор талыг хамардаг тул тэр
+    масштабт ч уншигдана.
+    ⚠ Хэмжсэн (2026-10-02, бодит үйлчилгээ):
+
+      1:120,000 ≈ 44 км → 72,713 давхцал (≈14 МБ, 37 хуудас)
+      1:60,000  ≈ 22 км → 38,161
+      1:30,000  ≈ 11 км → 11,366
+      1:13,000  ≈  5 км →  3,990
+
+    ⚠ Ерөнхийлөлт (`maxAllowableOffset`) ТУС БОЛОХГҮЙ: 2 м → 20 м
+    болгоход хуудас 0.47-оос 0.39 МБ л болно — ачаалал нь оройнууд
+    биш, бичлэг тутмын JSON-ы ТУЗ.
+  */
+  const zoneZoom = React.useMemo(() => zoomForScale(ZONE_SCALE), []);
+  const zoneClose = view != null && view.zoom >= zoneZoom;
 
   React.useEffect(() => {
     if (!parcelsOn || !view || !close) return;
@@ -472,11 +602,37 @@ export function PortalLayersDashboard({
     return out;
   }, [set.tidy, on, loaded]);
 
-  /* Аль бүсийн хослолд татсаныг нэрлэх түлхүүр — үүнгүй бол бүс
-     солиход ӨМНӨХ хослолын нэгж талбар зураг дээр үлдэнэ */
+  /*
+    ⚠⚠ ХАРАГДАХ ХҮРЭЭГЭЭР ТАЙРНА (2026-10-02, токеноор хэмжсэний
+    дараа). Туулын татамтай **87,947** нэгж талбар давхцдаг — бүгдийг
+    татвал хэдэн арван мегабайт болж, хотын төв бүхэлдээ улаан тор
+    болно. Тайрсан цагираг нь зөвхөн дэлгэц дээрхийг асууна; хүрээнээс
+    гадуурх нэгж талбар ямар ч байсан харагдахгүй тул дүрслэл
+    АЛДАГДАХГҮЙ.
+    ⚠ Хол байхад тайралт юу ч өгөхгүй (бүх хот багтана) тул тэр үед
+    `ZONE_LIMIT` хамгаалалт ажиллана: тоог нь хэлээд татахгүй.
+  */
+  const zoneClip = React.useMemo(() => {
+    if (!view || !zoneRings.length) return [];
+    /*
+      ⚠ ХЯЛБАРЧЛАЛТЫН ХҮЛЦЭЛ нь ДЭЛГЭЦИЙН 1.5 ПИКСЕЛ: харагдах
+      масштабт үл мэдэгдэх алдаа бөгөөд ойртох тусам өөрөө нарийсна.
+      Хэмжсэнээр асуулгын хуудас 0.51-ээс 0.31 секунд болно
+      ({@link simplifyRings}).
+    */
+    const mPerPx =
+      (156543.03392 * Math.cos((47.9 * Math.PI) / 180)) / 2 ** view.zoom;
+    return simplifyRings(
+      clipRings(zoneRings, view.box),
+      (1.5 * mPerPx) / 111320,
+    );
+  }, [zoneRings, view]);
+
+  /* Аль бүс, ямар хүрээнд татсаныг нэрлэх түлхүүр — үүнгүй бол бүс
+     эсвэл хүрээ солиход ӨМНӨХ татацын нэгж талбар зураг дээр үлдэнэ */
   const zoneKey = React.useMemo(
-    () => `${on.join("|")}:${zoneRings.length}`,
-    [on, zoneRings],
+    () => `${on.join("|")}:${zoneRings.length}:${view?.box.join(",") ?? ""}`,
+    [on, zoneRings, view],
   );
   const [zoneParcels, setZoneParcels] = React.useState<{
     key: string;
@@ -484,9 +640,12 @@ export function PortalLayersDashboard({
   }>({ key: "", tile: NO_PARCELS });
 
   React.useEffect(() => {
-    if (!parcelsOn || !zoneRings.length) return;
+    if (!parcelsOn || !zoneClose || !zoneClip.length) return;
     const ac = new AbortController();
-    fetchParcelsOn(zoneRings, ac.signal)
+    fetchParcelsOn(zoneClip, ac.signal, ZONE_LIMIT, (tile) => {
+      /* Хуудас ирэх бүрд шууд зурна — 37 хуудсыг бүгдийг хүлээхгүй */
+      if (!ac.signal.aborted) setZoneParcels({ key: zoneKey, tile });
+    })
       .then((tile) => {
         if (!ac.signal.aborted) setZoneParcels({ key: zoneKey, tile });
       })
@@ -496,14 +655,14 @@ export function PortalLayersDashboard({
           setZoneParcels({ key: zoneKey, tile: NO_PARCELS });
       });
     return () => ac.abort();
-  }, [parcelsOn, zoneRings, zoneKey]);
+  }, [parcelsOn, zoneClose, zoneClip, zoneKey]);
 
   /* Төлөв нь ДАМ гарна: эффектээс `set*` дуудахыг
      `react-hooks/set-state-in-effect` хориглодог */
   const zoneReady = zoneParcels.key === zoneKey;
   const shownZoneParcels =
     parcelsOn && zoneReady ? zoneParcels.tile : NO_PARCELS;
-  const zoneBusy = parcelsOn && zoneRings.length > 0 && !zoneReady;
+  const zoneBusy = parcelsOn && zoneClose && zoneClip.length > 0 && !zoneReady;
 
   const onView = React.useCallback(
     (box: [number, number, number, number], zoom: number) =>
@@ -525,21 +684,41 @@ export function PortalLayersDashboard({
            доорх хиймэл дагуул, дээрх дата давхаргыг дарахгүй */
         data: shownParcels.data,
         fill: { color: "#e8eef5", opacity: 0.07 },
-        /* ⚠⚠ ЗУРААС 0.7px-ЭЭС 1.2px БОЛОВ: дэд пикселийн, бүдэг
-           цагаан зураас нь хиймэл дагуулын зураг дээр бүрэн уусдаг
-           ({@link shape-case}). Зузаан нь ч болохгүй — нэгж талбар
-           нягт тор тул 1.2px дээр тор нь уншигдаж, доорх зураг нь
-           харагдсаар байна. */
-        line: { color: "#e8eef5", opacity: 0.8, width: 1.2 },
+        /* ⚠⚠ ЗУРААС 1.2px-ЭЭС 1.0px (хэрэглэгч, 2026-10-02: "parcel
+           border нарийсгаарай" — давхцсан торынхтой хамт).
+           ⚠ ЭНЭ НЬ ШАЛ: 2026-09-25-нд 0.7px / 0.5 тунгалаг байсныг
+           "хиймэл дагуул дээр бүрэн уусдаг" гэж 1.2px болгосон
+           ({@link shape-case}-тэй нэг шалтгаан). 1.0px нь ТУНГАЛАГАА
+           0.8 хэвээр барьдаг тул бэхний хэмжээ унасан хувилбараас
+           хоёр дахин их — доош буулгах бол ТУНГАЛАГИЙГ БҮҮ ХӨНД.
+           ⚠ Зузаан нь ч болохгүй: нэгж талбар нягт тор тул зураас
+           өргөссөөр доорх зургийг дардаг. */
+        line: { color: "#e8eef5", opacity: 0.8, width: 1.0 },
       });
-    /* Бүстэй давхцсан нь ТОДООР — дохионы улаан, тогтмол hex
-       ("газрын зураг хоёр горимд ижил" дүрэм) */
+    /*
+      БҮСТЭЙ ДАВХЦСАН нь ТОДООР — бүсийн ногоонтой НЭГ ГЭР БҮЛД,
+      гэрэлтэлтээрээ салсан бараан номин (хэрэглэгч, 2026-10-02:
+      "parcel өнгийг өөрчилье, ногоонтой зохицох өнгө өгөөрэй").
+
+      ⚠⚠ Улаан (`--clay` #e47b7b) нь бүсийн ногоонуудтай ердөө
+      **1.3:1** харьцаатай байсан (WCAG, хэмжсэн) — дохионы өнгө
+      боловч яг тэр газартаа уусдаг байв. Бараан номин нь дөрвөн сав
+      газрын ногоон дээр **4.9–5.2:1** өгнө.
+      ⚠ Өнцөг нь 175 — сав газруудын муж (195…116)-ийн дотор тул
+      "ногоонтой зохицно"; ялгаа нь зөвхөн ГЭРЭЛТЭЛТЭЭР (L 0.34).
+      ⚠ Тогтмол hex: "газрын зураг хоёр горимд ижил" дүрэм.
+    */
     if (shownZoneParcels.data.features.length)
       list.push({
         id: "parcel-zone",
         data: shownZoneParcels.data,
-        fill: { color: "#e47b7b", opacity: 0.3 },
-        line: { color: "#e47b7b", opacity: 0.95, width: 1.2 },
+        fill: { color: "#004635", opacity: 0.35 },
+        /* ⚠ ЗУРААС 1.2-ООС 0.8px (хэрэглэгч, 2026-10-02: "parcel
+           border нарийсгаарай"). Суурь нэгж талбарын цайвар зурааст
+           1.2px ЗААВАЛ (0.7px нь хиймэл дагуул дээр уусдаг) ч энэ нь
+           бараан, 35% дүүргэлттэй тул нимгэн ч тод үлдэнэ — нягт
+           хэсэгт мөн зураасны тор бага болно. */
+        line: { color: "#004635", opacity: 0.95, width: 0.8 },
         /* Бүсийн дүүргэлтийн ДЭЭР — доор нь орвол огт харагдахгүй */
         above: true,
       });
@@ -1486,10 +1665,22 @@ export function PortalLayersDashboard({
 
   React.useEffect(() => {
     if (!set.tidy) return;
+    /*
+      ⚠⚠ ЗӨВХӨН БҮСИЙН КАРТ ГАРАХ ҮЕД (2026-10-02, хэрэглэгч:
+      "уншилтыг хурдан болгоорой удаан байна шүү"). Энэ тоолол нь
+      ЗӨВХӨН {@link zoneCard}-д ордог бөгөөд тэр нь хоёроос олон
+      давхаргатай цэсэд л гардаг — татам зэрэг НЭГ давхаргатай цэсэд
+      үр дүн нь хаана ч гарахгүй атлаа **5.2 секунд** иддэг байв
+      (хэмжсэн, 37 цагираг × 524 мянган нэгж талбар).
+    */
+    const zoneable = on.filter(
+      (id) => loaded[id] && loaded[id].info.geometry !== "Point",
+    );
+    if (zoneable.length < 2) return;
     const ac = new AbortController();
-    for (const id of on) {
+    for (const id of zoneable) {
       const hit = loaded[id];
-      if (!hit || hit.info.geometry === "Point") continue;
+      if (!hit) continue;
       const rings = ringsOf(hit.data.shapes.features);
       if (!rings.length) continue;
       countParcelsIn(rings, ac.signal)
@@ -1502,6 +1693,104 @@ export function PortalLayersDashboard({
     }
     return () => ac.abort();
   }, [set.tidy, on, loaded]);
+
+  /*
+    ДАВХЦАХ НЭГЖ ТАЛБАР — ЗАДАРГААНЫ ТЭНХЛЭГЭЭР (`LayerSet.parcelBy`,
+    хэрэглэгч 2026-10-02: "татам доторх нэгж талбарыг харуулъя, map
+    болон чартаар").
+
+    Зураг дээр давхцсан нэгж талбар "Нэгж талбар" товчоор аль хэдийн
+    УЛААНААР зурагддаг ({@link fetchParcelsOn}); энэ нь түүний ТООН
+    хариулт — аль сав газрын татамд хэдэн нэгж талбар орсон бэ.
+
+    ⚠ Сервер тоолно (`returnCountOnly`) — хагас сая дүрсийг хөтөч рүү
+    татахгүй. Бүлэг тус бүр НЭГ хүсэлт.
+    ⚠ Бүлгийн түлхүүр нь задаргааны ӨӨРИЙН `keyOf` — диаграм, шүүлт,
+    өнгө гурвуулаа нэг эх сурвалжаас ({@link Breakdown.keyOf}).
+    ⚠ ШҮҮЛТЭЭС ҮЛ ХАМААРНА: давхцал нь давхаргын шинж чанар тул
+    `views` биш `loaded`-оос уншина (бүсийн картын тоотой нэг зарчим).
+  */
+  const parcelAxis = React.useMemo(
+    () => parcelAxisOf(set.parcelBy, on, loaded),
+    [set.parcelBy, on, loaded],
+  );
+
+  const parcelKey = parcelAxis
+    ? `${parcelAxis.id}:${parcelAxis.order.join("|")}:${[...parcelAxis.groups.values()].reduce((n, g) => n + g.length, 0)}`
+    : "";
+  const [axisParcels, setAxisParcels] = React.useState<{
+    key: string;
+    counts: Record<string, number>;
+  }>({ key: "", counts: {} });
+
+  React.useEffect(() => {
+    /* Дүрс ирээгүй бол тоолох зүйл алга — карт нь "…" харуулж хүлээнэ */
+    if (!parcelAxis?.groups.size) return;
+    const ac = new AbortController();
+    const keys = parcelAxis.order;
+    Promise.all(
+      keys.map((k) =>
+        countParcelsIn(ringsOf(parcelAxis.groups.get(k) ?? []), ac.signal)
+          /* Нэг бүлэг унавал бусад нь ХЭВЭЭР — диаграм нь нэмэлт
+             мэдээлэл тул самбарыг унагаахгүй */
+          .catch(() => 0),
+      ),
+    ).then((got) => {
+      if (ac.signal.aborted) return;
+      const counts: Record<string, number> = {};
+      keys.forEach((k, i) => (counts[k] = got[i]));
+      setAxisParcels({ key: parcelKey, counts });
+    });
+    return () => ac.abort();
+  }, [parcelAxis, parcelKey]);
+
+  /*
+    ⚠⚠ ДАВХЦАХ НЭГЖ ТАЛБАР ЮУ ВЭ — ЭРХ, ЗОРИУЛАЛТ (2026-10-02,
+    хэрэглэгч: "энэ хоосон зайнд юу хийж болох вэ, хоосон зай
+    гаргамааргүй байна").
+
+    Баруун багана хоёр богино карттай байсан тул доороо хоосон
+    үлдэж байв. Зайг ЗАЙГААР биш АГУУЛГААР дүүргэв: татамд давхцаж
+    буй газрууд ямар эрхтэй, ямар зориулалттай вэ гэдэг нь цэсэнд
+    урьд нь ХААНА Ч гардаггүй байсан бодит хариулт
+    ({@link parcelCuts}).
+
+    ⚠⚠ СЕРВЕР БҮЛЭГЛЭЖ ТООЛНО — 88 мянган дүрсийг хөтөч рүү татахгүй.
+    ⚠ ТАЙРААГҮЙ цагираг (`zoneRings`): тоо нь ХАРАГДАХ ХҮРЭЭНЭЭС ҮЛ
+    ХАМААРНА — "татамд хэдэн газар орсон бэ" гэдэг нь давхаргын шинж
+    чанар (бүсийн картын тоотой нэг зарчим).
+    ⚠ Унавал карт ГАРАХГҮЙ: эдгээр нь нэмэлт мэдээлэл тул самбарыг
+    унагаах ёсгүй.
+  */
+  const cutKey = set.parcelBy ? `${on.join("|")}:${zoneRings.length}` : "";
+  const [axisCuts, setAxisCuts] = React.useState<{
+    key: string;
+    cuts: ParcelCut[];
+  }>({ key: "", cuts: [] });
+
+  React.useEffect(() => {
+    if (!set.parcelBy || !zoneRings.length) return;
+    const ac = new AbortController();
+    parcelCuts(zoneRings, ac.signal)
+      .then((cuts) => {
+        if (!ac.signal.aborted) setAxisCuts({ key: cutKey, cuts });
+      })
+      .catch(() => {});
+    return () => ac.abort();
+  }, [set.parcelBy, zoneRings, cutKey]);
+
+  const cutsReady = cutKey !== "" && axisCuts.key === cutKey;
+
+  /* Төлөв нь ДАМ гарна: эффектээс `set*` дуудахыг
+     `react-hooks/set-state-in-effect` хориглодог */
+  const parcelReady = parcelAxis != null && axisParcels.key === parcelKey;
+  const parcelRows: Datum[] = parcelReady
+    ? parcelAxis.order.map((k) => ({
+        key: k,
+        label: k,
+        value: axisParcels.counts[k] ?? 0,
+      }))
+    : [];
 
   const stats = React.useMemo(() => {
     let records = 0;
@@ -1707,6 +1996,108 @@ export function PortalLayersDashboard({
    * Хоёр газар хуулбарлавал өнгө, сонголт, палитрын товч гурав эрт
    * орой зөрнө.
    */
+
+  /*
+    ДАВХЦАЖ БУЙ НЭГЖ ТАЛБАРЫН ДИАГРАМ.
+
+    ⚠ ӨНГӨ нь задаргааныхтай НЭГ эх сурвалжаас (`palettes`) — энэ нь
+    тусдаа хэмжүүр биш, ТЭР ЖЕ тэнхлэгийн хоёр дахь тоо.
+    ⚠ Нийт дүн нь мөрүүдийн нийлбэрээс БАГА байж болно: хоёр сав
+    газрын татамд зэрэг багтсан нэгж талбар хоёуланд нь тоологдоно.
+    Тиймээс толгойд нийлбэрийг БИЧИХГҮЙ, зөвхөн ангиллын тоог хэлнэ.
+  */
+  /*
+    ⚠⚠ ТООЛОЛ ХҮЛЭЭЖ БАЙХДАА Ч ГАРНА (хэрэглэгч, 2026-10-02: "нэгж
+    талбарын chart байнга харагдана шүү"). Дөрвөн хүсэлт ~3.6 секунд
+    (хэмжсэн) тул карт тэр хугацаанд огт байхгүй байж, дараа нь гэнэт
+    үсэрч гарч ирдэг байв — самбар тогтворгүй харагдана.
+    ⚠ Хүлээж байхад ТЭГ зурвас зурахгүй: "давхцал алга" гэсэн ХУДАЛ
+    заалт болно. Оронд нь ангиллын нэр ба "…" — бүсийн картын
+    хүлээлттэй нэг идиом.
+  */
+  const parcelCard = parcelAxis ? (
+    <CutCard
+      key="parcel-axis"
+      title={`Давхцаж буй нэгж талбар — ${parcelAxis.label}`}
+      tone={toneOf(parcelAxis.id)}
+      meta={`${parcelAxis.order.length} ангилал`}
+      weight={Math.max(3, parcelAxis.order.length)}
+    >
+      {parcelReady ? (
+        <RowChart
+          data={parcelRows}
+          tone={toneOf(parcelAxis.id)}
+          colorOf={(d) =>
+            palettes[parcelAxis.id]?.colors.get(d.key) ?? toneOf(parcelAxis.id)
+          }
+          dense
+        />
+      ) : (
+        <div className="divide-y divide-line">
+          {parcelAxis.order.map((k) => (
+            <div key={k} className="flex items-center gap-2 py-1.5">
+              <span className="min-w-0 flex-1 truncate text-[11.5px] text-ink-2">
+                {k}
+              </span>
+              <span className="num shrink-0 text-[11.5px] text-ink-3">…</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </CutCard>
+  ) : null;
+
+  /*
+    ДАВХЦАХ НЭГЖ ТАЛБАРЫН ЭРХ, ЗОРИУЛАЛТ.
+
+    ⚠ ӨНГӨ ГАНЦ: эрхийн хэлбэр, зориулалт нь НЭРЛЭСЭН ангилал тул
+    мөр бүрийг өөр өнгөөр ялгавал утгагүй солонго болно — ялгаа нь
+    уртаараа гарна (платформын "дата дүрслэлийн өнгө ганц" дүрэм).
+    ⚠ ТОВШИГДОХГҮЙ: эдгээр нь НЭГЖ ТАЛБАРЫН шинж тул давхаргын мөрийг
+    шүүх зүйл биш — задаргааны диаграмын товшилттой андуурагдах ёсгүй.
+    ⚠⚠ ТАТАЦ ХҮЛЭЭЖ БАЙХАД Ч КАРТ ГАРНА (`PARCEL_CUT_LABELS`): эс
+    тэгвээс хоёр карт хэдэн секундийн дараа гэнэт үсэрч, самбар
+    тогтворгүй харагдана — нэгж талбарын картын хүлээлттэй нэг идиом.
+  */
+  const cutTone = toneOf(parcelAxis?.id ?? on[0] ?? "");
+  const parcelCutCards = set.parcelBy
+    ? cutsReady
+      ? axisCuts.cuts.map((cut) => {
+          const total = cut.rows.reduce((n, r) => n + r.value, 0);
+          return (
+            <CutCard
+              key={`parcel-cut:${cut.field}`}
+              title={`Давхцаж буй нэгж талбар — ${cut.label}`}
+              tone={cutTone}
+              meta={`${num(total)} нэгж талбар · ${cut.rows.length} ангилал`}
+              weight={Math.max(3, cut.rows.length)}
+            >
+              <RowChart
+                data={cut.rows.map((r) => ({
+                  key: r.key,
+                  label: r.key,
+                  value: r.value,
+                }))}
+                tone={cutTone}
+                dense
+                clamp
+              />
+            </CutCard>
+          );
+        })
+      : PARCEL_CUT_LABELS.map((label) => (
+          <CutCard
+            key={`parcel-cut:${label}`}
+            title={`Давхцаж буй нэгж талбар — ${label}`}
+            tone={cutTone}
+            weight={3}
+          >
+            <div className="flex h-full items-center px-1 text-[11.5px] text-ink-3">
+              Тоолж байна…
+            </div>
+          </CutCard>
+        ))
+    : null;
 
   const zoneCard =
     zones.length > 1 ? (
@@ -1953,7 +2344,12 @@ export function PortalLayersDashboard({
           hit.info.areaField != null &&
           b2.field === hit.labels.name,
       );
-      const areas = withArea(id) && !namedArea ? areaRowsOf(hit, oids) : [];
+      /* ⚠ Бүртгэл картыг бүрмөсөн хааж болно
+         ({@link LayerSet.shapeAreas}) */
+      const areas =
+        withArea(id) && !namedArea && set.shapeAreas !== false
+          ? areaRowsOf(hit, oids)
+          : [];
       /*
         ⚠⚠ ГАНЦ ДҮРСТЭЙ ДАВХАРГЫН КАРТ нь БҮСИЙН КАРТТАЙ ЦЭСЭД
         ДАВХАРДАЛ (2026-09-29, хэрэглэгч: "чартуудыг scroll-дох
@@ -2238,7 +2634,9 @@ export function PortalLayersDashboard({
                 selected={chosen}
                 onSelect={onPick}
                 note={noteOf(b)}
-                format={b.kind === "count" ? undefined : measureText}
+                format={
+                  b.kind === "count" && !b.measure ? undefined : measureText
+                }
                 colorOf={
                   palette ? (d) => palette.get(d.key) ?? tone : undefined
                 }
@@ -2315,6 +2713,10 @@ export function PortalLayersDashboard({
       ) : null}
 
       {zoneCard}
+
+      {parcelCard}
+
+      {parcelCutCards}
 
       {chartCards(
         (id, b) => !split?.has(`${id}:${b.id}`),
@@ -2804,6 +3206,12 @@ export function PortalLayersDashboard({
                   /* Хязгаар нь амьд тул унтраахад хүрэшгүй ойртолт
                      өгөхөд л хангалттай */
                   labelZoom: showLabels ? LABEL_ZOOM : OFF_ZOOM,
+                  /* Хүрээ гарах эсэх нь хэлтсийн сонголт
+                     ({@link LayerSet.shapeOutline}) */
+                  outline: set.shapeOutline !== false,
+                  /* Шошго нь АНГИЛЛЫН баганаас гарах үед нэг нэр олон
+                     дүрсэд давтагдана — нэг нь л үлдэнэ */
+                  labelUnique: set.labelBy != null,
                 }}
                 /* Объект үүсэх МӨЧИД уншигддаг тул цэг байхгүй үед ч
                  ЗААВАЛ өгнө — эс тэгвээс шошгын давхарга огт үүсэхгүй
@@ -2838,43 +3246,53 @@ export function PortalLayersDashboard({
                 харин асаагаад юу ч гарахгүй бол эвдэрсэн гэж үзнэ.
                 ⚠ Хязгаарт хүрсэн үед ил хэлнэ — дутуу зургийг бүтэн
                 мэт харуулах нь худал.
+                ⚠⚠ АНХНААСАА АСААЛТТАЙ ЦЭСЭД ТОВЧ ГАРАХГҮЙ
+                ({@link LayerSet.parcels}, хэрэглэгч 2026-10-02: "энэ
+                товч хэрэггүй"). Дээрх "товчийг нуухгүй" дүрэм нь
+                УНТРААЛТТАЙ үед хамаарна: тэнд товч нь тийм боломж
+                байгааг зарладаг. Асаалттай үед нэгж талбар нь зураг
+                дээр аль хэдийн харагдаж байгаа тул зарлах зүйлгүй.
+                ⚠ Төлөвийн мэдэгдэл нь ҮЛДЭНЭ: давхцал тооцогдож
+                дуустал, хязгаарт хүрсэн эсэхийг хэлэх ёстой.
               */}
               <div className="absolute top-12 left-2 z-20 flex flex-col items-start gap-1">
-                <button
-                  type="button"
-                  aria-pressed={parcelsOn}
-                  onClick={() => {
-                    const next = !parcelsOn;
-                    setParcelsOn(next);
-                    /* Унтраахад ойртолтын дарлалтыг мөн тавина —
+                {set.parcels === true ? null : (
+                  <button
+                    type="button"
+                    aria-pressed={parcelsOn}
+                    onClick={() => {
+                      const next = !parcelsOn;
+                      setParcelsOn(next);
+                      /* Унтраахад ойртолтын дарлалтыг мөн тавина —
                        давхаргын өөрийн хүрээ буцаж хүчин төгөлдөр */
-                    if (!next) return setParcelFocus(null);
-                    if (close || !view) return;
-                    /* Одоогийн төвийг хадгалан хязгаар хүртэл ойртоно.
+                      if (!next) return setParcelFocus(null);
+                      if (close || !view) return;
+                      /* Одоогийн төвийг хадгалан хязгаар хүртэл ойртоно.
                        Хүрээний ӨРГӨН нь хоёр дахин багасахад ойртолт
                        нэгээр нэмэгдэнэ тул зөрүүг хоёрын зэргээр
                        хуваана */
-                    const [w, s2, e, n] = view.box;
-                    /* ⚠ Хязгаараас ЦААШ түлхэж бодно: `fitBounds`
+                      const [w, s2, e, n] = view.box;
+                      /* ⚠ Хязгаараас ЦААШ түлхэж бодно: `fitBounds`
                        нь 44px зайтай, `maxZoom: 14`-ээр таглагддаг
                        тул яг хязгаар дээр тооцвол таглаанд бага
                        зэрэг дутаж буудаг */
-                    const k = 2 ** (view.zoom - parcelZoom - 0.7);
-                    const cx = (w + e) / 2;
-                    const cy = (s2 + n) / 2;
-                    const dx = ((e - w) / 2) * k;
-                    const dy = ((n - s2) / 2) * k;
-                    setParcelFocus([cx - dx, cy - dy, cx + dx, cy + dy]);
-                  }}
-                  className={cn(
-                    "elevated rounded-xs border px-2 py-1 text-[11px] backdrop-blur-md transition-colors",
-                    parcelsOn
-                      ? "border-transparent bg-paper-hi text-ink"
-                      : "border-line-2 bg-paper/92 text-ink-2 hover:text-ink",
-                  )}
-                >
-                  Нэгж талбар
-                </button>
+                      const k = 2 ** (view.zoom - parcelZoom - 0.7);
+                      const cx = (w + e) / 2;
+                      const cy = (s2 + n) / 2;
+                      const dx = ((e - w) / 2) * k;
+                      const dy = ((n - s2) / 2) * k;
+                      setParcelFocus([cx - dx, cy - dy, cx + dx, cy + dy]);
+                    }}
+                    className={cn(
+                      "elevated rounded-xs border px-2 py-1 text-[11px] backdrop-blur-md transition-colors",
+                      parcelsOn
+                        ? "border-transparent bg-paper-hi text-ink"
+                        : "border-line-2 bg-paper/92 text-ink-2 hover:text-ink",
+                    )}
+                  >
+                    Нэгж талбар
+                  </button>
+                )}
                 {parcelsOn ? (
                   <span className="num rounded-xs bg-paper/92 px-1.5 py-0.5 text-[10px] text-ink-3 backdrop-blur-md">
                     {/*
@@ -2883,11 +3301,15 @@ export function PortalLayersDashboard({
                       гардаг тул "ойртоно уу" гэдэг нь худал болно.
                     */}
                     {zoneRings.length
-                      ? zoneBusy
-                        ? "Давхцлыг тооцож байна…"
-                        : `${num(shownZoneParcels.data.features.length)} давхцсан${
-                            shownZoneParcels.capped ? ", хэсэгчилсэн" : ""
-                          }`
+                      ? !zoneClose
+                        ? `1:${num(ZONE_SCALE)}-аас ойртоно уу`
+                        : zoneBusy
+                          ? "Давхцлыг тооцож байна…"
+                          : shownZoneParcels.tooMany
+                            ? `${num(shownZoneParcels.total ?? 0)} давхцсан · ойртоно уу`
+                            : `${num(shownZoneParcels.data.features.length)} давхцсан${
+                                shownZoneParcels.capped ? ", хэсэгчилсэн" : ""
+                              }`
                       : !close
                         ? `1:${num(PARCEL_SCALE)}-аас ойртоно уу`
                         : shownParcels.capped
@@ -3429,7 +3851,10 @@ function headMeta(b: Breakdown): string {
   const cats = `${num(b.values.length)} ангилал`;
   if (!hasShare(b)) return cats;
   const total = b.values.reduce((n, d) => n + d.value, 0);
-  if (b.kind === "count") return `${num(total)} бичлэг · ${cats}`;
+  /* ⚠ Хэмжилт зурвас болсон үед ({@link LayerSet.measureFirst}) тоо нь
+     бичлэгийнх БИШ — нэгжтэйгээ гарна */
+  if (b.kind === "count" && !b.measure)
+    return `${num(total)} бүртгэл · ${cats}`;
   const unit = b.measure ? unitOf(b.measure).unit : "";
   return `${measureText(total)}${unit ? ` ${unit}` : ""} · ${cats}`;
 }
@@ -3642,8 +4067,18 @@ function AxisCard({
         ) : undefined
       }
     >
+      {/*
+        ⚠⚠ ХҮСНЭГТ КАРТАА ДҮҮРГЭНЭ (`h-full` + доорх дүүргэгч мөр,
+        2026-10-02). Карт нь баганынхаа үлдсэн өндрийг хуваалцдаг
+        болсон тул (`flex-grow`) мөрүүд нь дээдээ эгнээд доороо
+        хоосон зай үлдээдэг байв — нийт дүнгийн мөр тэр хоосон зайн
+        ДЭЭР дүүжлэгдэнэ.
+        ⚠ `sticky bottom` ҮҮНИЙГ ШИЙДЭХГҮЙ: наалдац нь зөвхөн
+        агуулга ХАЛИХ үед л ажилладаг; карт агуулгаасаа өндөр үед
+        мөр байрандаа үлдэнэ.
+      */}
       <div className="min-h-0 flex-1 overflow-auto">
-        <table className="w-full border-separate border-spacing-0">
+        <table className="h-full w-full border-separate border-spacing-0">
           <thead>
             <tr>
               <th className="sticky top-0 z-10 border-b border-line-2 bg-paper-2 px-2 py-2 text-left align-bottom">
@@ -3714,6 +4149,16 @@ function AxisCard({
                 </tr>
               );
             })}
+            {/*
+              ДҮҮРГЭГЧ МӨР — үлдсэн өндрийг БҮТНЭЭР нь шингээнэ
+              (`h-full`), улмаас бодит мөрүүд нягтралаа хадгалж,
+              нийт дүн нь картынхаа ёроолд суана.
+              ⚠ Агуулга халих үед өндөр нь өөрөө тэг болно.
+              ⚠ Товшигддоггүй, хүрээгүй — зөвхөн зай эзэлнэ.
+            */}
+            <tr aria-hidden="true" className="h-full">
+              <td colSpan={cols.length + 1} />
+            </tr>
           </tbody>
           <tfoot>
             <tr>
