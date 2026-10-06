@@ -11,7 +11,7 @@ import { SOIL_EXAGGERATION, SOIL_MODULES, createSoilScene, type PickInfo, type S
 import { SectionCard } from "@/components/analysis/soil-section";
 import { RE3, RN3, loadThree, rampC, type Species } from "@/lib/latrine-sim-3d";
 import { SimSide, SimStage, useLatrineSim } from "@/components/analysis/latrine-sim";
-import { DEEP_X, STEP_DAYS, type PlumeState } from "@/lib/soil-plumes";
+import { PLUME_X, STEP_DAYS, type PlumeState } from "@/lib/soil-plumes";
 import { PlumeSection } from "@/components/analysis/plume-section";
 
 /* --------------------------------------------------------------------------
@@ -122,7 +122,23 @@ export function SoilScene() {
 
   const busy = state === "loading";
   const steps = plumes?.steps ?? 1;
-  const shown = !!plumes && plumes.count > 0;
+  /* Самбар зүсэлт БҮРД гарна — жорлонгүй бол тэгж хэлнэ; зураас, диаграм нь жорлонтой үед л */
+  const shown = !!plumes && plumes.cut > 0;
+  const hasPlumes = shown && plumes.count > 0;
+  /* ⚠ Шинэ зүсэлтийн тооцоо дуусмагц таймлайн ӨӨРӨӨ тоглоно (хэрэглэгч
+     2026-10-06: "zuseh bolon zurhad bohirdliin newchilt ni haragdah
+     heregtei") — нэг зүсэлтэд нэг л удаа; дараа нь хэрэглэгч өөрөө. */
+  const started = React.useRef(0);
+  React.useEffect(() => {
+    if (!plumes || plumes.cut === 0) {
+      started.current = 0;
+      return;
+    }
+    if (plumes.cut === started.current || plumes.count === 0 || plumes.done < plumes.total) return;
+    started.current = plumes.cut;
+    setT(0);
+    setPlaying(true);
+  }, [plumes]);
 
   React.useEffect(() => scene.current?.setPlumeTime(t), [t]);
   React.useEffect(() => scene.current?.setPlumeSpecies(species), [species]);
@@ -156,7 +172,7 @@ export function SoilScene() {
                   <span ref={scaleRef} className="num font-semibold text-ink empty:hidden after:font-normal after:text-ink-2 after:content-['_·_']" />
                   Босоо өсгөлт ×{SOIL_EXAGGERATION}
                   {/* ⚠ Гүний хэсэг өөр өсгөлттэй — гарч ирэх бүрд ИЛ хэлнэ */}
-                  {shown && plumes?.deep && plumes.deep.depth > 2 ? `, 2 м-ээс доош ×${DEEP_X}` : ""} · Товшиход профайл · Жорлон товшиход
+                  {hasPlumes ? `, бохирдлын өргөн ×${PLUME_X}` : ""} · Товшиход профайл · Жорлон товшиход
                   нэвчилтийн симуляци · Alt + товшиход тэр цэгээр зүсэлт
                 </span>
                 {shown ? (
@@ -198,7 +214,7 @@ export function SoilScene() {
             {simSel >= 0 ? <SimStage sim={sim} open={simOpen} onBack={closeSim} /> : null}
           </div>
           {/* ⚠ Симуляци нээлттэй үед нуугдана — тэр нь нэг жорлонгийнх */}
-          {shown && plumes?.deep && !simOpen ? (
+          {hasPlumes && plumes?.deep && !simOpen ? (
             <div className="h-[210px] shrink-0">
               <PlumeSection deep={plumes.deep} species={species} count={plumes.count} years={((t * STEP_DAYS) / 365).toFixed(1)} />
             </div>
@@ -212,7 +228,7 @@ export function SoilScene() {
             <SectionCard
               section={section}
               legend={legend}
-              plumes={shown ? { grid: plumes!.grid, species } : null}
+              plumes={hasPlumes ? { grid: plumes!.grid, species } : null}
               onPick={(lon, lat) => scene.current?.pickAt(lon, lat)}
             />
           ) : null}
@@ -272,6 +288,26 @@ function PlumeBar(props: {
 }) {
   const { state, t, species, playing } = props;
   const ramp = species === "N" ? RN3 : RE3;
+  /* Жорлонгүй зүсэлт — удирдлага биш, байдлыг нь хэлнэ */
+  if (state.count === 0)
+    return (
+      <div className="elevated absolute right-2 bottom-2 z-10 w-[380px] rounded-xs border border-line bg-paper/92 px-2.5 py-2 backdrop-blur-sm">
+        <div className="flex items-baseline justify-between gap-2">
+          <span className="text-[11.5px] font-semibold text-ink">БОХИРДЛЫН НЭВЧИЛТ</span>
+          <span className="num text-[11px] text-ink-3">0 нүхэн жорлон</span>
+        </div>
+        <div className="mt-1.5 flex items-center gap-1.5 text-[11.5px] text-ink-2">
+          {state.loading ? (
+            <>
+              <Loader2 size={12} className="animate-spin text-ink-3" />
+              Нүхэн жорлонгийн мэдээлэл ачаалж байна
+            </>
+          ) : (
+            "Зүсэлтийн шугам дээр нүхэн жорлон байхгүй — гэр хорооллоор зүснэ үү"
+          )}
+        </div>
+      </div>
+    );
   return (
     <div className="elevated absolute right-2 bottom-2 z-10 w-[380px] rounded-xs border border-line bg-paper/92 px-2.5 py-2 backdrop-blur-sm">
       <div className="flex items-baseline justify-between gap-2">

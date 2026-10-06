@@ -3,6 +3,7 @@
 import * as React from "react";
 import { RE3, RN3, rampC, type Species } from "@/lib/latrine-sim-3d";
 import type { DeepSection } from "@/lib/soil-plumes";
+import { MATS } from "@/lib/latrine-sim";
 
 /* --------------------------------------------------------------------------
    БОХИРДЛЫН НЭВЧИЛТ — ГҮНИЙ УС ХҮРТЭЛХ 2D ХӨНДЛӨН ОГТЛОЛ
@@ -20,6 +21,8 @@ import type { DeepSection } from "@/lib/soil-plumes";
    ⚠ Гүний ус нь жорлон тус бүрийн түвшин (`--water`) — жорлонгүй сэмплд
    зурахгүй, хооронд нь холбохгүй (байхгүй түвшинг байгаа мэт харуулахгүй).
    ⚠ Шатлал 3D-тэй НЭГ (`RN3` / `RE3`).
+   ⚠ 2 м-ээс ДООШ дэвсгэр нь ГЕОЛОГИ (JICA 2013, `MATS`-ийн өнгө) — 3D-ийн
+   гүний хэсэгтэй нэг ангилал; бохирдол түүн дээгүүр зурагдана.
    -------------------------------------------------------------------------- */
 
 const LEFT = 34;
@@ -62,17 +65,27 @@ export function PlumeSection({ deep, species, years, count }: { deep: DeepSectio
     const ramp = species === "N" ? RN3 : RE3;
     /* багана бүр дор хаяж 2 пиксел — нарийн зам дээр жорлон алга болохгүй */
     const bw = Math.max(2, cw);
+    /* геологийн дэвсгэр — 2 м-ээс доош */
+    const yTop = (2 / depth) * H;
+    for (let i = 0; i < samples; i++) {
+      const m = deep.geo[i];
+      if (m === 255 || !MATS[m]) continue;
+      g.fillStyle = MATS[m].col;
+      g.globalAlpha = 0.32;
+      g.fillRect(i * cw, yTop, cw + 0.5, H - yTop);
+      g.globalAlpha = 1;
+    }
     for (let i = 0; i < samples; i++) {
       const x = i * cw + cw / 2 - bw / 2;
       for (let r = 0; r < rows; r++) {
         const v = grid[i * rows + r];
-        if (!v) continue;
-        if (v === 1) g.fillStyle = "rgb(29,20,12)";
-        else {
-          const tt = (v - 2) / 253;
-          const k = rampC(ramp, tt);
-          g.fillStyle = `rgba(${k[0]},${k[1]},${k[2]},${0.45 + 0.55 * tt})`;
-        }
+        /* ⚠ 1 = НҮХ — зурахгүй (хэрэглэгч 2026-10-06: "jorlongiin guniig
+           haruulahgui zugeer bohirdliig ni"); нүхний гүн нь хэмжилт биш
+           загварын анхдагч тул бохирдол л харагдана */
+        if (v < 2) continue;
+        const tt = (v - 2) / 253;
+        const k = rampC(ramp, tt);
+        g.fillStyle = `rgba(${k[0]},${k[1]},${k[2]},${0.45 + 0.55 * tt})`;
         g.fillRect(x, r * rh, bw, rh + 0.5);
       }
       if (Number.isFinite(gw[i])) {
@@ -100,6 +113,9 @@ export function PlumeSection({ deep, species, years, count }: { deep: DeepSectio
     g.setLineDash([]);
   }, [deep, species, W, H]);
 
+  /* Зам дээр тохиолдсон геологи — тайлбарт */
+  const present = [...new Set(deep.geo)].filter((m) => m !== 255 && MATS[m]).sort((a, b) => a - b);
+
   const dStep = niceStep(deep.depth, 4);
   const dTicks: number[] = [];
   for (let d = 0; d <= deep.depth + 1e-6; d += dStep) dTicks.push(d);
@@ -112,7 +128,17 @@ export function PlumeSection({ deep, species, years, count }: { deep: DeepSectio
     <div className="flex h-full min-h-0 flex-col rounded-xs border border-line bg-paper-2">
       <div className="flex shrink-0 items-baseline justify-between gap-3 border-b border-line px-2.5 py-1.5">
         <span className="text-[12px] font-semibold tracking-[0.02em] text-ink uppercase">Бохирдлын нэвчилт · гүний ус хүртэл</span>
-        <span className="num text-[11px] text-ink-3">
+        {present.length ? (
+          <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2.5 gap-y-0.5 text-[11px] text-ink-2">
+            {present.map((m) => (
+              <span key={m} className="inline-flex items-center gap-1" title={MATS[m].n}>
+                <span className="inline-block h-2 w-3 rounded-xs" style={{ background: MATS[m].col, opacity: 0.75 }} />
+                {MATS[m].n.replace(/\s*\(.*\)$/, "")}
+              </span>
+            ))}
+          </span>
+        ) : null}
+        <span className="num shrink-0 text-[11px] text-ink-3">
           {count.toLocaleString()} нүхэн жорлон · {years} жил · <span className="text-(--water)">▬</span> гүний ус
         </span>
       </div>
