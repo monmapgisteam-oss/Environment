@@ -10,9 +10,12 @@
   гүний усны түвшин) оноогдсон. Блок нь тэр бүртгэлийг рельеф дээр
   байрлуулж харуулна.
 
-  ⚠ `R` үе (суурь чулуулаг) нь эх сурвалжид БАЙХГҮЙ — 150 см-ээс доош
-  200 см хүртэлх хэсгийг СХЕМЧИЛЖ нэмсэн (бэлтгэгч скрипт дээр).
-  Дэлгэц дээр "(схем)" гэж ил бичигдэнэ.
+  ⚠⚠ СХЕМИЙН `R` ҮЕ ХАСАГДАНА ({@link dropSchematic}). Бэлтгэгч скрипт
+  профайл БҮРД 150–200 см-т "R — суурь чулуулаг (схем)" нэмсэн байсан —
+  эх сурвалжид тийм үе байхгүй ("C 69+", "Cg (аллюви)" гэж нээлттэй
+  төгсдөг). Улмаас 2.5 м-ийн нүх зураг дээр хадыг нэвт ухсан мэт
+  харагдаж байв (хэрэглэгч 2026-10-06: "nuh uhaal R uyed hureed bbal
+  humuus gaihana"). Одоо эх сурвалжийн СҮҮЛИЙН үе 200 см хүртэл сунана.
 */
 import { asset } from "@/lib/base-path";
 
@@ -39,24 +42,33 @@ export type HClass = {
 };
 
 export const HCLS: Record<string, HClass> = {
-  O: { label: "O / T — ялзмаг, хүлэр", color: "#2b1f16", photo: ["A", { f: 0.6 }] },
+  O: { label: "O — ойн хөвд, навчны үлдэгдэл", color: "#2b1f16", photo: ["A", { f: 0.6 }] },
+  T: { label: "T — хүлэр (намаг)", color: "#3a2a1c", photo: ["A", { f: 0.7 }] },
   A: { label: "A — өнгөн ялзмагт давхарга", color: "#3f2b1d", photo: ["A", {}] },
   A2: { label: "A2 / AB — шилжилтийн ялзмагт", color: "#56402c", photo: ["A", { f: 1.15 }] },
   Ag: { label: "Ag / ABg — глейжсэн ялзмагт", color: "#4b4843", photo: ["A", { gray: 0.55, tint: [118, 126, 128], k: 0.3 }] },
   Bw: { label: "Bw — бүтэц өөрчлөгдсөн", color: "#9a5a33", photo: ["B", {}] },
   Bk: { label: "Bk — шохойн хуримтлал", color: "#c9b38d", photo: ["E", {}] },
   Bg: { label: "Bg — глей (ус тогтсон)", color: "#7e8b87", photo: ["B", { gray: 0.8, tint: [118, 138, 144], k: 0.5 }] },
+  Bgk: { label: "Bg(ca) — карбонатлаг глей", color: "#8c9490", photo: ["B", { gray: 0.8, tint: [130, 145, 148], k: 0.5 }] },
   Bf: { label: "Bf — төмрийн исэлжсэн", color: "#a4502a", photo: ["B", { tint: [185, 70, 30], k: 0.2 }] },
   C: { label: "C — эх чулуулаг, сайр хайрга", color: "#a39070", photo: ["C", {}] },
   CR: { label: "C/R — нимгэн, чулуурхаг", color: "#8d877a", photo: ["C", { f: 0.85 }] },
   Cg: { label: "Cg — глейжсэн аллюви", color: "#8f9891", photo: ["C", { gray: 0.7, tint: [125, 140, 140], k: 0.4 }] },
+  Cgk: { label: "Cg(ca) — карбонатлаг глейжсэн аллюви", color: "#9aa099", photo: ["C", { gray: 0.7, tint: [135, 148, 146], k: 0.4 }] },
   Cf: { label: "⊥C — мөнх цэвдэг", color: "#9db2c1", photo: ["C", { gray: 0.5, tint: [150, 180, 205], k: 0.45 }] },
   R: { label: "R — ан цавтай суурь чулуулаг (схем)", color: "#7d7a75", photo: ["R", {}] },
 };
 
-/** Үеийн генетик тэмдэглэгээг ангилалд буулгана */
+/** Үеийн генетик тэмдэглэгээг ангилалд буулгана.
+    ⚠ Хүлэр (T, T/H) нь ойн навчны үлдэгдлээс (O, Ov) ӨӨР ангилал —
+    нугат-намгийн хөрсөнд навч, өвсний зураг гарч байв (2026-10-06).
+    ⚠ "(ca)" дагавар нь КАРБОНАТЛАГ — хаявал шохой алга болно. */
 export function hcls(n: string): string {
-  if (/^(O|T)/.test(n)) return "O";
+  if (/^T/.test(n)) return "T";
+  if (/^O/.test(n)) return "O";
+  if (/^Bg.*ca/.test(n)) return "Bgk";
+  if (/^Cg.*ca/.test(n)) return "Cgk";
   if (n === "A" || n === "A1" || n === "AO") return "A";
   if (/^A.*g/.test(n)) return "Ag";
   if (/^A/.test(n)) return "A2";
@@ -84,7 +96,7 @@ export const SOILCOL: Record<string, string> = {
    холиход нэг талд л байгаа давхарга (жишээ нь Bk) шаантаг шиг
    нимгэрч алга болж, нөгөө талынх (Bg) ургаж орж ирнэ — хурц шугам
    биш, байгалийн катена. */
-const SLOT: Record<string, number> = { O: 0, A: 1, A2: 1, Ag: 2, Bw: 3, Bg: 3, Bf: 3, Bk: 4, C: 5, CR: 5, Cg: 5, Cf: 5, R: 6 };
+const SLOT: Record<string, number> = { O: 0, T: 0, A: 1, A2: 1, Ag: 2, Bw: 3, Bg: 3, Bgk: 3, Bf: 3, Bk: 4, C: 5, CR: 5, Cg: 5, Cgk: 5, Cf: 5, R: 6 };
 const HORD = Object.keys(HCLS);
 
 export type Horizon = { n: string; t: number; b: number; note: string };
@@ -165,7 +177,7 @@ async function load(): Promise<SoilData> {
     if (b.name.startsWith("tile")) tiles[b.name.slice(4)] = new Blob([bytes(b.name)], { type: "image/jpeg" });
   }
 
-  const { profiles } = header;
+  const profiles = (header.profiles = header.profiles.map(dropSchematic));
   const keys = [...new Set(profiles.flatMap((p) => p.hz.map((h) => hcls(h.n))))].sort(
     (a, b) => SLOT[a] - SLOT[b] || HORD.indexOf(a) - HORD.indexOf(b),
   );
@@ -192,6 +204,26 @@ async function load(): Promise<SoilData> {
     mLon: 111320 * Math.cos((lat0 * Math.PI) / 180),
     mLat: 110574,
   };
+}
+
+/**
+ * Бэлтгэгчийн нэмсэн "(схем)" үеийг хасаж, түүний ДЭЭРХ эх сурвалжийн үеийг
+ * доош нь сунгана: "C 69+" нь "69 см-ээс доош C" гэсэн үг тул 200 см хүртэл
+ * C байх нь эх сурвалжийн бичсэнтэй нийцнэ. "C/R 30+" профайлд C/R нь
+ * сунана — нимгэн чулуурхаг хөрсийг эх сурвалж өөрөө тэгж бичсэн.
+ * ⚠ Цэвдэгт хөрсний "⊥C 50–150" нь эх сурвалжид доод хилтэй цорын ганц
+ * тохиолдол; 150 см-ээс доош юу байгааг эх сурвалж хэлээгүй тул тэр ч
+ * сунана (шинэ үе зохиохгүй).
+ */
+function dropSchematic(p: Profile): Profile {
+  const hz: Horizon[] = [];
+  for (const h of p.hz) {
+    if ((h.note ?? "").includes("(схем)") && hz.length) {
+      const last = hz[hz.length - 1];
+      hz[hz.length - 1] = { ...last, b: Math.max(last.b, h.b) };
+    } else hz.push(h);
+  }
+  return { ...p, hz };
 }
 
 /* ── Профайлын холимог ────────────────────────────────────────────── */

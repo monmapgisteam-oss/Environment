@@ -739,6 +739,42 @@ export function WellsMap({
      * зориулагдсан: тухайн хэрчим өөрөө шошгоо үүрнэ.
      */
     labelPlacement?: "point" | "line-center";
+    /**
+     * НИМГЭН ХҮРЭЭ (хэрэглэгч, 2026-10-06: "голын татмын border-ийг
+     * засаарай, бүдүүн байна"). Татам нь голын дагуух НАРИЙН, салаалсан
+     * дүрсүүд тул анхдагч бараан касинг (2.8–4.2px) ба хүрээ нийлээд
+     * дүрсийн өөрийнхөө өргөнтэй тэнцэж, дүүргэлт нь харагдахаа больдог
+     * байв. Энэ үед касинг, хүрээ хоёр ойролцоогоор ХАГАС өргөнтэй.
+     * ⚠ Эх сурвалж үүсгэх МӨЧИД уншигдана (`modeRef`).
+     */
+    edge?: "thin";
+    /**
+     * ОЛОН ӨНЦӨГТИЙН ХҮРЭЭ (анхдагчаар гарна).
+     *
+     * `false` үед дүрс нь зөвхөн ДҮҮРГЭЛТЭЭРЭЭ харагдана — хүрээ ч,
+     * доорх бараан касинг ч зурагдахгүй.
+     *
+     * ⚠⚠ ЗӨВХӨН ОЛОН ӨНЦӨГТӨД: `shape-line` нь ШУГАМАН геометрийг ч
+     * зурдаг (минжний маршрут, 100 м зурвас) — тэнд хүрээ бол дүрс
+     * ӨӨРӨӨ тул хаавал давхарга бүхэлдээ алга болно.
+     * ⚠ СОНГОСОН дүрсэд хүрээ ҮРГЭЛЖ гарна (нимгэн) — дүүргэлт нь
+     * 42%-аас 68% болдог ч тэр ялгаа хиймэл дагуулын дэвсгэр дээр
+     * бараг мэдэгдэхгүй.
+     * ⚠ 2026-09-24-нд ЭСРЭГ засвар хийгдсэн тул БҮХ самбарт
+     * асаахгүй — хэлтсийн бүртгэлийн шийдвэр
+     * ({@link LayerSet.shapeOutline}).
+     */
+    outline?: boolean;
+    /**
+     * НЭГ БИЧВЭРТ ЯГ НЭГ ШОШГО (анхдагчаар дүрс бүрд нэг).
+     *
+     * ⚠ Ангиллын багана шошго болох үед ({@link LayerSet.labelBy})
+     * нэг нэр олон дүрсэд давтагдана — татамын "Хэрлэн" нь 23 дүрст.
+     * MapLibre зөвхөн ДАВХЦСАНЫГ хасдаг тул ижил бичвэр зураг даяар
+     * тарж бичигдэнэ.
+     * ⚠ Хамгийн ТОМ дүрс дээр суух тул гол биеийг заана.
+     */
+    labelUnique?: boolean;
   };
   /**
    * Цэгийн бичвэр шошго.
@@ -949,6 +985,9 @@ export function WellsMap({
     shapeLabelZoom: shapes?.labelZoom ?? 0,
     shapeFlow: Boolean(shapes?.flow),
     shapeLabelOnLine: shapes?.labelPlacement === "line-center",
+    shapeThin: shapes?.edge === "thin",
+    shapeOutline: shapes?.outline !== false,
+    shapeLabelUnique: Boolean(shapes?.labelUnique),
     detailZoom: detail?.minZoom,
     labeled: Boolean(labels),
     labelZoom: labels?.minzoom ?? 12,
@@ -1232,6 +1271,27 @@ export function WellsMap({
           ⚠ Горимоос ҮЛ ХАМААРНА: тогтмол rgba — платформын токен
           зураг дотор орохгүй ("газрын зураг хоёр горимд ижил" дүрэм).
         */
+        /*
+          ХҮРЭЭНИЙ ӨРГӨН — бүртгэл хүрээг хаасан үед ОЛОН ӨНЦӨГТ дээр
+          тэг болно ({@link shapes.outline}).
+
+          ⚠ ШУГАМАН дүрс ХӨНДӨГДӨХГҮЙ: `shape-line` нь маршрут, зурвас
+          зэрэг `LineString`-ийг ч зурдаг бөгөөд тэнд хүрээ нь дүрс
+          ӨӨРӨӨ — тэг өгвөл давхарга бүхэлдээ алга болно.
+          ⚠ ХҮРЭЭГҮЙ ГОРИМД СОНГОЛТЫН ЗУРААС НАРИЙН (`thin`): ердийн
+          горимд сонгосон хүрээ нь ХӨРШ дүрсүүдийн хүрээнээс ялгарах
+          ёстой тул бүдүүн; хүрээгүй горимд зураг дээрх ЦОРЫН ГАНЦ
+          зураас тул тэр жин шаардлагагүй.
+          ⚠ `["zoom"]` нь `interpolate`-ийн ШУУД оролт хэвээр: шалгалт
+          нь СУУДАЛ бүрийн дотор — эсрэгээр бичвэл MapLibre давхаргыг
+          чимээгүй голно.
+        */
+        const outlined = modeRef.current.shapeOutline;
+        const strokeAt = (lit: number, plain: number, thin = lit) =>
+          (outlined
+            ? ["case", SHAPE_LIT, lit, plain]
+            : ["case", SHAPE_LIT, thin, ["in", ["geometry-type"], ["literal", ["Polygon", "MultiPolygon"]]], 0, plain]) as unknown as ExpressionSpecification;
+
         m.addLayer({
           id: "shape-case",
           type: "line",
@@ -1239,15 +1299,27 @@ export function WellsMap({
           layout: { "line-join": "round" },
           paint: {
             "line-color": "rgba(8,14,20,.55)",
-            "line-width": [
-              "interpolate",
-              ["linear"],
-              ["zoom"],
-              8,
-              ["case", SHAPE_LIT, 4.6, 2.8],
-              14,
-              ["case", SHAPE_LIT, 6.4, 4.2],
-            ] as unknown as ExpressionSpecification,
+            /* Нимгэн горимд ойролцоогоор хагас ({@link shapes.edge});
+               хүрээгүй горимыг `strokeAt` барина */
+            "line-width": (modeRef.current.shapeThin
+              ? [
+                  "interpolate",
+                  ["linear"],
+                  ["zoom"],
+                  8,
+                  strokeAt(2.4, 1.2, 1.6),
+                  14,
+                  strokeAt(3.4, 2, 2),
+                ]
+              : [
+                  "interpolate",
+                  ["linear"],
+                  ["zoom"],
+                  8,
+                  strokeAt(4.6, 2.8, 2.2),
+                  14,
+                  strokeAt(6.4, 4.2, 3),
+                ]) as unknown as ExpressionSpecification,
           },
         });
 
@@ -1261,15 +1333,25 @@ export function WellsMap({
             /* `["zoom"]` нь дээд түвшний `interpolate`-ийн шууд оролт
                байх ёстой — сонголтын шалгалтыг СУУДАЛ бүрийн дотор
                оруулав, эсрэгээр бичвэл давхарга чимээгүйхэн гологдоно */
-            "line-width": [
-              "interpolate",
-              ["linear"],
-              ["zoom"],
-              8,
-              ["case", SHAPE_LIT, 1.8, 0.5],
-              14,
-              ["case", SHAPE_LIT, 2.6, 1.2],
-            ] as unknown as ExpressionSpecification,
+            "line-width": (modeRef.current.shapeThin
+              ? [
+                  "interpolate",
+                  ["linear"],
+                  ["zoom"],
+                  8,
+                  strokeAt(1.2, 0.35, 0.8),
+                  14,
+                  strokeAt(1.8, 0.7, 1),
+                ]
+              : [
+                  "interpolate",
+                  ["linear"],
+                  ["zoom"],
+                  8,
+                  strokeAt(1.8, 0.5, 1),
+                  14,
+                  strokeAt(2.6, 1.2, 1.4),
+                ]) as unknown as ExpressionSpecification,
             "line-opacity": 0.9,
           },
         });
@@ -2428,7 +2510,9 @@ export function WellsMap({
        тавихад алга болсон дүрсийн шошго зураг дээр үлдэнэ */
     const lab = live.getSource("shape-labels");
     if (lab && "setData" in lab)
-      (lab as GeoJSONSource).setData(labelPoints(shapeData));
+      (lab as GeoJSONSource).setData(
+        labelPoints(shapeData, modeRef.current.shapeLabelUnique),
+      );
   }, [live, shapeData]);
 
   /* Сонгогдсон талбайг тодруулах — `feature-state`-ээр, дахин зурахгүй */

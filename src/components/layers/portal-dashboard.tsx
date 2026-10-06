@@ -28,11 +28,21 @@ import {
 import { BasemapGallery } from "@/components/map/basemap-gallery";
 import {
   countParcelsIn,
+  PARCEL_CUT_LABELS,
+  parcelCuts,
+  type ParcelCut,
   fetchParcelsIn,
   fetchParcelsOn,
+  clipRings,
+  simplifyRings,
   NO_PARCELS,
   PARCEL_SCALE,
+  parcelAxes,
+  parcelCountsIn,
+  parcelWhere,
   ringsOf,
+  type ParcelAxis,
+  type ParcelCount,
   type ParcelTile,
 } from "@/lib/parcels";
 import { MapTip, MapTipRow, useMapTip } from "@/components/map/hover-tip";
@@ -51,6 +61,7 @@ import { Bounds } from "@/lib/extent";
 import {
   breakdowns,
   categoryKey,
+  isSystemField,
   labelParts,
   fetchLayerFeatures,
   fetchLayerInfo,
@@ -141,6 +152,109 @@ function categoryRamp(hue: number, n: number): string[] {
  * ⚠ Дүрс бүрд НЭГ УДАА бодогдоно (`WeakMap`): шүүлт тавих бүрд
  * долоон мянган олон өнцөгтийн оройг дахин тоолох нь утгагүй.
  */
+/**
+ * ДАВХЦАХ НЭГЖ ТАЛБАРЫГ ЗАДЛАХ ТЭНХЛЭГ ({@link LayerSet.parcelBy}).
+ *
+ * Давхаргын дүрсүүдийг заасан талбарын утгаар бүлэглэнэ: бүлэг бүр
+ * нэг хүсэлт болж, сервер давхцлыг тоолно.
+ *
+ * ⚠ Бүлгийн түлхүүр нь задаргааны ӨӨРИЙН `keyOf` — диаграм, шүүлт,
+ * өнгө гурвуулаа нэг эх сурвалжаас.
+ * ⚠ Дараалал нь задаргаанаас: тоогоороо эрэмбэлэгдсэн хэвээр.
+ * ⚠ Цэвэр функц тул модулийн түвшинд — бүрэлдэхүүн доторх давталт,
+ * эрт буцалт хоёр нь React Compiler-ийн мемоизацийг тасалдаг.
+ */
+function parcelAxisOf(
+  field: string | undefined,
+  on: readonly string[],
+  loaded: Record<string, Loaded>,
+): {
+  id: string;
+  label: string;
+  order: string[];
+  groups: Map<string, GeoJSON.Feature[]>;
+} | null {
+  if (!field) return null;
+  for (const id of on) {
+    const hit = loaded[id];
+    if (!hit || hit.info.geometry === "Point") continue;
+    const b = hit.charts.find((c) => c.field === field && c.kind === "count");
+    if (!b) continue;
+    /*
+      ⚠⚠ ГЕОМЕТР ХОЖИМ ИРНЭ: давхарга атрибутаараа эхлээд ирдэг
+      ({@link fetchLayerFeatures}) тул дүрсээр нь шүүвэл карт хэдэн
+      секунд огт үүсэхгүй. Ангиллын НЭР, ДАРААЛАЛ нь задаргаанаас
+      (атрибут) гардаг тул картыг шууд үүсгээд, тооллыг нь дүрс ирэхэд
+      бодно (хэрэглэгч, 2026-10-02: "нэгж талбарын chart байнга
+      харагдана шүү").
+    */
+    const groups = new Map<string, GeoJSON.Feature[]>();
+    for (const f of hit.data.shapes.features) {
+      const row = hit.data.rows[Number(f.id)];
+      if (!row) continue;
+      for (const key of b.keyOf(row))
+        groups.set(key, [...(groups.get(key) ?? []), f]);
+    }
+    return {
+      id,
+      label: b.label,
+      order: b.values.map((v) => v.key),
+      groups,
+    };
+  }
+  return null;
+}
+
+/**
+ * БҮСТЭЙ ДАВХЦСАН НЭГЖ ТАЛБАРЫН ДЭЭД ХЭМЖЭЭ — нэг татацад.
+ *
+ * ⚠⚠ Туулын татамтай **87,947** нэгж талбар давхцдаг (2026-10-02-нд
+ * токеноор хэмжсэн): бүгдийг татвал хэдэн арван мегабайт, хотын төв
+ * бүхэлдээ улаан тор болж доорх хиймэл дагуул, татам хоёулаа дарагдана.
+ *
+ * Тиймээс цагирагийг ХАРАГДАХ ХҮРЭЭГЭЭР тайрч ({@link clipRings}), үр
+ * дүн нь энэ хязгаараас хэтэрвэл ОГТ ТАТАХГҮЙ — зөвхөн тоог нь хэлж
+ * "ойртоно уу" гэнэ. Хагас татсан тор нь "эдгээр л давхцаж байна"
+ * гэсэн ХУДАЛ зураг гаргана.
+ *
+ * ⚠ ХЭМЖСЭН (2026-10-02, бодит үйлчилгээ): дүүргийн харагдац (~6 км)
+ * нь **5,195 нэгж талбар · 0.6 секунд · 1.4 МБ**; 1:120 000 (~44 км)
+ * нь **72,713 · ≈14 МБ · 37 хуудас**.
+ *
+ * ⚠ Хязгаар нь ХАМГААЛАЛТ болохоос ХААЛТ биш: хаалтыг масштаб
+ * ({@link ZONE_SCALE}) тавина. Энэ нь зөвхөн "татам бүхэлдээ
+ * харагдаж байхад 88 мянгыг татах" тохиолдлоос сэргийлнэ.
+ */
+const ZONE_LIMIT = 80000;
+
+/**
+ * БҮСТЭЙ ДАВХЦСАН НЭГЖ ТАЛБАР ЭНЭ МАСШТАБААС ХАРАГДАНА.
+ *
+ * ⚠ Хязгаарыг ойртолтоор БИШ ХАРЬЦААГААР: зургийн буланд гарах заалт
+ * мөн харьцаагаар бичигддэг тул хэрэглэгч хэдээс эхлэн гарахыг
+ * тэндээс шууд уншина (шошго, суурь нэгж талбартай нэг зарчим).
+ *
+ * ⚠⚠ **1:120 000-ААС 1:30 000 БОЛСОН** (хэрэглэгчийн шийдвэр,
+ * 2026-10-02: "удаан байна шүү" → хурдыг сонгов). Зааг нь ХУРДЫГ
+ * ШУУД тодорхойлно — татац нь давхцлын ТООНООС хамаарна (2026-10-02-нд
+ * бодит үйлчилгээн дээр хэмжсэн):
+ *
+ * | Масштаб | Өргөн | Давхцал | Хугацаа |
+ * |---|---|---|---|
+ * | 1:120 000 | 44 км | 72,713 | ≈22 с · 37 хуудас · 14 МБ |
+ * | 1:60 000 | 22 км | 38,161 | ≈12 с |
+ * | **1:30 000** | 11 км | **11,366** | **≈1.8 с** |
+ * | 1:13 000 | 5 км | 3,990 | ≈1.2 с |
+ *
+ * ⚠ Сервер хуудас бүрд ~0.3 секунд зарцуулдаг бөгөөд ЗЭРЭГЦЭЭГ нэмэх
+ * нь тус болохгүй (хэмжсэн: 37 хуудас зэрэг 32.5 с, 6-аар бүлэглэхэд
+ * 32.9 с) — хурдны цорын ганц хөшүүрэг нь ЗААГ.
+ * ⚠ Хол байхад давхцлын тоо нь ДИАГРАМААР гарсаар байна ("Давхцаж
+ * буй нэгж талбар — Сав газар") тул тоон хариулт алдагдахгүй: зөвхөн
+ * зураг дээрх тор нь ойртсон үед гарна.
+ */
+const ZONE_SCALE = 30_000;
+
 const SPANS = new WeakMap<GeoJSON.Feature, number>();
 
 function shapeSpan(f: GeoJSON.Feature): number {
@@ -231,6 +345,58 @@ const LABEL_ZOOM = zoomForScale(LABEL_SCALE);
 const OFF_ZOOM = 24;
 
 /**
+ * Давхаргын ТЭРГҮҮЛЭХ тооллын задаргааны талбар — ганц утгат, хураагаагүй,
+ * хугацааны биш. Нэргүй дүрсийг тодорхойлох ("Туул · № 30") ба давхаргыг
+ * бүс болгон хуваахад ({@link LayerSet.splitZones}) хэрэглэгдэнэ.
+ */
+function leadGroup(hit: Loaded): string | undefined {
+  return hit.charts.find(
+    (b) => b.kind === "count" && !b.multi && !b.top && !isTime(b),
+  )?.field;
+}
+
+/**
+ * НЭРГҮЙ ДАВХАРГА ХӨРШӨӨСӨӨ НЭРИЙН БАГАНА ЗЭЭЛНЭ.
+ *
+ * Нэрийн баганыг дата өөрөө тогтоодог ({@link labelParts}) ч ганц
+ * мөртэй давхаргад ялгах зүйл байхгүй тул тогтоож чадахгүй —
+ * тэжээгдлийн муж (нэг дүрс) "№ 1" гэж гардаг байв (хэрэглэгч,
+ * 2026-10-06: "ус хангамжийн эх үүсвэрийн нэрийг харуулаарай").
+ * Нэг цэсийн давхаргууд ихэвчлэн НЭГ бүтэцтэй тул хөрш давхаргын
+ * (хязгаарлалтын бүс — таван эх үүсвэрийн нэр) тогтоосон багана нь
+ * энд ч мөн нэрийн багана.
+ *
+ * ⚠ Зөвхөн тэр багана ЭНЭ давхаргад БАЙГАА бөгөөд БӨГЛӨГДСӨН үед.
+ * Таамаг биш: эх сурвалжийн өөрийн утга л гарна.
+ * ⚠ Өөрчлөгдөх зүйл байхгүй бол ижил обьектыг буцаана — React-ийн
+ * дахин зурагдалтыг дэмий өдөөхгүй.
+ */
+function borrowNames(m: Record<string, Loaded>): Record<string, Loaded> {
+  const donors = Object.values(m)
+    .map((h) => h.labels.name)
+    .filter((x): x is string => !!x);
+  if (!donors.length) return m;
+
+  let out = m;
+  for (const [id, hit] of Object.entries(m)) {
+    /* Олон мөртэй давхаргад нэргүй байх нь датаны ДҮГНЭЛТ (хаяг, код
+       мэт багана нэр болохгүй) — түүнийг дарахгүй */
+    if (hit.labels.name || Object.keys(hit.data.rows).length > 1) continue;
+    const field = donors.find(
+      (name) =>
+        hit.info.fields.some((f) => f.name === name) &&
+        Object.values(hit.data.rows).some(
+          (r) => categoryKey(r[name]) !== "Бүртгэгдээгүй",
+        ),
+    );
+    if (!field) continue;
+    if (out === m) out = { ...m };
+    out[id] = { ...hit, labels: { ...hit.labels, name: field } };
+  }
+  return out;
+}
+
+/**
  * Дүрсний шошго — нэр ба хэмжээ хоёр мөрөнд.
  *
  * Хоосон утгыг ОГТ бичихгүй: зураг дээрх "—" нь мэдээлэл өгөхгүй,
@@ -244,6 +410,19 @@ function labelFor(hit: Loaded, oid: number): string {
 
   if (hit.labels.name) {
     const v = categoryKey(row[hit.labels.name]);
+    if (v !== "Бүртгэгдээгүй") lines.push(v);
+  } else if (hit.info.set.splitZones) {
+    /*
+      ⚠ НЭРГҮЙ ДҮРС БҮСИЙНХЭЭ НЭРЭЭР (хэрэглэгч, 2026-10-06: "label
+      асаа"). Голын татмын 37 дүрс нэрийн баганагүй тул шошго огт
+      гардаггүй байв — асаалттай байсан ч хоосон. Ангиллаараа бүс
+      болгон хуваасан цэсэд ({@link LayerSet.splitZones}) тэр ангилал
+      (сав газар) нь бүсийн картын мөр, цонхны "Нэр"-тэй НЭГ утга.
+      ⚠ Ердийн цэсэд нэргүй давхарга шошгогүй хэвээр — ангиллыг
+      олон зуун дүрс дээр давтах нь зургийг бөглөрүүлнэ.
+    */
+    const group = leadGroup(hit);
+    const v = group ? categoryKey(row[group]) : "Бүртгэгдээгүй";
     if (v !== "Бүртгэгдээгүй") lines.push(v);
   }
 
@@ -403,7 +582,9 @@ export function PortalLayersDashboard({
     дуусаагүй байхад шинэ хөдөлгөөн гарвал хуучныг ТАСАЛНА
     (`AbortController`) — эс тэгвээс хоцорсон хариу шинийг дарж бичнэ.
   */
-  const [parcelsOn, setParcelsOn] = React.useState(false);
+  /* Анхны төлөв нь БҮРТГЭЛЭЭС ({@link LayerSet.parcels}): самбар нь
+     цэс бүрд `key`-ээр дахин үүсдэг тул цэс солиход шинээр уншигдана */
+  const [parcelsOn, setParcelsOn] = React.useState(set.parcels === true);
   /*
     ⚠⚠ ТОВЧ нь ӨӨРӨӨ ТИЙШ АВААЧНА (хэрэглэгч, 2026-09-25: "миний
     өгсөн parcel-ийг харуулж чадахгүй байгаа юм уу").
@@ -421,32 +602,62 @@ export function PortalLayersDashboard({
   */
   const [parcelFocus, setParcelFocus] = React.useState<Extent | null>(null);
   const [parcels, setParcels] = React.useState<ParcelTile>(NO_PARCELS);
+  const [parcelErr, setParcelErr] = React.useState<string | null>(null);
   const [view, setView] = React.useState<{
     box: [number, number, number, number];
     zoom: number;
   } | null>(null);
   const parcelZoom = React.useMemo(() => zoomForScale(PARCEL_SCALE), []);
   const close = view != null && view.zoom >= parcelZoom;
+  /* Суурь хил ойртоход ӨӨРӨӨ гарах эсэх ({@link LayerSet.parcelsNear}) —
+     товч нь тэр үед зөвхөн давхцсан нэгж талбарыг тодруулна */
+  const baseParcels = parcelsOn || Boolean(set.parcelsNear);
+  /*
+    БҮСТЭЙ ДАВХЦСАН нэгж талбарын хаалт — 1:120 000 (хэрэглэгч,
+    2026-10-02: "1:120 000-с харагддаг болгоё parcel").
+
+    ⚠ СУУРЬ нэгж талбарынхаас (1:13 000) ХОЛ: давхцсан нь бүхэл
+    хотыг биш, зөвхөн татамын дотор талыг хамардаг тул тэр
+    масштабт ч уншигдана.
+    ⚠ Хэмжсэн (2026-10-02, бодит үйлчилгээ):
+
+      1:120,000 ≈ 44 км → 72,713 давхцал (≈14 МБ, 37 хуудас)
+      1:60,000  ≈ 22 км → 38,161
+      1:30,000  ≈ 11 км → 11,366
+      1:13,000  ≈  5 км →  3,990
+
+    ⚠ Ерөнхийлөлт (`maxAllowableOffset`) ТУС БОЛОХГҮЙ: 2 м → 20 м
+    болгоход хуудас 0.47-оос 0.39 МБ л болно — ачаалал нь оройнууд
+    биш, бичлэг тутмын JSON-ы ТУЗ.
+  */
+  const zoneZoom = React.useMemo(() => zoomForScale(ZONE_SCALE), []);
+  const zoneClose = view != null && view.zoom >= zoneZoom;
 
   React.useEffect(() => {
-    if (!parcelsOn || !view || !close) return;
+    if (!baseParcels || !view || !close) return;
     const ac = new AbortController();
-    fetchParcelsIn(view.box, ac.signal)
+    fetchParcelsIn(view.box, ac.signal, view.zoom)
       .then((t) => {
-        if (!ac.signal.aborted) setParcels(t);
+        if (ac.signal.aborted) return;
+        setParcels(t);
+        setParcelErr(null);
       })
-      .catch(() => {
-        /* Тасарсан, эсвэл сервер татгалзсан — суурь давхарга тул
-           самбарыг УНАГААХГҮЙ, зүгээр л хоосон үлдэнэ */
-        if (!ac.signal.aborted) setParcels(NO_PARCELS);
+      .catch((e: Error) => {
+        /* Суурь давхарга тул самбарыг УНАГААХГҮЙ — гэхдээ ЧИМЭЭГҮЙ ч
+           хоосон үлдээхгүй: хэрэглэгч "хил харагдахгүй байна" гэж
+           мэдээлэхэд шалтгаан нь хаана ч бичигдээгүй байв (2026-10-06).
+           Алдаа нь товчны доорх мөрөнд гарна */
+        if (ac.signal.aborted || e.name === "AbortError") return;
+        setParcels(NO_PARCELS);
+        setParcelErr(e.message);
       });
     return () => ac.abort();
-  }, [parcelsOn, view, close]);
+  }, [baseParcels, view, close]);
 
   /* Унтраасан, эсвэл хол байхад ДАМ хоосон — эффектээс `set*`
      дуудах нь `react-hooks/set-state-in-effect`-д хориотой бөгөөд
      нэмэлт зурагдалт үүсгэнэ */
-  const shownParcels = parcelsOn && close ? parcels : NO_PARCELS;
+  const shownParcels = baseParcels && close ? parcels : NO_PARCELS;
 
   /*
     БҮСТЭЙ ДАВХЦАХ НЭГЖ ТАЛБАР — ТОДООР (хэрэглэгч, 2026-09-29:
@@ -483,11 +694,37 @@ export function PortalLayersDashboard({
     return out;
   }, [set.zones, on, loaded]);
 
-  /* Аль бүсийн хослолд татсаныг нэрлэх түлхүүр — үүнгүй бол бүс
-     солиход ӨМНӨХ хослолын нэгж талбар зураг дээр үлдэнэ */
+  /*
+    ⚠⚠ ХАРАГДАХ ХҮРЭЭГЭЭР ТАЙРНА (2026-10-02, токеноор хэмжсэний
+    дараа). Туулын татамтай **87,947** нэгж талбар давхцдаг — бүгдийг
+    татвал хэдэн арван мегабайт болж, хотын төв бүхэлдээ улаан тор
+    болно. Тайрсан цагираг нь зөвхөн дэлгэц дээрхийг асууна; хүрээнээс
+    гадуурх нэгж талбар ямар ч байсан харагдахгүй тул дүрслэл
+    АЛДАГДАХГҮЙ.
+    ⚠ Хол байхад тайралт юу ч өгөхгүй (бүх хот багтана) тул тэр үед
+    `ZONE_LIMIT` хамгаалалт ажиллана: тоог нь хэлээд татахгүй.
+  */
+  const zoneClip = React.useMemo(() => {
+    if (!view || !zoneRings.length) return [];
+    /*
+      ⚠ ХЯЛБАРЧЛАЛТЫН ХҮЛЦЭЛ нь ДЭЛГЭЦИЙН 1.5 ПИКСЕЛ: харагдах
+      масштабт үл мэдэгдэх алдаа бөгөөд ойртох тусам өөрөө нарийсна.
+      Хэмжсэнээр асуулгын хуудас 0.51-ээс 0.31 секунд болно
+      ({@link simplifyRings}).
+    */
+    const mPerPx =
+      (156543.03392 * Math.cos((47.9 * Math.PI) / 180)) / 2 ** view.zoom;
+    return simplifyRings(
+      clipRings(zoneRings, view.box),
+      (1.5 * mPerPx) / 111320,
+    );
+  }, [zoneRings, view]);
+
+  /* Аль бүс, ямар хүрээнд татсаныг нэрлэх түлхүүр — үүнгүй бол бүс
+     эсвэл хүрээ солиход ӨМНӨХ татацын нэгж талбар зураг дээр үлдэнэ */
   const zoneKey = React.useMemo(
-    () => `${on.join("|")}:${zoneRings.length}`,
-    [on, zoneRings],
+    () => `${on.join("|")}:${zoneRings.length}:${view?.box.join(",") ?? ""}`,
+    [on, zoneRings, view],
   );
   const [zoneParcels, setZoneParcels] = React.useState<{
     key: string;
@@ -495,9 +732,12 @@ export function PortalLayersDashboard({
   }>({ key: "", tile: NO_PARCELS });
 
   React.useEffect(() => {
-    if (!parcelsOn || !zoneRings.length) return;
+    if (!parcelsOn || !zoneClose || !zoneClip.length) return;
     const ac = new AbortController();
-    fetchParcelsOn(zoneRings, ac.signal)
+    fetchParcelsOn(zoneClip, ac.signal, ZONE_LIMIT, (tile) => {
+      /* Хуудас ирэх бүрд шууд зурна — 37 хуудсыг бүгдийг хүлээхгүй */
+      if (!ac.signal.aborted) setZoneParcels({ key: zoneKey, tile });
+    })
       .then((tile) => {
         if (!ac.signal.aborted) setZoneParcels({ key: zoneKey, tile });
       })
@@ -507,14 +747,56 @@ export function PortalLayersDashboard({
           setZoneParcels({ key: zoneKey, tile: NO_PARCELS });
       });
     return () => ac.abort();
-  }, [parcelsOn, zoneRings, zoneKey]);
+  }, [parcelsOn, zoneClose, zoneClip, zoneKey]);
 
   /* Төлөв нь ДАМ гарна: эффектээс `set*` дуудахыг
      `react-hooks/set-state-in-effect` хориглодог */
   const zoneReady = zoneParcels.key === zoneKey;
   const shownZoneParcels =
     parcelsOn && zoneReady ? zoneParcels.tile : NO_PARCELS;
-  const zoneBusy = parcelsOn && zoneRings.length > 0 && !zoneReady;
+  const zoneBusy = parcelsOn && zoneClose && zoneClip.length > 0 && !zoneReady;
+
+  /*
+    НЭГЖ ТАЛБАРЫН ДИАГРАМААС СОНГОСОН АНГИЛАЛ ({@link ParcelCard}) —
+    тэр бүсийн тэр ангиллын нэгж талбаруудыг серверээс нөхцөлөөр татна.
+    ⚠ Үр дүн нь СОНГОЛТЫН `id`-тайгаа — сонголт солигдоход хуучин тор
+    зурагт үлдэхгүй (эффектээс `set*(null)` дуудахгүй, ДАМ шалгана).
+  */
+  const [parcelPick, setParcelPick] = React.useState<ParcelPick | null>(null);
+  const [pickTile, setPickTile] = React.useState<{
+    id: string;
+    tile: ParcelTile;
+  } | null>(null);
+  React.useEffect(() => {
+    if (!parcelPick) return;
+    const ac = new AbortController();
+    fetchParcelsOn(
+      parcelPick.rings,
+      ac.signal,
+      undefined,
+      undefined,
+      parcelPick.where,
+    )
+      .then((tile) => {
+        if (!ac.signal.aborted) setPickTile({ id: parcelPick.id, tile });
+      })
+      .catch(() => {
+        if (!ac.signal.aborted)
+          setPickTile({ id: parcelPick.id, tile: NO_PARCELS });
+      });
+    return () => ac.abort();
+  }, [parcelPick]);
+  const shownPick =
+    parcelPick && pickTile?.id === parcelPick.id ? pickTile.tile : null;
+
+  /* Тодорсон нэгж талбарууд руу ОЙРТОНО */
+  const pickFocus = React.useMemo<Extent | null>(() => {
+    if (!shownPick?.data.features.length) return null;
+    const b = new Bounds();
+    for (const f of shownPick.data.features)
+      if (f.geometry) b.addGeometry(f.geometry);
+    return b.get(0.004);
+  }, [shownPick]);
 
   const onView = React.useCallback(
     (box: [number, number, number, number], zoom: number) =>
@@ -529,33 +811,100 @@ export function PortalLayersDashboard({
   const overlays = React.useMemo(() => {
     const list: NonNullable<React.ComponentProps<typeof LayerMap>["overlays"]> =
       [];
-    if (shownParcels.data.features.length)
+    /*
+      ⚠⚠ ДИАГРАМААС АНГИЛАЛ СОНГОСОН ҮЕД ЗУРАГ ШҮҮГДЭНЭ (хэрэглэгч,
+      2026-10-06: "map дээр шүүгдэнэ шүү"). Сонгосон нэгж талбарууд
+      бусад бүх нэгж талбарын торын ДЭЭР тодорч байсан нь шүүлт биш
+      тодруулга байв. Одоо суурь тор (саарал) ба бүстэй давхцсан
+      (улаан) нэгж талбар НУУГДАЖ, зөвхөн сонгосон ангилал үлдэнэ.
+      Цуцлахад бүгд буцаж гарна.
+      ⚠ Бүсийн дүрс (татам, хамгаалалтын бүс) ХЭВЭЭР — сонгосон нэгж
+      талбарууд аль бүсэд байгааг хүрээ нь хэлнэ.
+    */
+    const filtering = Boolean(parcelPick);
+    if (!filtering && shownParcels.data.features.length)
       list.push({
         id: "parcel",
         /* ⚠ Дүүргэлт МАШ БҮДЭГ: нэгж талбар нь ДАТА биш СУУРЬ —
            доорх хиймэл дагуул, дээрх дата давхаргыг дарахгүй */
         data: shownParcels.data,
-        fill: { color: "#e8eef5", opacity: 0.07 },
-        /* ⚠⚠ ЗУРААС 0.7px-ЭЭС 1.2px БОЛОВ: дэд пикселийн, бүдэг
+        /*
+          ⚠⚠ ЦАЙВАР СААРАЛ (хэрэглэгч, 2026-10-06; "цагаан биш" →
+          "шар биш! cyan" → "чи өөрөө зохицох өнгө өг" → "цагаан
+          саарал болго"). Платформын хүйтэн slate гэр бүл (#c3cad3) —
+          засаг захиргааны хилийн ЦЭВЭР цагаанаас (#ffffff) бага зэрэг
+          бараан тул хоёр нь нийлэхгүй, гэхдээ өнгөгүй тул дохио ч,
+          дата ч мэт уншигдахгүй.
+          ⚠ Элсэн шар, цэнхэр, лаванда гурвуулаа туршигдаж БУЦААГДСАН.
+          ⚠ Тогтмол hex — газрын зураг хоёр горимд ижил.
+        */
+        fill: { color: "#c3cad3", opacity: 0.06 },
+        /* ⚠ Зузаан 1.0px (хэрэглэгч, 2026-10-02: "parcel border
+           нарийсгаарай", `dept/amitan-urgamal`-аас).
+           ⚠⚠ ЗУРААС 0.7px-ЭЭС 1.2px БОЛОВ: дэд пикселийн, бүдэг
            цагаан зураас нь хиймэл дагуулын зураг дээр бүрэн уусдаг
            ({@link shape-case}). Зузаан нь ч болохгүй — нэгж талбар
            нягт тор тул 1.2px дээр тор нь уншигдаж, доорх зураг нь
            харагдсаар байна. */
-        line: { color: "#e8eef5", opacity: 0.8, width: 1.2 },
+        line: { color: "#c3cad3", opacity: 0.85, width: 1.0 },
+        /*
+          ⚠⚠ ХИЛ, БҮСИЙН ДЭЭР (хэрэглэгч, 2026-10-06: "parcel хилийн
+          дээр харагдъя"). Урьд нь засаг захиргааны хилийн ДООР
+          (`bnd-country`-ийн өмнө) суудаг байсан тул бүсийн дүүргэлт
+          (татам, хамгаалалтын бүс) нь торыг дарж, бүсийн дотор нэгж
+          талбар харагдахгүй байв. Одоо шошгын доор, бусад бүхний дээр.
+          ⚠ Дүүргэлт нь 6% тул доорх бүсийн өнгө уншигдсаар байна.
+        */
+        above: true,
       });
-    /* Бүстэй давхцсан нь ТОДООР — дохионы улаан, тогтмол hex
-       ("газрын зураг хоёр горимд ижил" дүрэм) */
-    if (shownZoneParcels.data.features.length)
+    /*
+      БҮСТЭЙ ДАВХЦСАН нь ТОДООР — бүсийн ногоонтой НЭГ ГЭР БҮЛД,
+      гэрэлтэлтээрээ салсан бараан номин (хэрэглэгч, 2026-10-02:
+      "parcel өнгийг өөрчилье, ногоонтой зохицох өнгө өгөөрэй").
+
+      ⚠⚠ Улаан (`--clay` #e47b7b) нь бүсийн ногоонуудтай ердөө
+      **1.3:1** харьцаатай байсан (WCAG, хэмжсэн) — дохионы өнгө
+      боловч яг тэр газартаа уусдаг байв. Бараан номин нь дөрвөн сав
+      газрын ногоон дээр **4.9–5.2:1** өгнө.
+      ⚠ Өнцөг нь 175 — сав газруудын муж (195…116)-ийн дотор тул
+      "ногоонтой зохицно"; ялгаа нь зөвхөн ГЭРЭЛТЭЛТЭЭР (L 0.34).
+      ⚠ Тогтмол hex: "газрын зураг хоёр горимд ижил" дүрэм.
+    */
+    if (!filtering && shownZoneParcels.data.features.length)
       list.push({
         id: "parcel-zone",
         data: shownZoneParcels.data,
-        fill: { color: "#e47b7b", opacity: 0.3 },
-        line: { color: "#e47b7b", opacity: 0.95, width: 1.2 },
+        fill: { color: "#004635", opacity: 0.35 },
+        /* ⚠ ЗУРААС 1.2-ООС 0.8px (хэрэглэгч, 2026-10-02: "parcel
+           border нарийсгаарай"). Суурь нэгж талбарын цайвар зурааст
+           1.2px ЗААВАЛ (0.7px нь хиймэл дагуул дээр уусдаг) ч энэ нь
+           бараан, 35% дүүргэлттэй тул нимгэн ч тод үлдэнэ — нягт
+           хэсэгт мөн зураасны тор бага болно. */
+        line: { color: "#004635", opacity: 0.95, width: 0.8 },
         /* Бүсийн дүүргэлтийн ДЭЭР — доор нь орвол огт харагдахгүй */
         above: true,
       });
+    /*
+      Диаграмаас сонгосон ангилал — СУУРЬ НЭГЖ ТАЛБАРТАЙ ИЖИЛ ЦАЙВАР
+      СААРАЛ (хэрэглэгч, 2026-10-06: "өмнөх шигээ цагаан саарлаараа
+      харагдана"). Шүүлт нь "бусад нь алга болж, үлдсэн нь ердийнхөөрөө"
+      гэсэн утгатай — тусгай тодруулга БИШ.
+      ⚠⚠ ТУРШИЖ БУЦААГДСАН: (1) бүсийн өнгө — бүсийнхээ дүүргэлттэй
+      ижил болж уусдаг байв; (2) цагаан дүүргэлт + бараан касинг —
+      хэрэглэгч ердийн саарлыг сонгов.
+      ⚠ Зураас нь шошгын доор, бүсийн дүүргэлтийн ДЭЭР (`above`) — эс
+      тэгвээс бүсийн дүүргэлт доороо дарна.
+    */
+    if (parcelPick && shownPick?.data.features.length)
+      list.push({
+        id: "parcel-pick",
+        data: shownPick.data,
+        fill: { color: "#c3cad3", opacity: 0.06 },
+        line: { color: "#c3cad3", opacity: 0.85, width: 1.2 },
+        above: true,
+      });
     return list.length ? list : undefined;
-  }, [shownParcels, shownZoneParcels]);
+  }, [shownParcels, shownZoneParcels, parcelPick, shownPick]);
   const tip = useMapTip();
 
   /*
@@ -659,7 +1008,7 @@ export function PortalLayersDashboard({
              худаг дээр тэр нь секундээр хэмжигддэг ажил */
           const prev = m[id];
           const same = prev && prev.data.rows === data.rows;
-          return {
+          return borrowNames({
             ...m,
             [id]: {
               info,
@@ -667,7 +1016,7 @@ export function PortalLayersDashboard({
               charts: same ? prev.charts : breakdowns(info, data),
               labels: same ? prev.labels : labelParts(info, data),
             },
-          };
+          });
         });
       };
       fetchLayerFeatures(info, ac.signal, place)
@@ -1155,7 +1504,17 @@ export function PortalLayersDashboard({
          өөр өнгөтэй болно */
       const b = hit.charts.find((c) => c.field === field && c.kind === "count");
       if (!b) continue;
-      const ramp = categoryRamp(hueOf(id), b.values.length);
+      /* Өнцгөөр тараах муж байвал гэрэлтэлтийн шатлалыг орлоно
+         ({@link LayerSet.hueSpan}) */
+      const span = set.hueSpan?.[id];
+      const n = b.values.length;
+      const ramp = span
+        ? b.values.map((_, i) =>
+            toneOfHue(
+              n < 2 ? span[0] : span[0] + ((span[1] - span[0]) * i) / (n - 1),
+            ),
+          )
+        : categoryRamp(hueOf(id), n);
       /* Бүртгэлээр заасан өнцөг ({@link LayerSet.valueHues}) шатлалыг
          дарна — гэрэлтэлт, ханалт нь давхаргынхтай адил хэвээр */
       const fixed = set.valueHues?.[id];
@@ -1170,7 +1529,7 @@ export function PortalLayersDashboard({
       };
     }
     return out;
-  }, [on, loaded, colorField, hueOf, set.valueHues]);
+  }, [on, loaded, colorField, hueOf, set.valueHues, set.hueSpan]);
 
   /*
     Асаалттай давхаргуудыг НЭГ цуглуулгад нийлүүлнэ.
@@ -1398,8 +1757,12 @@ export function PortalLayersDashboard({
     ёсгүй.
   */
   const areaRowsOf = React.useCallback(
-    (hit: Loaded, oids: Set<number>): Datum[] => {
+    (hit: Loaded, oids: Set<number>, plain = false): Datum[] => {
       const out: Datum[] = [];
+      /* Тэргүүлэх тооллын задаргаа — нэргүй дүрсийг түүгээр тодорхойлно
+         (доор). `plain` үед (ангиллаараа хуваасан бүсийн дотор) ангилал
+         нь толгойд аль хэдийн бичигдсэн тул давтахгүй */
+      const group = plain ? undefined : leadGroup(hit);
       for (const oid of oids) {
         const raw = hit.data.area[oid];
         if (!raw) continue;
@@ -1414,9 +1777,22 @@ export function PortalLayersDashboard({
         const name = hit.labels.name
           ? categoryKey(hit.data.rows[oid]?.[hit.labels.name])
           : "";
+        /*
+          ⚠ НЭРГҮЙ ДҮРСИЙГ АНГИЛЛААР НЬ ТОДОРХОЙЛНО (хэрэглэгч,
+          2026-10-06, голын татмын зургаар: "засъя"). Голын татмын 37
+          дүрс бүгд "№ 30", "№ 37" гэж гарч, аль сав газрынх болох нь
+          жагсаалтаас уншигдахгүй байв. Давхаргын ТЭРГҮҮЛЭХ тооллын
+          задаргаа (`group`) байвал түүний утгыг дугаарын өмнө бичнэ:
+          "Туул · № 30". Дугаар нь танигч хэвээр, ангилал нь эх
+          сурвалжийн утга — зохиомол зүйл нэмэгдээгүй.
+        */
+        const tag = group
+          ? categoryKey(hit.data.rows[oid]?.[group])
+          : "Бүртгэгдээгүй";
+        const no = tag !== "Бүртгэгдээгүй" ? `${tag} · № ${oid}` : `№ ${oid}`;
         out.push({
           key: String(oid),
-          label: name && name !== "Бүртгэгдээгүй" ? name : `№ ${oid}`,
+          label: name && name !== "Бүртгэгдээгүй" ? name : no,
           value: ha,
         });
       }
@@ -1531,26 +1907,109 @@ export function PortalLayersDashboard({
     Тиймээс `views` биш `loaded`-оос уншина.
   */
   const [overlap, setOverlap] = React.useState<Record<string, number>>({});
-  const [zoneOpen, setZoneOpen] = React.useState<string | null>(null);
+  /* Задарсан бүсүүд — ОЛОН зэрэг (хэрэглэгч, 2026-10-06: "3-уулангийн
+     нь зэрэг харж болдог болгоорой"). Урьд нь нэгийг нээхэд нөгөө нь
+     хаагддаг байсан тул бүсүүдийн дүрсийг хооронд нь харьцуулах
+     боломжгүй байв */
+  const [zoneOpen, setZoneOpen] = React.useState<readonly string[]>([]);
+
+  /*
+    ДАВХЦАХ НЭГЖ ТАЛБАР — ЗАДАРГААНЫ ТЭНХЛЭГЭЭР (`LayerSet.parcelBy`,
+    хэрэглэгч 2026-10-02: "татам доторх нэгж талбарыг харуулъя, map
+    болон чартаар").
+
+    Зураг дээр давхцсан нэгж талбар "Нэгж талбар" товчоор аль хэдийн
+    УЛААНААР зурагддаг ({@link fetchParcelsOn}); энэ нь түүний ТООН
+    хариулт — аль сав газрын татамд хэдэн нэгж талбар орсон бэ.
+
+    ⚠ Сервер тоолно (`returnCountOnly`) — хагас сая дүрсийг хөтөч рүү
+    татахгүй. Бүлэг тус бүр НЭГ хүсэлт.
+    ⚠ Бүлгийн түлхүүр нь задаргааны ӨӨРИЙН `keyOf` — диаграм, шүүлт,
+    өнгө гурвуулаа нэг эх сурвалжаас ({@link Breakdown.keyOf}).
+    ⚠ ШҮҮЛТЭЭС ҮЛ ХАМААРНА: давхцал нь давхаргын шинж чанар тул
+    `views` биш `loaded`-оос уншина (бүсийн картын тоотой нэг зарчим).
+  */
+  const parcelAxis = React.useMemo(
+    () => parcelAxisOf(set.parcelBy, on, loaded),
+    [set.parcelBy, on, loaded],
+  );
+
+  const parcelKey = parcelAxis
+    ? `${parcelAxis.id}:${parcelAxis.order.join("|")}:${[...parcelAxis.groups.values()].reduce((n, g) => n + g.length, 0)}`
+    : "";
+  const [axisParcels, setAxisParcels] = React.useState<{
+    key: string;
+    counts: Record<string, number>;
+  }>({ key: "", counts: {} });
 
   React.useEffect(() => {
-    if (!set.zones) return;
+    /* Дүрс ирээгүй бол тоолох зүйл алга — карт нь "…" харуулж хүлээнэ */
+    if (!parcelAxis?.groups.size) return;
     const ac = new AbortController();
-    for (const id of on) {
-      const hit = loaded[id];
-      if (!hit || hit.info.geometry === "Point") continue;
-      const rings = ringsOf(hit.data.shapes.features);
-      if (!rings.length) continue;
-      countParcelsIn(rings, ac.signal)
-        .then((n) => {
-          if (!ac.signal.aborted) setOverlap((m) => ({ ...m, [id]: n }));
-        })
-        .catch(() => {
-          /* Давхцлын тоо нь НЭМЭЛТ мэдээлэл — самбарыг унагаахгүй */
-        });
-    }
+    const keys = parcelAxis.order;
+    Promise.all(
+      keys.map((k) =>
+        countParcelsIn(ringsOf(parcelAxis.groups.get(k) ?? []), ac.signal)
+          /* Нэг бүлэг унавал бусад нь ХЭВЭЭР — диаграм нь нэмэлт
+             мэдээлэл тул самбарыг унагаахгүй */
+          .catch(() => 0),
+      ),
+    ).then((got) => {
+      if (ac.signal.aborted) return;
+      const counts: Record<string, number> = {};
+      keys.forEach((k, i) => (counts[k] = got[i]));
+      setAxisParcels({ key: parcelKey, counts });
+    });
     return () => ac.abort();
-  }, [set.zones, on, loaded]);
+  }, [parcelAxis, parcelKey]);
+
+  /*
+    ⚠⚠ ДАВХЦАХ НЭГЖ ТАЛБАР ЮУ ВЭ — ЭРХ, ЗОРИУЛАЛТ (2026-10-02,
+    хэрэглэгч: "энэ хоосон зайнд юу хийж болох вэ, хоосон зай
+    гаргамааргүй байна").
+
+    Баруун багана хоёр богино карттай байсан тул доороо хоосон
+    үлдэж байв. Зайг ЗАЙГААР биш АГУУЛГААР дүүргэв: татамд давхцаж
+    буй газрууд ямар эрхтэй, ямар зориулалттай вэ гэдэг нь цэсэнд
+    урьд нь ХААНА Ч гардаггүй байсан бодит хариулт
+    ({@link parcelCuts}).
+
+    ⚠⚠ СЕРВЕР БҮЛЭГЛЭЖ ТООЛНО — 88 мянган дүрсийг хөтөч рүү татахгүй.
+    ⚠ ТАЙРААГҮЙ цагираг (`zoneRings`): тоо нь ХАРАГДАХ ХҮРЭЭНЭЭС ҮЛ
+    ХАМААРНА — "татамд хэдэн газар орсон бэ" гэдэг нь давхаргын шинж
+    чанар (бүсийн картын тоотой нэг зарчим).
+    ⚠ Унавал карт ГАРАХГҮЙ: эдгээр нь нэмэлт мэдээлэл тул самбарыг
+    унагаах ёсгүй.
+  */
+  const cutKey = set.parcelBy ? `${on.join("|")}:${zoneRings.length}` : "";
+  const [axisCuts, setAxisCuts] = React.useState<{
+    key: string;
+    cuts: ParcelCut[];
+  }>({ key: "", cuts: [] });
+
+  React.useEffect(() => {
+    if (!set.parcelBy || !zoneRings.length) return;
+    const ac = new AbortController();
+    parcelCuts(zoneRings, ac.signal)
+      .then((cuts) => {
+        if (!ac.signal.aborted) setAxisCuts({ key: cutKey, cuts });
+      })
+      .catch(() => {});
+    return () => ac.abort();
+  }, [set.parcelBy, zoneRings, cutKey]);
+
+  const cutsReady = cutKey !== "" && axisCuts.key === cutKey;
+
+  /* Төлөв нь ДАМ гарна: эффектээс `set*` дуудахыг
+     `react-hooks/set-state-in-effect` хориглодог */
+  const parcelReady = parcelAxis != null && axisParcels.key === parcelKey;
+  const parcelRows: Datum[] = parcelReady
+    ? parcelAxis.order.map((k) => ({
+        key: k,
+        label: k,
+        value: axisParcels.counts[k] ?? 0,
+      }))
+    : [];
 
   const stats = React.useMemo(() => {
     let records = 0;
@@ -1750,23 +2209,187 @@ export function PortalLayersDashboard({
     ⚠ Талбай нь эх сурвалжийн ӨӨРИЙН гектараар ({@link LayerInfo.areaInHa})
     — `SHAPE__Area` нь Web Mercator тул 2.2 дахин хөөрөгдсөн.
   */
-  const zones = React.useMemo(() => {
+  /*
+    БҮСИЙН ХЭСГҮҮД — талбай, давхцлын тоо тооцохоос ӨМНӨХ алхам.
+
+    Ердийн үед хэсэг бүр НЭГ ДАВХАРГА. `splitZones` үед (голын татам)
+    НЭГ давхарга тэргүүлэх ангиллаараа хуваагдана — сав газар бүр бүс
+    болно ({@link LayerSet.splitZones}).
+    ⚠ Давхцлын тоо (`overlap`) хэсэг бүрийн геометрээс асуугддаг тул
+    хэсгүүд нь `zones`-оос ТУСДАА — эс тэгвээс давхцал ирэх бүрд
+    геометр дахин угсрагдана.
+  */
+  const zoneParts = React.useMemo(() => {
     if (!set.zones) return [];
-    return views
-      .filter((v) => v.hit.info.geometry !== "Point")
-      .map((v) => {
-        const k = v.hit.info.areaInHa ? 1 : 1 / 10000;
-        let ha = 0;
-        for (const oid of v.oids) ha += (v.hit.data.area[oid] ?? 0) * k;
-        return {
-          id: v.id,
-          label: v.hit.info.name,
-          ha,
-          parcels: overlap[v.id],
-          rows: areaRowsOf(v.hit, v.oids),
-        };
-      });
-  }, [set.zones, views, overlap, areaRowsOf]);
+    type Part = {
+      id: string;
+      layer: string;
+      label: string;
+      tone: string;
+      hit: Loaded;
+      oids: Set<number>;
+      /** Хуваасан бүсийн ШҮҮЛТ — тэнхлэг ба утга (`pickOnly`) */
+      axis?: string;
+      key?: string;
+    };
+    /*
+      ⚠⚠ БҮСИЙН КАРТ ГАНЦААРАА ЗОГСДОГ ЦЭСЭД ТОО НЬ СОНГОЛТООС ҮЛ
+      ХАМААРНА ({@link LayerSet.zonesOnly}, 2026-10-06-ны шалгалт).
+      Сонгосон бичлэг бүх самбарыг шүүдэг (`views`) тул дүрс сонгомогц
+      бусад хоёр бүс "0 га, 0 дүрс" болж, нээлттэй жагсаалт ганц мөр
+      болж хумигддаг байв — өөр дүрс рүү шилжих арга алга болно. Тэр
+      карт нь цэсийн ТОЙМ бөгөөд дүрс сонгох ЦЭС мөн тул бүтэн
+      давхаргаас (`loaded`) тоолно; сонголт нь зөвхөн мөрийг тодруулна.
+      ⚠ Бүсийн цэс (`on`) хүчинтэй хэвээр — нуусан бүс гарахгүй.
+      ⚠ Талбарын шүүлт энэ цэсэд байхгүй (`fieldMenus: false`,
+      задаргааны карт гарахгүй) тул алгасах зүйл алга.
+    */
+    const whole = (id: string, hit: Loaded, oids: Set<number>): Part => ({
+      id,
+      layer: id,
+      label: hit.info.name,
+      tone: toneOf(id),
+      hit,
+      oids,
+    });
+    const out: Part[] = [];
+    if (set.zonesOnly) {
+      for (const id of on) {
+        const hit = loaded[id];
+        if (!hit || hit.info.geometry === "Point") continue;
+        const all = new Set(Object.keys(hit.data.rows).map(Number));
+        const field = set.splitZones ? leadGroup(hit) : undefined;
+        const b = field
+          ? hit.charts.find((c) => c.field === field && c.kind === "count")
+          : undefined;
+        if (!b) {
+          out.push(whole(id, hit, all));
+          continue;
+        }
+        /* Ангилал бүр нэг бүс — диаграмын ӨӨРИЙН `keyOf`-оор, эс тэгвээс
+           зургийн өнгө, шүүлтийн түлхүүртэй зөрнө */
+        const by = new Map<string, Set<number>>();
+        for (const oid of all) {
+          const row = hit.data.rows[oid];
+          const key = row ? b.keyOf(row)[0] : undefined;
+          if (key == null) continue;
+          const group = by.get(key) ?? new Set<number>();
+          group.add(oid);
+          by.set(key, group);
+        }
+        for (const v of b.values) {
+          const oids = by.get(v.key);
+          if (!oids?.size) continue;
+          out.push({
+            id: `${id}\u0000${v.key}`,
+            layer: id,
+            label: v.label,
+            /* Зургийн өнгөтэй НЭГ эх сурвалж — карт нь тайлбар болно */
+            tone: palettes[id]?.colors.get(v.key) ?? toneOf(id),
+            hit,
+            oids,
+            axis: filterKey(b),
+            key: v.key,
+          });
+        }
+      }
+    } else {
+      for (const v of views)
+        if (v.hit.info.geometry !== "Point")
+          out.push(whole(v.id, v.hit, v.oids));
+    }
+    return out;
+  }, [
+    set.zones,
+    set.zonesOnly,
+    set.splitZones,
+    on,
+    loaded,
+    views,
+    palettes,
+    toneOf,
+  ]);
+
+  /* Хэсэг бүрийн ГЕОМЕТР — давхцлын асуулга ба нэгж талбарын картад */
+  const zoneShapes = React.useCallback(
+    (p: { hit: Loaded; oids: Set<number>; layer: string; id: string }) =>
+      p.id === p.layer
+        ? p.hit.data.shapes.features
+        : p.hit.data.shapes.features.filter((f) => p.oids.has(Number(f.id))),
+    [],
+  );
+
+  /* Давхцах нэгж талбарын тоо — хэсэг бүрд НЭГ л удаа асууна. Хуваасан
+     бүсийн палитр ирэх зэргээр хэсгүүд дахин угсрагдахад дахин асуухгүй */
+  const asked = React.useRef(new Set<string>());
+  /* ⚠ ЦУЦЛАХГҮЙ: хэсгүүд палитр ирэх зэргээр дахин угсрагдаж эффект
+     дахин ажилладаг. Цэвэрлэгээнд хүсэлтийг цуцалбал шинэ ажиллалт
+     "аль хэдийн асуусан" гэж алгасаж, тоо хэзээ ч ирэхгүй. Хүсэлт
+     дуусаад төлөвт сууна; самбар салсан бол React үүнийг үл тоомсорлоно */
+  React.useEffect(() => {
+    if (!set.zones) return;
+    for (const p of zoneParts) {
+      if (asked.current.has(p.id)) continue;
+      const rings = ringsOf(zoneShapes(p));
+      if (!rings.length) continue;
+      asked.current.add(p.id);
+      countParcelsIn(rings)
+        .then((n) => setOverlap((m) => ({ ...m, [p.id]: n })))
+        .catch(() => {
+          /* Давхцлын тоо нь НЭМЭЛТ мэдээлэл — самбарыг унагаахгүй.
+             Дараагийн удаа дахин асуухын тулд тэмдэглэгээг арилгана */
+          asked.current.delete(p.id);
+        });
+    }
+  }, [set.zones, zoneParts, zoneShapes]);
+
+  const zones = React.useMemo(() => {
+    const out = zoneParts.map((p) => {
+      const k = p.hit.info.areaInHa ? 1 : 1 / 10000;
+      let ha = 0;
+      for (const oid of p.oids) ha += (p.hit.data.area[oid] ?? 0) * k;
+      return {
+        id: p.id,
+        layer: p.layer,
+        label: p.label,
+        tone: p.tone,
+        ha,
+        parcels: overlap[p.id],
+        /* Хуваасан бүсийн мөр ангиллаа ДАВТАХГҮЙ — тэр нь толгойд бий */
+        rows: areaRowsOf(p.hit, p.oids, p.id !== p.layer),
+        features: zoneShapes(p),
+        axis: p.axis,
+        key: p.key,
+      };
+    });
+    /* Хуваасан бүсүүд том нь эхэндээ; давхаргын бүсүүд бүртгэлийн
+       дарааллаараа (тэжээгдэл → хязгаарлалт → хориглолт) */
+    return set.splitZones ? out.sort((a, b) => b.ha - a.ha) : out;
+  }, [zoneParts, overlap, areaRowsOf, zoneShapes, set.splitZones]);
+
+  /*
+    Бүсийн карт гарах эсэх. Ердийн олон давхаргат цэсэд ХОЁРООС цөөн
+    бүс бол үзүүлэлтийн зурвасыг давтана; харин бүсийн карт ганцаараа
+    зогсдог цэсэд бүсийн цэсээр нэгийг үлдээхэд карт алга болбол
+    дүрсүүдийг сонгох зам ч, нэгж талбарын карт ч хамт алга болдог байв.
+  */
+  const zoneMode = set.zonesOnly ? zones.length > 0 : zones.length > 1;
+
+  /* Нэгж талбарын картын бүсүүд. ⚠ Тогтвортой лавлагаа ЗААВАЛ: карт нь
+     бүсийн геометрээс асуулга угсардаг тул эцэг самбарын зурагдалт
+     бүрд шинэ массив өгвөл асуулга дахин эхэлнэ */
+  const parcelZones = React.useMemo(
+    () =>
+      set.zonesOnly && zoneMode
+        ? zones.map((z) => ({
+            id: z.id,
+            label: z.label,
+            tone: z.tone,
+            features: z.features,
+          }))
+        : null,
+    [set.zonesOnly, zoneMode, zones],
+  );
 
   if (!ready) {
     return (
@@ -1788,73 +2411,332 @@ export function PortalLayersDashboard({
    * орой зөрнө.
    */
 
-  const zoneCard =
-    zones.length > 1 ? (
-      <CutCard
-        key="zones"
-        title={set.title ?? "Давхаргаар"}
-        tone={toneOf(zones[0].id)}
-        first
-        meta={`${num(Math.round(zones.reduce((n, z) => n + z.ha, 0)))} га`}
-        weight={Math.max(4, zones.length * 2)}
-      >
+  /*
+    ⚠⚠ БҮСИЙН КАРТ нь ЦЭСИЙН ЦОРЫН ГАНЦ КАРТ болов (хэрэглэгч,
+    2026-10-06: "доод 2 тусдаа чарт нь хэрэггүй, үүнийгээ хөгжүүл"),
+    {@link LayerSet.zonesOnly}. Тиймээс тусдаа картуудын хийдэг байсан
+    ажлыг ӨӨРӨӨ үүрнэ:
+
+    1. **Нэр БҮТЭН.** Урьд нь нэр, га, нэгж талбар гурав НЭГ эгнээнд
+       шахагдаж "Тэжээгдлийн…", "Хязгаарлалт…" гэж тасардаг байв —
+       бүсийн нэр бол картын гол мэдээлэл. Одоо мөр ХОЁР эгнээтэй:
+       дээд нь нэр ба талбай, доод нь дүрсийн ба нэгж талбарын тоо.
+    2. **Өнгөт тэмдэг** — давхаргын өнгө (`toneOf`), зурагтай НЭГ эх
+       сурвалж: карт нь газрын зургийн тайлбар болно.
+    3. ⚠⚠ **ДҮҮРГЭЛТТЭЙ ЗУРВАС БАЙХГҮЙ** (хэрэглэгч, 2026-10-06: "тэр
+       га-г дүрсэлж байгаа дүүргэлттэй өнгөнүүд хэрэггүй"). Бүсийн
+       мөрөнд ч, дүрсийн мөрөнд ч талбайг зурвасаар давтаж байсныг
+       хасав — тоо нь өөрөө хариулт. **Дахин бүү нэм.**
+    4. **Задаргааны мөр ТОВШИГДОНО** — урьд нь зөвхөн бичвэр байсан;
+       тусдаа картуудын `RowChart` нь дүрсийг сонгож зураг ойртуулдаг
+       байсан тул тэр боломж энд шилжсэн (`setPicked` + `setRowPick`).
+       Дахин товшиход цуцлагдана.
+  */
+  /*
+    ⚠ `dept/amitan-urgamal`-ийн (2026-10-02) нэгж талбарын картууд —
+    `LayerSet.parcelBy` асаалттай үед л гарна. Ногоон бүсийн цэсүүд
+    2026-10-06-ны нэгтгэлээс хойш `ParcelCard`-ыг хэрэглэдэг тул
+    идэвхгүй (хэрэглэгчийн шийдвэр: өнөөдрийнхийг үлдээх).
+
+    ДАВХЦАЖ БУЙ НЭГЖ ТАЛБАРЫН ДИАГРАМ.
+
+    ⚠ ӨНГӨ нь задаргааныхтай НЭГ эх сурвалжаас (`palettes`) — энэ нь
+    тусдаа хэмжүүр биш, ТЭР ЖЕ тэнхлэгийн хоёр дахь тоо.
+    ⚠ Нийт дүн нь мөрүүдийн нийлбэрээс БАГА байж болно: хоёр сав
+    газрын татамд зэрэг багтсан нэгж талбар хоёуланд нь тоологдоно.
+    Тиймээс толгойд нийлбэрийг БИЧИХГҮЙ, зөвхөн ангиллын тоог хэлнэ.
+  */
+  /*
+    ⚠⚠ ТООЛОЛ ХҮЛЭЭЖ БАЙХДАА Ч ГАРНА (хэрэглэгч, 2026-10-02: "нэгж
+    талбарын chart байнга харагдана шүү"). Дөрвөн хүсэлт ~3.6 секунд
+    (хэмжсэн) тул карт тэр хугацаанд огт байхгүй байж, дараа нь гэнэт
+    үсэрч гарч ирдэг байв — самбар тогтворгүй харагдана.
+    ⚠ Хүлээж байхад ТЭГ зурвас зурахгүй: "давхцал алга" гэсэн ХУДАЛ
+    заалт болно. Оронд нь ангиллын нэр ба "…" — бүсийн картын
+    хүлээлттэй нэг идиом.
+  */
+  const parcelCard = parcelAxis ? (
+    <CutCard
+      key="parcel-axis"
+      title={`Давхцаж буй нэгж талбар — ${parcelAxis.label}`}
+      tone={toneOf(parcelAxis.id)}
+      meta={`${parcelAxis.order.length} ангилал`}
+      weight={Math.max(3, parcelAxis.order.length)}
+    >
+      {parcelReady ? (
+        <RowChart
+          data={parcelRows}
+          tone={toneOf(parcelAxis.id)}
+          colorOf={(d) =>
+            palettes[parcelAxis.id]?.colors.get(d.key) ?? toneOf(parcelAxis.id)
+          }
+          dense
+        />
+      ) : (
         <div className="divide-y divide-line">
-          {zones.map((z) => {
-            const open = zoneOpen === z.id;
+          {parcelAxis.order.map((k) => (
+            <div key={k} className="flex items-center gap-2 py-1.5">
+              <span className="min-w-0 flex-1 truncate text-[11.5px] text-ink-2">
+                {k}
+              </span>
+              <span className="num shrink-0 text-[11.5px] text-ink-3">…</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </CutCard>
+  ) : null;
+
+  /*
+    ДАВХЦАХ НЭГЖ ТАЛБАРЫН ЭРХ, ЗОРИУЛАЛТ.
+
+    ⚠ ӨНГӨ ГАНЦ: эрхийн хэлбэр, зориулалт нь НЭРЛЭСЭН ангилал тул
+    мөр бүрийг өөр өнгөөр ялгавал утгагүй солонго болно — ялгаа нь
+    уртаараа гарна (платформын "дата дүрслэлийн өнгө ганц" дүрэм).
+    ⚠ ТОВШИГДОХГҮЙ: эдгээр нь НЭГЖ ТАЛБАРЫН шинж тул давхаргын мөрийг
+    шүүх зүйл биш — задаргааны диаграмын товшилттой андуурагдах ёсгүй.
+    ⚠⚠ ТАТАЦ ХҮЛЭЭЖ БАЙХАД Ч КАРТ ГАРНА (`PARCEL_CUT_LABELS`): эс
+    тэгвээс хоёр карт хэдэн секундийн дараа гэнэт үсэрч, самбар
+    тогтворгүй харагдана — нэгж талбарын картын хүлээлттэй нэг идиом.
+  */
+  const cutTone = toneOf(parcelAxis?.id ?? on[0] ?? "");
+  const parcelCutCards = set.parcelBy
+    ? cutsReady
+      ? axisCuts.cuts.map((cut) => {
+          const total = cut.rows.reduce((n, r) => n + r.value, 0);
+          return (
+            <CutCard
+              key={`parcel-cut:${cut.field}`}
+              title={`Давхцаж буй нэгж талбар — ${cut.label}`}
+              tone={cutTone}
+              meta={`${num(total)} нэгж талбар · ${cut.rows.length} ангилал`}
+              weight={Math.max(3, cut.rows.length)}
+            >
+              <RowChart
+                data={cut.rows.map((r) => ({
+                  key: r.key,
+                  label: r.key,
+                  value: r.value,
+                }))}
+                tone={cutTone}
+                dense
+                clamp
+              />
+            </CutCard>
+          );
+        })
+      : PARCEL_CUT_LABELS.map((label) => (
+          <CutCard
+            key={`parcel-cut:${label}`}
+            title={`Давхцаж буй нэгж талбар — ${label}`}
+            tone={cutTone}
+            weight={3}
+          >
+            <div className="flex h-full items-center px-1 text-[11.5px] text-ink-3">
+              Тоолж байна…
+            </div>
+          </CutCard>
+        ))
+    : null;
+
+  const zoneCard = zoneMode ? (
+    <CutCard
+      key="zones"
+      title={set.title ?? "Давхаргаар"}
+      tone={zones[0].tone}
+      first
+      meta={`${num(Math.round(zones.reduce((n, z) => n + z.ha, 0)))} га`}
+      weight={Math.max(4, zones.length * 2)}
+      /* Цэсийн тойм — доорх нэгж талбарын карттай өндөр хуваалцаж
+           тасрахгүй (хэрэглэгч, 2026-10-06: "бүтэн харагддаг болго") */
+      full
+      action={
+        /* Хуваасан бүс задрахгүй — товч хэрэггүй */
+        set.splitZones ? undefined : (
+          /* Бүгдийг НЭГ товшилтоор — гурвыг зэрэг харах нь энэ картын
+             гол хэрэглээ тул гурван удаа товшуулахгүй */
+          <button
+            type="button"
+            onClick={() =>
+              setZoneOpen(
+                zones.every((z) => zoneOpen.includes(z.id))
+                  ? []
+                  : zones.map((z) => z.id),
+              )
+            }
+            className="shrink-0 rounded-xs border border-line px-1.5 py-0.5 text-[10.5px] whitespace-nowrap text-ink-2 hover:bg-paper-hi hover:text-ink"
+          >
+            {zones.every((z) => zoneOpen.includes(z.id))
+              ? "Бүгдийг хураах"
+              : "Бүгдийг задлах"}
+          </button>
+        )
+      }
+    >
+      <div className="divide-y divide-line">
+        {zones.map((z) => {
+          /*
+            ⚠⚠ ХУВААСАН БҮС ЗАДРАХГҮЙ (хэрэглэгч, 2026-10-06: "дүрс гэж
+            задлах шаардлагагүй, зүгээр л жишээ нь Туул гээд дан").
+            Мөр нь нэр · талбай · давхцах нэгж талбар. Товшиход газрын
+            зураг тэр сав газраар ШҮҮГДЭНЭ (`pickOnly` — дахин товшиход
+            цуцлагдана); карт өөрөө шүүгдэхгүй тул бусад мөр харагдсаар.
+          */
+          if (set.splitZones && z.axis && z.key) {
+            const axis = z.axis;
+            const key = z.key;
+            const on = (filters[z.layer]?.[axis] ?? []).includes(key);
+            /*
+              ⚠ НЭГ ЭГНЭЭ (хэрэглэгч, 2026-10-06: "хоорондын зайг
+              шахъя"): нэр · талбай · нэгж талбар зэрэгцэнэ. Хоёр эгнээ
+              байхад мөр 52px, нэг эгнээнд ~30px.
+              ⚠ Сонголтыг `border-l` БИШ дотогшоо сүүдрээр тэмдэглэнэ:
+              `divide-line` нь хүүхдийн хүрээний өнгийг дардаг тул
+              `border-transparent` ажиллахгүй, мөр бүрийн зүүн талд
+              саарал зураас гарч байв.
+            */
             return (
-              <div key={z.id}>
-                <button
-                  type="button"
-                  aria-expanded={open}
-                  onClick={() => setZoneOpen(open ? null : z.id)}
-                  className="flex w-full items-center gap-2 px-0.5 py-2 text-left hover:bg-paper-hi"
+              <button
+                key={z.id}
+                type="button"
+                aria-pressed={on}
+                onClick={() => {
+                  pickOnly(z.layer, [[axis, key]]);
+                  /* Нэгж талбарын карт өөр сав газар руу шилжих тул
+                     өмнөх тодруулга зураг дээр үлдэх ёсгүй */
+                  setParcelPick(null);
+                }}
+                className={cn(
+                  "grid w-full grid-cols-[10px_minmax(0,1fr)_auto_auto] items-baseline gap-x-3 px-1.5 py-1.5 text-left hover:bg-paper-hi focus-visible:outline-offset-[-2px]",
+                  on && "bg-paper-hi",
+                )}
+                style={
+                  on ? { boxShadow: `inset 2px 0 0 ${z.tone}` } : undefined
+                }
+              >
+                <span
+                  aria-hidden
+                  className="size-2.5 self-center rounded-[1px]"
+                  style={{ background: z.tone }}
+                />
+                <span
+                  className="truncate text-[12.5px] text-ink"
+                  title={z.label}
                 >
+                  {z.label}
+                </span>
+                <span className="num text-right text-[12.5px] font-medium whitespace-nowrap text-ink">
+                  {num(Math.round(z.ha))} га
+                </span>
+                <span className="num w-[118px] text-right text-[11px] whitespace-nowrap text-ink-3">
+                  {z.parcels == null ? "…" : `${num(z.parcels)} нэгж талбар`}
+                </span>
+              </button>
+            );
+          }
+          /* Сонгосон дүрсийн бүс ӨӨРӨӨ задарна — зураг дээр дарахад
+               тэр дүрс карт дээр ч тодорч харагдах ёстой */
+          const base = uidBase(z.layer);
+          const holds =
+            picked != null &&
+            z.rows.some((r) => base + Number(r.key) === picked);
+          const open = zoneOpen.includes(z.id) || holds;
+          const tone = z.tone;
+          return (
+            <div key={z.id}>
+              <button
+                type="button"
+                aria-expanded={open}
+                onClick={() => {
+                  setZoneOpen((s) =>
+                    open ? s.filter((x) => x !== z.id) : [...s, z.id],
+                  );
+                  /* Сонголт нь бүсийг нээлттэй барьдаг тул хаахад тэр
+                       сонголтыг мөн цуцална — эс тэгвээс толгой дарахад
+                       юу ч болохгүй мэт харагдана */
+                  if (open && holds) {
+                    setPicked(null);
+                    setRowPick(null);
+                  }
+                }}
+                /* Нээлттэй бүс нь ДЭВСГЭРЭЭР тодорно. Фокусын хүрээ нь
+                     4px зайтай тул хөрш мөрүүд рүү халиж, сонголт мэт
+                     уншигдаж байв — дотогшоо татав */
+                className={cn(
+                  "w-full px-1 py-2 text-left hover:bg-paper-hi focus-visible:outline-offset-[-2px]",
+                  open && "bg-paper-hi",
+                )}
+              >
+                <span className="flex items-start gap-2">
                   <ChevronDown
                     aria-hidden
                     className={cn(
-                      "size-3.5 shrink-0 text-ink-3 transition-transform",
+                      "mt-px size-3.5 shrink-0 text-ink-3 transition-transform",
                       !open && "-rotate-90",
                     )}
                   />
-                  <span className="min-w-0 flex-1 truncate text-[12px] text-ink">
+                  <span
+                    aria-hidden
+                    className="mt-[3px] size-2.5 shrink-0 rounded-[1px]"
+                    style={{ background: tone }}
+                  />
+                  <span className="min-w-0 flex-1 text-[12.5px] leading-snug text-ink">
                     {z.label}
                   </span>
-                  <span className="num shrink-0 text-[12px] text-ink">
+                  <span className="num shrink-0 text-[12.5px] font-medium text-ink">
                     {num(Math.round(z.ha))} га
                   </span>
-                  <span className="num w-[116px] shrink-0 text-right text-[11.5px] whitespace-nowrap text-ink-2">
+                </span>
+                {/* Баримтын мөр нь дээд мөртэйгээ ижил хоёр баганатай:
+                      дүрсийн тоо нэрийн доор, нэгж талбар талбайн доор —
+                      хоёр тоо бүс хооронд босоогоороо эгнэнэ */}
+                <span className="num mt-0.5 flex items-baseline justify-between gap-2 pl-[38px] text-[11px] text-ink-3">
+                  {/* ГАНЦ НЭРТЭЙ ДҮРС бол тооны оронд НЭР нь (хэрэглэгч,
+                        2026-10-06: тэжээгдлийн мужийн ус хангамжийн эх
+                        үүсвэр) — "1 дүрс" гэдэг юу ч хэлэхгүй, нэрийг нь
+                        харахын тулд задлах шаардлагагүй. Дугаараар
+                        нэрлэгдсэн ("№ 1") бол тоо хэвээр */}
+                  {z.rows.length === 1 && !z.rows[0].label.startsWith("№ ") ? (
+                    <span
+                      className="min-w-0 truncate text-ink-2"
+                      title={z.rows[0].label}
+                    >
+                      {z.rows[0].label}
+                    </span>
+                  ) : (
+                    <span>{num(z.rows.length)} дүрс</span>
+                  )}
+                  <span className="whitespace-nowrap">
                     {z.parcels == null ? "…" : `${num(z.parcels)} нэгж талбар`}
                   </span>
-                </button>
-                {open ? (
-                  <div className="pb-2 pl-6">
-                    {z.rows.length ? (
-                      z.rows.map((r) => (
-                        <div
-                          key={r.key}
-                          className="flex items-center gap-2 py-0.5"
-                        >
-                          <span className="min-w-0 flex-1 truncate text-[11.5px] text-ink-2">
-                            {r.label}
-                          </span>
-                          <span className="num shrink-0 text-[11.5px] text-ink-3">
-                            {num(Math.round(r.value))} га
-                          </span>
-                        </div>
-                      ))
-                    ) : (
-                      <p className="py-1 text-[11.5px] text-ink-3">
-                        Дүрсийн хүрээ ирээгүй байна.
-                      </p>
-                    )}
-                  </div>
-                ) : null}
-              </div>
-            );
-          })}
-        </div>
-      </CutCard>
-    ) : null;
+                </span>
+              </button>
+              {open ? (
+                <div className="pb-2 pl-[38px]">
+                  {z.rows.length ? (
+                    <ZoneShapes
+                      rows={z.rows}
+                      tone={tone}
+                      base={base}
+                      picked={picked}
+                      onPick={(uid) => {
+                        setPicked(uid);
+                        setRowPick(uid);
+                      }}
+                    />
+                  ) : (
+                    <p className="py-1 text-[11.5px] text-ink-3">
+                      Мэдээлэл хүлээгдэж байна
+                    </p>
+                  )}
+                </div>
+              ) : null}
+            </div>
+          );
+        })}
+      </div>
+    </CutCard>
+  ) : null;
 
   const chartCards = (
     keep: (id: string, b: Breakdown) => boolean,
@@ -1873,6 +2755,8 @@ export function PortalLayersDashboard({
     views.map(({ id, hit, charts, rows, oids }) => {
       /* ЗӨВХӨН ЗУРАГТ гарах давхарга ({@link LayerSet.mapOnly}) */
       if (set.mapOnly?.includes(id)) return null;
+      /* Бүсийн карт дүрсүүдийг өөрөө задалдаг ({@link LayerSet.zonesOnly}) */
+      if (set.zonesOnly && zoneMode) return null;
       const tone = toneOf(id);
       /* Задаргаа БҮГД энд: цуваа, харьцуулалт хоёрыг зургийн
          доод зурваст тавьж байсныг хэрэглэгч буцаав (2026-09-15)
@@ -2037,10 +2921,14 @@ export function PortalLayersDashboard({
           hit.info.areaField != null &&
           b2.field === hit.labels.name,
       );
-      /* Мянга мянган нэргүй полигонд дугаарын жагсаалт болдог тул
-         бүртгэл хааж болно ({@link LayerSet.noShapeArea}) */
+      /* Бүртгэл картыг бүрмөсөн ({@link LayerSet.shapeAreas}), эсвэл
+         давхарга тус бүрээр ({@link LayerSet.noShapeArea} — мянга мянган
+         нэргүй полигонд дугаарын жагсаалт болдог) хааж болно */
       const areas =
-        withArea(id) && !namedArea && !set.noShapeArea?.includes(id)
+        withArea(id) &&
+        !namedArea &&
+        set.shapeAreas !== false &&
+        !set.noShapeArea?.includes(id)
           ? areaRowsOf(hit, oids)
           : [];
       /*
@@ -2057,7 +2945,7 @@ export function PortalLayersDashboard({
         ⚠ ЗӨВХӨН бүсийн карт БАЙГАА үед: нэг давхаргатай цэсэд тэр
         тоо өөр хаана ч гарахгүй тул карт нь хэвээр.
       */
-      const soloDup = areas.length === 1 && zones.length > 1;
+      const soloDup = areas.length === 1 && zoneMode;
       const base = uidBase(id);
       const areaCard =
         areas.length && !soloDup ? (
@@ -2126,6 +3014,11 @@ export function PortalLayersDashboard({
         баганат хүснэгт нь зурвасаас юу ч илүү хэлэхгүй.
       */
       const axes: { key: string; label: string; list: Breakdown[] }[] = [];
+      /* Нэрийн тэнхлэг — `nameApart` үед нэгдсэн картаас ГАДУУР, түүний
+         доор өөрийн картаар ({@link LayerSet.nameApart}) */
+      const named: Breakdown[] = [];
+      const apart = (b: Breakdown) =>
+        !!set.nameApart && !!hit.labels.name && b.field === hit.labels.name;
       if (set.tidy)
         for (const b of cuts) {
           /* ⚠ ХУРААСАН (`top`) диаграм ХАСАГДАХГҮЙ: тэр нь ӨӨРИЙН
@@ -2139,6 +3032,10 @@ export function PortalLayersDashboard({
              ойн төлбөрийн "2023 · 2024" харьцуулалт ингэж алга болох
              байв. Бүлэглэсэн багана өөрийн карттай хэвээр. */
           if (b.kind === "compare") continue;
+          if (apart(b)) {
+            named.push(b);
+            continue;
+          }
           const k = filterKey(b);
           const at = axes.find((a) => a.key === k);
           if (at) at.list.push(b);
@@ -2154,16 +3051,43 @@ export function PortalLayersDashboard({
       const solo =
         Boolean(set.fillSolo) && cuts.length === 1 && !crossCard && !areaCard;
 
-      const cards = cuts.map((b, i) => {
+      /* Салгасан нэрийн тэнхлэг — нэгдсэн картын ДООР ({@link named}) */
+      const nameCard = named.length ? (
+        <AxisCard
+          key={`${id}:names`}
+          dense
+          axes={[
+            { key: filterKey(named[0]), label: named[0].label, list: named },
+          ]}
+          tone={tone}
+          first={false}
+          records={rows.length}
+          word={set.record}
+          selectedOf={(axis) => (sel[axis] ?? [])[0] ?? null}
+          onPick={(axis, key) =>
+            key == null ? pick(id, axis, null) : pickOnly(id, [[axis, key]])
+          }
+        />
+      ) : null;
+
+      /* Туузан дор наалдах ЭХНИЙ карт — салгасан нэрийн тэнхлэгийг
+         алгасна, тэр нь доор зурагддаг */
+      const leadId = cuts.find((b) => !named.includes(b))?.id;
+      const cards = cuts.map((b) => {
+        if (named.includes(b)) return null;
         if (inAxis.has(b.id)) {
           /* Эхний гишүүн дээр л нэг удаа зурна */
           if (axes[0].list[0].id !== b.id) return null;
           return (
             <AxisCard
               key={`${id}:axes`}
+              /* Нэрийн карт доор нь байвал дүүргийн хүснэгт БҮТЭН
+                 үлдэнэ — агших, гүйх нь нэрийн картын ажил (хэрэглэгч,
+                 2026-10-06) */
+              full={named.length > 0}
               axes={axes}
               tone={tone}
-              first={i === 0 && !crossCard}
+              first={b.id === leadId && !crossCard}
               records={rows.length}
               word={set.record}
               bars={set.axisBars}
@@ -2190,7 +3114,7 @@ export function PortalLayersDashboard({
             key={`${id}:${b.id}`}
             title={environment ? topicChartTitle(b) : chartTitle(b)}
             tone={tone}
-            first={i === 0 && !crossCard}
+            first={b.id === leadId && !crossCard}
             weight={cardWeight(b)}
             fill={solo}
             /* Нийт дүн ба ангиллын тоо — зурвасуудыг нүдээр нэмэх
@@ -2374,17 +3298,44 @@ export function PortalLayersDashboard({
                 }
               />
             ) : (
-              <RowChart
-                data={b.values}
-                tone={tone}
-                selected={chosen}
-                onSelect={onPick}
-                note={noteOf(b)}
-                format={b.kind === "count" ? undefined : measureText}
-                colorOf={
-                  palette ? (d) => palette.get(d.key) ?? tone : undefined
-                }
-                /*
+              <>
+                {/*
+                ⚠⚠ НЭМЭЛТ ТОО ЮУ БОЛОХЫГ НЭРЛЭНЭ (хэрэглэгч, 2026-10-06,
+                голын татмын зургаар: "засъя"). Тооллын диаграмд
+                хэмжилт шингэхэд (`note`) мөр бүрт ХОЁР тоо гардаг:
+                нэрийн ард бүдэг нь хэмжилт, төгсгөлд нь бичлэгийн тоо —
+                зурвас нь сүүлийнхийг хэмждэг. Нэгжгүй хэмжилт дээр нэрийн
+                ардах "44,240" нь юуны тоо болох нь хаана ч бичигдээгүй
+                тул зурвастайгаа зөрж буй мэт харагдаж байв (Туул 44,240
+                боловч зурвас нь Хэрлэнийхээс богино). Одоо хоёр тоо
+                баганын толгой мэт нэрлэгдэнэ.
+              */}
+                {b.note ? (
+                  <div className="mb-1 flex items-baseline justify-between gap-3 border-b border-line pb-1">
+                    <span className="eyebrow min-w-0 truncate text-ink-3">
+                      {b.label} · {b.note.label}
+                      {b.note.unit ? `, ${b.note.unit}` : ""}
+                    </span>
+                    <span className="eyebrow shrink-0 text-ink-3">
+                      {b.kind === "count"
+                        ? (set.record?.count ?? "Бүртгэлийн тоо")
+                        : (b.measure ?? "")}
+                    </span>
+                  </div>
+                ) : null}
+                <RowChart
+                  data={b.values}
+                  tone={tone}
+                  selected={chosen}
+                  onSelect={onPick}
+                  note={noteOf(b)}
+                  format={
+                    b.kind === "count" && !b.measure ? undefined : measureText
+                  }
+                  colorOf={
+                    palette ? (d) => palette.get(d.key) ?? tone : undefined
+                  }
+                  /*
                   ⚠ ШАХСАН МӨР (хэрэглэгчийн хүсэлт, 2026-09-17).
                   Задаргаа нь хорин таван утга хүртэл байж болох
                   (`MAX_VALUES`) тул ердийн 51px-ийн мөр нь карт
@@ -2394,28 +3345,29 @@ export function PortalLayersDashboard({
                   Ганц карт баганаа дүүргэх үед (`solo`) эсрэгээрээ
                   ТОМОРНО — зай нь хэтэрхий их.
                 */
-                dense={!solo}
-                fill={solo}
-                /*
+                  dense={!solo}
+                  fill={solo}
+                  /*
                   ⚠ НЭРИЙГ НЭГ ЭГНЭЭНД барина. Урт монгол нэр
                   хоёр эгнээ болоход мөр 31px-ээс 46px болж шахсаны
                   ашиг алга болно. Бүтэн нэр нь мөрийн `title`-д,
                   шүүлтүүрийн хайлттай цэсэнд бүтнээрээ үлдэнэ.
                 */
-                clamp={!palette}
-                /*
+                  clamp={!palette}
+                  /*
                   ⚠ ЭЗЛЭХ ХУВЬ — зөвхөн бүхэл нь мэдэгдэж байгаа үед
                   ({@link hasShare}). Толгойн нийт дүнтэй хамт мөр бүр
                   "хэдэн хувь" гэдэгт өөрөө хариулна.
                 */
-                /* ⚠ ХУВЬ ХАСАГДСАН (хэрэглэгч, 2026-09-25: "хувь
+                  /* ⚠ ХУВЬ ХАСАГДСАН (хэрэглэгч, 2026-09-25: "хувь
                    нтр харуулаад байх шаардлагагүй"). Тоо нь өөрөө
                    хариулт — хувь нь мөр бүрийг өргөсгөж, нягт
                    баганад нэр нь тасрахад хүргэж байв. Толгойн НИЙТ
                    ДҮН үлдсэн тул харьцаа хэрэгтэй үед тэндээс
                    уншигдана. */
-                share={false}
-              />
+                  share={false}
+                />
+              </>
             )}
           </CutCard>
         );
@@ -2426,6 +3378,7 @@ export function PortalLayersDashboard({
           {band}
           {crossCard}
           {cards}
+          {nameCard}
           {areaCard}
         </React.Fragment>
       );
@@ -2460,6 +3413,40 @@ export function PortalLayersDashboard({
       ) : null}
 
       {zoneCard}
+
+      {/* Бүсийн картын ДООР — давхцах нэгж талбарын задаргаа (хэрэглэгч,
+          2026-10-06). Зөвхөн бүсийн карт ганцаараа зогсдог цэсэд
+          ({@link LayerSet.zonesOnly}); бусад олон давхаргат цэсэд
+          давхаргууд нь бүс биш тул асуулт утгагүй */}
+      {parcelZones ? (
+        <ParcelCard
+          zones={parcelZones}
+          onPick={setParcelPick}
+          pickInfo={
+            parcelPick
+              ? {
+                  busy: !shownPick,
+                  count: shownPick ? shownPick.data.features.length : null,
+                  capped: Boolean(shownPick?.capped),
+                }
+              : null
+          }
+          /* Сав газраар шүүсэн бол нэгж талбарын карт ч түүн рүү */
+          prefer={
+            zones.find(
+              (z) =>
+                z.axis &&
+                z.key &&
+                (filters[z.layer]?.[z.axis] ?? []).includes(z.key),
+            )?.id ?? null
+          }
+        />
+      ) : null}
+
+      {/* `parcelBy` асаалттай цэсэд л гарна (дээрхийг үзнэ үү) */}
+      {parcelCard}
+
+      {parcelCutCards}
 
       {chartCards(
         (id, b) => !split?.has(`${id}:${b.id}`),
@@ -2638,6 +3625,7 @@ export function PortalLayersDashboard({
           setSeries({});
           setPicked(null);
           setRowPick(null);
+          setParcelPick(null);
           if (on.length < set.layers.length) setOn([...set.layers]);
         }}
       >
@@ -2994,6 +3982,15 @@ export function PortalLayersDashboard({
                   /* Хязгаар нь амьд тул унтраахад хүрэшгүй ойртолт
                      өгөхөд л хангалттай */
                   labelZoom: showLabels ? LABEL_ZOOM : OFF_ZOOM,
+                  /* Нарийн дүрстэй давхаргад нимгэн хүрээ
+                     ({@link LayerSet.thinEdge}) */
+                  edge: set.thinEdge ? "thin" : undefined,
+                  /* Хүрээ гарах эсэх нь хэлтсийн сонголт
+                     ({@link LayerSet.shapeOutline}) */
+                  outline: set.shapeOutline !== false,
+                  /* Шошго нь АНГИЛЛЫН баганаас гарах үед нэг нэр олон
+                     дүрсэд давтагдана — нэг нь л үлдэнэ */
+                  labelUnique: set.labelBy != null,
                 }}
                 /* Объект үүсэх МӨЧИД уншигддаг тул цэг байхгүй үед ч
                  ЗААВАЛ өгнө — эс тэгвээс шошгын давхарга огт үүсэхгүй
@@ -3010,7 +4007,7 @@ export function PortalLayersDashboard({
                   setRowPick(null);
                 }}
                 onHover={tip.onHover}
-                focus={parcelFocus ?? rowFocus ?? focus}
+                focus={parcelFocus ?? pickFocus ?? rowFocus ?? focus}
                 cluster={false}
                 overlays={overlays}
                 onView={onView}
@@ -3028,43 +4025,77 @@ export function PortalLayersDashboard({
                 харин асаагаад юу ч гарахгүй бол эвдэрсэн гэж үзнэ.
                 ⚠ Хязгаарт хүрсэн үед ил хэлнэ — дутуу зургийг бүтэн
                 мэт харуулах нь худал.
+                ⚠⚠ АНХНААСАА АСААЛТТАЙ ЦЭСЭД ТОВЧ ГАРАХГҮЙ
+                ({@link LayerSet.parcels}, хэрэглэгч 2026-10-02: "энэ
+                товч хэрэггүй"). Дээрх "товчийг нуухгүй" дүрэм нь
+                УНТРААЛТТАЙ үед хамаарна: тэнд товч нь тийм боломж
+                байгааг зарладаг. Асаалттай үед нэгж талбар нь зураг
+                дээр аль хэдийн харагдаж байгаа тул зарлах зүйлгүй.
+                ⚠ Төлөвийн мэдэгдэл нь ҮЛДЭНЭ: давхцал тооцогдож
+                дуустал, хязгаарт хүрсэн эсэхийг хэлэх ёстой.
               */}
               <div className="absolute top-12 left-2 z-20 flex flex-col items-start gap-1">
-                <button
-                  type="button"
-                  aria-pressed={parcelsOn}
-                  onClick={() => {
-                    const next = !parcelsOn;
-                    setParcelsOn(next);
-                    /* Унтраахад ойртолтын дарлалтыг мөн тавина —
+                {set.parcels === true ? null : (
+                  <button
+                    type="button"
+                    aria-pressed={parcelsOn}
+                    onClick={() => {
+                      const next = !parcelsOn;
+                      setParcelsOn(next);
+                      /* Унтраахад ойртолтын дарлалтыг мөн тавина —
                        давхаргын өөрийн хүрээ буцаж хүчин төгөлдөр */
-                    if (!next) return setParcelFocus(null);
-                    if (close || !view) return;
-                    /* Одоогийн төвийг хадгалан хязгаар хүртэл ойртоно.
+                      if (!next) return setParcelFocus(null);
+                      if (close || !view) return;
+                      /* Одоогийн төвийг хадгалан хязгаар хүртэл ойртоно.
                        Хүрээний ӨРГӨН нь хоёр дахин багасахад ойртолт
                        нэгээр нэмэгдэнэ тул зөрүүг хоёрын зэргээр
                        хуваана */
-                    const [w, s2, e, n] = view.box;
-                    /* ⚠ Хязгаараас ЦААШ түлхэж бодно: `fitBounds`
+                      const [w, s2, e, n] = view.box;
+                      /* ⚠ Хязгаараас ЦААШ түлхэж бодно: `fitBounds`
                        нь 44px зайтай, `maxZoom: 14`-ээр таглагддаг
                        тул яг хязгаар дээр тооцвол таглаанд бага
                        зэрэг дутаж буудаг */
-                    const k = 2 ** (view.zoom - parcelZoom - 0.7);
-                    const cx = (w + e) / 2;
-                    const cy = (s2 + n) / 2;
-                    const dx = ((e - w) / 2) * k;
-                    const dy = ((n - s2) / 2) * k;
-                    setParcelFocus([cx - dx, cy - dy, cx + dx, cy + dy]);
-                  }}
-                  className={cn(
-                    "elevated rounded-xs border px-2 py-1 text-[11px] backdrop-blur-md transition-colors",
-                    parcelsOn
-                      ? "border-transparent bg-paper-hi text-ink"
-                      : "border-line-2 bg-paper/92 text-ink-2 hover:text-ink",
-                  )}
-                >
-                  Нэгж талбар
-                </button>
+                      const k = 2 ** (view.zoom - parcelZoom - 0.7);
+                      const cx = (w + e) / 2;
+                      const cy = (s2 + n) / 2;
+                      const dx = ((e - w) / 2) * k;
+                      const dy = ((n - s2) / 2) * k;
+                      setParcelFocus([cx - dx, cy - dy, cx + dx, cy + dy]);
+                    }}
+                    className={cn(
+                      "elevated rounded-xs border px-2 py-1 text-[11px] backdrop-blur-md transition-colors",
+                      parcelsOn
+                        ? "border-transparent bg-paper-hi text-ink"
+                        : "border-line-2 bg-paper/92 text-ink-2 hover:text-ink",
+                    )}
+                  >
+                    Нэгж талбар
+                  </button>
+                )}
+                {/*
+                  ⚠ ОЙРТОХОД ӨӨРӨӨ ГАРДАГ ХИЛ ({@link LayerSet.parcelsNear})
+                  ХОЛ байхад, эсвэл уншигдаагүй үед ИЛ хэлнэ — эс тэгвээс
+                  "хил харагдахгүй байна" гэдгийн шалтгаан нуугдана
+                  (хэрэглэгч, 2026-10-06).
+                */}
+                {!parcelsOn &&
+                set.parcelsNear &&
+                (!close || parcelErr || shownParcels.capped) ? (
+                  <span
+                    className={cn(
+                      "num max-w-[260px] rounded-xs bg-paper/92 px-1.5 py-0.5 text-[10px] backdrop-blur-md",
+                      parcelErr && close ? "text-clay" : "text-ink-3",
+                    )}
+                  >
+                    {parcelErr && close
+                      ? `Нэгж талбар уншигдсангүй: ${parcelErr}`
+                      : close && shownParcels.capped
+                        ? /* Хязгаараас олон — хэсэгчилсэн тор зурахгүй,
+                             тоогоор нь хэлнэ ({@link fetchParcelsIn}) */
+                          `${num(shownParcels.total ?? 0)} нэгж талбар — ойртуулна уу`
+                        : `Нэгж талбарын хил 1:${num(PARCEL_SCALE)}-аас ойртоход харагдана`}
+                  </span>
+                ) : null}
                 {parcelsOn ? (
                   <span className="num rounded-xs bg-paper/92 px-1.5 py-0.5 text-[10px] text-ink-3 backdrop-blur-md">
                     {/*
@@ -3073,11 +4104,15 @@ export function PortalLayersDashboard({
                       гардаг тул "ойртоно уу" гэдэг нь худал болно.
                     */}
                     {zoneRings.length
-                      ? zoneBusy
-                        ? "Давхцлыг тооцож байна…"
-                        : `${num(shownZoneParcels.data.features.length)} давхцсан${
-                            shownZoneParcels.capped ? ", хэсэгчилсэн" : ""
-                          }`
+                      ? !zoneClose
+                        ? `1:${num(ZONE_SCALE)}-аас ойртоно уу`
+                        : zoneBusy
+                          ? "Давхцлыг тооцож байна…"
+                          : shownZoneParcels.tooMany
+                            ? `${num(shownZoneParcels.total ?? 0)} давхцсан · ойртоно уу`
+                            : `${num(shownZoneParcels.data.features.length)} давхцсан${
+                                shownZoneParcels.capped ? ", хэсэгчилсэн" : ""
+                              }`
                       : !close
                         ? `1:${num(PARCEL_SCALE)}-аас ойртоно уу`
                         : shownParcels.capped
@@ -3210,9 +4245,16 @@ export function PortalLayersDashboard({
             */}
               {active ? (
                 <RecordPanel
-                  info={active.info}
+                  hit={active.hit}
                   row={active.row}
-                  tone={toneOf(active.info.id)}
+                  oid={(picked ?? 0) - uidBase(active.id)}
+                  /* Зургийн өнгөтэй НЭГ эх сурвалж — ангиллаар будсан бол
+                     тэр ангиллын өнгө, эс бөгөөс давхаргынх */
+                  tone={
+                    palettes[active.id]?.colors.get(
+                      palettes[active.id]?.keyOf(active.row)[0] ?? "",
+                    ) ?? toneOf(active.id)
+                  }
                   onClose={() => setPicked(null)}
                 />
               ) : null}
@@ -3650,7 +4692,9 @@ function headMeta(b: Breakdown, word?: { one: string }): string {
   const cats = `${num(b.values.length)} ангилал`;
   if (!hasShare(b)) return cats;
   const total = b.values.reduce((n, d) => n + d.value, 0);
-  if (b.kind === "count")
+  /* ⚠ Хэмжилт зурвас болсон үед ({@link LayerSet.measureFirst}) тоо нь
+     бичлэгийнх БИШ — нэгжтэйгээ гарна */
+  if (b.kind === "count" && !b.measure)
     return `${num(total)} ${word?.one ?? "бүртгэл"} · ${cats}`;
   const unit = b.measure ? unitOf(b.measure).unit : "";
   return `${measureText(total)}${unit ? ` ${unit}` : ""} · ${cats}`;
@@ -3735,6 +4779,8 @@ function AxisCard({
   selectedOf,
   onPick,
   bars = false,
+  dense = false,
+  full = false,
 }: {
   axes: { key: string; label: string; list: Breakdown[] }[];
   tone: string;
@@ -3747,6 +4793,19 @@ function AxisCard({
   word?: { one: string; count: string };
   selectedOf: (axis: string) => string | null;
   onPick: (axis: string, key: string | null) => void;
+  /**
+   * ШАХСАН мөр (хэрэглэгч, 2026-10-06: "булгийн нэртэй чартын зайг
+   * шахъя"). Нэрийн тэнхлэг хорин мөртэй тул ердийн 10px-ийн доторх
+   * зайтай мөр картыг сунгадаг; шахсан үед 4px, нэр НЭГ эгнээнд
+   * (бүтэн нь `title`-д). Үсгийн хэмжээ платформын 11–13px мужид.
+   */
+  dense?: boolean;
+  /**
+   * БҮТЭН харагдана — баганын өндөр өөрчлөгдөхөд агшиж дотроо
+   * гүйхгүй ({@link CutCard} `full`). Хэрэглэгч, 2026-10-06: "дүүргийн
+   * чарт resize хийхэд бүтэн харагддаг байхаар хий".
+   */
+  full?: boolean;
 }) {
   /* ⚠ "бичлэг" нь мэдээллийн сангийн үг — дэлгэцэд гарахгүй */
   const one = word?.one ?? "бүртгэл";
@@ -3858,6 +4917,7 @@ function AxisCard({
       tone={tone}
       first={first}
       weight={cardWeight(count)}
+      full={full}
       meta={`${num(records)} ${one} · ${
         count.top ? `эхний ${count.top}` : `${num(count.values.length)} ангилал`
       }`}
@@ -3891,97 +4951,662 @@ function AxisCard({
           />
         </div>
       ) : (
-        <div className="min-h-0 flex-1 overflow-auto">
-          <table className="w-full border-separate border-spacing-0">
-            <thead>
-              <tr>
-                <th className="sticky top-0 z-10 border-b border-line-2 bg-paper-2 px-2 py-2 text-left align-bottom">
-                  <span className="eyebrow text-ink-3">{axis.label}</span>
-                </th>
-                {cols.map((c) => (
+        <>
+          {/*
+            ⚠⚠ ХҮСНЭГТ КАРТАА ДҮҮРГЭНЭ (`h-full` + доорх дүүргэгч мөр,
+            2026-10-02). Карт нь баганынхаа үлдсэн өндрийг хуваалцдаг
+            болсон тул (`flex-grow`) мөрүүд нь дээдээ эгнээд доороо
+            хоосон зай үлдээдэг байв — нийт дүнгийн мөр тэр хоосон зайн
+            ДЭЭР дүүжлэгдэнэ.
+            ⚠ `sticky bottom` ҮҮНИЙГ ШИЙДЭХГҮЙ: наалдац нь зөвхөн
+            агуулга ХАЛИХ үед л ажилладаг; карт агуулгаасаа өндөр үед
+            мөр байрандаа үлдэнэ.
+          */}
+          <div className="min-h-0 flex-1 overflow-auto">
+            <table className="h-full w-full border-separate border-spacing-0">
+              <thead>
+                <tr>
                   <th
-                    key={c.key}
-                    className="sticky top-0 z-10 border-b border-line-2 border-l border-l-line bg-paper-2 px-2 py-2 text-right align-bottom"
-                  >
-                    <span className="eyebrow block leading-tight text-ink-3">
-                      {c.name}
-                    </span>
-                    {c.unit ? (
-                      <span className="mt-0.5 block text-[9.5px] leading-none text-ink-3 lowercase">
-                        {c.unit}
-                      </span>
-                    ) : null}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {count.values.map((r) => {
-                const on = picked === r.key;
-                return (
-                  <tr
-                    key={r.key}
-                    tabIndex={0}
-                    aria-selected={on}
-                    onClick={() => onPick(axis.key, on ? null : r.key)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" || e.key === " ") {
-                        e.preventDefault();
-                        onPick(axis.key, on ? null : r.key);
-                      }
-                    }}
                     className={cn(
-                      "cursor-pointer transition-colors hover:bg-paper-hi",
-                      on && "bg-paper-hi",
+                      "sticky top-0 z-10 border-b border-line-2 bg-paper-2 px-2 text-left align-bottom",
+                      dense ? "py-1.5" : "py-2",
                     )}
-                    style={{ opacity: picked && !on ? 0.45 : 1 }}
                   >
-                    <td
+                    <span className="eyebrow text-ink-3">{axis.label}</span>
+                  </th>
+                  {cols.map((c) => (
+                    <th
+                      key={c.key}
                       className={cn(
-                        "border-b border-line px-2 py-2.5 text-[12px] leading-tight",
-                        on ? "font-medium text-ink" : "text-ink-2",
+                        "sticky top-0 z-10 border-b border-line-2 border-l border-l-line bg-paper-2 px-2 text-right align-bottom",
+                        dense ? "py-1.5" : "py-2",
                       )}
                     >
-                      {r.label}
-                    </td>
-                    {cols.map((c) => {
-                      const v = c.by.get(r.key);
-                      const top = isLead(c, v);
-                      return (
-                        <td
-                          key={c.key}
-                          className={cn(
-                            "num border-b border-line border-l border-l-line px-2 py-2.5 text-right text-[12.5px]",
-                            top ? "font-medium" : "text-ink",
-                          )}
-                          style={top ? { color: tone } : undefined}
-                        >
-                          {cell(v)}
-                        </td>
-                      );
-                    })}
-                  </tr>
-                );
-              })}
-            </tbody>
-            <tfoot>
-              <tr>
-                <td className="sticky bottom-0 border-t border-line-2 bg-paper-2 px-2 py-2 text-[11.5px] font-medium text-ink-2">
-                  Нийт
-                </td>
-                {cols.map((c) => (
+                      <span className="eyebrow block leading-tight text-ink-3">
+                        {c.name}
+                      </span>
+                      {c.unit ? (
+                        <span className="mt-0.5 block text-[9.5px] leading-none text-ink-3 lowercase">
+                          {c.unit}
+                        </span>
+                      ) : null}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {count.values.map((r) => {
+                  const on = picked === r.key;
+                  return (
+                    <tr
+                      key={r.key}
+                      tabIndex={0}
+                      aria-selected={on}
+                      onClick={() => onPick(axis.key, on ? null : r.key)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          onPick(axis.key, on ? null : r.key);
+                        }
+                      }}
+                      className={cn(
+                        "cursor-pointer transition-colors hover:bg-paper-hi",
+                        on && "bg-paper-hi",
+                      )}
+                      style={{ opacity: picked && !on ? 0.45 : 1 }}
+                    >
+                      <td
+                        className={cn(
+                          "border-b border-line px-2 leading-tight",
+                          dense
+                            ? "w-full max-w-0 truncate py-1 text-[11.5px]"
+                            : "py-2.5 text-[12px]",
+                          on ? "font-medium text-ink" : "text-ink-2",
+                        )}
+                        title={dense ? r.label : undefined}
+                      >
+                        {r.label}
+                      </td>
+                      {cols.map((c) => {
+                        const v = c.by.get(r.key);
+                        const top = isLead(c, v);
+                        return (
+                          <td
+                            key={c.key}
+                            className={cn(
+                              "num border-b border-line border-l border-l-line px-2 text-right",
+                              dense
+                                ? "py-1 text-[11.5px] whitespace-nowrap"
+                                : "py-2.5 text-[12.5px]",
+                              top ? "font-medium" : "text-ink",
+                            )}
+                            style={top ? { color: tone } : undefined}
+                          >
+                            {cell(v)}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  );
+                })}
+                {/*
+                  ДҮҮРГЭГЧ МӨР — үлдсэн өндрийг БҮТНЭЭР нь шингээнэ
+                  (`h-full`), улмаас бодит мөрүүд нягтралаа хадгалж,
+                  нийт дүн нь картынхаа ёроолд суана.
+                  ⚠ Агуулга халих үед өндөр нь өөрөө тэг болно.
+                  ⚠ Товшигддоггүй, хүрээгүй — зөвхөн зай эзэлнэ.
+                */}
+                <tr aria-hidden="true" className="h-full">
+                  <td colSpan={cols.length + 1} />
+                </tr>
+              </tbody>
+              <tfoot>
+                <tr>
                   <td
-                    key={c.key}
-                    className="num sticky bottom-0 border-t border-line-2 border-l border-l-line bg-paper-2 px-2 py-2 text-right text-[12.5px] font-medium text-ink"
+                    className={cn(
+                      "sticky bottom-0 border-t border-line-2 bg-paper-2 px-2 text-[11.5px] font-medium text-ink-2",
+                      dense ? "py-1.5" : "py-2",
+                    )}
                   >
-                    {c.total == null ? "" : num(Math.round(c.total))}
+                    Нийт
                   </td>
-                ))}
-              </tr>
-            </tfoot>
-          </table>
-        </div>
+                  {cols.map((c) => (
+                    <td
+                      key={c.key}
+                      className={cn(
+                        "num sticky bottom-0 border-t border-line-2 border-l border-l-line bg-paper-2 px-2 text-right font-medium text-ink",
+                        dense ? "py-1.5 text-[11.5px]" : "py-2 text-[12.5px]",
+                      )}
+                    >
+                      {c.total == null ? "" : num(Math.round(c.total))}
+                    </td>
+                  ))}
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </>
       )}
+    </CutCard>
+  );
+}
+
+/**
+ * Бүсийн доторх дүрсүүд — бүсийн картын задаргаа.
+ *
+ * ⚠⚠ ИЖИЛ ХЭМЖЭЭТЭЙ ДАРААЛСАН ДҮРС НЭГ МӨРӨНД (хэрэглэгч, 2026-10-06,
+ * зургаар: "хөгжүүлээд сайжруул"). Хориглолтын бүсийн 18 дүрсийн 12
+ * нь (№ 6–17) тус бүр 7 га буюу ижил радиустай тойрог бөгөөд арван
+ * хоёр ижил мөр жагсаалтын гуравны хоёрыг эзэлж, том зургаа нь тэдний
+ * дунд алга болж байв. Гурваас олон дараалсан мөр ижил (бөөрөнхийлсөн)
+ * талбайтай бол НЭГ бүлгийн мөр болно; товшиход задарна.
+ * ⚠ Мөр ХАСАГДАХГҮЙ: бүлэг дотор тус бүр нь товшигдож сонгогдсоор
+ * байна. Сонгосон дүрс бүлэг дотор байвал бүлэг өөрөө нээлттэй гарна.
+ * ⚠ Бүлгийн утга нь "тус бүр" — нийлбэр БИШ: мөрүүд ижил хэмжээтэй
+ * гэдэг нь гол мэдээлэл, нийлбэрийг бүсийн толгой аль хэдийн хэлдэг.
+ *
+ * ⚠ Зурвас БАЙХГҮЙ (хэрэглэгч, 2026-10-06) — нэр ба талбай хоёр
+ * баганатай жагсаалт; талбай нь баруун ирмэгтээ эгнэнэ.
+ */
+const ZONE_GRID =
+  "grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3";
+
+function ZoneShapes({
+  rows,
+  tone,
+  base,
+  picked,
+  onPick,
+}: {
+  rows: Datum[];
+  tone: string;
+  /** Давхаргын UID-ийн суурь (`uidBase`) */
+  base: number;
+  picked: number | null;
+  onPick: (uid: number | null) => void;
+}) {
+  const [openRun, setOpenRun] = React.useState<string | null>(null);
+
+  const runs = React.useMemo(() => {
+    const out: Datum[][] = [];
+    for (const r of rows) {
+      const last = out[out.length - 1];
+      if (last && Math.round(last[0].value) === Math.round(r.value))
+        last.push(r);
+      else out.push([r]);
+    }
+    /* Гурваас цөөн давталт нь бүлэг болохгүй — тэр нь ердийн жагсаалт */
+    return out.flatMap((run) =>
+      run.length >= 3 ? [run] : run.map((r) => [r]),
+    );
+  }, [rows]);
+
+  const row = (r: Datum, nested = false) => {
+    const uid = base + Number(r.key);
+    const on = picked === uid;
+    return (
+      <button
+        key={r.key}
+        type="button"
+        aria-pressed={on}
+        onClick={() => onPick(on ? null : uid)}
+        className={cn(
+          ZONE_GRID,
+          "border-l-2 py-1 pr-0.5 text-left hover:bg-paper-hi focus-visible:outline-offset-[-2px]",
+          nested ? "pl-4" : "pl-1.5",
+          on ? "bg-paper-hi" : "border-transparent",
+        )}
+        style={on ? { borderLeftColor: tone } : undefined}
+      >
+        <span
+          className={cn(
+            "truncate text-[11.5px]",
+            on ? "text-ink" : "text-ink-2",
+          )}
+          title={r.label}
+        >
+          {r.label}
+        </span>
+        <span className="num text-right text-[11.5px] whitespace-nowrap text-ink-3">
+          {num(Math.round(r.value))} га
+        </span>
+      </button>
+    );
+  };
+
+  /* "№ 6", "№ 7" … гэсэн дараалсан дугаар бол мужаар нэрлэнэ, эс бөгөөс
+     эхний ба сүүлчийн нэрээр */
+  const runLabel = (run: Datum[]) => {
+    const nos = run.map((r) => /^№ (\d+)$/.exec(r.label)?.[1]);
+    if (nos.every(Boolean)) {
+      const n = nos.map(Number).sort((a, b) => a - b);
+      if (n[n.length - 1] - n[0] === n.length - 1)
+        return `№ ${n[0]} – ${n[n.length - 1]}`;
+    }
+    return `${run[0].label} … ${run[run.length - 1].label}`;
+  };
+
+  return (
+    <div>
+      {runs.map((run) => {
+        if (run.length === 1) return row(run[0]);
+        const key = run[0].key;
+        const holds = run.some((r) => base + Number(r.key) === picked);
+        const open = openRun === key || holds;
+        return (
+          <div key={`run:${key}`}>
+            <button
+              type="button"
+              aria-expanded={open}
+              onClick={() => setOpenRun(openRun === key ? null : key)}
+              className={cn(
+                ZONE_GRID,
+                "border-l-2 border-transparent py-1 pr-0.5 pl-1.5 text-left hover:bg-paper-hi focus-visible:outline-offset-[-2px]",
+              )}
+            >
+              <span className="flex min-w-0 items-center gap-1 text-[11.5px] text-ink-2">
+                <ChevronDown
+                  aria-hidden
+                  className={cn(
+                    "size-3 shrink-0 text-ink-3 transition-transform",
+                    !open && "-rotate-90",
+                  )}
+                />
+                <span className="truncate">{runLabel(run)}</span>
+                <span className="num shrink-0 text-ink-3">
+                  · {num(run.length)} дүрс
+                </span>
+              </span>
+              <span className="num text-right text-[11.5px] whitespace-nowrap text-ink-3">
+                тус бүр {num(Math.round(run[0].value))} га
+              </span>
+            </button>
+            {open ? run.map((r) => row(r, true)) : null}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/**
+ * БҮСЭД ДАВХЦАХ НЭГЖ ТАЛБАР — зориулалт, эрхийн хэлбэрээр
+ * (хэрэглэгч, 2026-10-06, бүсийн картын зургийг заан: "энэ чартын
+ * доор нэгж талбарынх нь чартыг гарга").
+ *
+ * Бүсийн карт нь "хэдэн нэгж талбар" гэдгийг хэлдэг; энэ нь "ЯМАР
+ * газар" гэдгийг — хамгаалалтын бүсийн дотор орон сууц, үйлдвэр,
+ * хөдөө аж ахуйн газар хэр байгааг.
+ *
+ * ⚠⚠ БҮС ТУС БҮРЭЭР, НЭГТГЭХГҮЙ: гурван бүс бие биеэ агуулдаг
+ * ({@link fetchParcelsOn}-ийн тэмдэглэл — тэжээгдэл 17 мянга,
+ * хязгаарлалт 11 мянга, хориглолт 4 мянга, давхардалгүй нь бага) тул
+ * нийлбэр нь нэг нэгж талбарыг хоёр, гурав тоолно. Бүс сонгох товч нь
+ * бүсийн картын өнгөт тэмдэгтэй ижил өнгөтэй.
+ * ⚠ Нийлбэр нь бүсийн картын тоотой ТААРНА: хоосон утга нь
+ * "Бүртгэгдээгүй" гэсэн мөр болж үлддэг ({@link parcelCountsIn}).
+ * ⚠ Тоолол СЕРВЕР дээр — нэгж талбарын атрибут хөтөч рүү орохгүй.
+ */
+/**
+ * Нэгж талбарын диаграмаас СОНГОСОН ангилал — газрын зурагт тодруулна
+ * (хэрэглэгч, 2026-10-06: "нэгж талбарын чартнаас шүүгддэг болгоё").
+ */
+type ParcelPick = {
+  /** Бүс · тэнхлэг · ангилал — үр дүнг сонголттой нь тааруулна */
+  id: string;
+  rings: GeoJSON.Position[][];
+  where: string;
+  label: string;
+  tone: string;
+};
+
+/** Хэмжилт хийгдэхээс өмнөх мөрийн тоо ({@link ParcelCard}) */
+const PARCEL_TOP = 10;
+
+function ParcelCard({
+  zones,
+  prefer = null,
+  onPick,
+  pickInfo = null,
+}: {
+  zones: {
+    id: string;
+    label: string;
+    tone: string;
+    features: GeoJSON.Feature[];
+  }[];
+  /**
+   * Самбарын шүүлтээр сонгогдсон бүс (голын татмын сав газар) — карт
+   * түүн рүү ӨӨРӨӨ шилжинэ: газрын зураг, бүсийн карт, энэ карт гурав
+   * нэг сонголтыг дагана. Хэрэглэгч энд өөр товч дарвал тэр нь давуу,
+   * гэхдээ шүүлт дахин солигдох хүртэл л.
+   */
+  prefer?: string | null;
+  /** Мөр товшиход — сонгосон ангилал, эсвэл цуцлалт (`null`) */
+  onPick?: (pick: ParcelPick | null) => void;
+  /** Газрын зурагт тодруулсан үр дүн — диаграмын доор тоогоор хэлнэ */
+  pickInfo?: { busy: boolean; count: number | null; capped: boolean } | null;
+}) {
+  /* Гараар сонгосон бүс — ямар `prefer`-ийн үед сонгосноо хамт барина:
+     шүүлт солигдвол гар сонголт хүчингүй болж `prefer` дахин түрүүлнэ
+     (эффектээр төлөв цэвэрлэхгүй — ДАМ гарна) */
+  const [chosen, setChosen] = React.useState<{
+    prefer: string | null;
+    id: string;
+  } | null>(null);
+  const zoneId =
+    chosen && chosen.prefer === prefer ? chosen.id : (prefer ?? null);
+  const setZoneId = (id: string) => {
+    setChosen({ prefer, id });
+    /* Бүс солигдоход өмнөх бүсийн тодруулга зураг дээр үлдэх ёсгүй */
+    onPick?.(null);
+  };
+  const [axisField, setAxisFieldRaw] = React.useState<string | null>(null);
+  const setAxisField = (field: string) => {
+    setAxisFieldRaw(field);
+    onPick?.(null);
+  };
+  const [axes, setAxes] = React.useState<ParcelAxis[] | null>(null);
+  const [axesError, setAxesError] = React.useState<string | null>(null);
+  /* Үр дүн нь ТҮЛХҮҮРТЭЙГЭЭ хамт — бүс, тэнхлэг солигдоход хуучин
+     хариу шинэ сонголтын дор харагдахгүй (эффектээс `set*(null)`
+     дуудахгүйн тулд ачаалал нь түлхүүрийн зөрүүнээс ДАМ гарна) */
+  const [result, setResult] = React.useState<{
+    key: string;
+    rows?: ParcelCount[];
+    error?: string;
+  } | null>(null);
+
+  React.useEffect(() => {
+    let live = true;
+    parcelAxes()
+      .then((a) => live && setAxes(a))
+      .catch((e: Error) => live && setAxesError(e.message));
+    return () => {
+      live = false;
+    };
+  }, []);
+
+  /* Сонголт нь ДАМ — бүс эсвэл тэнхлэг алга болбол эхнийх рүү буцна */
+  const zone = zones.find((z) => z.id === zoneId) ?? zones[0];
+  const axis = axes?.find((a) => a.field === axisField) ?? axes?.[0] ?? null;
+  const rings = React.useMemo(
+    () => (zone ? ringsOf(zone.features) : []),
+    [zone],
+  );
+  const key = zone && axis ? `${zone.id}\u0000${axis.field}` : null;
+
+  /*
+    СОНГОСОН АНГИЛАЛ — бүс, тэнхлэгтэйгээ ХАМТ (`ctx`): тэдгээр
+    солигдоход сонголт ДАМ хүчингүй болно (эффектээр цэвэрлэхгүй).
+  */
+  const [cat, setCat] = React.useState<{ ctx: string; key: string } | null>(
+    null,
+  );
+  /* Эцэг самбар тодруулгыг цэвэрлэвэл ("Цэвэрлэх", сав газар солих)
+     `pickInfo` нь `null` болно — мөр ч тодрохоо болино */
+  const selectedCat =
+    cat && key && cat.ctx === key && pickInfo ? cat.key : null;
+
+  React.useEffect(() => {
+    if (!zone || !axis || !key || !rings.length) return;
+    let live = true;
+    parcelCountsIn(zone.id, rings, axis.field)
+      .then((rows) => live && setResult({ key, rows }))
+      .catch((e: Error) => live && setResult({ key, error: e.message }));
+    return () => {
+      live = false;
+    };
+  }, [zone, axis, key, rings]);
+
+  const current = result?.key === key ? result : null;
+  const rows = current?.rows ?? null;
+  const total = rows?.reduce((n, r) => n + r.value, 0) ?? null;
+
+  /*
+    ⚠⚠ БАГТАХ МӨРИЙН ТООГ ХЭМЖИЖ ТОГТООНО (хэрэглэгч, 2026-10-06: "2
+    чартаа чи өөрөө мэдээд тааруул"). Урьд нь тогтмол арав байсан нь
+    өндөр дэлгэцэд хоосон зай, намхан дэлгэцэд гүйлгүүр үлдээдэг байв.
+
+    Карт нь баганын ҮЛДСЭН өндрийг бүтнээр эзэлнэ (`fill`), бүсийн карт
+    нь агуулгынхаа өндөртэй (`full`). Жагсаалтын талбайн өндөр ба
+    мөрийн БОДИТ өндрийг `ResizeObserver` хэмжиж, багтах тоог гаргана
+    — бүсүүдийг задлахад бүсийн карт өсөж, энэ жагсаалт дагаж хумигдана.
+
+    ⚠ Хэмжилт нь ажиглагчийн дуудлагад — эффектээс шууд `set*`
+    дуудахгүй (`react-hooks/set-state-in-effect`).
+    ⚠ Мөрийн тоо нь `data-rows`-оос: зурагдалтын үед `ref`-д бичихийг
+    `react-hooks/refs` хориглодог.
+    ⚠ ХАМГИЙН БАГАДАА ГУРАВ: бүх бүсийг задалснаар зай дуусвал багана
+    өөрөө гүйнэ — гурваас цөөн мөр нь диаграм биш.
+    ⚠ ХУРААЛТ ИЛ хэвээр: "Бусад N ангилал · M нэгж талбар" мөр юу
+    нуугдсаныг тоогоор хэлж, товшиход бүгдийг дэлгэнэ (тэр үед
+    жагсаалт дотроо гүйнэ). Толгойн нийт тоо БҮХ мөрийнх.
+    ⚠ Мөрийн тоо хэмжилтээс хамаарч өөрчлөгдөхөд эргэлдэхгүй: хураах
+    мөр нь жагсаалтын ГАДНА тул түүнийг гаргах, нуух нь талбайн өндрийг
+    өөрчилсөн ч дүгнэлт нь хэвээр үлддэг.
+  */
+  const [openKey, setOpenKey] = React.useState<string | null>(null);
+  const expanded = openKey != null && openKey === key;
+  const listRef = React.useRef<HTMLDivElement>(null);
+  const chartRef = React.useRef<HTMLDivElement>(null);
+  const [fit, setFit] = React.useState<{ avail: number; row: number }>({
+    avail: 0,
+    row: 0,
+  });
+  const hasList = !!rows?.length;
+
+  React.useEffect(() => {
+    const list = listRef.current;
+    const chart = chartRef.current;
+    if (!list || !chart) return;
+    const measure = () => {
+      const n = Number(chart.dataset.rows) || 0;
+      const row = n > 0 ? chart.offsetHeight / n : 0;
+      const avail = list.clientHeight;
+      setFit((f) =>
+        Math.abs(f.avail - avail) < 1 && Math.abs(f.row - row) < 0.5
+          ? f
+          : { avail, row: row || f.row },
+      );
+    };
+    const ro = new ResizeObserver(measure);
+    ro.observe(list);
+    ro.observe(chart);
+    return () => ro.disconnect();
+  }, [hasList]);
+
+  /* ⚠ "Бүгд багтах уу" гэдгийг ЭХЭЛЖ шалгана: агуулгын өндөртэй
+     горимд (`is-fit`) талбай нь яг `n × мөр` тул нөөцийн 2px-ийг хасаад
+     хуваавал n − 1 гарч, хураах ↔ дэлгэх хооронд эргэлдэнэ */
+  const measured = fit.row > 0 && fit.avail > 0;
+  const cap = !measured
+    ? PARCEL_TOP
+    : rows && rows.length * fit.row <= fit.avail + 1
+      ? rows.length
+      : Math.max(3, Math.floor((fit.avail - 2) / fit.row));
+  const folded = !!rows && !expanded && rows.length > cap;
+  const shown = rows && folded ? rows.slice(0, cap) : rows;
+  const rest = rows && folded ? rows.slice(cap) : [];
+
+  if (axes && !axes.length) return null;
+
+  return (
+    <CutCard
+      title="Давхцаж буй нэгж талбар"
+      tone={zone?.tone ?? "var(--data)"}
+      first
+      meta={total == null ? undefined : `${num(total)} нэгж талбар`}
+      fill
+      /* Бүх мөр багтаж байвал карт АГУУЛГЫНХАА өндөртэй — үлдсэн
+         өндрийг эзэлж доороо хоосон зай үлдээхгүй (хэрэглэгч,
+         2026-10-06: "хоосон зай гаргахгүй"). Багтахгүй болмогц
+         (`folded`) үлдсэн өндрийг дүүргэж хураана */
+      fit={!!rows && !folded && !expanded}
+    >
+      <div className="flex min-h-0 flex-1 flex-col gap-2">
+        {/* Бүс сонгогч — бүсийн картын дарааллаар, өнгөөр */}
+        <div className="flex flex-wrap gap-1">
+          {zones.map((z) => {
+            const on = z.id === zone?.id;
+            return (
+              <button
+                key={z.id}
+                type="button"
+                aria-pressed={on}
+                onClick={() => setZoneId(z.id)}
+                className={cn(
+                  "flex items-center gap-1.5 rounded-xs border px-2 py-1 text-[11.5px] focus-visible:outline-offset-[-2px]",
+                  on
+                    ? "border-line-2 bg-paper-hi text-ink"
+                    : "border-line text-ink-2 hover:bg-paper-hi hover:text-ink",
+                )}
+              >
+                <span
+                  aria-hidden
+                  className="size-2 shrink-0 rounded-[1px]"
+                  style={{ background: z.tone }}
+                />
+                {z.label}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Тэнхлэг сонгогч — эх сурвалжид олдсон талбаруудаас л */}
+        {axes && axes.length > 1 ? (
+          <div className="flex gap-3 border-b border-line text-[11.5px]">
+            {axes.map((a) => {
+              const on = a.field === axis?.field;
+              return (
+                <button
+                  key={a.field}
+                  type="button"
+                  aria-pressed={on}
+                  onClick={() => setAxisField(a.field)}
+                  className={cn(
+                    "-mb-px border-b-2 pb-1 focus-visible:outline-offset-[-2px]",
+                    on
+                      ? "text-ink"
+                      : "border-transparent text-ink-3 hover:text-ink",
+                  )}
+                  style={on ? { borderBottomColor: zone?.tone } : undefined}
+                >
+                  {a.label}
+                </button>
+              );
+            })}
+          </div>
+        ) : null}
+
+        {axesError || current?.error ? (
+          <p className="py-2 text-[11.5px] text-clay">
+            {axesError ?? current?.error}
+          </p>
+        ) : rows && shown ? (
+          rows.length ? (
+            <>
+              <div
+                ref={listRef}
+                className={cn(
+                  "min-h-0 flex-1",
+                  expanded ? "overflow-y-auto" : "overflow-hidden",
+                )}
+              >
+                <div ref={chartRef} data-rows={shown.length}>
+                  <RowChart
+                    data={shown}
+                    tone={zone?.tone}
+                    format={(v) => num(v)}
+                    dense
+                    clamp
+                    /*
+                      ⚠⚠ МӨР ТОВШИГДОНО (хэрэглэгч, 2026-10-06: "нэгж
+                      талбарын чартнаас шүүгддэг болгоё"). Тэр бүсийн
+                      тэр ангиллын нэгж талбарууд газрын зурагт бүсийн
+                      өнгөөр тодорч, зураг тэдэн рүү ойртоно. Дахин
+                      товшиход цуцлагдана.
+                      ⚠ Нөхцөл нь мөрөнд нийлсэн БҮХ эх утгаас
+                      (`raws`) — бичиглэлийн зөрүүтэй утга нэг мөр
+                      болдог тул нэгийг нь л авбал зурагт дутуу гарна.
+                    */
+                    selected={selectedCat}
+                    onSelect={(k) => {
+                      const r = k ? rows.find((x) => x.key === k) : null;
+                      if (!k || !r || !key || !zone || !axis) {
+                        setCat(null);
+                        onPick?.(null);
+                        return;
+                      }
+                      setCat({ ctx: key, key: k });
+                      onPick?.({
+                        id: `${key}\u0000${k}`,
+                        rings,
+                        where: parcelWhere(axis.field, r.raws),
+                        label: r.label,
+                        tone: zone.tone,
+                      });
+                    }}
+                  />
+                </div>
+              </div>
+              {selectedCat && pickInfo ? (
+                <p className="num flex shrink-0 items-center gap-1.5 border-t border-line pt-1.5 text-[11px] text-ink-3">
+                  {pickInfo.busy ? (
+                    <>
+                      <Loader2 size={12} className="animate-spin" />
+                      Газрын зурагт тодруулж байна…
+                    </>
+                  ) : (
+                    <>
+                      Газрын зурагт:{" "}
+                      <span className="text-ink">
+                        {num(pickInfo.count ?? 0)} нэгж талбар
+                      </span>
+                      {pickInfo.capped ? " · хэсэгчилсэн" : ""}
+                    </>
+                  )}
+                </p>
+              ) : null}
+              {folded || expanded ? (
+                <button
+                  type="button"
+                  aria-expanded={expanded}
+                  onClick={() => setOpenKey(expanded ? null : key)}
+                  className="flex w-full shrink-0 items-center gap-1.5 border-t border-line pt-1.5 text-left text-[11.5px] text-ink-2 hover:text-ink focus-visible:outline-offset-[-2px]"
+                >
+                  <ChevronDown
+                    aria-hidden
+                    className={cn(
+                      "size-3.5 shrink-0 text-ink-3 transition-transform",
+                      expanded ? "rotate-180" : "",
+                    )}
+                  />
+                  {expanded ? (
+                    "Жагсаалтыг хураах"
+                  ) : (
+                    <>
+                      <span>Бусад {num(rest.length)} ангилал</span>
+                      <span className="num ml-auto text-ink-3">
+                        {num(rest.reduce((n, r) => n + r.value, 0))} нэгж талбар
+                      </span>
+                    </>
+                  )}
+                </button>
+              ) : null}
+            </>
+          ) : (
+            <p className="py-2 text-[11.5px] text-ink-3">
+              Нэгж талбар бүртгэгдээгүй байна
+            </p>
+          )
+        ) : (
+          <p className="flex items-center gap-2 py-2 text-[11.5px] text-ink-3">
+            <Loader2 size={13} className="animate-spin" />
+            Нэгж талбарын мэдээллийг ачаалж байна…
+          </p>
+        )}
+      </div>
     </CutCard>
   );
 }
@@ -3993,13 +5618,28 @@ function CutCard({
   weight = 1,
   meta,
   action,
-  fill = false,
+  full,
+  fill,
+  fit,
   children,
 }: {
   title: string;
   tone: string;
-  /** Баганыг бүхэлд нь дүүргэнэ ({@link LayerSet.fillSolo}) */
+  /**
+   * БҮТЭН харагдана — агшихгүй, дотроо гүйхгүй (`.is-full`). Баганын
+   * өндрийг бусад карттай хуваалцахгүй; бусад нь үлдсэн зайг авна.
+   */
+  full?: boolean;
+  /**
+   * Баганын ҮЛДСЭН өндрийг бүтнээр эзэлнэ (`.is-fill`) — агуулга нь
+   * өөрөө хэмжиж багтана ({@link ParcelCard}).
+   */
   fill?: boolean;
+  /**
+   * `fill` картыг АГУУЛГЫНХАА өндөрт буцаана (`.is-fit`) — бүх мөр
+   * багтсан үед. Ингэснээр карт хэзээ ч хоосон зайгаар сунахгүй.
+   */
+  fit?: boolean;
   /** Давхаргын ЭХНИЙ карт — туузандаа наалдаж, бүлгээ эхлүүлнэ */
   first?: boolean;
   /**
@@ -4029,11 +5669,21 @@ function CutCard({
       className={cn(
         "analytics-chart-card flex min-h-0 flex-col rounded-xl border border-line bg-paper-2",
         first && "border-t-2",
+        full && "is-full",
         fill && "is-fill",
+        fill && fit && "is-fit",
       )}
       style={
         {
-          flexGrow: weight,
+          /*
+            ⚠⚠ `full`/`fill` картад ЖИН ТАВИХГҮЙ (хэрэглэгч, 2026-10-06,
+            зургаар: "энэ дунд хоосон зай гарахгүй"). Inline `flexGrow`
+            нь CSS-ийн `.is-full { flex: 0 0 auto }`-г ДАРДАГ тул
+            бүсийн карт 6 жингээрээ сунаж, гурван мөрийн доор хагас
+            баганын хоосон зай үүсгэн нэгж талбарын картыг ёроол руу
+            шахаж байв. Тэдний өндрийг CSS бүрэн эзэмшинэ.
+          */
+          ...(full || fill ? null : { flexGrow: weight }),
           /*
             ДООД ӨНДӨР нь мөн АГУУЛГЫН ХЭРЭГЦЭЭГЭЭР (2026-09-25).
             168px гэсэн ТОГТМОЛ шал нь ганц мөртэй картад ч
@@ -4071,20 +5721,28 @@ function CutCard({
  * яг тэр дүрс орвол хаагдана — хэрэглэгч хааж, ойртож, дахин нээх
  * ёсгүй.
  */
+/** Дүрс тус бүрт давхцах нэгж талбарын тоо — товч цонхны кэш */
+const SHAPE_PARCELS = new Map<string, Promise<number>>();
+
 function RecordPanel({
-  info,
+  hit,
   row,
+  oid,
   tone,
   onClose,
 }: {
-  info: LayerInfo;
+  hit: Loaded;
   row: Record<string, unknown>;
+  /** Давхарга доторх ТҮҮХИЙ дугаар (`objectid`) */
+  oid: number;
   tone: string;
   onClose: () => void;
 }) {
   const panel = useMapPanel("left");
+  const { info } = hit;
+  const brief = Boolean(info.set.brief);
   /* Цонхны диаграм ({@link LayerSet.recordCharts}) — тэдгээрт орсон
-     талбар жагсаалтад ДАХИН гарахгүй */
+     талбар жагсаалтад ДАХИН гарахгүй (бөглөгдсөн ч, бөглөөгүй ч) */
   const groups = info.set.recordCharts?.[info.id] ?? [];
   const charted = new Set(
     groups.flatMap((g) => [
@@ -4093,73 +5751,270 @@ function RecordPanel({
     ]),
   );
 
+  /*
+    ДҮРСТЭЙ ДАВХЦАХ НЭГЖ ТАЛБАР — товч цонхонд ({@link LayerSet.brief}).
+    Тухайн НЭГ дүрсийн хүрээгээр серверээс тоолно; хариу нь дүрс тус
+    бүрээр кэшлэгдэнэ (`SHAPE_PARCELS`) тул дахин дарахад асуухгүй.
+    ⚠ Үр дүн ТҮЛХҮҮРТЭЙГЭЭ — өөр дүрс сонгоход хуучин тоо гарахгүй
+    (эффектээс `set*(null)` дуудахгүйн тулд ДАМ шалгана).
+  */
+  const countKey = `${info.name}\u0000${oid}`;
+  const [parcelCount, setParcelCount] = React.useState<{
+    key: string;
+    n: number | null;
+  } | null>(null);
+  React.useEffect(() => {
+    if (!brief) return;
+    const f = hit.data.shapes.features.find((x) => Number(x.id) === oid);
+    const rings = f ? ringsOf([f]) : [];
+    if (!rings.length) return;
+    let p = SHAPE_PARCELS.get(countKey);
+    if (!p) {
+      p = countParcelsIn(rings);
+      SHAPE_PARCELS.set(countKey, p);
+      /* Унасан амлалтыг кэшид үлдээхгүй */
+      p.catch(() => SHAPE_PARCELS.delete(countKey));
+    }
+    let live = true;
+    p.then(
+      (n) => live && setParcelCount({ key: countKey, n }),
+      () => live && setParcelCount({ key: countKey, n: null }),
+    );
+    return () => {
+      live = false;
+    };
+  }, [brief, hit, oid, countKey]);
+  const parcels = parcelCount?.key === countKey ? parcelCount : null;
+
+  /*
+    ⚠⚠ ЗАГВАР ШИНЭЧЛЭГДСЭН (хэрэглэгч, 2026-10-06: "pop up загвар
+    шинэчилье"). Урьд нь давхаргын нэр л гарчигт сууж, бүх талбар нэг
+    жагсаалтад ИЖИЛ ЖИНТЭЙ — ТОМ ҮСГЭЭР, 92px-ийн баганад — цуварч,
+    хоосон талбарууд бөглөгдсөнүүдийн ДУНД холилдож байв. Аль дүрс
+    сонгогдсон, тэр нь хэр том вэ гэдгийг жагсаалтаас хайж олох хэрэгтэй
+    болдог байлаа. Одоо ГУРВАН давхарга:
+
+    1. ТОЛГОЙ — өнгөт тэмдэг (зургийн өнгө), дүрсийн НЭР (зургийн
+       шошго ба бүсийн картын мөртэй НЭГ эх сурвалж), талбай.
+    2. БӨГЛӨГДСӨН ТАЛБАРУУД — нэр · утга хоёр баганаар, энгийн үсгээр.
+    3. БӨГЛӨӨГҮЙ ТАЛБАРУУД — доор нь тоотойгоо, нэрсээр нь.
+       ⚠ ХАСААГҮЙ: 2026-09-30-нд "хоосон ч хамаагүй бүх талбар"
+       гэсэн шийдвэр хэвээр — хоосон байдал нь өөрөө мэдээлэл. Зөвхөн
+       бөглөгдсөн утгуудын дундаас ЯЛГАРСАН.
+  */
+  const name = hit.labels.name ? categoryKey(row[hit.labels.name]) : "";
+  const group = leadGroup(hit);
+  const tag = group ? categoryKey(row[group]) : "Бүртгэгдээгүй";
+  const title =
+    name && name !== "Бүртгэгдээгүй"
+      ? name
+      : tag !== "Бүртгэгдээгүй"
+        ? `${tag} · № ${oid}`
+        : `№ ${oid}`;
+  const rawArea = hit.data.area[oid];
+  const ha =
+    rawArea != null && Number.isFinite(rawArea)
+      ? info.areaInHa
+        ? rawArea
+        : rawArea / 10000
+      : null;
+
+  const filled: {
+    name: string;
+    alias: string;
+    text: string;
+    isNum: boolean;
+  }[] = [];
+  const empty: { name: string; alias: string }[] = [];
+  /* Толгойд гарсан утга жагсаалтад ДАВТАГДАХГҮЙ — нэг тоог хоёр газар
+     бичихгүй дүрэм (нэр, ангилал, талбай) */
+  const shown = new Set<string>();
+  if (name && name !== "Бүртгэгдээгүй" && hit.labels.name)
+    shown.add(hit.labels.name);
+  if (group && tag !== "Бүртгэгдээгүй") shown.add(group);
+  if (ha != null && info.areaField) shown.add(info.areaField);
+  for (const f of info.fields) {
+    if (shown.has(f.name) || charted.has(f.name)) continue;
+    /* Систем талбар (дугаарлалт, координат, нэгтгэлийн үлдэц) хүнд
+       юу ч хэлэхгүй ({@link isSystemField}) — бөглөөгүй хэсэгт ч орохгүй */
+    if (isSystemField(f.name, f.alias)) continue;
+    const v = row[f.name];
+    const text = typeof v === "string" ? v.trim() : v;
+    if (text === "" || text == null) {
+      empty.push({ name: f.name, alias: f.alias });
+      continue;
+    }
+    filled.push({
+      name: f.name,
+      alias: f.alias,
+      text: fieldText(f.alias, text),
+      isNum: typeof text === "number" && Number.isFinite(text),
+    });
+  }
+
+  /*
+    ⚠⚠ ТОВЧ ЦОНХ — ГУРВАН МӨР (хэрэглэгч, 2026-10-06: "Нэр — Туул,
+    Талбай — 0000, Нэгж талбар — 0000 гээд тэр л"). Бусад талбар,
+    бөглөөгүй хэсэг ГАРАХГҮЙ. Нэр нь нэрийн багана → ангилал (сав
+    газар) → дугаар; дугаар нь сонгосон дүрсийг ялгахаас өөр юу ч
+    хэлэхгүй тул нэр олдсон үед бичигдэхгүй.
+  */
+  if (brief) {
+    const briefName =
+      name && name !== "Бүртгэгдээгүй"
+        ? name
+        : tag !== "Бүртгэгдээгүй"
+          ? tag
+          : `№ ${oid}`;
+    const rows: { label: string; value: React.ReactNode; num?: boolean }[] = [
+      { label: "Нэр", value: briefName },
+    ];
+    if (ha != null)
+      rows.push({
+        label: "Талбай",
+        value: `${num(ha, ha >= 100 ? 0 : 2)} га`,
+        num: true,
+      });
+    if (info.geometry !== "Point")
+      rows.push({
+        label: "Нэгж талбар",
+        value: parcels ? (
+          parcels.n == null ? (
+            <span className="text-ink-3">Тодорхойгүй</span>
+          ) : (
+            num(parcels.n)
+          )
+        ) : (
+          <Loader2 size={12} className="inline animate-spin text-ink-3" />
+        ),
+        num: true,
+      });
+    return (
+      <MapPanel
+        state={panel}
+        title={info.name}
+        onClose={onClose}
+        className="top-2 right-2 w-[260px]"
+      >
+        <dl className="divide-y divide-line">
+          {rows.map((r) => (
+            <div
+              key={r.label}
+              className="flex items-baseline justify-between gap-3 px-3 py-2"
+            >
+              <dt className="flex items-center gap-2 text-[11.5px] text-ink-3">
+                {r.label === "Нэр" ? (
+                  <span
+                    aria-hidden
+                    className="size-2 shrink-0 rounded-[1px]"
+                    style={{ background: tone }}
+                  />
+                ) : null}
+                {r.label}
+              </dt>
+              <dd
+                className={cn(
+                  "min-w-0 text-right text-[13px] font-medium break-words text-ink",
+                  r.num && "num",
+                )}
+              >
+                {r.value}
+              </dd>
+            </div>
+          ))}
+        </dl>
+      </MapPanel>
+    );
+  }
+
   return (
     <MapPanel
       state={panel}
       title={info.name}
       onClose={onClose}
       /*
-        ⚠⚠ ӨНДӨР НЬ АГУУЛГААРАА, БҮТЭН БИШ (2026-09-29, хэрэглэгч
-        зургаар: хориглолтын бүсийн хоёр мөрийн доор бүтэн дэлгэцийн
-        хоосон талбай). Урьд нь `top` ба `bottom` ХОЁУЛАА бэхлэгдсэн
-        тул самбар агуулгаасаа үл хамааран зургийн бүтэн өндрийг
-        эзэлдэг байв — хоёр талбартай давхаргад (дугаар, талбай) ~800px
-        хоосон цагаан талбай үлдэнэ.
-        ⚠ `max-h` нь УРТ бичлэгийг хамгаална: самбарын бие
-        `flex-1 min-h-0 overflow-y-auto` тул дотроо гүйнэ.
+        ⚠⚠ ӨНДӨР НЬ АГУУЛГААРАА, БҮТЭН БИШ (2026-09-29): `max-h` нь урт
+        бичлэгийг хамгаална, бие нь дотроо гүйнэ.
       */
-      className="top-2 right-2 max-h-[calc(100%-2.5rem)] w-[288px]"
+      className="top-2 right-2 max-h-[calc(100%-2.5rem)] w-[300px]"
     >
-      {/*
-        ⚠⚠ ХООСОН ТАЛБАР Ч ГАРНА (2026-09-30, хэрэглэгч: "pop up-д
-        тайлбар field байхгүй бн").
-
-        Урьд нь утгагүй мөрийг чимээгүй алгасдаг байсан тул "энэ
-        талбар байдаг ч бөглөгдөөгүй" гэдгийг дэлгэцээс мэдэх арга
-        БАЙХГҮЙ: булгийн тайлбар хоосон байсан тул мөр нь огт
-        гардаггүй, улмаас талбар нь үгүй мэт харагдаж байв.
-        ⚠ Химийн бодисын атрибутын хүснэгттэй ЯГ НЭГ шийдвэр
-        (2026-09-23: "хоосон ч хамаагүй бүх column буюу field надад
-        хэрэгтэй, би харж байгаад хүмүүс нь бөглүүрэй гээд хэлэх гээд
-        байна") — хоосон байдал нь ӨӨРӨӨ мэдээлэл.
-        ⚠ Хоосныг "—" гэж БҮДЭГ өнгөөр хэлнэ: бөглөгдсөн утгуудаас
-        нүдээр шууд салах ёстой.
-        ⚠ Самбарын бие дотроо гүйнэ тул олон талбартай давхарга
-        (худгийн паспорт) ч багтана.
-      */}
-      {groups.length ? (
-        <div className="divide-y divide-line border-b border-line">
-          {groups.map((g) => (
-            <RecordBars key={g.label} group={g} row={row} tone={tone} />
-          ))}
+      <div className="min-h-0 overflow-y-auto">
+        {/* ---- 1. Толгой ---- */}
+        <div className="flex items-start gap-2.5 border-b border-line px-3 py-2.5">
+          <span
+            aria-hidden
+            className="mt-[5px] size-2.5 shrink-0 rounded-[1px]"
+            style={{ background: tone }}
+          />
+          <div className="min-w-0 flex-1">
+            <p className="display text-[14px] leading-snug text-ink">{title}</p>
+            {name && tag !== "Бүртгэгдээгүй" && tag !== name ? (
+              <p className="mt-0.5 text-[11.5px] text-ink-3">{tag}</p>
+            ) : null}
+          </div>
+          {ha != null ? (
+            <span className="num shrink-0 text-right text-[14px] font-medium whitespace-nowrap text-ink">
+              {num(ha, ha >= 100 ? 0 : 2)}
+              <span className="ml-1 text-[11px] font-normal text-ink-3">
+                га
+              </span>
+            </span>
+          ) : null}
         </div>
-      ) : null}
-      <dl className="divide-y divide-line overflow-y-auto">
-        {info.fields
-          .filter((f) => !charted.has(f.name))
-          .map((f) => {
-            const v = row[f.name];
-            const text = typeof v === "string" ? v.trim() : v;
-            const empty = text === "" || text == null;
-            const isNum = typeof text === "number" && Number.isFinite(text);
-            return (
-              <div key={f.name} className="flex gap-2 px-2.5 py-1.5">
-                <dt className="w-[92px] shrink-0 text-[10px] tracking-[0.06em] text-ink-3 uppercase">
+
+        {/* ---- 1б. Оны диаграм ({@link LayerSet.recordCharts}) ---- */}
+        {groups.length ? (
+          <div className="divide-y divide-line border-b border-line">
+            {groups.map((g) => (
+              <RecordBars key={g.label} group={g} row={row} tone={tone} />
+            ))}
+          </div>
+        ) : null}
+
+        {/* ---- 2. Бөглөгдсөн талбарууд ---- */}
+        {filled.length ? (
+          <dl className="divide-y divide-line">
+            {filled.map((f) => (
+              <div
+                key={f.name}
+                className="grid grid-cols-[minmax(0,42%)_minmax(0,1fr)] gap-3 px-3 py-1.5"
+              >
+                <dt className="text-[11px] leading-snug text-ink-3">
                   {f.alias}
                 </dt>
                 <dd
                   className={cn(
-                    "min-w-0 flex-1 text-[11.5px] leading-snug",
-                    empty ? "text-ink-3" : "text-ink-2",
-                    isNum && "num",
+                    "min-w-0 text-[12px] leading-snug break-words text-ink",
+                    f.isNum && "num",
                   )}
                 >
-                  {empty ? "—" : fieldText(f.alias, text)}
+                  {f.text}
                 </dd>
               </div>
-            );
-          })}
-      </dl>
+            ))}
+          </dl>
+        ) : null}
+
+        {/* ---- 3. Бөглөөгүй талбарууд ---- */}
+        {empty.length ? (
+          <div className="border-t border-line px-3 py-2">
+            <p className="eyebrow text-ink-3">
+              Бөглөөгүй талбар ·{" "}
+              <span className="num">{num(empty.length)}</span>
+            </p>
+            <div className="mt-1.5 flex flex-wrap gap-1">
+              {empty.map((f) => (
+                <span
+                  key={f.name}
+                  className="rounded-xs border border-dashed border-line-2 px-1.5 py-0.5 text-[10.5px] text-ink-3"
+                >
+                  {f.alias}
+                </span>
+              ))}
+            </div>
+          </div>
+        ) : null}
+      </div>
     </MapPanel>
   );
 }
