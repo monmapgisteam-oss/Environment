@@ -739,6 +739,15 @@ export function WellsMap({
      * зориулагдсан: тухайн хэрчим өөрөө шошгоо үүрнэ.
      */
     labelPlacement?: "point" | "line-center";
+    /**
+     * НИМГЭН ХҮРЭЭ (хэрэглэгч, 2026-10-06: "голын татмын border-ийг
+     * засаарай, бүдүүн байна"). Татам нь голын дагуух НАРИЙН, салаалсан
+     * дүрсүүд тул анхдагч бараан касинг (2.8–4.2px) ба хүрээ нийлээд
+     * дүрсийн өөрийнхөө өргөнтэй тэнцэж, дүүргэлт нь харагдахаа больдог
+     * байв. Энэ үед касинг, хүрээ хоёр ойролцоогоор ХАГАС өргөнтэй.
+     * ⚠ Эх сурвалж үүсгэх МӨЧИД уншигдана (`modeRef`).
+     */
+    edge?: "thin";
   };
   /**
    * Цэгийн бичвэр шошго.
@@ -949,6 +958,7 @@ export function WellsMap({
     shapeLabelZoom: shapes?.labelZoom ?? 0,
     shapeFlow: Boolean(shapes?.flow),
     shapeLabelOnLine: shapes?.labelPlacement === "line-center",
+    shapeThin: shapes?.edge === "thin",
     detailZoom: detail?.minZoom,
     labeled: Boolean(labels),
     labelZoom: labels?.minzoom ?? 12,
@@ -1239,15 +1249,26 @@ export function WellsMap({
           layout: { "line-join": "round" },
           paint: {
             "line-color": "rgba(8,14,20,.55)",
-            "line-width": [
-              "interpolate",
-              ["linear"],
-              ["zoom"],
-              8,
-              ["case", SHAPE_LIT, 4.6, 2.8],
-              14,
-              ["case", SHAPE_LIT, 6.4, 4.2],
-            ] as unknown as ExpressionSpecification,
+            /* Нимгэн горимд ойролцоогоор хагас ({@link shapes.edge}) */
+            "line-width": (modeRef.current.shapeThin
+              ? [
+                  "interpolate",
+                  ["linear"],
+                  ["zoom"],
+                  8,
+                  ["case", SHAPE_LIT, 2.4, 1.2],
+                  14,
+                  ["case", SHAPE_LIT, 3.4, 2],
+                ]
+              : [
+                  "interpolate",
+                  ["linear"],
+                  ["zoom"],
+                  8,
+                  ["case", SHAPE_LIT, 4.6, 2.8],
+                  14,
+                  ["case", SHAPE_LIT, 6.4, 4.2],
+                ]) as unknown as ExpressionSpecification,
           },
         });
 
@@ -1261,15 +1282,25 @@ export function WellsMap({
             /* `["zoom"]` нь дээд түвшний `interpolate`-ийн шууд оролт
                байх ёстой — сонголтын шалгалтыг СУУДАЛ бүрийн дотор
                оруулав, эсрэгээр бичвэл давхарга чимээгүйхэн гологдоно */
-            "line-width": [
-              "interpolate",
-              ["linear"],
-              ["zoom"],
-              8,
-              ["case", SHAPE_LIT, 1.8, 0.5],
-              14,
-              ["case", SHAPE_LIT, 2.6, 1.2],
-            ] as unknown as ExpressionSpecification,
+            "line-width": (modeRef.current.shapeThin
+              ? [
+                  "interpolate",
+                  ["linear"],
+                  ["zoom"],
+                  8,
+                  ["case", SHAPE_LIT, 1.2, 0.35],
+                  14,
+                  ["case", SHAPE_LIT, 1.8, 0.7],
+                ]
+              : [
+                  "interpolate",
+                  ["linear"],
+                  ["zoom"],
+                  8,
+                  ["case", SHAPE_LIT, 1.8, 0.5],
+                  14,
+                  ["case", SHAPE_LIT, 2.6, 1.2],
+                ]) as unknown as ExpressionSpecification,
             "line-opacity": 0.9,
           },
         });
