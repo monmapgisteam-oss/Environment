@@ -42,6 +42,7 @@ import {
   mulberry32,
 } from "@/lib/soil-profile";
 import { SEP_CLASSES, fetchLatrineSim, sepClass } from "@/lib/latrine-sim";
+import { gravelLevel, gravelShare, hasGravel, loadSoilTiles, profileGravel, soilTexture, transitionTexture } from "@/lib/soil-texture";
 import type { Species } from "@/lib/latrine-sim-3d";
 import { createPlumes, type PlumeState } from "@/lib/soil-plumes";
 import { fetchLayerFeatures, fetchLayerInfo } from "@/lib/portal-layers";
@@ -156,6 +157,8 @@ export async function createSoilScene(opts: {
   onLatrine: (i: number) => void;
 }): Promise<SoilScene> {
   const { container, data, onPick, onNote, onSection, onPlumes, onLatrine, onScale } = opts;
+  /* Фото хавтанцар (жишиг зургийн бүтэц) — байхгүй бол бүтэц бүхэлдээ датаас */
+  const photos = await loadSoilTiles();
   const [EsriMap, SceneView, GraphicsLayer, Graphic, Mesh, MeshComponent, MeshMaterial, MeshTexture,
     SliceAnalysis, SlicePlane, Expand, Point, Extent, reactiveUtils, FeatureLayer] = opts.mods as [
     C, C, C<GLayer>, C, C, C, C, C, C, C, C<Widget>, C, C, Reactive, C<FLayer>,
@@ -201,59 +204,60 @@ export async function createSoilScene(opts: {
   }
   fg.putImageData(topImg, 0, 0);
 
-  /* ── Бүтэц: жишиг зургийн хавтанцрыг ангилал тус бүрд тохируулна ── */
-  const tileImgs: Record<string, HTMLImageElement> = {};
-  await Promise.all(
-    Object.entries(data.tiles).map(async ([k, b]) => {
-      tileImgs[k] = await blobImage(b);
-    }),
+  /* ── Бүтэц: ангилал бүрийнхийг ДАТААС зурна ({@link soilTexture}) ──
+     ⚠ Урьд нь ерөнхий жишиг зургийн (подзол) таван хавтанцраас тохируулдаг
+     байв — давталт нь илт, өнгө нь Монголын хөрсөнд таарахгүй тул нүүр
+     "зураг шиг" харагдаж байлаа (хэрэглэгч, 2026-10-06). Хайрганы
+     нягтрал нь профайлын `gravel`-аас ({@link classGravel}). */
+  const PG = profileGravel(profiles);
+  /** Бүтцийн суурь түлхүүр: "C~2" = C ангилал, хайрганы 2-р түвшин; "O" = түвшингүй */
+  const CV: Record<string, HTMLCanvasElement> = {};
+  const canvasOf = (base: string): HTMLCanvasElement => {
+    if (hasGravel(base) && !base.includes("~")) return canvasOf(`${base}~1`);
+    if (CV[base]) return CV[base];
+    const [cls, lv] = base.split("~");
+    const cv = soilTexture(cls, hasGravel(cls) ? gravelShare(cls, Number(lv ?? 1)) : 0, photos);
+    decorate(cls, cv.getContext("2d")!);
+    return (CV[base] = cv);
+  };
+  /** Хуулга, монолит, хөндлөн огтлолд — дунд түвшний хайргатай */
+  const TEXCV: Record<string, HTMLCanvasElement> = Object.fromEntries(
+    Object.keys(HCLS).map((cls) => [cls, canvasOf(hasGravel(cls) ? `${cls}~1` : cls)]),
   );
-  const TEXCV: Record<string, HTMLCanvasElement> = {};
-  for (const cls of Object.keys(HCLS)) {
-    const [src, o] = HCLS[cls].photo;
-    const cv = document.createElement("canvas");
-    cv.width = TILE_W;
-    cv.height = TILE_H;
-    const g = cv.getContext("2d")!;
-    g.drawImage(tileImgs[src], 0, 0, TILE_W, TILE_H);
-    if (o.f || o.gray || o.tint) {
-      const im = g.getImageData(0, 0, TILE_W, TILE_H);
-      const d = im.data;
-      const f = o.f || 1;
-      for (let i = 0; i < d.length; i += 4) {
-        let r = d[i] * f;
-        let gg = d[i + 1] * f;
-        let b = d[i + 2] * f;
-        if (o.gray) {
-          const l = 0.3 * r + 0.59 * gg + 0.11 * b;
-          r += (l - r) * o.gray;
-          gg += (l - gg) * o.gray;
-          b += (l - b) * o.gray;
-        }
-        if (o.tint) {
-          r += (o.tint[0] - r) * o.k!;
-          gg += (o.tint[1] - gg) * o.k!;
-          b += (o.tint[2] - b) * o.k!;
-        }
-        d[i] = r;
-        d[i + 1] = gg;
-        d[i + 2] = b;
-      }
-      g.putImageData(im, 0, 0);
-    }
-    decorate(cls, g);
-    TEXCV[cls] = cv;
-  }
+  /** Зурвасын хайрганы түвшин — хоёр үзүүрийн профайлын жинтэй дундаж */
+  const gravelOf = (a: Blend, b: Blend) => {
+    let s = 0;
+    for (let p = 0; p < PG.length; p++) s += ((a.w[p] + b.w[p]) / 2) * PG[p];
+    return gravelLevel(s);
+  };
+  /** Ангилал (+ хайрга) (+ ханасан) → материалын түлхүүр */
+  const keyOf = (c: string, sat: boolean, lv: number) => c + (hasGravel(c) ? `~${lv}` : "") + (sat ? "_w" : "");
 
-  const TEX = Object.fromEntries(
-    Object.entries(TEXCV).map(([k, cv]) => [k, new MeshTexture({ data: cv, wrap: "repeat" })]),
-  );
+  /* ⚠ Бүтэц, материал ЗАЛХУУ: хайрганы түвшин ("C~2") ба шилжилтийн
+     бүсийн түлхүүр ("A~1>Bk~1_w") нь зүсэлт дээр гарч ирсэн хосоор л
+     үүснэ. */
+  const TEX: Record<string, unknown> = {};
+  const texOfKey = (k: string) => {
+    if (TEX[k]) return TEX[k];
+    if (k.includes(">")) {
+      const [u, l] = k.split(">");
+      const cv = transitionTexture(
+        canvasOf(u.split("_")[0]),
+        canvasOf(l.split("_")[0]),
+        u.endsWith("_w") ? SAT_TINT : null,
+        l.endsWith("_w") ? SAT_TINT : null,
+        [...k].reduce((h, ch) => h * 31 + ch.charCodeAt(0), 17),
+      );
+      return (TEX[k] = new MeshTexture({ data: cv, wrap: { horizontal: "repeat", vertical: "clamp" } }));
+    }
+    return (TEX[k] = new MeshTexture({ data: canvasOf(k), wrap: "repeat" }));
+  };
   const MAT: Record<string, unknown> = {};
-  /** `_w` дагавар = гүний усаар ханасан хэсэг (цэнхэр туяа) */
+  /** `_w` дагавар = гүний усаар ханасан хэсэг (цэнхэр туяа); `>` = шилжилтийн бүс, туяа нь бүтцэд шингэсэн */
   const mat = (key: string) =>
     (MAT[key] ??= new MeshMaterial({
-      colorTexture: TEX[key.split("_")[0]],
-      color: key.endsWith("_w") ? SAT_TINT : [255, 255, 255, 1],
+      colorTexture: texOfKey(key.includes(">") ? key : key.split("_")[0]),
+      color: !key.includes(">") && key.endsWith("_w") ? SAT_TINT : [255, 255, 255, 1],
       doubleSided: true,
     }));
   const SR = { wkid: 4326 };
@@ -377,44 +381,117 @@ export async function createSoilScene(opts: {
   const exs = () => EX / 100;
   const tileM = () => (TILE_CM / 100) * EX;
 
-  /* ⚠ ДАВХАРГЫН ХИЛИЙГ БАГА ЗЭРЭГ ДОЛГИОЛОГ болгоно — шулуун хил нь
-     хиймэл харагдана. Гүн `t`-ийн ТАСРАЛТГҮЙ функц тул тэг зузаантай
-     давхарга тэг хэвээр үлдэж, уламжлал нь 1-ээс бага тул дараалал
-     алдагдахгүй. Байршлаас хамаарах тул хөрш зурвасын оройнууд таарна. */
+  /* ⚠ ДАВХАРГЫН ХИЛ ДОЛГИОЛОГ — шулуун хил нь хиймэл харагдана. Гүн `t`-ийн
+     ТАСРАЛТГҮЙ, ӨСӨХ функц: уламжлал нь хаана ч 0.17-оос багагүй (доорх
+     коэффициентээр бодсон) тул тэг зузаантай давхарга тэг хэвээр,
+     дараалал алдагдахгүй. Байршлаас хамаарах тул хөрш зурвасын оройнууд
+     таарна. Далайц нь гадарга ба 2 м-ийн ёроолд тэг, дунд хэсэгт 8 см —
+     A/B хил ~2.5 см, B/C хил ~7 см долгилно (FAO: smooth → wavy). */
   const phase = (lon: number, lat: number) => {
     const x = lon * mLon;
     const y = lat * mLat;
     return 2 * Math.sin(x / 173 + Math.sin(y / 211)) + Math.sin((x + y) / 97) + 0.6 * Math.sin(y / 61 - x / 137);
   };
-  const wav = (t: number, ph: number) =>
-    t <= 0 || t >= R_BOTTOM ? t : t + 2.5 * Math.sin((Math.PI * t) / R_BOTTOM) * Math.sin(0.07 * t + ph);
+  const phase2 = (lon: number, lat: number) => {
+    const x = lon * mLon;
+    const y = lat * mLat;
+    return 3 * Math.sin(x / 41 + 0.7 * Math.sin(y / 53)) + 2 * Math.sin((x - y) / 29);
+  };
+  const wav = (t: number, ph: number, ph2: number) =>
+    t <= 0 || t >= R_BOTTOM
+      ? t
+      : t + 8 * Math.sin((Math.PI * t) / R_BOTTOM) * (0.7 * Math.sin(0.07 * t + ph) + 0.3 * Math.sin(0.13 * t + ph2));
 
-  /** A→B шугамын доорх босоо зурвас; хоёр үзүүрт өөр профайлтай тул хил налж шилжинэ */
+  /** Шилжилтийн бүсийн ХАГАС өргөн, см — ДЭЭД давхаргын хилийн тодролоор
+      (FAO: abrupt < 2 · clear 2–5 · gradual 5–15 см). Хархүрэн хөрсний
+      A → Bk хил бодит зүсэлтийн фото дээр ААЖИМ (хэл, толботой) тул
+      A-гийнх 5 см; эх чулуулаг руу мөн аажим. */
+  const HALF: Record<string, number> = {
+    O: 1.2, T: 2, A: 5, A2: 5, Ag: 3.5, Bw: 5, Bk: 6, Bg: 5, Bgk: 5, Bf: 4, C: 6, CR: 2.5, Cg: 5, Cgk: 5, Cf: 2, R: 0,
+  };
+
+  type Seg = { k: string; c: string; t: number; d: number };
+  /** Нэг үзүүрийн харагдах давхаргууд (тэг зузаантайг хасна) */
+  function segsAt(pr: Blend, ph: number, ph2: number, top: number, lv: number): Seg[] {
+    const out: Seg[] = [];
+    for (const b of bandsOf(pr, keys)) {
+      const t = Math.max(wav(b.t, ph, ph2), top);
+      const d = Math.max(wav(b.b, ph, ph2), t);
+      if (d - t < 0.01) continue;
+      out.push({ k: keyOf(b.c, b.sat, lv), c: b.c, t, d });
+    }
+    return out;
+  }
+
   /**
    * A→B шугамын доорх босоо зурвас.
    *
    * ⚠ `topA`/`topB` нь ДЭЭД ХЯЗГААР, см. Анхдагчаар хуулсан гүн
    * (`PEEL`) боловч ХЭВТЭЭ зүсэлтийн периметрийн хананд цэг тутамд
    * өөр байна: тэнд хана нь гадаргаас биш ОГТОЛСОН ГҮНЭЭС эхэлнэ.
+   *
+   * ⚠⚠ ШИЛЖИЛТИЙН БҮС: хоёр үзүүрийн давхаргын дараалал ИЖИЛ бол
+   * ангилал солигдох хил бүрд `дээд>доод` түлхүүртэй тусдаа зурвас
+   * тавьж ({@link transitionTexture}), хоёр давхаргыг тэр хэмжээгээр
+   * богиносгоно — давхцуулбал нэг хавтгайд хоёр гадарга z-fight хийнэ.
+   * Дараалал зөрвөл (давхарга шаантаг шиг алга болж буй катенагийн бүс)
+   * хил хурц хэвээр. Гүний усны хил (ижил ангилал, `_w`) хурц хэвээр.
    */
   function strip(mb: MB, A: number[], B: number[], zA: number, zB: number, uA: number, uB: number, prA: Blend, prB: Blend, topA = PEEL, topB = PEEL) {
     const e = exs();
-    const bA = bandsOf(prA, keys);
-    const bB = bandsOf(prB, keys);
+    const lv = gravelOf(prA, prB);
+    const sA = segsAt(prA, phase(A[0], A[1]), phase2(A[0], A[1]), topA, lv);
+    const sB = segsAt(prB, phase(B[0], B[1]), phase2(B[0], B[1]), topB, lv);
+    const put = (k: string, tA: number, tB: number, dA: number, dB: number, v: (cm: number, end: number) => number) => {
+      const a = mb.v(A[0], A[1], zA - tA * e, uA, v(tA, 0));
+      const b = mb.v(B[0], B[1], zB - tB * e, uB, v(tB, 0));
+      const c = mb.v(B[0], B[1], zB - dB * e, uB, v(dB, 1));
+      const d = mb.v(A[0], A[1], zA - dA * e, uA, v(dA, 1));
+      mb.quad(k, a, b, c, d);
+    };
+    const depthV = (cm: number) => cm / TILE_CM;
+    const n = sA.length;
+    const same = n === sB.length && sA.every((x, i) => x.k === sB[i].k);
+    /* Хил бүрийн хагас өргөн — хоёр үзүүрт тус тусад нь */
+    const hA = new Float32Array(n);
+    const hB = new Float32Array(n);
+    if (same)
+      for (let i = 0; i + 1 < n; i++) {
+        if (sA[i].c === sA[i + 1].c) continue;
+        const h = HALF[sA[i].c] ?? 3;
+        const ha = Math.min(h, 0.3 * (sA[i].d - sA[i].t), 0.3 * (sA[i + 1].d - sA[i + 1].t));
+        const hb = Math.min(h, 0.3 * (sB[i].d - sB[i].t), 0.3 * (sB[i + 1].d - sB[i + 1].t));
+        if (Math.min(ha, hb) < 0.4) continue;
+        hA[i] = ha;
+        hB[i] = hb;
+      }
+    if (same) {
+      for (let i = 0; i < n; i++) {
+        const upA = i ? hA[i - 1] : 0;
+        const upB = i ? hB[i - 1] : 0;
+        put(sA[i].k, sA[i].t + upA, sB[i].t + upB, sA[i].d - hA[i], sB[i].d - hB[i], depthV);
+        if (!hA[i]) continue;
+        /* Шилжилтийн зурвас — бүтцийн v нь 0 (дээд) … 1 (доод) */
+        const edge = (_: number, end: number) => (end ? 0.995 : 0.005);
+        put(`${sA[i].k}>${sA[i + 1].k}`, sA[i].d - hA[i], sB[i].d - hB[i], sA[i].d + hA[i], sB[i].d + hB[i], edge);
+      }
+      return;
+    }
+
+    /* Дараалал зөрсөн — давхарга бүрийг индексээр (нэг үзүүрт шаантаг шиг алга болно) */
     const pA = phase(A[0], A[1]);
     const pB = phase(B[0], B[1]);
+    const qA = phase2(A[0], A[1]);
+    const qB = phase2(B[0], B[1]);
+    const bA = bandsOf(prA, keys);
+    const bB = bandsOf(prB, keys);
     for (let i = 0; i < bA.length; i++) {
-      const tA = Math.max(wav(bA[i].t, pA), topA);
-      const tB = Math.max(wav(bB[i].t, pB), topB);
-      const dA = Math.max(wav(bA[i].b, pA), tA);
-      const dB = Math.max(wav(bB[i].b, pB), tB);
+      const tA = Math.max(wav(bA[i].t, pA, qA), topA);
+      const tB = Math.max(wav(bB[i].t, pB, qB), topB);
+      const dA = Math.max(wav(bA[i].b, pA, qA), tA);
+      const dB = Math.max(wav(bB[i].b, pB, qB), tB);
       if (dA - tA < 0.01 && dB - tB < 0.01) continue; // энэ хэсэгт байхгүй / хуулагдсан давхарга
-      const k = bA[i].c + (bA[i].sat ? "_w" : "");
-      const a = mb.v(A[0], A[1], zA - tA * e, uA, tA / TILE_CM);
-      const b = mb.v(B[0], B[1], zB - tB * e, uB, tB / TILE_CM);
-      const c = mb.v(B[0], B[1], zB - dB * e, uB, dB / TILE_CM);
-      const d = mb.v(A[0], A[1], zA - dA * e, uA, dA / TILE_CM);
-      mb.quad(k, a, b, c, d);
+      put(keyOf(bA[i].c, bA[i].sat, lv), tA, tB, dA, dB, depthV);
     }
   }
 
@@ -1221,8 +1298,11 @@ export async function createSoilScene(opts: {
      ⚠ Орчин солигдоход блок дахин баригдана (`rebuild`). */
   type Env = "clean" | "real";
   const envOpts: { id: Env; label: string; note: string }[] = [
-    { id: "clean", label: "Цэвэр дэвсгэр", note: "Зөвхөн хөрсний блок" },
-    { id: "real", label: "Бодит орчин", note: "Хиймэл дагуулын зураг, рельеф, нарны гэрэл" },
+    /* ⚠ Мэргэжлийн нэр томьёо, тайлбаргүй (хэрэглэгч 2026-10-06: "доорх
+       тайлбарыг аваад дээрх нэрийг мэргэжлийн үг хэллэгээр соли").
+       Урьд нь "Цэвэр дэвсгэр" / "Бодит орчин" гэж, доор нь тайлбартай. */
+    { id: "clean", label: "Хөрсний блок диаграм", note: "" },
+    { id: "real", label: "Рельеф ба ортофото", note: "" },
   ];
   const envBox = document.createElement("div");
   envBox.className = "soil-env";
@@ -1237,10 +1317,13 @@ export async function createSoilScene(opts: {
     const t = document.createElement("span");
     t.className = "soil-env-label";
     t.textContent = o.label;
-    const n = document.createElement("span");
-    n.className = "soil-env-note";
-    n.textContent = o.note;
-    b.append(t, n);
+    b.append(t);
+    if (o.note) {
+      const n = document.createElement("span");
+      n.className = "soil-env-note";
+      n.textContent = o.note;
+      b.append(n);
+    }
     b.addEventListener("click", () => setEnv(o.id));
     envBox.append(b);
     return { id: o.id, b };
@@ -1251,8 +1334,11 @@ export async function createSoilScene(opts: {
   surfHead.textContent = "Дээд гадарга";
   envBox.append(surfHead);
   const surfOpts: { id: Surface; label: string; note: string }[] = [
-    { id: "geology", label: "Хөрсний хэв шинж", note: "Бодит гадаргын бүтэцтэй" },
-    { id: "imagery", label: "Хиймэл дагуулын зураг", note: imgCv ? "Зөвхөн зураг" : "Уншигдсангүй" },
+    /* Нэр ХЭВЭЭР (хэрэглэгч 2026-10-06: "ene 2 huuchin nereere"), зөвхөн
+       тайлбар хасагдсан. Тэмдэглэл нь ЗӨВХӨН зураг татагдаагүй үед —
+       тэр нь тайлбар биш төлөв */
+    { id: "geology", label: "Хөрсний хэв шинж", note: "" },
+    { id: "imagery", label: "Хиймэл дагуулын зураг", note: imgCv ? "" : "Уншигдсангүй" },
   ];
   const surfBtns = surfOpts.map((o) => {
     const b = document.createElement("button");
@@ -1261,10 +1347,13 @@ export async function createSoilScene(opts: {
     const t = document.createElement("span");
     t.className = "soil-env-label";
     t.textContent = o.label;
-    const n = document.createElement("span");
-    n.className = "soil-env-note";
-    n.textContent = o.note;
-    b.append(t, n);
+    b.append(t);
+    if (o.note) {
+      const n = document.createElement("span");
+      n.className = "soil-env-note";
+      n.textContent = o.note;
+      b.append(n);
+    }
     b.addEventListener("click", () => setSurface(o.id));
     envBox.append(b);
     return { id: o.id, b };
@@ -1349,6 +1438,19 @@ export async function createSoilScene(opts: {
     ⚠ Худгийн ГҮНИЙГ зурагт гаргаагүй: талбарын жагсаалтыг токеноор
     шалгаагүй тул гүнийн талбарыг таамаглахгүй.
   */
+  /*
+    ⚠⚠ ЖОРЛОН 1:20 000-аас ОЙРТОХОД Л ХАРАГДАНА (хэрэглэгч 2026-10-06:
+    "1:20000 jorlong haruuldag bolgoy"). Урьд нь бүх масштабад алсын шоо
+    болж харагддаг байсан тул хот даяар 145 мянган шоо зураг дарж байв.
+    ⚠ Хязгаар нь БОДИТ масштабаар — зургийн доод буланд гарах "1:N"
+    ({@link onScale}) -тай ижил. Давхаргын `minScale` нь `view.scale`-ыг
+    ашигладаг бөгөөд тэр нь Web Mercator тул Улаанбаатарт бодитоос
+    1/cos(φ) ≈ 1.49 дахин том — хөрвүүлэхгүй бол жорлон 1:13 400-д л
+    гарч ирнэ.
+    ⚠ Бүхээг ↔ шоо солигдох хил (`BOX_SCALE`, доор) хөндөгдөөгүй.
+  */
+  const LATRINE_SCALE = 20000;
+  const LATRINE_VIEW_SCALE = LATRINE_SCALE / mercK(47.92);
   type Overlay = {
     id: string;
     label: string;
@@ -1409,8 +1511,11 @@ export async function createSoilScene(opts: {
   function paintOverlay(o: Overlay) {
     o.btn.classList.toggle("is-on", o.on);
     o.btn.setAttribute("aria-pressed", String(o.on));
-    o.note.textContent = o.busy ? "Ачаалж байна" : o.err;
-    o.note.hidden = !o.busy && !o.err;
+    /* Асаалттай ч масштаб хол бол жорлон харагдахгүй — шалтгааныг хэлнэ,
+       эс тэгвээс товч ажиллахгүй мэт санагдана */
+    const far = o.box && o.on && !o.busy && !o.err && view.scale > LATRINE_VIEW_SCALE;
+    o.note.textContent = o.busy ? "Ачаалж байна" : o.err || (far ? "1:20 000-аас ойртоход харагдана" : "");
+    o.note.hidden = !o.note.textContent;
   }
   overlays.forEach(paintOverlay);
   /* ⚠ Жорлонг ЗАГВАРЫН багцаас (`latrine-sim.bin`): порталын
@@ -1536,6 +1641,13 @@ export async function createSoilScene(opts: {
   });
   const boxLayers: FLayer[] = [];
   const stopWatchers: { remove: () => void }[] = [];
+  /* Жорлонгийн "1:20 000-аас ойртоход" тэмдэглэл масштабаа дагана */
+  stopWatchers.push(
+    reactiveUtils.watch(
+      () => view.stationary && view.scale,
+      () => view.stationary && overlays.forEach(paintOverlay),
+    ),
+  );
   const boxElev = () =>
     REAL ? { mode: "relative-to-ground", featureExpressionInfo: { expression: "0" } } : { mode: "absolute-height" };
   async function toggleOverlay(o: Overlay) {
@@ -1604,6 +1716,7 @@ export async function createSoilScene(opts: {
             popupEnabled: false,
             elevationInfo: boxElev(),
             renderer: classed(cubeSym(farSize(view.scale))),
+            minScale: LATRINE_VIEW_SCALE,
             maxScale: BOX_SCALE,
           });
           await far.load();
@@ -2716,16 +2829,7 @@ function decorate(cls: string, g: CanvasRenderingContext2D) {
         g.restore();
       }
   };
-  if (cls === "Ag" || cls === "Bg")
-    for (let i = 0; i < (cls === "Bg" ? 70 : 40); i++) {
-      const x = R() * TILE_W, y = R() * TILE_H, r = rr(3, 12), a = rr(0, 3);
-      wrap(() => {
-        g.fillStyle = `rgba(${rr(170, 205) | 0},${rr(95, 125) | 0},40,${rr(0.3, 0.6)})`;
-        g.beginPath();
-        g.ellipse(x, y, r, r * rr(0.5, 0.9), a, 0, 7);
-        g.fill();
-      });
-    }
+  /* Глейн толбо — {@link soilTexture} өөрөө зурна */
   if (cls === "Cf")
     for (let i = 0; i < 26; i++) {
       const x = R() * TILE_W, y = R() * TILE_H, l = rr(60, 200), w = rr(1.5, 4.5);

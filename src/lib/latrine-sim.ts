@@ -30,6 +30,7 @@
 import { asset } from "@/lib/base-path";
 import { arcgisJson } from "@/lib/arcgis";
 import { PIT_SERVICE } from "@/lib/toilets";
+import { fetchGeology } from "@/lib/geology";
 
 /* ── Хөрсний ангилал: van Genuchten–Mualem, Carsel & Parrish (1988) ──
    thr, ths, α (1/м), n, Ks (м/өдөр); lamE — E.coli устах+шүүгдэх хурд (1/өдөр) */
@@ -42,7 +43,33 @@ export const TEX: Record<string, Texture> = {
   cloam: { n: "шаварлаг шавранцар", thr: 0.095, ths: 0.41, a: 1.9, vn: 1.31, Ks: 0.0624, lamE: 2.0 },
 };
 
-/** Геологи (UB_ground_classi.shp) → хөрсний ангилал, уст давхаргын K (м/өдөр) */
+/**
+ * Геологи (UB_ground_classi.shp, JICA 2013) → хөрсний ангилал, уст давхаргын K (м/өдөр).
+ *
+ * ⚠⚠ НЕОГЕН ЗАССАН (2026-10-06, хэрэглэгч: "sudalgaani ur dung hudlaa baij
+ * bolohgui"). Урьд нь "Неогений шавар" — шаварлаг шавранцар, K 0.05 м/өдөр.
+ * Гурван бие даасан эх сурвалж түүнийг ЦЭВЭР ШАВАР БИШ гэж хэлнэ:
+ *  · ШУА ГГХ, нүхэн жорлонгийн тайлан (2021), 4.4: плиоцены хурдсыг "улаан
+ *    шар өнгийн шавар, хайрга, элс сул барьцалдсан конглемерат хайрганцар
+ *    элсэнцэр" гэж бичээд нэвчилтийг ДУНД (3/5 — элсэнцэртэй ижил) үнэлсэн;
+ *  · JICA (2013) уг ангийг "Neogene gravel" гэж нэрлэсэн, түүн дээрх өрөмдлөг
+ *    UB_BO_02: 0.2–4 м шавар, элс, чулуутай хайрга, 4–30 м шавартай элсэн
+ *    хайрга, гүний ус 4.7 м (Vol-4 Databook, 1.3.1);
+ *  · Туулын сав газрын гидрогеологи: хайрга, чулууны завсрыг нарийн элс,
+ *    шавар дүүргэж, зарим газар 5–8 м шаварлаг үе үүсгэж хагас даралтат
+ *    нөхцөл бий болгодог (Water 2018, 10(6) 750).
+ * Тиймээс ханаагүй бүсэд элсэнцэр (`sloam`), уст давхаргын K нь шавартай
+ * хайрганы (GC) ердийн 10⁻⁶–10⁻⁵ м/с = 0.09–0.9 м/өдөр мужийн геометр
+ * дундаж ≈ 0.3 м/өдөр.
+ * ⚠ СУУРЬ ЧУЛУУЛАГ ХЭВЭЭР (шавранцар, 0.5): ГГХ-ийн тайлан тунамал
+ * чулуулгийг (C, D, K) "хөнгөн шавранцар"-тай ижил 2/5 гэж үнэлсэн нь одоогийн
+ * сонголттой таарна. Налуу дээрх гэр хорооллын ЧУЛУУЛГИЙН худгуудад нитрат
+ * 64–305 мг/л илэрсэн (Sci. Total Environ. 2021) нь бага K → бага шингэрэл →
+ * өндөр агууламжтай НИЙЦНЭ; хагархайн дагуух хурдан урсгалыг энэ загвар
+ * тусгаагүй (ARGOSS 2001-ийн "bypass flow").
+ * ⚠ 7 = интрузив (боржин, пегматит) — жорлон ДЭЭР нь байхгүй, зөвхөн
+ * зүсэлтийн гүний хэсгийг будахад; ГГХ 1/5 (хамгийн бага).
+ */
 export type Material = { n: string; t: keyof typeof TEX; Kaq: number; col: string; tex: string };
 export const MATS: Material[] = (
   [
@@ -51,8 +78,9 @@ export const MATS: Material[] = (
     { n: "Дэнжийн хурдас (хайрга)", t: "sand", Kaq: 20, col: "#d3c095" },
     { n: "Нуранги хурдас (сайр, чулуу)", t: "lsand", Kaq: 5, col: "#b9a27c" },
     { n: "Эолын элс", t: "lsand", Kaq: 5, col: "#e3d3a8" },
-    { n: "Неогений шавар", t: "cloam", Kaq: 0.05, col: "#b07a5a" },
+    { n: "Неогений хурдас (шавартай хайрга, элс)", t: "sloam", Kaq: 0.3, col: "#b98a62" },
     { n: "Суурь чулуулаг (өгөршсөн, хагархай)", t: "loam", Kaq: 0.5, col: "#8f877c" },
+    { n: "Интрузив чулуулаг (боржин)", t: "cloam", Kaq: 0.05, col: "#a0918a" },
   ] as const
 ).map((m) => ({ ...m, tex: TEX[m.t].n }));
 
@@ -131,7 +159,17 @@ async function loadSim(): Promise<SimData> {
   };
   const idb = blk("id");
   const id = new Int32Array(buf, idb.offset, idb.count);
-  const { lon, lat } = await fillCoords(id);
+  const [{ lon, lat }, geo] = await Promise.all([fillCoords(id), fetchGeology().catch(() => null)]);
+  /* ⚠ КОДГҮЙ олон өнцөгт дээрх жорлонг геологийн ангиллаар (`NEWID`) нь —
+     бэлтгэгч нь тэднийг оноогоор таамагласан байв (~6% нь зөрсөн) */
+  const mat = u8("mat");
+  const gcode = u8("gcode");
+  if (geo && h.gcodes[0] === "")
+    for (let i = 0; i < h.n; i++) {
+      if (gcode[i] !== 0 || Number.isNaN(lon[i])) continue;
+      const m = geo.at(lon[i], lat[i]);
+      if (m != null && m < 7) mat[i] = m;
+    }
   const tiles: Record<string, Blob> = {};
   for (const b of h.blocks) if (b.name.startsWith("tile")) tiles[b.name.slice(4)] = new Blob([u8(b.name)], { type: "image/jpeg" });
   return {
@@ -144,12 +182,12 @@ async function loadSim(): Promise<SimData> {
     pit: u8("pit"),
     src: u8("src"),
     nwell: u8("nwell"),
-    mat: u8("mat"),
+    mat,
     dens: u8("dens"),
     soil: u8("soil"),
     valley: u8("valley"),
     kh: u8("kh"),
-    gcode: u8("gcode"),
+    gcode,
     profiles: h.profiles,
     khList: h.khList,
     gcodes: h.gcodes,
