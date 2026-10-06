@@ -185,6 +185,81 @@ export type LayerSet = {
    */
   skipField?: RegExp;
   /**
+   * ДИАГРАМ, ШОШГОНД ОРОХГҮЙ талбар — ДАВХАРГА ТУС БҮРЭЭР.
+   *
+   * {@link skipField}-ээс ялгаатай нь талбар ТАТАГДСААР байж,
+   * бичлэгийн цонхонд харагдсаар байна — зөвхөн диаграм, газрын
+   * зургийн шошго түүнийг хэрэглэхгүй.
+   *
+   * Хэрэгцээ нь эх сурвалжийн ХУУЛБАР багана (2026-10-06, ойн долоон
+   * давхаргыг токеноор шалгасны дараа): нэг зүйлийг латин ба кирилл,
+   * кодтой ба кодгүй, жагсаалт ба 0/1 тэмдэглэгээ гэж ХОЁР газар
+   * бичдэг. Хуулбарын шалгуур аль нэгийг нь үлдээдэг ч ЗӨВИЙГ нь
+   * сонгох баталгаагүй — ойн ялгарал дээр латиныг нь ("tarmag mod")
+   * сонгож байв. Аль нь эрх мэдэлтэй болохыг эх сурвалжийн эзэн
+   * мэднэ тул бүртгэлд сууна.
+   *
+   * ⚠ Түлхүүр нь ДАВХАРГЫН нэр: нэг талбарын нэр (`name`) өөр
+   * давхаргад өөр утгатай байдаг.
+   */
+  chartSkip?: Readonly<Record<string, RegExp>>;
+  /**
+   * ХӨНДЛӨН ХҮСНЭГТИЙН ХОС — давхарга тус бүрээр `[мөр, багана]`
+   * талбарын нэр ({@link LayerSet.tidy} бүрдэлд).
+   *
+   * Өгөөгүй бол анхдагч дүрэм: хоёроос найман утгатай, НЭГ утгат
+   * эхний хоёр тоолол. Тэр нь ТХГН дээр "ТХГН ангилал × Түвшин"
+   * болж, 42-оос 26 нь "Бүртгэгдээгүй" мөрөнд унаж байв (хэрэглэгч
+   * 2026-10-06-нд "Түвшин × Дүүрэг"-ийг сонгов).
+   *
+   * ⚠ МӨР нь олон утгат байж БОЛНО (нэг ТХГН хоёр дүүрэгт хамаарна):
+   * баганын нийтийг давхардалгүй бүртгэлээр тоолно. Багана нь ЗААВАЛ
+   * нэг утгат — эс тэгвээс мөрийн нийт ч давхарна.
+   */
+  cross?: Readonly<Record<string, readonly [string, string]>>;
+  /**
+   * ҮЗҮҮЛЭЛТИЙН ЗУРВАС — НЭГ ДАВХАРГЫГ ХОЁР БҮЛЭГТ хуваана
+   * (хэрэглэгч 2026-10-06, ойн хэлтэс: "индикаторт нийт хэдэн ТХГН
+   * байгаа болон тэдгээрт хамаарах газруудын тоо, талбай нь л байхад
+   * болно. Индикатор жижигрүүл").
+   *
+   * `field` бөглөгдсөн бүртгэл нь `filled` бүлэг, хоосон нь `empty`.
+   * ТХГН дээр: ангилалтай 16 (ДЦГ, БЦГ, БНГ…) ба ангилалгүй, дүүргийн
+   * ИТХ-аар хамгаалалтад авсан 26 газар — 2026-10-06-нд 42 мөрийг
+   * бүтнээр нь уншиж, хэрэглэгч энэ хуваалтыг сонгосон.
+   *
+   * `layer` асаалттай үед зурвас ЗӨВХӨН гурван нүдтэй: хоёр бүлгийн тоо
+   * (талбайтай нь) ба нийт талбай. Унтраалттай үед ердийн зурвас.
+   * ⚠ Өгсөн бүрдэлд зурвас ЖИЖИГ хэлбэртэй (`is-compact`).
+   * ⚠ Тоо нь ШҮҮЛТИЙГ дагана — диаграмтай зөрөх ёсгүй.
+   */
+  overviewSplit?: {
+    layer: string;
+    field: string;
+    filled: string;
+    empty: string;
+  };
+  /**
+   * ДАВХАРГЫН НЭГДСЭН КАРТ хүснэгтийн оронд ЗУРВАСААР ({@link LayerSet.tidy}
+   * бүрдэлд). Тэнхлэг сэлгэгч хэвээр; мөр бүр тоогоо зурвасаар, нийлсэн
+   * хэмжилтийг (га) ард нь бүдэг бичвэрээр харуулна.
+   *
+   * Ойн хэлтэс (2026-10-06): хэрэглэгч хүснэгтийг "их төвөгтэй" гэж
+   * үзээд энэ хувилбарыг сонгосон, нэг удаа хүснэгт рүү буцаагаад
+   * дахин энэ рүү сэргээв. Ногоон бүсийн хүснэгт ХӨНДӨГДӨӨГҮЙ.
+   */
+  axisBars?: boolean;
+  /**
+   * ГАНЦ КАРТТАЙ ДАВХАРГА БАГАНАА ДҮҮРГЭНЭ — карт `max-content`-оор
+   * таглагдахгүй, зурвасын мөрүүд өндрийг хуваалцаж томорно.
+   *
+   * Ойн хэлтэс (хэрэглэгч 2026-10-06, ойн төлбөрийн картыг заан: "энэ
+   * зайнд таарсан байдлаар хийгээрэй"): тав, долоон мөртэй карт
+   * баганын дээд 250px-д суугаад доор нь бүтэн дэлгэцийн хоосон зай
+   * үлдэж байв. Ногоон бүс ХӨНДӨГДӨӨГҮЙ.
+   */
+  fillSolo?: boolean;
+  /**
    * ДИАГРАМЫН ЦЭГЦ — бодит датан дээр илэрсэн гурван шуугианыг цэвэрлэнэ
    * (2026-09-25, ногоон бүсийн 18 давхаргыг токеноор шалгасны дараа).
    *
@@ -207,8 +282,27 @@ export type LayerSet = {
    * ⚠ Бүртгэлийн тэмдэг болгосон нь санаатай: эдгээр нь хуваалцсан
    * хөдөлгүүрийн зан төлөвийг өөрчилдөг тул ой, амьтан, үнэлгээний
    * хэлтсийг ХӨНДӨХГҮЙ. Тэдгээр дээр шалгаж баталсны дараа асаана.
+   * ✅ Ойн хэлтэст 2026-10-06-нд асаав (хэрэглэгчийн сонголт).
+   *
+   * ⚠ БҮСИЙН онцлогууд (нэгж талбарын давхцал, бүсийн тойм карт) энд
+   * БИШ — {@link LayerSet.zones}.
    */
   tidy?: boolean;
+  /**
+   * ДАВХАРГУУД нь БҮС — олон өнцөгт бүрийн нэгж талбарын давхцлыг
+   * сервер тоолж, бүсийн тойм карт (талбай · давхцах нэгж талбар)
+   * гаргаж, "Нэгж талбар" товч нь ДАВХЦСАН нэгж талбарыг бүхэлд нь
+   * улаанаар татна.
+   *
+   * ⚠⚠ `tidy`-аас САЛСАН (2026-10-06). Урьд нь тэр тугтай хамт асдаг
+   * байсан тул ойн хэлтэст `tidy` асаахад 7,699 хэсэглэлийн геометрийг
+   * давхцлын асуулгаар илгээж, хэдэн арван мянган нэгж талбар татах
+   * байв. Тэгээд ч ойн долоон давхарга нь нэг системийн БҮС биш
+   * (тусгай хамгаалалт, төлбөр, хэсэглэл …) — тэдний талбайг нэмж
+   * "нийт га" гэх нь утгагүй.
+   * Зөвхөн ногоон бүсийн хэлтэст.
+   */
+  zones?: boolean;
   /**
    * ҮЗҮҮЛЭЛТИЙН ЗУРВАС ГАРАХ ЭСЭХ (анхдагчаар гарна).
    *
@@ -379,6 +473,36 @@ export type LayerSet = {
    */
   valueHues?: Record<string, Record<string, number>>;
   /**
+   * ЗУРГИЙГ АЛЬ ТАЛБАРААР БУДАХ — давхарга → талбарын нэр.
+   *
+   * Анхдагчаар эхний нэг утгат тоолол (ТХГН дээр "Түвшин"). Албан
+   * тэмдэглэгээтэй ангилал байвал (ТХГН-ийн улсын сүлжээний зураг:
+   * дархан цаазат ягаан, цогцолбор ногоон, нөөц улбар шар, дурсгалт
+   * нил ягаан) тэр талбарыг заана. Хэрэглэгч диаграмын палитрын
+   * товчоор сэлгэж болсоор байна.
+   */
+  colorFields?: Record<string, string>;
+  /**
+   * БИЧЛЭГИЙН ЦОНХНЫ ДИАГРАМ — давхарга → хэмжилтийн бүлгүүд.
+   *
+   * Бүлэг бүр нэг хэмжилтийг ОН ТУС БҮРЭЭР зурвас болгоно (`years`),
+   * нийт нь толгойд (`total`). Ойн төлбөр (хэрэглэгч 2026-10-06: "мод
+   * бэлтгэсэн талбай, бэлтгэсэн мод, төлбөр нтр чартаар харагдахгүй
+   * юу" → "энэ цонхонд"): арван хоёр мөр тоо гурван жижиг диаграм
+   * болно.
+   * ⚠ Диаграмд орсон талбарууд доорх жагсаалтаас ХАСАГДАНА — нэг тоо
+   * хоёр газар гарахгүй. Үлдсэн талбар (дүүрэг, хороо …) хэвээр.
+   * ⚠ Хоосон он "—", зурвасгүй — "0" БИШ.
+   */
+  recordCharts?: Record<
+    string,
+    readonly {
+      label: string;
+      total?: string;
+      years: readonly { label: string; field: string }[];
+    }[]
+  >;
+  /**
    * БИЧЛЭГ гэж юуг нэрлэх вэ.
    *
    * ⚠ Ерөнхий хөдөлгүүр "бичлэг" гэж бичдэг нь техникийн үг: булгийн
@@ -419,6 +543,68 @@ export type LayerSet = {
    * ХЭЛТСИЙН бүртгэлд сууна (`skipMeasure`-тэй нэг зарчим).
    */
   areaHa?: Record<string, string>;
+  /**
+   * ТАЛБАЙ ОГТ ТООЦОХГҮЙ ДАВХАРГА.
+   *
+   * Гектарын баганагүй давхаргад талбай `SHAPE__Area`-аас (Web
+   * Mercator, ~2.2 дахин хөөрөгдсөн) гардаг. Дүрс нь өөрөө хэмжигдэхүүн
+   * БИШ үед (ойн төлбөрийн давхаргын олон өнцөгт нь ДҮҮРГИЙН бүтэн
+   * хил) тэр тоо утгагүй: "Талбай, га 473,564" гэж үзүүлэлтэд, "дүрс
+   * тус бүрээр" картад гарч байв (хэрэглэгч 2026-10-06: "энэ цонхыг
+   * засъя").
+   */
+  noArea?: readonly string[];
+  /**
+   * "ТАЛБАЙ, ГА — ДҮРС ТУС БҮРЭЭР" КАРТ ГАРАХГҮЙ ДАВХАРГА.
+   *
+   * Тэр карт нь цөөн нэргүй бүстэй давхаргад зориулагдсан (ногоон
+   * бүсийн хориглолтын 18 бүс). Мянга мянган нэргүй полигонтой
+   * давхаргад (ойн ялгарал 6,264, хэсэглэл 7,699) "№ 64 = 146 га"
+   * гэсэн дугаарын жагсаалт болж юу ч хэлэхгүй. Талбай нь индикатор,
+   * задаргааны нэмэлт утгад ХЭВЭЭР.
+   */
+  noShapeArea?: readonly string[];
+  /**
+   * ХЭМЖИЛТ ТУС БҮР ӨӨРИЙН КАРТ — давхаргын БҮХ диаграмыг орлоно.
+   *
+   * `by` талбараар задалж, карт бүр нэг хэмжилтийг харуулна. `years`
+   * өгвөл ангилал бүрт он тус бүрийн ЗЭРЭГЦЭЭ зурвас (`compare`),
+   * эрэмбэ нь `field` (нийт) баганаар; өгөхгүй бол нийтийн ганц зурвас.
+   * ⚠ "Нийт · 2023 · …" СЭЛГЭГЧ байсан — хэрэглэгч "чартаа сайжруул"
+   * гэхэд гурван хувилбараас зэрэгцээ зурвасыг сонгосон тул кодоос
+   * устсан (2026-10-06).
+   *
+   * Ойн төлбөр (хэрэглэгч 2026-10-06: "дүүрэг бүрийн мод бэлтгэсэн
+   * талбай, бэлтгэсэн модны хэмжээ, төлбөр гэх attribute дээрх бүх
+   * мэдээлэл чартаар харагдана"): гурван карт.
+   *
+   * ⚠ Яагаад тусдаа сонголт вэ: эх сурвалж оны багана бичсэн үед
+   * хөдөлгүүр "нийт" баганыг харьцуулалтаас ХАСДАГ, 9 мөрөнд 9 дүүрэг
+   * тул дүүрэг тооллын ангилал болдоггүй, мөн `pickMeasures` нь 12
+   * хэмжилтээр хязгаарлагддаг (энэ давхарга 14 тоон баганатай).
+   * ⚠ Хэмжилтийг бүртгэлийн заасан БАГАНААС шууд уншина. Нэрийг мөн
+   * бүртгэл өгнө — эх сурвалжийн alias-аас ("мян.₮ нийт") угсрахгүй.
+   * ⚠ Багана нь олдохгүй карт, он ЧИМЭЭГҮЙ алгасагдана.
+   */
+  measureCards?: Record<
+    string,
+    {
+      by: string;
+      /**
+       * Он тус бүрийн хэсгүүдийг НЭГ зурваст давхарлана (хэрэглэгч
+       * 2026-10-06: "дахиад өөрчил" → "оноор давхарласан зурвас").
+       * Өгөхгүй бол зэрэгцээ зурвас.
+       */
+      stacked?: boolean;
+      cards: readonly {
+        /** Гарчиг — "Мод бэлтгэсэн талбай, га" */
+        label: string;
+        /** Нийт дүнгийн багана — ангиллын эрэмбэ, толгойн дүн */
+        field: string;
+        years?: readonly { label: string; field: string }[];
+      }[];
+    }
+  >;
 };
 
 /** Давхаргын харагдах нэр — бүртгэлд байхгүй бол үйлчилгээнийхээр */
@@ -716,9 +902,11 @@ async function loadLayerInfo(
      `SHAPE__Area` рүү УНАХГҮЙ: тэр цэгэн давхаргад алга,
      байсан ч 2.2 дахин хөөрөгдсөн тул хоёр алдаа нэмэгднэ */
   const ambiguous = !hectare && haFields.length > 1;
-  const areaField = ambiguous
-    ? null
-    : (hectare?.name ?? shapeArea?.name ?? null);
+  /* Бүртгэл талбайг хаасан ({@link LayerSet.noArea}) */
+  const areaField =
+    ambiguous || set.noArea?.includes(id)
+      ? null
+      : (hectare?.name ?? shapeArea?.name ?? null);
   /** Талбайн багана нь гектараар бичигдсэн эсэх (эс бөгөөс м²) */
   const areaInHa = Boolean(hectare);
 
@@ -968,7 +1156,8 @@ export type ChartKind =
   /** Огнооны талбарын САРЫН хуваарилалт */
   | "month";
 
-type Datum = { key: string; label: string; value: number };
+/** `missing` — бөглөгдөөгүй, "тэг" БИШ (харьцуулалтын цувааны нүд) */
+type Datum = { key: string; label: string; value: number; missing?: boolean };
 type Group = { key: string; label: string; total: number; rows: Datum[] };
 
 /** Нэг бичлэгийн атрибутууд */
@@ -1003,6 +1192,14 @@ export type Breakdown = {
   /** Бүлэглэх талбарын нэр */
   label: string;
   kind: ChartKind;
+  /**
+   * Харьцуулалтын (`compare`) цуваануудын НИЙТЛЭГ нэр — "Мод бэлтгэсэн
+   * талбай" (цуваа нь "2023", "2024" …). Гарчигт "Харьцуулалт"-ын оронд
+   * гарна; нийтлэг хэсэггүй бол хоосон.
+   */
+  subject?: string;
+  /** Харьцуулалтыг ОНООР ДАВХАРЛАСАН зурвасаар зурах ({@link LayerSet.measureCards}-ийн `stacked`) */
+  stack?: boolean;
   /**
    * Хэмжигдэхүүний нэр — ангиллаас ӨӨР талбар хэмжигдэж байвал.
    *
@@ -2474,22 +2671,45 @@ function measureCharts(
     const list = dated.length >= 2 ? dated : all;
 
     const names = trimShared(list.map((m) => m.name));
+    /* Цуваануудын НИЙТЛЭГ нэр ("Мод бэлтгэсэн талбай") — гарчигт
+       "Харьцуулалт"-ын оронд ({@link Breakdown.subject}). Нийтлэг хэсэг
+       байхгүй бол `undefined` */
+    const subject =
+      names[0] !== list[0].name
+        ? list[0].name.slice(0, list[0].name.length - names[0].length).trim()
+        : undefined;
 
     const count = (rs: Row[]): Counted => {
       const rolled = list.map((m) => rollUp(m, rs, keyOf));
       const keep = topOf(rolled[0]);
-      const lead = cutTo(rolled[0], keep);
+      /* ⚠ Бүлэг нь БҮХ цуваанаас (2026-10-06): зөвхөн эхнийхээс (2023)
+         авбал тэр онд хоосон боловч дараа нь утгатай ангилал
+         диаграмаас ОГТ алга болно. Эхний цуваанд байхгүй нь араас нь,
+         тэг утгатай */
+      const seen = new Set(rolled[0].map((d) => d.key));
+      const later = rolled
+        .slice(1)
+        .flat()
+        .filter((d) => !seen.has(d.key) && Boolean(seen.add(d.key)))
+        .map((d) => ({ key: d.key, label: d.label, value: 0 }));
+      const lead = [...cutTo(rolled[0], keep), ...later];
       return {
         values: lead,
         groups: lead.map((d) => ({
           key: d.key,
           label: d.label,
           total: d.value,
-          rows: list.map((m, i) => ({
-            key: `${d.key}·${m.field.name}`,
-            label: names[i],
-            value: rolled[i].find((v) => v.key === d.key)?.value ?? 0,
-          })),
+          rows: list.map((m, i) => {
+            /* `rollUp` нь зөвхөн БӨГЛӨГДСӨН утгатай ангиллыг буцаана —
+               олдохгүй бол тэр он хоосон, "тэг" БИШ ({@link Datum.missing}) */
+            const hit = rolled[i].find((v) => v.key === d.key);
+            return {
+              key: `${d.key}·${m.field.name}`,
+              label: names[i],
+              value: hit?.value ?? 0,
+              ...(hit ? null : { missing: true }),
+            };
+          }),
         })),
       };
     };
@@ -2500,6 +2720,7 @@ function measureCharts(
       label: by.alias,
       kind: "compare",
       measure: list.some((m) => m.approx) ? `${unit} ≈` : unit,
+      subject,
       top: cutsAt(list[0]),
       keyOf,
       recount: count,
@@ -2737,9 +2958,122 @@ function nameField(
  *
  * Бүгд эх сурвалжийн ТӨРЛӨӨС гарна — талбарын нэр кодод бичигдээгүй.
  */
-export function breakdowns(info: LayerInfo, data: LayerFeatures): Breakdown[] {
+/**
+ * ХЭМЖИЛТ ТУС БҮР ӨӨРИЙН КАРТ ({@link LayerSet.measureCards}).
+ *
+ * Бөглөгдөөгүй нүд нь `rollUp`-д орохгүй тул тэр хугацаанд утгагүй
+ * дүүрэг жагсаалтад гарахгүй — "0" гэж худал бичигдэхгүй.
+ */
+function measureCardCharts(info: LayerInfo, rows: Row[]): Breakdown[] {
+  const spec = info.set.measureCards?.[info.id];
+  if (!spec) return [];
+  const by = info.fields.find((f) => f.name === spec.by);
+  if (!by) return [];
+  const keyOf = (row: Row) => [categoryKey(row[by.name])];
+
+  /* Бүртгэлийн заасан баганыг шууд уншина — `pickMeasures`-ийн 12
+     хэмжилтийн хязгаар, `skipUnit` энд хамаарахгүй */
+  const measureOf = (name: string): Measure | null => {
+    const field = info.fields.find((f) => f.name === name);
+    if (!field || !NUMERIC.test(field.type)) return null;
+    return {
+      field,
+      unit: "",
+      name: field.alias,
+      share: false,
+      read: numberOf,
+      approx: false,
+      values: [],
+    };
+  };
+
+  return spec.cards.flatMap((card): Breakdown[] => {
+    const main = measureOf(card.field);
+    if (!main) return [];
+    const years = (card.years ?? []).flatMap((y) => {
+      const m = measureOf(y.field);
+      return m ? [{ label: y.label, m }] : [];
+    });
+
+    /*
+      ⚠⚠ ОН ТУС БҮРИЙН ЗЭРЭГЦЭЭ ЗУРВАС (хэрэглэгч 2026-10-06: "чартаа
+      сайжруул" → гурван хувилбараас). Дүүрэг бүрт 2023 · 2024 · 2025
+      гурван зурвас зэрэг — сэлгэгч хэрэггүй, `compare` (бүлэглэсэн
+      хэвтээ багана) хэлбэрээр зурагдана. Эрэмбэ нь НИЙТ баганаар.
+      ⚠ Нийтэд байхгүй ч аль нэг онд утгатай ангилал араас нь орно.
+      ⚠ Хоосон он `missing` — "—", зурвасгүй ("0" БИШ).
+    */
+    const count = (rs: Row[]): Counted => {
+      const totals = rollUp(main, rs, keyOf);
+      const rolled = years.map((y) => rollUp(y.m, rs, keyOf));
+      const seen = new Set(totals.map((d) => d.key));
+      const later = rolled
+        .flat()
+        .filter((d) => !seen.has(d.key) && Boolean(seen.add(d.key)))
+        .map((d) => ({ key: d.key, label: d.label, value: 0 }));
+      const lead = [...totals, ...later];
+      return {
+        values: lead,
+        groups: years.length
+          ? lead.map((d) => ({
+              key: d.key,
+              label: d.label,
+              total: d.value,
+              rows: years.map((y, i) => {
+                const hit = rolled[i].find((v) => v.key === d.key);
+                return {
+                  key: `${d.key}·${y.m.field.name}`,
+                  label: y.label,
+                  value: hit?.value ?? 0,
+                  ...(hit ? null : { missing: true }),
+                };
+              }),
+            }))
+          : undefined,
+      };
+    };
+    /* Гарчиг: "Мод бэлтгэсэн талбай" (`subject`) + "га" (`measure`,
+       зурвасын дээр нэгж болж гарна) — сүүлийн таслалаар хуваана */
+    const cut = card.label.lastIndexOf(", ");
+    const subject = cut > 0 ? card.label.slice(0, cut) : card.label;
+    const unit = cut > 0 ? card.label.slice(cut + 2) : "";
+    return [
+      {
+        id: `card:${card.field}:${by.name}`,
+        field: by.name,
+        label: by.alias,
+        kind: years.length ? "compare" : "sum",
+        subject: years.length ? subject : undefined,
+        stack: years.length > 0 && spec.stacked === true,
+        measure: years.length ? unit : card.label,
+        keyOf,
+        recount: count,
+        ...count(rows),
+      },
+    ];
+  });
+}
+
+/**
+ * Диаграм, шошгонд хэрэглэх талбарууд ({@link LayerSet.chartSkip}-ийг
+ * хассан). Бичлэгийн цонх `info.fields`-ийг шууд уншдаг тул хөндөгдөхгүй.
+ */
+function chartInfo(info: LayerInfo): LayerInfo {
+  const skip = info.set.chartSkip?.[info.id];
+  if (!skip) return info;
+  return {
+    ...info,
+    fields: info.fields.filter((f) => !skip.test(f.name)),
+  };
+}
+
+export function breakdowns(full: LayerInfo, data: LayerFeatures): Breakdown[] {
+  const info = chartInfo(full);
   const rows = Object.values(data.rows);
   if (!rows.length) return [];
+
+  const cards = measureCardCharts(info, rows);
+  if (cards.length) return cards;
 
   /* ---- 1. Ангилал ---- */
   const cats: Candidate[] = [];
@@ -2758,10 +3092,16 @@ export function breakdowns(info: LayerInfo, data: LayerFeatures): Breakdown[] {
       ⚠ ХУАНЛИЙН талбарыг АВАХГҮЙ: он, сар нь аль хэдийн хугацааны
       цуваа болдог тул ангилал болговол нэг зүйл хоёр диаграм болно.
     */
+    /* ⚠⚠ ДУГААР ОРОХГҮЙ (2026-10-06): ойн хэсэглэлийн `gid` нь 0 ба
+       88 гэсэн ХОЁР утгатай тул ангилал болж, жинхэнэ "Нэр" диаграмыг
+       хуулбарын шалгуураар шахаж гаргаж байв. Хэмжилтийн зам аль
+       хэдийн `ID_FIELD`-ийг шалгадаг — энэ зам мартсан байв. */
     const band =
       !text &&
       info.set.tidy === true &&
       NUMERIC.test(f.type) &&
+      !ID_FIELD.test(f.name) &&
+      !ID_FIELD.test(f.alias) &&
       (() => {
         const nums = rows
           .map((r) => numberOf(r[f.name]))
@@ -3070,7 +3410,9 @@ export type LayerLabels = {
  */
 const LABEL_MAX = 40;
 
-export function labelParts(info: LayerInfo, data: LayerFeatures): LayerLabels {
+export function labelParts(full: LayerInfo, data: LayerFeatures): LayerLabels {
+  /* Шошго диаграмтай НЭГ эх сурвалжаас — хасагдсан талбар энд ч орохгүй */
+  const info = chartInfo(full);
   const rows = Object.values(data.rows);
   if (!rows.length) return { name: null, measure: null };
 

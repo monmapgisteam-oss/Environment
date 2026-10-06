@@ -1401,6 +1401,170 @@
   color: var(--moss);
   font-weight: 600;
 }
+/*
+  ОНООР ДАВХАРЛАСАН ЗУРВАС (`StackedBarChart`, ойн төлбөр, 2026-10-06).
+  Нэр · зурвас · нийт НЭГ эгнээнд: нэрийн багана ТОГТМОЛ (зурвасууд нэг
+  цэгээс эхэлж урт нь харьцуулагдана), утгын багана ТОГТМОЛ.
+  Хэсгүүдийн хооронд 1px цоорхой — хөрш онуудын хил тод.
+*/
+.stacked-chart {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.stacked-chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  margin-bottom: 6px;
+  font-size: 10.5px;
+  color: var(--ink-2);
+}
+.stacked-chart-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.stacked-chart-legend i {
+  width: 8px;
+  height: 8px;
+  border-radius: 1px;
+}
+/* Тайлбар нь оны шүүлт: товч боловч ЧИП биш — хүрээгүй, зөвхөн
+   унтарсан он бүдгэрнэ. Хүрээтэй товч болговол тайлбар биш удирдлагын
+   эгнээ мэт уншигдаж, картын толгойтой өрсөлдөнө. */
+.stacked-chart-key {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 4px;
+  margin: -2px -4px;
+  border-radius: 2px;
+  color: inherit;
+  cursor: pointer;
+}
+.stacked-chart-key:hover { background: var(--paper-hi); }
+.stacked-chart-key:focus-visible { outline: 1px solid var(--line-2); }
+.stacked-chart-key.is-off { opacity: .4; }
+.stacked-chart-key.is-off i { background: transparent !important; box-shadow: inset 0 0 0 1px var(--ink-3); }
+.stacked-chart-row {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr) 64px;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 6px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  text-align: left;
+  transition:
+    background 150ms,
+    opacity 150ms;
+}
+.stacked-chart-row:not(:disabled):hover {
+  background: var(--paper-3);
+}
+.stacked-chart-row.is-selected {
+  border-color: color-mix(in oklab, var(--moss) 25%, transparent);
+  background: color-mix(in oklab, var(--moss) 7%, var(--paper-2));
+}
+.stacked-chart-label {
+  overflow: hidden;
+  font-size: 11.5px;
+  color: var(--ink-2);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.stacked-chart-track {
+  display: flex;
+  gap: 1px;
+  height: 10px;
+  overflow: hidden;
+  border-radius: 3px;
+  background: var(--paper-hi);
+}
+.stacked-chart-track span {
+  height: 100%;
+}
+/* Хэсэг дээрх утга (`labels`) — зурвас 16px, тоо дотроо голлоно.
+   ⚠ Өнгө нь БАРААН: хэсгүүд цайвараас дунд ногоон хүртэл тул цагаан
+   тоо эхний (цайвар) хэсэгт уусна. */
+.stacked-chart.is-labeled .stacked-chart-track {
+  height: 16px;
+}
+.stacked-chart.is-labeled .stacked-chart-track span {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  font-size: 10px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  white-space: nowrap;
+  color: #0b1a14;
+}
+.stacked-chart-value {
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+  text-align: right;
+}
+/* Нэрийн доорх нэмэлт утга ("174 га") — `BarChart sub` */
+.bar-chart-ticks em {
+  display: block;
+  margin-top: 2px;
+  font-style: normal;
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/*
+  КАРТАА ДҮҮРГЭСЭН БОСОО БАГАНА (`BarChart fill`, ойн хэлтэс,
+  2026-10-06). Хэвтээ зурвас өндөр картад тарж хоосон зай үлдээж байсан
+  ("арай дэндүү" → "өөрчлөөд үзээдээ"); босоо багана өндрийг шууд
+  ашиглана. Тэнхлэг гарахгүй — утга нь баганын орой дээр.
+*/
+.bar-chart.is-fill {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+}
+.bar-chart.is-fill .bar-chart-layout {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.bar-chart.is-fill .bar-chart-layout > .min-w-0 {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+}
+.bar-chart.is-fill .bar-chart-plot {
+  flex: 1 1 auto;
+  min-height: 160px;
+}
+.bar-chart.is-fill .bar-chart-fill {
+  max-width: 56px;
+}
+.bar-chart.is-fill .bar-chart-value {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.bar-chart.is-fill .bar-chart-ticks {
+  padding-top: 8px;
+  font-size: 11px;
+  color: var(--ink-2);
+}
+.bar-chart.is-fill .bar-chart-ticks em {
+  color: var(--ink-3);
+  font-size: 10.5px;
+}
 /* Зурвасын диаграм НЯГТ (хэрэглэгч 2026-09-17): мөр хоорондын зай, дотоод зай, толгой–зурвасын завсар бүгд хагасаар багассан */
 .row-chart {
   display: flex;
@@ -1768,6 +1932,42 @@
   font-variant-numeric: tabular-nums;
   overflow-wrap: anywhere;
 }
+/* Тооны ард бүдэг нэмэлт утга — ТХГН-ийн бүлгийн талбай */
+.analytics-stat-sub {
+  margin-left: 8px;
+  font-size: 11.5px;
+  font-weight: 400;
+  letter-spacing: 0;
+  color: var(--ink-3);
+}
+/*
+  ⚠ ЖИЖИГ ЗУРВАС (`LayerSet.overviewSplit`, ойн хэлтэс, 2026-10-06:
+  "индикатор жижигрүүл"). Ердийн нүд ~68px өндөртэй; энд ~46px —
+  зураг, диаграмд ~22px буцаана. Бичвэр 10px-ээс доош БУУХГҮЙ
+  (`ink-3`-ийн контрастын дүрэм).
+*/
+.analytics-overview.is-compact {
+  gap: 8px;
+}
+.analytics-overview.is-compact .analytics-stat {
+  gap: 10px;
+  padding: 6px 12px;
+}
+.analytics-overview.is-compact .analytics-stat-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+}
+.analytics-overview.is-compact .analytics-stat-icon svg {
+  width: 16px;
+  height: 16px;
+}
+.analytics-overview.is-compact .analytics-stat-label {
+  margin-bottom: 1px;
+}
+.analytics-overview.is-compact .analytics-stat-value {
+  font-size: 17px;
+}
 /*
   ⚠⚠ КАРТЫН ЧИМЭГ ШАХАГДСАН (2026-09-28/29, хэрэглэгч: "ийм title
   картын өндрийг багасга" → "чартуудыг scroll-дох шаардлагагүй шууд
@@ -1782,12 +1982,22 @@
   ⚠ Хэвтээ зай 12px-ээс доош БУУРАХГҮЙ: бичвэр картын ирмэгт наалдах
   ёсгүй.
 */
+/*
+  ⚠⚠ БАГАНА НАРИЙСАХАД БИЧВЭР ДАВХЦАХГҮЙ (хэрэглэгч, 2026-10-06:
+  "resize хийхэд текст нь давхцахгүй шүү"). Гарчиг `min-width: 0`
+  байсан тул хамгийн урт ҮГЭЭСЭЭ ч нарийсч, "ТҮВШИН" нь хажуугийн
+  "42 бүртгэл · 3 ангилал" дээгүүр хальж байв. Одоо гарчиг хамгийн
+  урт үгээсээ нарийсахгүй (`min-content`), багтахгүй үед толгойн
+  хэсгүүд ДАРААГИЙН МӨР рүү шилжинэ (`flex-wrap`). Өргөн үед
+  харагдац өөрчлөгдөхгүй — шилжилт зөвхөн дутуу зайд үүснэ.
+*/
 .analytics-chart-head {
   display: flex;
+  flex-wrap: wrap;
   flex-shrink: 0;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
+  gap: 6px 10px;
   padding: 9px 12px;
   border-bottom: 1px solid var(--line);
 }
@@ -1803,7 +2013,7 @@
   ⚠ Үсгийн хэмжээ, жин ХЭВЭЭР (12px / 600).
 */
 .analytics-chart-head h2 {
-  min-width: 0;
+  min-width: min-content;
   flex: 1;
   font-size: 12px;
   font-weight: 600;
@@ -1880,6 +2090,55 @@
   .analytics-chart-body {
     flex: 1 1 auto;
   }
+  /*
+    ⚠⚠ ДАН КАРТ БАГАНАА ДҮҮРГЭНЭ (`LayerSet.fillSolo`, ойн хэлтэс,
+    2026-10-06: "энэ зайнд таарсан байдлаар хийгээрэй"). Дээрх
+    `max-content` таглаа нь олон картыг ХУВААЛЦАХ үед хоосон зай
+    үүсгэхгүйн тулд; ганц карт байхад тэр нь баганын доод талыг бүхэлд
+    нь хоосон үлдээж байв.
+  */
+  .analytics-chart-card.is-fill {
+    max-height: none;
+  }
+  .analytics-chart-card.is-fill .analytics-chart-body {
+    display: flex;
+    flex-direction: column;
+  }
+}
+/* Мөрүүд үлдсэн өндрийг хуваалцана, 120px-ээс өндөрсөхгүй; бичвэр,
+   зурвас томорно ({@link RowChart} `fill`) */
+.row-chart.is-fill {
+  flex: 1 1 auto;
+  gap: 4px;
+}
+.row-chart.is-fill .row-chart-item {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 0;
+  /* ⚠ 120px нь "арай дэндүү" байв (хэрэглэгч, 2026-10-06): таван мөр
+     баганын өндрөөр тарж, мөр хооронд 80px хоосон зай үүсэж байлаа.
+     64px-ээр туршихад нөгөө туйл руу — картын доод хагас хоосон
+     үлдэв. 88px нь дунд нь. */
+  max-height: 88px;
+  padding: 5px 10px;
+}
+.row-chart.is-fill .row-chart-heading {
+  margin-bottom: 6px;
+}
+.row-chart.is-fill .row-chart-label {
+  font-size: 12.5px;
+}
+.row-chart.is-fill .row-chart-label em {
+  font-size: 11.5px;
+}
+.row-chart.is-fill .row-chart-heading strong {
+  font-size: 15px;
+}
+.row-chart.is-fill .row-chart-track-inner {
+  height: 9px;
+  border-radius: 4px;
 }
 /* ХӨРСНИЙ ЗҮСЭЛТИЙН ХАЖУУГИЙН БАГАНА.
 

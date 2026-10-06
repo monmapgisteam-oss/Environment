@@ -8,17 +8,21 @@ import {
   ChevronDown,
   Layers3,
   Loader2,
+  MapPin,
   Palette,
   Ruler,
   Shapes,
+  ShieldCheck,
   Sigma,
   Tag,
 } from "lucide-react";
 import {
   AreaChart,
+  BarChart,
   GroupedBarChart,
   PieChart,
   RowChart,
+  StackedBarChart,
   type Datum,
 } from "@/components/charts";
 import { BasemapGallery } from "@/components/map/basemap-gallery";
@@ -185,6 +189,13 @@ const MAX_COLOR_VALUES = 12;
  * гэдгээ гарчигтаа ИЛ хэлнэ.
  */
 const AREA_TOP = 20;
+
+/**
+ * Баганаа дүүргэх ганц карт ({@link LayerSet.fillSolo}) хэдэн ангилал
+ * хүртэл БОСОО баганаар зурагдах вэ. Үүнээс олон бол хэвтээ зурвас —
+ * нарийн (~520px) картад есөөс олон багана нэрээ тайрна.
+ */
+const SOLO_COLUMNS = 8;
 
 /**
  * Давхаргын дугаарын орон зай.
@@ -462,7 +473,7 @@ export function PortalLayersDashboard({
     ⚠ Суурь (саарал) нэгж талбар ХЭВЭЭР: ойртсон үед контекст өгнө.
   */
   const zoneRings = React.useMemo(() => {
-    if (!set.tidy) return [];
+    if (!set.zones) return [];
     const out: GeoJSON.Position[][] = [];
     for (const id of on) {
       const hit = loaded[id];
@@ -470,7 +481,7 @@ export function PortalLayersDashboard({
       out.push(...ringsOf(hit.data.shapes.features));
     }
     return out;
-  }, [set.tidy, on, loaded]);
+  }, [set.zones, on, loaded]);
 
   /* Аль бүсийн хослолд татсаныг нэрлэх түлхүүр — үүнгүй бол бүс
      солиход ӨМНӨХ хослолын нэгж талбар зураг дээр үлдэнэ */
@@ -1086,6 +1097,16 @@ export function PortalLayersDashboard({
          LayerSet.plain}) — ганц тонгоор зурагдаж, таних тэмдэгт НЭГ
          мөр болно */
       if (set.plain?.includes(id)) return null;
+      /* Бүртгэлийн заасан талбар ({@link LayerSet.colorFields}) — тооллын
+         диаграмтай үед л (палитрын дараалал түүнээс гардаг) */
+      const wanted = set.colorFields?.[id];
+      if (
+        wanted &&
+        loaded[id]?.charts.some(
+          (c) => c.kind === "count" && !c.multi && c.field === wanted,
+        )
+      )
+        return wanted;
       /* Олон утгатай задаргаа өнгө жолоодохгүй: нэг дүрс хоёр
          ангилалд харьяалагдвал аль өнгийг нь өгөх вэ гэдэг хариултгүй */
       const first = loaded[id]?.charts.find(
@@ -1095,7 +1116,7 @@ export function PortalLayersDashboard({
         ? first.field
         : null;
     },
-    [colorBy, loaded, environment, set.plain],
+    [colorBy, loaded, environment, set.plain, set.colorFields],
   );
 
   /**
@@ -1428,20 +1449,41 @@ export function PortalLayersDashboard({
   const crosses = React.useMemo(() => {
     const out = new Map<
       string,
-      { row: Breakdown; col: Breakdown; cell: Map<string, number> }
+      {
+        row: Breakdown;
+        col: Breakdown;
+        cell: Map<string, number>;
+        /** Давхардалгүй баганын нийт — мөр олон утгат үед л */
+        colTotal?: Map<string, number>;
+        total?: number;
+      }
     >();
     if (!set.tidy) return out;
     for (const v of views) {
-      const fit = v.charts.filter(
-        (b) =>
-          b.kind === "count" &&
-          !b.multi &&
-          b.values.length >= 2 &&
-          b.values.length <= 8,
-      );
-      if (fit.length < 2) continue;
-      const [col, row] = fit;
+      let row: Breakdown | undefined;
+      let col: Breakdown | undefined;
+      const pair = set.cross?.[v.id];
+      if (pair) {
+        /* Бүртгэлийн заасан хос ({@link LayerSet.cross}) */
+        const count = (field: string) =>
+          v.charts.find((b) => b.kind === "count" && b.field === field);
+        row = count(pair[0]);
+        col = count(pair[1]);
+        if (!row || !col || col.multi) continue;
+      } else {
+        const fit = v.charts.filter(
+          (b) =>
+            b.kind === "count" &&
+            !b.multi &&
+            b.values.length >= 2 &&
+            b.values.length <= 8,
+        );
+        if (fit.length < 2) continue;
+        [col, row] = fit;
+      }
       const cell = new Map<string, number>();
+      const colTotal = row.multi ? new Map<string, number>() : undefined;
+      let total = 0;
       /*
         ⚠⚠ НҮДНҮҮД нь ХОЁР ХЭМЖЭЭСЭЭ АЛГАСЧ тоологдоно (2026-09-29).
         Урьд нь ШҮҮГДСЭН мөрөөс (`v.rows`) тоолдог байсан тул мөр
@@ -1456,16 +1498,23 @@ export function PortalLayersDashboard({
       const skip = [filterKey(row), filterKey(col)];
       for (const r of Object.values(v.hit.data.rows)) {
         if (!v.passes(r, skip)) continue;
-        for (const rk of row.keyOf(r))
-          for (const ck of col.keyOf(r)) {
+        total += 1;
+        for (const ck of col.keyOf(r)) {
+          /* Бүртгэл бүр баганадаа НЭГ удаа — мөр хэд ч байсан */
+          if (colTotal) colTotal.set(ck, (colTotal.get(ck) ?? 0) + 1);
+          for (const rk of row.keyOf(r)) {
             const k = `${rk}\u0000${ck}`;
             cell.set(k, (cell.get(k) ?? 0) + 1);
           }
+        }
       }
-      out.set(v.id, { row, col, cell });
+      out.set(
+        v.id,
+        colTotal ? { row, col, cell, colTotal, total } : { row, col, cell },
+      );
     }
     return out;
-  }, [views, set.tidy]);
+  }, [views, set.tidy, set.cross]);
 
   /*
     БҮС БҮРД ХЭДЭН НЭГЖ ТАЛБАР ДАВХЦАЖ БАЙНА (хэрэглэгч, 2026-09-25:
@@ -1485,7 +1534,7 @@ export function PortalLayersDashboard({
   const [zoneOpen, setZoneOpen] = React.useState<string | null>(null);
 
   React.useEffect(() => {
-    if (!set.tidy) return;
+    if (!set.zones) return;
     const ac = new AbortController();
     for (const id of on) {
       const hit = loaded[id];
@@ -1501,7 +1550,7 @@ export function PortalLayersDashboard({
         });
     }
     return () => ac.abort();
-  }, [set.tidy, on, loaded]);
+  }, [set.zones, on, loaded]);
 
   const stats = React.useMemo(() => {
     let records = 0;
@@ -1515,6 +1564,32 @@ export function PortalLayersDashboard({
     }
     return { layers: views.length, records, ha };
   }, [views]);
+
+  /*
+    НЭГ ДАВХАРГЫН ХОЁР БҮЛЭГ ({@link LayerSet.overviewSplit}) — ТХГН
+    дээр ангилалтай ба ангилалгүй. Шүүгдсэн дүрсээс (`oids`) тоолно:
+    индикатор диаграмтайгаа зөрөх ёсгүй.
+    ⚠ "Хоосон" гэдгийг `categoryKey`-ээр шийднэ — диаграмын
+    "Бүртгэгдээгүй" мөртэй НЭГ дүрэм.
+  */
+  const groups = React.useMemo(() => {
+    const g = set.overviewSplit;
+    if (!g) return null;
+    const v = views.find((x) => x.id === g.layer);
+    if (!v) return null;
+    const k = v.hit.info.areaInHa ? 1 : 1 / 10000;
+    const none = categoryKey(null);
+    const filled = { n: 0, ha: 0 };
+    const empty = { n: 0, ha: 0 };
+    for (const oid of v.oids) {
+      const row = v.hit.data.rows[oid];
+      if (!row) continue;
+      const side = categoryKey(row[g.field]) === none ? empty : filled;
+      side.n += 1;
+      side.ha += (v.hit.data.area[oid] ?? 0) * k;
+    }
+    return { filled, empty, ha: filled.ha + empty.ha };
+  }, [set.overviewSplit, views]);
 
   /**
    * НЭМЭЛТ ҮЗҮҮЛЭЛТ — диаграмуудаас ӨӨРСДӨӨ гарна.
@@ -1555,6 +1630,11 @@ export function PortalLayersDashboard({
     for (const v of views)
       for (const b of v.charts) {
         if (b.kind !== "sum" || b.top || !b.measure) continue;
+        /* Хэмжилт тус бүр өөрийн карттай давхарга ({@link
+           LayerSet.measureCards}) — нийлбэр нь картын толгойд аль
+           хэдийн бий; индикаторт давтахгүй (хэрэглэгч 2026-10-06:
+           "индикатор биш чартаар") */
+        if (set.measureCards?.[v.id]) continue;
         if (stats.ha > 0 && /(^|,\s*)га$/i.test(b.measure)) continue;
         if (seen.has(b.measure)) continue;
         seen.add(b.measure);
@@ -1587,7 +1667,7 @@ export function PortalLayersDashboard({
       }
 
     return out.slice(0, 2);
-  }, [views, stats.ha]);
+  }, [views, stats.ha, set.measureCards]);
 
   /*
     Доод зурваст орох диаграмууд — давхарга бүрийн хугацааны цуваа.
@@ -1671,7 +1751,7 @@ export function PortalLayersDashboard({
     — `SHAPE__Area` нь Web Mercator тул 2.2 дахин хөөрөгдсөн.
   */
   const zones = React.useMemo(() => {
-    if (!set.tidy) return [];
+    if (!set.zones) return [];
     return views
       .filter((v) => v.hit.info.geometry !== "Point")
       .map((v) => {
@@ -1686,7 +1766,7 @@ export function PortalLayersDashboard({
           rows: areaRowsOf(v.hit, v.oids),
         };
       });
-  }, [set.tidy, views, overlap, areaRowsOf]);
+  }, [set.zones, views, overlap, areaRowsOf]);
 
   if (!ready) {
     return (
@@ -1902,7 +1982,7 @@ export function PortalLayersDashboard({
           title={`${cross.row.label} × ${cross.col.label}`}
           tone={tone}
           first
-          meta={`${num(rows.length)} бичлэг`}
+          meta={`${num(rows.length)} ${set.record?.one ?? "бүртгэл"}`}
           weight={Math.max(4, cross.row.values.length + 2)}
         >
           <Matrix
@@ -1915,6 +1995,10 @@ export function PortalLayersDashboard({
               label: d.label,
             }))}
             cell={(r, c) => cross.cell.get(`${r}\u0000${c}`) ?? 0}
+            colTotals={
+              cross.colTotal ? (c) => cross.colTotal?.get(c) ?? 0 : undefined
+            }
+            total={cross.total}
             rowSel={(filters[id]?.[filterKey(cross.row)] ?? [])[0] ?? null}
             colSel={(filters[id]?.[filterKey(cross.col)] ?? [])[0] ?? null}
             onRow={(k) =>
@@ -1953,7 +2037,12 @@ export function PortalLayersDashboard({
           hit.info.areaField != null &&
           b2.field === hit.labels.name,
       );
-      const areas = withArea(id) && !namedArea ? areaRowsOf(hit, oids) : [];
+      /* Мянга мянган нэргүй полигонд дугаарын жагсаалт болдог тул
+         бүртгэл хааж болно ({@link LayerSet.noShapeArea}) */
+      const areas =
+        withArea(id) && !namedArea && !set.noShapeArea?.includes(id)
+          ? areaRowsOf(hit, oids)
+          : [];
       /*
         ⚠⚠ ГАНЦ ДҮРСТЭЙ ДАВХАРГЫН КАРТ нь БҮСИЙН КАРТТАЙ ЦЭСЭД
         ДАВХАРДАЛ (2026-09-29, хэрэглэгч: "чартуудыг scroll-дох
@@ -2044,6 +2133,12 @@ export function PortalLayersDashboard({
              тэнхлэгийн ДОТОР таарах шаардлагатай. Хугацаа нь харин
              тасралтгүй тэнхлэгтэй тул хүснэгтэд таарахгүй. */
           if (isTime(b)) continue;
+          /* ⚠⚠ ХАРЬЦУУЛАЛТ (`compare`) ОРОХГҮЙ (2026-10-06): хүснэгт нь
+             диаграм бүрээс НЭГ багана авдаг тул олон оны цуваанаас
+             зөвхөн ЭХНИЙ он үлдэж, нэгжийн нэр баганын гарчиг болно —
+             ойн төлбөрийн "2023 · 2024" харьцуулалт ингэж алга болох
+             байв. Бүлэглэсэн багана өөрийн карттай хэвээр. */
+          if (b.kind === "compare") continue;
           const k = filterKey(b);
           const at = axes.find((a) => a.key === k);
           if (at) at.list.push(b);
@@ -2054,6 +2149,10 @@ export function PortalLayersDashboard({
       const inAxis = new Set(
         oneCard ? axes.flatMap((a) => a.list.map((b) => b.id)) : [],
       );
+      /* Давхарга ГАНЦ карттай бол тэр нь баганаа дүүргэнэ
+         ({@link LayerSet.fillSolo}) — хоосон доод талыг үлдээхгүй */
+      const solo =
+        Boolean(set.fillSolo) && cuts.length === 1 && !crossCard && !areaCard;
 
       const cards = cuts.map((b, i) => {
         if (inAxis.has(b.id)) {
@@ -2067,6 +2166,7 @@ export function PortalLayersDashboard({
               first={i === 0 && !crossCard}
               records={rows.length}
               word={set.record}
+              bars={set.axisBars}
               selectedOf={(axis) => (sel[axis] ?? [])[0] ?? null}
               onPick={(axis, key) =>
                 key == null ? pick(id, axis, null) : pickOnly(id, [[axis, key]])
@@ -2092,9 +2192,10 @@ export function PortalLayersDashboard({
             tone={tone}
             first={i === 0 && !crossCard}
             weight={cardWeight(b)}
+            fill={solo}
             /* Нийт дүн ба ангиллын тоо — зурвасуудыг нүдээр нэмэх
                шаардлагагүй болно */
-            meta={set.tidy && !isTime(b) ? headMeta(b) : undefined}
+            meta={set.tidy && !isTime(b) ? headMeta(b, set.record) : undefined}
             action={
               driver ? (
                 <button
@@ -2152,14 +2253,34 @@ export function PortalLayersDashboard({
                 мөрийнхөө төгсгөлд суух тул нарийн багананд ч
                 шахагдахгүй.
               */
-              <GroupedBarChart
-                {...shownSeries(b, series[id], hueOf(id))}
-                layout="horizontal"
-                unit={b.measure}
-                format={measureText}
-                selected={chosen}
-                onSelect={onPick}
-              />
+              b.stack ? (
+                /* Оноор давхарласан зурвас ({@link LayerSet.measureCards}) */
+                <StackedBarChart
+                  {...shownSeries(b, series[id], hueOf(id))}
+                  unit={b.measure}
+                  format={measureText}
+                  selected={chosen}
+                  onSelect={onPick}
+                  /* Хэсэг бүр дээр оны утга (хэрэглэгч 2026-10-06:
+                     "чарт дээр label асаагаад үздээ") */
+                  labels
+                  /* Тайлбар нь оны шүүлт — "Он" цэстэй НЭГ төлөв
+                     (хэрэглэгч 2026-10-06: "энэ оноос filter хийдэг
+                     болгоё"). Гурван карт бүгд НЭГ давхаргын тул нэгд
+                     товшиход гурвуулаа дагана. */
+                  legend={seriesLegend(b, series[id], hueOf(id))}
+                  onLegend={(label) => pickYear(id, label)}
+                />
+              ) : (
+                <GroupedBarChart
+                  {...shownSeries(b, series[id], hueOf(id))}
+                  layout="horizontal"
+                  unit={b.measure}
+                  format={measureText}
+                  selected={chosen}
+                  onSelect={onPick}
+                />
+              )
             ) : isTime(b) ? (
               /*
                 ⚠⚠ ХУГАЦААНЫ ЦУВАА нь ТАЛБАЙН ДИАГРАМ (хэрэглэгчийн
@@ -2219,6 +2340,27 @@ export function PortalLayersDashboard({
                 selected={chosen?.[0] ?? null}
                 onSelect={onPick}
               />
+            ) : solo && b.values.length <= SOLO_COLUMNS ? (
+              /*
+                ⚠⚠ ГАНЦ КАРТ — БОСОО БАГАНА (хэрэглэгч, 2026-10-06:
+                хэвтээ зурвас 120px мөрөөр "арай дэндүү", 88px-ээр ч
+                хоосон зай үлдэв → "өөрчлөөд үзээдээ"). Хэвтээ мөр нь
+                өндрийг ЗАЙгаар л дүүргэдэг; босоо багана нь түүнийг
+                УТГААР дүүргэнэ. Нэмэлт утга (га) нэрийн доор.
+                ⚠ Найман ангиллаас олон бол ердийн зурвас: 24 багана
+                нарийн картад багтахгүй.
+              */
+              <BarChart
+                data={b.values}
+                tone={tone}
+                fill
+                height={600}
+                labels
+                format={b.kind === "count" ? undefined : measureText}
+                sub={noteOf(b)}
+                selected={chosen}
+                onSelect={onPick}
+              />
             ) : isPie(b) && !set.tidy ? (
               <PieChart
                 data={b.values}
@@ -2249,8 +2391,11 @@ export function PortalLayersDashboard({
                   бүрийг гүйлгүүртэй болгодог байв. Шахсан үед
                   мөр ~31px — ес, арван утга гүйлгэхгүйгээр
                   багтана.
+                  Ганц карт баганаа дүүргэх үед (`solo`) эсрэгээрээ
+                  ТОМОРНО — зай нь хэтэрхий их.
                 */
-                dense
+                dense={!solo}
+                fill={solo}
                 /*
                   ⚠ НЭРИЙГ НЭГ ЭГНЭЭНД барина. Урт монгол нэр
                   хоёр эгнээ болоход мөр 31px-ээс 46px болж шахсаны
@@ -2612,8 +2757,39 @@ export function PortalLayersDashboard({
         — ойн хэсэглэлийн "7,699 бичлэг" өөр хаана ч гардаггүй. Хэлтэс
         тус бүр өөрөө шийднэ (`skipMeasure`, `values`-тай нэг зарчим).
       */}
-      {set.overview === false ? null : (
-        <div className="analytics-overview" aria-label="Өгөгдлийн тойм">
+      {set.overview === false ? null : groups && set.overviewSplit ? (
+        /* Хоёр бүлгийн тоо, талбай ба нийт талбай — ӨӨР юу ч үгүй
+           (хэрэглэгч, 2026-10-06: "… л байхад болно") */
+        <div
+          className="analytics-overview is-compact"
+          aria-label="Өгөгдлийн тойм"
+        >
+          <Stat
+            icon={ShieldCheck}
+            label={set.overviewSplit.filled}
+            value={num(groups.filled.n)}
+            sub={`${num(Math.round(groups.filled.ha))} га`}
+          />
+          <Stat
+            icon={MapPin}
+            label={set.overviewSplit.empty}
+            value={num(groups.empty.n)}
+            sub={`${num(Math.round(groups.empty.ha))} га`}
+          />
+          <Stat
+            icon={Ruler}
+            label="Нийт талбай, га"
+            value={num(Math.round(groups.ha))}
+          />
+        </div>
+      ) : (
+        <div
+          className={cn(
+            "analytics-overview",
+            set.overviewSplit && "is-compact",
+          )}
+          aria-label="Өгөгдлийн тойм"
+        >
           {picker ? (
             <Stat
               icon={Layers3}
@@ -2628,10 +2804,13 @@ export function PortalLayersDashboard({
                хардаггүй. Платформ өөрөө "бүртгэл" гэдэг үгтэй
                (доорх `environment` хувилбар түүнийг аль хэдийн
                хэрэглэдэг) тул хоёуланг нэг үгэнд оруулав */
+            /* Бүртгэл өөрийн нэртэй бол түүгээр ({@link LayerSet.record}):
+               ойн төлбөрийн мөр бүр нэг ДҮҮРЭГ (хэрэглэгч 2026-10-06:
+               "дүүрэг шүү") */
             label={
               environment
                 ? "Сонгосон давхаргын бүртгэл"
-                : "Шүүлтэд тохирох бүртгэл"
+                : (set.record?.count ?? "Шүүлтэд тохирох бүртгэл")
             }
             value={
               environment && on.some((id) => !loaded[id] && !failed[id])
@@ -2685,8 +2864,19 @@ export function PortalLayersDashboard({
            давхаргын бүх задаргаа НЭГ таван баганат хүснэгт болсон тул
            350px дээр гарчиг бүр гурван мөр болж шахагддаг. Чирж
            өөрчилнө. */
+        /* ⚠ Давхарга сонгох багана ЗЭРЭГ байвал (ойн хэлтэс) 560 нь
+           газрын зургийг 300px руу шахна — 440 нь нэгдсэн хүснэгтийн
+           гарчгийг хоёр мөрөнд багтааж, зурагт зай үлдээнэ. */
         right={
-          showCharts ? (set.tidy ? 560 : environment ? 370 : 350) : undefined
+          showCharts
+            ? set.tidy
+              ? picker
+                ? 440
+                : 560
+              : environment
+                ? 370
+                : 350
+            : undefined
         }
         className="min-h-0 flex-1"
       >
@@ -3022,6 +3212,7 @@ export function PortalLayersDashboard({
                 <RecordPanel
                   info={active.info}
                   row={active.row}
+                  tone={toneOf(active.info.id)}
                   onClose={() => setPicked(null)}
                 />
               ) : null}
@@ -3190,6 +3381,28 @@ function shownSeries(
 }
 
 /**
+ * Тайлбарын БҮТЭН жагсаалт — нуусан цуваа нь `on: false`-оор үлдэнэ.
+ * Өнгө нь {@link shownSeries}-тэй ижил шатлалаас (бүтэн жагсаалтын
+ * байрлалаар), эс тэгвээс тайлбар ба зурвас өөр өнгө хэлнэ.
+ * Шүүлтгүй (эсвэл таарах он үгүй) үед бүгд асаалттай.
+ */
+function seriesLegend(
+  b: Breakdown,
+  years: string[] | undefined,
+  hue: number,
+): { key: string; label: string; color: string; on: boolean }[] {
+  const all = b.groups?.[0]?.rows ?? [];
+  const ramp = seriesRamp(hue, all.length || 1);
+  const any = all.some((r) => years?.includes(r.label));
+  return all.map((r, i) => ({
+    key: r.key,
+    label: r.label,
+    color: ramp[i],
+    on: !any || Boolean(years?.includes(r.label)),
+  }));
+}
+
+/**
  * ШҮҮЛТҮҮРИЙН МӨРӨНД ямар цэс гарах вэ.
  *
  * Талбар бүрд НЭГ цэс: нэг талбар хэд хэдэн диаграм төрүүлдэг
@@ -3331,7 +3544,9 @@ function chartTitle(b: Breakdown): string {
     case "mean":
       return `${b.measure ?? ""} — ${b.label}, дундаж${cut}`;
     case "compare":
-      return `Харьцуулалт, ${b.measure ?? ""} — ${b.label}${cut}`;
+      /* Цуваануудын нийтлэг нэр ("Мод бэлтгэсэн талбай") байвал түүгээр —
+         "Харьцуулалт" нь юуг хэмжсэнийг хэлдэггүй байв (2026-10-06) */
+      return `${b.subject ?? "Харьцуулалт"}, ${b.measure ?? ""} — ${b.label}${cut}`;
     /*
       ⚠⚠ ОГНООНЫ ТАЛБАР ӨӨРИЙН НЭРЭЭРЭЭ ГАРНА (хэрэглэгчийн шийдвэр,
       2026-09-28: "тусгай зөвшөөрөл авсан огноо болго гэх мэтээр
@@ -3424,12 +3639,19 @@ function hasShare(b: Breakdown): boolean {
   return !b.multi && b.top == null && (b.kind === "count" || b.kind === "sum");
 }
 
-/** Картын толгойн баримт — "33 бичлэг · 4 ангилал" */
-function headMeta(b: Breakdown): string {
+/**
+ * Картын толгойн баримт — "33 бүртгэл · 4 ангилал".
+ *
+ * ⚠ "бичлэг" нь мэдээллийн сангийн үг — дэлгэцэд ХЭЗЭЭ Ч гарахгүй
+ * (хэлний дүрэм). Бүртгэл өөрийн үгтэй бол ({@link LayerSet.record})
+ * түүгээр.
+ */
+function headMeta(b: Breakdown, word?: { one: string }): string {
   const cats = `${num(b.values.length)} ангилал`;
   if (!hasShare(b)) return cats;
   const total = b.values.reduce((n, d) => n + d.value, 0);
-  if (b.kind === "count") return `${num(total)} бичлэг · ${cats}`;
+  if (b.kind === "count")
+    return `${num(total)} ${word?.one ?? "бүртгэл"} · ${cats}`;
   const unit = b.measure ? unitOf(b.measure).unit : "";
   return `${measureText(total)}${unit ? ` ${unit}` : ""} · ${cats}`;
 }
@@ -3512,10 +3734,13 @@ function AxisCard({
   word,
   selectedOf,
   onPick,
+  bars = false,
 }: {
   axes: { key: string; label: string; list: Breakdown[] }[];
   tone: string;
   first: boolean;
+  /** Хүснэгтийн оронд зурвас ({@link LayerSet.axisBars}) */
+  bars?: boolean;
   /** Давхаргын нийт бичлэг — тооллын баганын дүн */
   records: number;
   /** Бичлэгийг юу гэж нэрлэх ({@link LayerSet.record}) */
@@ -3523,8 +3748,9 @@ function AxisCard({
   selectedOf: (axis: string) => string | null;
   onPick: (axis: string, key: string | null) => void;
 }) {
-  const one = word?.one ?? "бичлэг";
-  const countLabel = word?.count ?? "Бичлэг";
+  /* ⚠ "бичлэг" нь мэдээллийн сангийн үг — дэлгэцэд гарахгүй */
+  const one = word?.one ?? "бүртгэл";
+  const countLabel = word?.count ?? "Бүртгэлийн тоо";
   const [want, setWant] = React.useState(axes[0]?.key ?? "");
   const axis = axes.find((a) => a.key === want) ?? axes[0];
   if (!axis) return null;
@@ -3625,7 +3851,10 @@ function AxisCard({
 
   return (
     <CutCard
-      title={count.label}
+      /* Зурвасын горимд хэмжилтийн диаграм ("Нэр" тэнхлэг — талбай)
+         юуг хэмжсэнээ гарчигтаа хэлнэ: хүснэгтэд тэр нь баганын
+         толгойд байсан */
+      title={bars && count.kind !== "count" ? chartTitle(count) : count.label}
       tone={tone}
       first={first}
       weight={cardWeight(count)}
@@ -3642,96 +3871,117 @@ function AxisCard({
         ) : undefined
       }
     >
-      <div className="min-h-0 flex-1 overflow-auto">
-        <table className="w-full border-separate border-spacing-0">
-          <thead>
-            <tr>
-              <th className="sticky top-0 z-10 border-b border-line-2 bg-paper-2 px-2 py-2 text-left align-bottom">
-                <span className="eyebrow text-ink-3">{axis.label}</span>
-              </th>
-              {cols.map((c) => (
-                <th
-                  key={c.key}
-                  className="sticky top-0 z-10 border-b border-line-2 border-l border-l-line bg-paper-2 px-2 py-2 text-right align-bottom"
-                >
-                  <span className="eyebrow block leading-tight text-ink-3">
-                    {c.name}
-                  </span>
-                  {c.unit ? (
-                    <span className="mt-0.5 block text-[9.5px] leading-none text-ink-3 lowercase">
-                      {c.unit}
-                    </span>
-                  ) : null}
+      {bars ? (
+        /* ⚠ ЗУРВАСЫН ГОРИМ ({@link LayerSet.axisBars}): зөвхөн тэнхлэгийн
+           ГОЛ диаграм (тоолол, эс бөгөөс эхний хэмжилт) зурагдана;
+           нийлсэн хэмжилт (га) нь мөрийн ард бүдэг бичвэр. Бусад
+           хэмжилтийн багана энд ГАРАХГҮЙ — ойн давхаргад тийм зүйл
+           байхгүй (2026-10-06-нд шалгасан). */
+        <div className="min-h-0 flex-1 overflow-auto">
+          <RowChart
+            data={count.values}
+            tone={tone}
+            selected={picked}
+            onSelect={(k) => onPick(axis.key, k)}
+            note={noteOf(count)}
+            format={count.kind === "count" ? undefined : measureText}
+            dense
+            clamp
+            share={false}
+          />
+        </div>
+      ) : (
+        <div className="min-h-0 flex-1 overflow-auto">
+          <table className="w-full border-separate border-spacing-0">
+            <thead>
+              <tr>
+                <th className="sticky top-0 z-10 border-b border-line-2 bg-paper-2 px-2 py-2 text-left align-bottom">
+                  <span className="eyebrow text-ink-3">{axis.label}</span>
                 </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {count.values.map((r) => {
-              const on = picked === r.key;
-              return (
-                <tr
-                  key={r.key}
-                  tabIndex={0}
-                  aria-selected={on}
-                  onClick={() => onPick(axis.key, on ? null : r.key)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault();
-                      onPick(axis.key, on ? null : r.key);
-                    }
-                  }}
-                  className={cn(
-                    "cursor-pointer transition-colors hover:bg-paper-hi",
-                    on && "bg-paper-hi",
-                  )}
-                  style={{ opacity: picked && !on ? 0.45 : 1 }}
-                >
-                  <td
-                    className={cn(
-                      "border-b border-line px-2 py-2.5 text-[12px] leading-tight",
-                      on ? "font-medium text-ink" : "text-ink-2",
-                    )}
+                {cols.map((c) => (
+                  <th
+                    key={c.key}
+                    className="sticky top-0 z-10 border-b border-line-2 border-l border-l-line bg-paper-2 px-2 py-2 text-right align-bottom"
                   >
-                    {r.label}
-                  </td>
-                  {cols.map((c) => {
-                    const v = c.by.get(r.key);
-                    const top = isLead(c, v);
-                    return (
-                      <td
-                        key={c.key}
-                        className={cn(
-                          "num border-b border-line border-l border-l-line px-2 py-2.5 text-right text-[12.5px]",
-                          top ? "font-medium" : "text-ink",
-                        )}
-                        style={top ? { color: tone } : undefined}
-                      >
-                        {cell(v)}
-                      </td>
-                    );
-                  })}
-                </tr>
-              );
-            })}
-          </tbody>
-          <tfoot>
-            <tr>
-              <td className="sticky bottom-0 border-t border-line-2 bg-paper-2 px-2 py-2 text-[11.5px] font-medium text-ink-2">
-                Нийт
-              </td>
-              {cols.map((c) => (
-                <td
-                  key={c.key}
-                  className="num sticky bottom-0 border-t border-line-2 border-l border-l-line bg-paper-2 px-2 py-2 text-right text-[12.5px] font-medium text-ink"
-                >
-                  {c.total == null ? "" : num(Math.round(c.total))}
+                    <span className="eyebrow block leading-tight text-ink-3">
+                      {c.name}
+                    </span>
+                    {c.unit ? (
+                      <span className="mt-0.5 block text-[9.5px] leading-none text-ink-3 lowercase">
+                        {c.unit}
+                      </span>
+                    ) : null}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {count.values.map((r) => {
+                const on = picked === r.key;
+                return (
+                  <tr
+                    key={r.key}
+                    tabIndex={0}
+                    aria-selected={on}
+                    onClick={() => onPick(axis.key, on ? null : r.key)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        onPick(axis.key, on ? null : r.key);
+                      }
+                    }}
+                    className={cn(
+                      "cursor-pointer transition-colors hover:bg-paper-hi",
+                      on && "bg-paper-hi",
+                    )}
+                    style={{ opacity: picked && !on ? 0.45 : 1 }}
+                  >
+                    <td
+                      className={cn(
+                        "border-b border-line px-2 py-2.5 text-[12px] leading-tight",
+                        on ? "font-medium text-ink" : "text-ink-2",
+                      )}
+                    >
+                      {r.label}
+                    </td>
+                    {cols.map((c) => {
+                      const v = c.by.get(r.key);
+                      const top = isLead(c, v);
+                      return (
+                        <td
+                          key={c.key}
+                          className={cn(
+                            "num border-b border-line border-l border-l-line px-2 py-2.5 text-right text-[12.5px]",
+                            top ? "font-medium" : "text-ink",
+                          )}
+                          style={top ? { color: tone } : undefined}
+                        >
+                          {cell(v)}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                );
+              })}
+            </tbody>
+            <tfoot>
+              <tr>
+                <td className="sticky bottom-0 border-t border-line-2 bg-paper-2 px-2 py-2 text-[11.5px] font-medium text-ink-2">
+                  Нийт
                 </td>
-              ))}
-            </tr>
-          </tfoot>
-        </table>
-      </div>
+                {cols.map((c) => (
+                  <td
+                    key={c.key}
+                    className="num sticky bottom-0 border-t border-line-2 border-l border-l-line bg-paper-2 px-2 py-2 text-right text-[12.5px] font-medium text-ink"
+                  >
+                    {c.total == null ? "" : num(Math.round(c.total))}
+                  </td>
+                ))}
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      )}
     </CutCard>
   );
 }
@@ -3743,10 +3993,13 @@ function CutCard({
   weight = 1,
   meta,
   action,
+  fill = false,
   children,
 }: {
   title: string;
   tone: string;
+  /** Баганыг бүхэлд нь дүүргэнэ ({@link LayerSet.fillSolo}) */
+  fill?: boolean;
   /** Давхаргын ЭХНИЙ карт — туузандаа наалдаж, бүлгээ эхлүүлнэ */
   first?: boolean;
   /**
@@ -3776,6 +4029,7 @@ function CutCard({
       className={cn(
         "analytics-chart-card flex min-h-0 flex-col rounded-xl border border-line bg-paper-2",
         first && "border-t-2",
+        fill && "is-fill",
       )}
       style={
         {
@@ -3820,13 +4074,24 @@ function CutCard({
 function RecordPanel({
   info,
   row,
+  tone,
   onClose,
 }: {
   info: LayerInfo;
   row: Record<string, unknown>;
+  tone: string;
   onClose: () => void;
 }) {
   const panel = useMapPanel("left");
+  /* Цонхны диаграм ({@link LayerSet.recordCharts}) — тэдгээрт орсон
+     талбар жагсаалтад ДАХИН гарахгүй */
+  const groups = info.set.recordCharts?.[info.id] ?? [];
+  const charted = new Set(
+    groups.flatMap((g) => [
+      ...(g.total ? [g.total] : []),
+      ...g.years.map((y) => y.field),
+    ]),
+  );
 
   return (
     <MapPanel
@@ -3862,31 +4127,110 @@ function RecordPanel({
         ⚠ Самбарын бие дотроо гүйнэ тул олон талбартай давхарга
         (худгийн паспорт) ч багтана.
       */}
+      {groups.length ? (
+        <div className="divide-y divide-line border-b border-line">
+          {groups.map((g) => (
+            <RecordBars key={g.label} group={g} row={row} tone={tone} />
+          ))}
+        </div>
+      ) : null}
       <dl className="divide-y divide-line overflow-y-auto">
-        {info.fields.map((f) => {
-          const v = row[f.name];
-          const text = typeof v === "string" ? v.trim() : v;
-          const empty = text === "" || text == null;
-          const isNum = typeof text === "number" && Number.isFinite(text);
-          return (
-            <div key={f.name} className="flex gap-2 px-2.5 py-1.5">
-              <dt className="w-[92px] shrink-0 text-[10px] tracking-[0.06em] text-ink-3 uppercase">
-                {f.alias}
-              </dt>
-              <dd
-                className={cn(
-                  "min-w-0 flex-1 text-[11.5px] leading-snug",
-                  empty ? "text-ink-3" : "text-ink-2",
-                  isNum && "num",
-                )}
-              >
-                {empty ? "—" : fieldText(f.alias, text)}
-              </dd>
-            </div>
-          );
-        })}
+        {info.fields
+          .filter((f) => !charted.has(f.name))
+          .map((f) => {
+            const v = row[f.name];
+            const text = typeof v === "string" ? v.trim() : v;
+            const empty = text === "" || text == null;
+            const isNum = typeof text === "number" && Number.isFinite(text);
+            return (
+              <div key={f.name} className="flex gap-2 px-2.5 py-1.5">
+                <dt className="w-[92px] shrink-0 text-[10px] tracking-[0.06em] text-ink-3 uppercase">
+                  {f.alias}
+                </dt>
+                <dd
+                  className={cn(
+                    "min-w-0 flex-1 text-[11.5px] leading-snug",
+                    empty ? "text-ink-3" : "text-ink-2",
+                    isNum && "num",
+                  )}
+                >
+                  {empty ? "—" : fieldText(f.alias, text)}
+                </dd>
+              </div>
+            );
+          })}
       </dl>
     </MapPanel>
+  );
+}
+
+/**
+ * Цонхны нэг хэмжилт — он тус бүр нэг зурвас ({@link LayerSet.recordCharts}).
+ *
+ * ⚠ Хуваарь нь ЗӨВХӨН энэ бүлгийн дотор (гурван оны хамгийн их утга):
+ * га, м³, төгрөг нь өөр нэгжтэй тул хооронд нь нэг хуваарьт оруулахгүй.
+ * ⚠ Хоосон он "—", зурвасгүй — "0" гэвэл тэр онд бэлтгэл хийгээгүй мэт
+ * худал уншигдана.
+ */
+function RecordBars({
+  group,
+  row,
+  tone,
+}: {
+  group: NonNullable<LayerSet["recordCharts"]>[string][number];
+  row: Record<string, unknown>;
+  tone: string;
+}) {
+  const read = (field: string) => {
+    const v = row[field];
+    return typeof v === "number" && Number.isFinite(v) ? v : null;
+  };
+  const years = group.years.map((y) => ({ ...y, value: read(y.field) }));
+  const total = group.total ? read(group.total) : null;
+  const max = Math.max(1e-9, ...years.map((y) => y.value ?? 0));
+  const text = (v: number) => num(v, Math.abs(v) >= 100 ? 0 : 1);
+
+  return (
+    <div className="px-2.5 py-2">
+      <div className="mb-1.5 flex items-baseline justify-between gap-2">
+        <span className="text-[10.5px] leading-tight text-ink-2">
+          {group.label}
+        </span>
+        {total != null ? (
+          <span className="num shrink-0 text-[10.5px] text-ink-3">
+            нийт <b className="font-semibold text-ink">{text(total)}</b>
+          </span>
+        ) : null}
+      </div>
+      <div className="space-y-1">
+        {years.map((y) => (
+          <div key={y.field} className="flex items-center gap-2">
+            <span className="num w-8 shrink-0 text-[10px] text-ink-3">
+              {y.label}
+            </span>
+            <span className="h-[6px] min-w-0 flex-1 rounded-[2px] bg-paper-hi">
+              {y.value != null ? (
+                <span
+                  className="block h-full rounded-[2px]"
+                  style={{
+                    width: `${Math.max((y.value / max) * 100, y.value > 0 ? 1 : 0)}%`,
+                    background: tone,
+                  }}
+                />
+              ) : null}
+            </span>
+            <span
+              className={cn(
+                "num w-12 shrink-0 text-right text-[11px]",
+                y.value == null ? "text-ink-3" : "text-ink",
+              )}
+            >
+              {y.value == null ? "—" : text(y.value)}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -3965,10 +4309,13 @@ function Head({
 function Stat({
   label,
   value,
+  sub,
   icon: Icon,
 }: {
   label: string;
   value: string;
+  /** Тооны ард бүдэг нэмэлт утга ("120,345 га") */
+  sub?: string;
   icon: typeof Layers3;
 }) {
   return (
@@ -3978,7 +4325,10 @@ function Stat({
       </span>
       <div className="min-w-0">
         <span className="analytics-stat-label">{label}</span>
-        <span className="analytics-stat-value">{value}</span>
+        <span className="analytics-stat-value">
+          {value}
+          {sub ? <span className="analytics-stat-sub">{sub}</span> : null}
+        </span>
       </div>
     </div>
   );

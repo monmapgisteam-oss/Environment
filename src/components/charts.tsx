@@ -48,6 +48,13 @@ export type Datum = {
   key: string;
   label: string;
   value: number;
+  /**
+   * Утга БӨГЛӨГДӨӨГҮЙ — `value` нь 0 боловч "тэг" гэсэн үг БИШ
+   * (`GroupedBarChart` "—" гэж бичиж, багана зурахгүй). Ойн төлбөрийн
+   * давхаргад зарим дүүргийн 2024, 2025 оны нүд хоосон байхад "0
+   * төгрөг" гэж гарч байв (2026-10-06).
+   */
+  missing?: boolean;
   /** Толь бичиг дэх байрлал — өнгө сонгоход хэрэглэнэ */
   rank?: number;
   /**
@@ -71,10 +78,20 @@ export type Datum = {
 
 export function BarChart({
   data, height = 130, tone = "var(--data)", selected, onSelect, formatTick, labels, unit, format = num,
+  fill = false, sub,
 }: {
   data: Datum[]; height?: number; tone?: string; selected?: Selection;
   onSelect?: (key: string | null) => void; formatTick?: (d: Datum, i: number) => string;
   labels?: boolean; unit?: string; format?: (v: number) => string;
+  /**
+   * КАРТАА ДҮҮРГЭНЭ — өндөр нь контейнерээс (ойн төлбөр, 2026-10-06:
+   * хэвтээ зурвас өндөр картад тарж хоосон зай үлдээж байв). Тэнхлэг
+   * гарахгүй — утга бүр баганынхаа орой дээр бичигддэг. `height` нь
+   * зөвхөн шошгын зайг тооцоход.
+   */
+  fill?: boolean;
+  /** Нэрийн ДООР хоёр дахь мөр — өөр нэгжтэй нэмэлт утга ("174 га") */
+  sub?: (d: Datum) => string;
 }) {
   if (!data.length) return <div className="chart-empty">Үзүүлэлт байхгүй</div>;
   const max = Math.max(...data.map((d) => d.value), 1);
@@ -85,14 +102,14 @@ export function BarChart({
   const axisTicks = format(max / 2) === format(0) || format(max / 2) === format(max) ? [0, 1] : [0, .5, 1];
 
   return (
-    <div className="bar-chart">
+    <div className={cn("bar-chart", fill && "is-fill")}>
       {unit && <div className="chart-unit">{unit}</div>}
       <div className="bar-chart-layout">
-        <div className="bar-chart-axis" style={{ height }} aria-hidden="true">
+        {fill ? null : <div className="bar-chart-axis" style={{ height }} aria-hidden="true">
           {axisTicks.map((ratio) => <span key={ratio} style={{ bottom: `${ratio * (100 - room)}%` }} title={format(max * ratio)}>{format(max * ratio)}</span>)}
-        </div>
+        </div>}
         <div className="min-w-0">
-          <div className="bar-chart-plot" style={{ height }}>
+          <div className="bar-chart-plot" style={fill ? undefined : { height }}>
             {[0, .25, .5, .75, 1].map((ratio) => <span key={ratio} className="chart-gridline" style={{ bottom: `${ratio * (100 - room)}%` }} aria-hidden="true" />)}
             <div className="bar-chart-columns">
               {data.map((d) => {
@@ -104,13 +121,116 @@ export function BarChart({
               })}
             </div>
           </div>
-          <div className="bar-chart-ticks">{data.map((d, i) => <span key={d.key} title={d.label} className={picked(selected, d.key) ? "is-selected" : undefined}>{formatTick ? formatTick(d, i) : d.label}</span>)}</div>
+          <div className="bar-chart-ticks">{data.map((d, i) => <span key={d.key} title={d.label} className={picked(selected, d.key) ? "is-selected" : undefined}>{formatTick ? formatTick(d, i) : d.label}{sub ? <em>{sub(d) || " "}</em> : null}</span>)}</div>
         </div>
       </div>
     </div>
   );
 }
 
+
+/**
+ * ОНООР ДАВХАРЛАСАН ЗУРВАС — бүлэг бүр НЭГ хэвтээ зурвас, цуваа нь
+ * (2023 · 2024 · 2025) дараалан нийлсэн хэсгүүд, урт нь нийлбэр.
+ *
+ * Ойн төлбөр (хэрэглэгч 2026-10-06: "дахиад өөрчил" → дөрвөн
+ * хувилбараас): нийт ба он бүрийн хувь нэг харцаар. Зэрэгцээ зурвас нь
+ * дүүрэг бүрт гурван мөр эзэлж карт хэт урт болдог байв.
+ *
+ * ⚠ Хуваарь нь БҮХ бүлгийн хамгийн их НИЙЛБЭРЭЭР — бүлэг тус бүрийн
+ * дотор биш, эс тэгвээс уртууд харьцуулагдахгүй.
+ * ⚠ Бөглөгдөөгүй хэсэг (`missing`) зурагдахгүй; нийлбэр нь зөвхөн
+ * бөглөгдсөн хэсгүүдийнх.
+ */
+export function StackedBarChart({
+  groups, colors, unit, format = num, selected, onSelect, labels = false, legend, onLegend,
+}: {
+  groups: DatumGroup[];
+  /** Цуваа бүрийн өнгө — бүлэг доторх дараалалтай тохирно */
+  colors: string[];
+  /** Хэмжих нэгж — тайлбарын эхэнд */
+  unit?: string;
+  format?: (v: number) => string;
+  selected?: Selection;
+  onSelect?: (key: string | null) => void;
+  /**
+   * Хэсэг бүр дээр ӨӨРИЙН утга (хэрэглэгч 2026-10-06: "чарт дээр label
+   * асаагаад үздээ"). Зурвас 16px болж тоо дотор нь суна.
+   * ⚠ Тоо нь БАГТАХ хэсэгт л гарна: зурвасын БОДИТ өргөнийг хэмжиж
+   * (`ResizeObserver`), хэсгийн пиксел өргөн тооны уртаас бага бол
+   * бичихгүй — тасархай "13,4…" нь тоо биш шуугиан. Утга нь `title`-д
+   * хэвээр.
+   */
+  labels?: boolean;
+  /**
+   * Тайлбарын БҮХ цуваа — нуугдсан ч (`on: false`) жагсаалтад үлдэнэ
+   * (хэрэглэгч 2026-10-06: "энэ оноос filter хийдэг болгоё").
+   * ⚠ `groups`-оос гаргаж БОЛОХГҮЙ: тэр нь аль хэдийн шүүгдсэн тул
+   * нуусан оныг буцааж асаах товч алга болно.
+   */
+  legend?: { key: string; label: string; color: string; on: boolean }[];
+  /** Тайлбарын мөр товшиход — шүүлтүүрийн "Он" цэстэй НЭГ төлөв */
+  onLegend?: (label: string) => void;
+}) {
+  /* Зурвасын өргөн, px — бүх мөрийн зурвас ижил өргөнтэй тул эхнийхийг
+     хэмжинэ. Хэмжигдэхээс өмнө (0) шошго гарахгүй */
+  const [trackPx, setTrackPx] = React.useState(0);
+  const observer = React.useRef<ResizeObserver | null>(null);
+  const measure = React.useCallback((el: HTMLSpanElement | null) => {
+    observer.current?.disconnect();
+    if (!el || !labels) return;
+    observer.current = new ResizeObserver(([e]) => setTrackPx(e.contentRect.width));
+    observer.current.observe(el);
+  }, [labels]);
+  React.useEffect(() => () => observer.current?.disconnect(), []);
+
+  if (!groups.length) return <div className="chart-empty">Үзүүлэлт байхгүй</div>;
+  const sumOf = (g: DatumGroup) => g.rows.reduce((s, r) => s + (r.missing ? 0 : r.value), 0);
+  const max = Math.max(...groups.map(sumOf), 1e-9);
+  const series = groups[0]?.rows ?? [];
+  const interactive = Boolean(onSelect);
+  /* 10px tabular тоо ~6.2px/тэмдэгт + хоёр талын 4px зай */
+  const fits = (v: number, text: string) => (v / max) * trackPx >= text.length * 6.2 + 8;
+  return (
+    <div className={cn("stacked-chart", labels && "is-labeled")}>
+      <div className="stacked-chart-legend">
+        {unit ? <span className="eyebrow">{unit}</span> : null}
+        {legend && onLegend
+          ? legend.map((l) => (
+            <button key={l.key} type="button" aria-pressed={l.on} onClick={() => onLegend(l.label)}
+              title={`${l.label} оноор шүүх`} className={cn("stacked-chart-key", !l.on && "is-off")}>
+              <i aria-hidden="true" style={{ background: l.color }} />{l.label}
+            </button>
+          ))
+          : series.map((r, i) => <span key={r.key}><i aria-hidden="true" style={{ background: colors[i % colors.length] }} />{r.label}</span>)}
+      </div>
+      {groups.map((g, gi) => {
+        const total = sumOf(g);
+        const on = nothingPicked(selected) || picked(selected, g.key);
+        return (
+          <button key={g.key} type="button" disabled={!interactive} aria-pressed={interactive ? picked(selected, g.key) : undefined}
+            onClick={() => onSelect?.(clickValue(selected, g.key))}
+            title={`${g.label} · ${g.rows.map((r) => `${r.label}: ${r.missing ? "—" : format(r.value)}`).join(" · ")}`}
+            className={cn("stacked-chart-row", picked(selected, g.key) && "is-selected")} style={{ opacity: on ? 1 : .35 }}>
+            <span className="stacked-chart-label">{g.label}</span>
+            <span className="stacked-chart-track" ref={gi === 0 ? measure : undefined}>
+              {g.rows.map((r, i) => {
+                if (r.missing || r.value <= 0) return null;
+                const text = format(r.value);
+                return (
+                  <span key={r.key} style={{ width: `${(r.value / max) * 100}%`, background: colors[i % colors.length] }}>
+                    {labels && fits(r.value, text) ? text : null}
+                  </span>
+                );
+              })}
+            </span>
+            <strong className="stacked-chart-value">{format(total)}</strong>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
 
 export function GroupedBarChart({
   groups,
@@ -253,7 +373,7 @@ export function GroupedBarChart({
                           on ? "text-ink-2" : "text-ink-3/60",
                         )}
                       >
-                        {format(r.value)}
+                        {r.missing ? "—" : format(r.value)}
                       </span>
                     </span>
                   ))}
@@ -285,7 +405,7 @@ export function GroupedBarChart({
                       key={r.key}
                       /* Багана бүр ӨӨРИЙН утгаа хэлнэ: шошго багтахгүй
                      нарийн үед энэ нь тоог мэдэх цорын ганц зам */
-                      title={`${g.label} · ${r.label} · ${format(r.value)}${unit ? ` ${unit}` : ""}`}
+                      title={`${g.label} · ${r.label} · ${r.missing ? "—" : `${format(r.value)}${unit ? ` ${unit}` : ""}`}`}
                       className="relative flex h-full flex-1 items-end"
                     >
                       <span
@@ -788,7 +908,7 @@ function Tooltip({
 
 export function RowChart({
   data, tone = "var(--data)", colorOf, selected, onSelect, max: maxOverride, base = 0, format = num, guide,
-  dense = false, note, clamp = false, share = false, inline = false,
+  dense = false, note, clamp = false, share = false, inline = false, fill = false,
 }: {
   data: Datum[]; tone?: string; colorOf?: (d: Datum) => string; selected?: Selection;
   onSelect?: (key: string | null) => void; max?: number; base?: number;
@@ -851,6 +971,13 @@ export function RowChart({
    * ⚠ `share`-тэй ХАМТ бүү хэрэглэ.
    */
   inline?: boolean;
+  /**
+   * КАРТАА ДҮҮРГЭНЭ — мөрүүд үлдсэн өндрийг хуваалцаж, бичвэр, зурвас
+   * томорно. Баганад ГАНЦААРАА суух карт дээр (ойн төлбөр, 2026-10-06:
+   * "энэ зайнд таарсан байдлаар"). Мөр бүр 120px-ээс өндөрсөхгүй —
+   * цөөн мөр нь дэлгэц дээгүүр тарж харьцуулалт алдагдахгүй.
+   */
+  fill?: boolean;
 }) {
   const max = maxOverride ?? Math.max(...data.map((d) => d.value), 1);
   /* Хувийн суурь — БҮХ мөрийн нийлбэр (хамгийн их утга БИШ) */
@@ -862,7 +989,7 @@ export function RowChart({
   const guideAt = guide != null && guide > base && guide < max ? at(guide) : null;
   if (!data.length) return <div className="chart-empty">Үзүүлэлт байхгүй</div>;
   return (
-    <div className={cn("row-chart", dense && "is-dense", clamp && "is-clamped", inline && "is-inline")}>
+    <div className={cn("row-chart", dense && "is-dense", clamp && "is-clamped", inline && "is-inline", fill && "is-fill")}>
       {data.map((d) => {
         const active = nothingPicked(selected) || picked(selected, d.key);
         const isSelected = picked(selected, d.key);

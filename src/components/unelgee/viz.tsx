@@ -40,6 +40,8 @@ export function Matrix({
   onCell,
   colorOf,
   unit = "",
+  colTotals,
+  total,
 }: {
   rows: Key[];
   cols: Key[];
@@ -54,14 +56,26 @@ export function Matrix({
   /** Мөрийн өнгө — зурагтай ижил өнгө үзүүлэх үед */
   colorOf?: (row: string) => string;
   unit?: string;
+  /**
+   * Баганын нийт ба ерөнхий нийтийг ГАДНААС өгөх (сонголттой).
+   *
+   * ⚠ МӨР нь олон утгат задаргаа байх үед (нэг ТХГН хоёр дүүрэгт
+   * хамаарна) нүднүүдийн нийлбэр бүртгэлийг ДАВХАР тоолно — баганын
+   * нийт нь давхардалгүй бүртгэлийн тоо байх ёстой. Мөрийн нийт зөв
+   * хэвээр: бүртгэл бүр НЭГ баганад л ордог.
+   */
+  colTotals?: (col: string) => number;
+  total?: number;
 }) {
   const grid = React.useMemo(() => {
     const g = rows.map((r) => cols.map((c) => cell(r.key, c.key)));
     const rowTotal = g.map((line) => line.reduce((s, v) => s + v, 0));
-    const colTotal = cols.map((_, j) => g.reduce((s, line) => s + line[j], 0));
+    const colTotal = cols.map((c, j) =>
+      colTotals ? colTotals(c.key) : g.reduce((s, line) => s + line[j], 0),
+    );
     const max = Math.max(1, ...g.flat());
-    return { g, rowTotal, colTotal, max, total: rowTotal.reduce((s, v) => s + v, 0) };
-  }, [rows, cols, cell]);
+    return { g, rowTotal, colTotal, max, total: total ?? rowTotal.reduce((s, v) => s + v, 0) };
+  }, [rows, cols, cell, colTotals, total]);
 
   if (!rows.length || !cols.length) return <div className="chart-empty">Үзүүлэлт байхгүй</div>;
 
@@ -70,7 +84,9 @@ export function Matrix({
 
   return (
     <div className="min-h-0 flex-1 overflow-auto">
-      <p className="ue-matrix-help">Нүдний тоо: {unit || "бүртгэл"}. Өнгө тодрох тусам утга ихэснэ. Мөр, багана эсвэл нүд дээр дарж шүүнэ.</p>
+      {/* ⚠ "Нүдний тоо … дарж шүүнэ" гэсэн заавар ХАСАГДСАН (2026-10-06):
+          арга зүйн тайлбар, хэрэглээний заавар дэлгэцэд ГАРАХГҮЙ (хэлний
+          дүрэм). Нэгж нь толгойн зүүн нүдэнд хэвээр. */}
       <table className="ue-matrix w-full border-separate border-spacing-0 text-[11px]">
         <caption className="sr-only">Дүүрэг болон сонгосон ангиллаар харьцуулсан {unit}</caption>
         <thead className="sticky top-0 z-10 bg-paper-2">

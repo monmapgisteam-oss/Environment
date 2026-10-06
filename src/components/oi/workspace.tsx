@@ -1,20 +1,30 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { Loader2 } from "lucide-react";
-import { FOREST } from "@/lib/forest-layers";
+import {
+  Coins,
+  Fence,
+  LayoutGrid,
+  Leaf,
+  Loader2,
+  ShieldCheck,
+  Sprout,
+  Trees,
+} from "lucide-react";
+import { SourceTabs, useStoredTab } from "@/components/ui/source-tabs";
+import { FOREST_TABS } from "@/lib/forest-layers";
 
 /*
-  Ойн хэлтэс — НЭГ харагдац.
+  Ойн хэлтэс — давхарга бүр ӨӨРИЙН цэс (хэрэглэгч 2026-10-06, ногоон
+  бүсийн "Өгөгдлийн багц"-ыг заан: "ингэж шүү").
 
-  Урьд нь таван таб байсан: нэгдсэн зураг ба давхарга тус бүрийн дөрвөн
-  самбар (ойн сан, ойн төрөл, дагалт баялаг, тусгай хамгаалалт).
-  Тэдгээр дөрөв нь ArcGIS Online дээрх үйлчилгээнээс уншдаг байсан
-  бөгөөд эх сурвалж нь 2026-09-14-нд УСТГАГДСАН — нээвэл алдаа л
-  заана. Дата нь `environment.ub.gov.mn` порталын найман давхарга руу
-  шилжсэн тул нэгдсэн зураг тэднийг бүгдийг агуулна.
+  Урьд нь долоон давхарга НЭГ зурагт асаалт/унтраалттай байсан бөгөөд
+  зүүн талын жагсаалтаас сонгодог байв. Одоо ногоон бүсийн хэлтэстэй
+  ижил: цэс сонгоход тэр давхарга шууд асна, жагсаалт байхгүй тул
+  газрын зураг өргөснө.
 
-  Ганц харагдацад таб зурвас илүүц: юу руу шилжихийг сонгох зүйл алга.
+  Сонгосон нь л ачаалагдана: тус бүр MapLibre-тэй тул бүгдийг эхнээс
+  нь татах нь дэмий жин.
 */
 const spinner = () => (
   <div className="flex h-full items-center justify-center rounded-xs border border-line bg-paper-2">
@@ -30,16 +40,93 @@ const LayersDashboard = dynamic(
   { ssr: false, loading: spinner },
 );
 
+/*
+  ⚠ Тайлбарт (`note`) бүртгэлийн ТОО БИЧИХГҮЙ (ногоон бүсийн шийдвэр):
+  давхарга нээгдэхэд бодит тоо өөрөө гарна. Тайлбар нь датанаас
+  УНШСАН утгуудыг нэрлэнэ (2026-10-06-нд токеноор шалгасан) —
+  таамаглаж тайлбарлахгүй.
+*/
+const TABS = [
+  {
+    id: "O01_THGN_polygon",
+    label: "Тусгай хамгаалалттай газар",
+    /* `tuvshin` домэйн — гурван утга */
+    note: "УИХ · НИТХ · ДИТХ",
+    full: "Тусгай хамгаалалттай газар нутаг",
+    icon: ShieldCheck,
+  },
+  {
+    id: "O03_tulbur_duureg",
+    label: "Ойн төлбөр",
+    /* Хоёр хэмжилтийн нэр (м³ нь хэлтсийн шийдвэрээр диаграмд ороогүй) */
+    note: "Мод бэлтгэсэн талбай · төлбөрийн орлого",
+    full: "Ойн төлбөр, дүүргээр",
+    icon: Coins,
+  },
+  {
+    id: "O03_buffer_100m",
+    label: "Хамгаалалтын зурвас",
+    note: "100 метр",
+    full: "100 метрийн хамгаалалтын зурвас",
+    icon: Fence,
+  },
+  {
+    id: "O03_oi_yalgaral",
+    label: "Ойн ялгарал",
+    /* `ylgaral`-ын хамгийн олон гурван утга */
+    note: "Ой · тармаг мод · мод бэлтгэсэн талбай",
+    icon: Trees,
+  },
+  {
+    id: "O03_oi_heseglel",
+    label: "Ойн хэсэглэл",
+    /* `name` талбарын хоёр утга */
+    note: "Улаанбаатар · Багануур",
+    icon: LayoutGrid,
+  },
+  {
+    id: "O03_nogoon_bus_heseg",
+    label: "Ногоон бүсийн хэсэг",
+    /* `folderpath` — бүх мөрд ижил ганц утга */
+    note: "Ногоон бүс ба Богд уул",
+    full: "Улаанбаатар хотын ногоон бүс ба Богд уул",
+    icon: Sprout,
+  },
+  {
+    id: "O03_dagalt_baylag",
+    label: "Ойн дагалт баялаг",
+    /* `zuiluud` жагсаалтаас — эх сурвалжийн зүйлийн нэрс */
+    note: "Нэрс · хушны самар · чага",
+    icon: Leaf,
+  },
+] as const;
+
+type TabId = (typeof TABS)[number]["id"];
+
+const IDS = TABS.map((t) => t.id);
+
 export function OiWorkspace() {
+  /* Сонголт хадгалагдана — буцаж ирэхэд сүүлд харсан давхарга нээгдэнэ */
+  const [tab, pick] = useStoredTab<TabId>("oi.tab", IDS, "O01_THGN_polygon");
+
+  const set = FOREST_TABS[tab];
+
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <div className="department-workspace">
       {/*
-        ⚠ ТОЛГОЙ БАЙХГҮЙ (хэрэглэгчийн шийдвэр, 2026-09-17). Бусад таван
-        хэлтэс мөн толгойгүй — платформын толгой ба хажуугийн зурвас
-        хэлтсийн нэрийг аль хэдийн харуулдаг тул самбар доторх гарчиг нь
-        давхардал (санхүүгийн хэлтэстэй нэг сургамж). Дахин бүү нэм.
+        ⚠ ТОЛГОЙ БАЙХГҮЙ (хэрэглэгчийн шийдвэр, 2026-09-17): платформын
+        толгой ба хажуугийн зурвас хэлтсийн нэрийг аль хэдийн харуулдаг.
       */}
-      <div className="min-h-0 flex-1"><LayersDashboard set={FOREST} /></div>
+      <SourceTabs tabs={TABS} value={tab} onChange={pick} label="Сэдэв" />
+
+      {/*
+        ⚠ `key` ЗААВАЛ: бүх таб НЭГ бүрэлдэхүүнээр зурагддаг тул React
+        нь таб солиход түүнийг ДАХИН ҮҮСГЭДЭГГҮЙ — шүүлт, сонголт
+        өмнөх табынхаараа үлдэнэ.
+      */}
+      <div className="department-workspace-content">
+        <LayersDashboard key={set.key} set={set} />
+      </div>
     </div>
   );
 }

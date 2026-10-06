@@ -203,6 +203,8 @@ export const NOGOON: LayerSet = {
   services: { [SURVEY]: SURVEY_URL },
   skipField: SKIP_FIELD,
   tidy: true,
+  /* Бүс бүрийн нэгж талбарын давхцал, бүсийн тойм карт ({@link LayerSet.zones}) */
+  zones: true,
   overview: false,
 };
 
@@ -291,8 +293,10 @@ function tab(
        давхарга хаана байгааг мэдэх шаардлагагүй */
     services: { [SURVEY]: SURVEY_URL },
     skipField: SKIP_FIELD,
-    /* Диаграмын цэгц — зөвхөн ЭНЭ хэлтэст (бусад гурав хөндөгдөхгүй) */
+    /* Диаграмын цэгц (ойд мөн асаалттай) ба бүсийн онцлог — сүүлийнх нь
+       зөвхөн ЭНЭ хэлтэст ({@link LayerSet.zones}) */
     tidy: true,
+    zones: true,
     /* Үзүүлэлтийн зурвас ГАРАХГҮЙ: бичлэгийн тоо нь давхаргын тууз,
        диаграмын толгойд, талбай нь бүсийн карт, диаграмд аль хэдийн
        бий — зурвас нь давхардал болно */
