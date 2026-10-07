@@ -4,7 +4,6 @@ import * as React from "react";
 import dynamic from "next/dynamic";
 import { Boxes, FlaskConical, Loader2, Trash2, Workflow, Wrench } from "lucide-react";
 import { SourceTabs, useStoredTab } from "@/components/ui/source-tabs";
-import { WASTE } from "@/lib/hyanalt-layers";
 
 /*
   Хэлтэс ТАВАН табтай. Зэрэг ачаалахгүй: сонгосон нь л татагдана.
@@ -51,16 +50,17 @@ const ChemSystemDashboard = dynamic(
 );
 
 /*
-  Хог хаягдлын хоёр давхарга — ХУВААЛЦСАН порталын самбараар
-  ({@link src/components/layers/portal-dashboard.tsx}). Бүтцээ эх
-  сурвалжаас өөрөө уншдаг тул энэ сэдэвт тусдаа код бичээгүй: ялгаа нь
-  зөвхөн `LayerSet`-д ({@link src/lib/hyanalt-layers.ts}).
+  Хог хаягдлын хоёр давхарга — ӨӨРИЙН самбар (2026-10-05).
+
+  ⚠ Урьд нь ХУВААЛЦСАН порталын самбараар зурагдаж, хоёр давхарга
+  радио товчоор сэлгэгддэг байв. Хэрэглэгч хоёуланг НИЙЛҮҮЛЖ, диаграмыг
+  хасуулсан тул ерөнхий самбарын тохиргоогоор шийдэх боломжгүй болов —
+  дэлгэрэнгүйг {@link src/components/hyanalt/waste-dashboard.tsx}-ээс.
+  Давхаргын бүртгэл (`WASTE`) нь хэвээр: татац, талбарын албан нэр,
+  эх сурвалжийн хуудас түүнээс уншина.
 */
-const PortalLayers = dynamic(
-  () =>
-    import("@/components/layers/portal-dashboard").then(
-      (m) => m.PortalLayersDashboard,
-    ),
+const WasteDashboard = dynamic(
+  () => import("@/components/hyanalt/waste-dashboard").then((m) => m.WasteDashboard),
   { ssr: false, loading: spinner },
 );
 
@@ -199,7 +199,7 @@ export function HyanaltWorkspace() {
         {open === "chemsystem" ? (
           <ChemSystemDashboard />
         ) : open === "landfill" ? (
-          <PortalLayers set={WASTE} />
+          <WasteDashboard />
         ) : open === "repair" ? (
           <RepairMap />
         ) : open === "scheme" ? (
