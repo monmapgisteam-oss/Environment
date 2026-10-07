@@ -121,6 +121,94 @@ export function saneGeometry(
   return ok;
 }
 
+/*
+  ОЛОН ӨНЦӨГТИЙН ЭВДЭРСЭН ОРОЙГ ХАСАХ (хэрэглэгч, 2026-10-07, ойн
+  ялгарал: "энэ map нь ягд дүүрээд байна" — зураг дэлхий даяар ногооноор
+  будагдаж, Африк дээр "Ялгарал: Ой" гэж гарч байв).
+
+  {@link saneGeometry} нь бүхэл дүрсийг хаядаг бөгөөд муж нь зөвхөн
+  Улаанбаатарын орчим тул порталын бүх давхаргад хэрэглэхэд хэт хатуу.
+  Энэ нь ӨРГӨН мужаас (Монгол улс) гадуурх ОРОЙГ л хасна: нэг эвдэрсэн
+  орой нь дүрсийг дэлхий даяар сунгадаг бол үлдсэн орой нь хүчинтэй хэвээр.
+  ⚠ Дөрвөөс цөөн оройтой үлдсэн тойрог хаягдана (олон өнцөгт биш болно);
+  ямар ч тойрог үлдээгүй бол `null` — дүрс зурагт орохгүй, бичлэг нь
+  диаграм, жагсаалтад ХЭВЭЭР.
+*/
+const REGION: [number, number, number, number] = [87, 41, 120, 52.5];
+
+const inRegion = ([x, y]: GeoJSON.Position): boolean =>
+  x >= REGION[0] && x <= REGION[2] && y >= REGION[1] && y <= REGION[3];
+
+/** Хассан оройн тоо — дуудагч тал анхааруулга бичихэд */
+export type Clipped = { geometry: GeoJSON.Geometry | null; dropped: number };
+
+export function clipToRegion(g: GeoJSON.Geometry): Clipped {
+  let dropped = 0;
+  const ring = (r: GeoJSON.Position[]): GeoJSON.Position[] | null => {
+    const kept = r.filter(inRegion);
+    dropped += r.length - kept.length;
+    if (kept.length === r.length) return r;
+    if (kept.length < 3) return null;
+    /* Тойрог хаалттай байх ёстой */
+    const [a, b] = [kept[0], kept[kept.length - 1]];
+    if (a[0] !== b[0] || a[1] !== b[1]) kept.push(a);
+    return kept.length >= 4 ? kept : null;
+  };
+  /* Гадна тойрог унавал олон өнцөгт бүхэлдээ унана — нүх нь ганцаараа
+     утгагүй */
+  const poly = (p: GeoJSON.Position[][]): GeoJSON.Position[][] | null => {
+    const outer = ring(p[0] ?? []);
+    if (!outer) return null;
+    const holes = p.slice(1).map(ring).filter(Boolean) as GeoJSON.Position[][];
+    return [outer, ...holes];
+  };
+  if (g.type === "Polygon") {
+    const p = poly(g.coordinates);
+    return { geometry: p ? { type: "Polygon", coordinates: p } : null, dropped };
+  }
+  if (g.type === "MultiPolygon") {
+    const ps = g.coordinates.map(poly).filter(Boolean) as GeoJSON.Position[][][];
+    return {
+      geometry: ps.length ? { type: "MultiPolygon", coordinates: ps } : null,
+      dropped,
+    };
+  }
+  if (g.type === "LineString") {
+    const kept = g.coordinates.filter(inRegion);
+    dropped += g.coordinates.length - kept.length;
+    return {
+      geometry: kept.length >= 2 ? { type: "LineString", coordinates: kept } : null,
+      dropped,
+    };
+  }
+  if (g.type === "MultiLineString") {
+    const ls = g.coordinates
+      .map((l) => {
+        const kept = l.filter(inRegion);
+        dropped += l.length - kept.length;
+        return kept.length >= 2 ? kept : null;
+      })
+      .filter(Boolean) as GeoJSON.Position[][];
+    return {
+      geometry: ls.length ? { type: "MultiLineString", coordinates: ls } : null,
+      dropped,
+    };
+  }
+  if (g.type === "Point")
+    return inRegion(g.coordinates)
+      ? { geometry: g, dropped: 0 }
+      : { geometry: null, dropped: 1 };
+  if (g.type === "MultiPoint") {
+    const kept = g.coordinates.filter(inRegion);
+    dropped += g.coordinates.length - kept.length;
+    return {
+      geometry: kept.length ? { type: "MultiPoint", coordinates: kept } : null,
+      dropped,
+    };
+  }
+  return { geometry: g, dropped: 0 };
+}
+
 /* --------------------------------------------------------------------------
    ЦЭГИЙН КООРДИНАТЫГ НАЙДВАРТАЙ УНШИХ
    -------------------------------------------------------------------------- */
