@@ -40,9 +40,9 @@ import {
 } from "@/lib/bomt";
 import { spreadRamp } from "@/lib/tone-ramp";
 import { num } from "@/lib/utils";
-import { Card, Field, Head, MapLegend, Pending, Stat, type LegendItem } from "./ui";
-import { Composition, Segments, Table, type Column, type Key } from "./viz";
-import { StackedComparison } from "./subject-charts";
+import { Card, Field, Head, MapLegend, Pending, Stat, StatStrip, type LegendItem } from "./ui";
+import { Table, type Column } from "./viz";
+import { SimpleChart } from "./subject-charts";
 
 const PolygonMap = dynamic(
   () => import("@/components/wells/map").then((m) => m.WellsMap),
@@ -67,14 +67,6 @@ const PLANTING_COLOR = new Map<string, string>(
 );
 const FALLBACK = "#67d7e4";
 
-/** Хүснэгтийн МӨРИЙН хэмжээс — багана нь үргэлж мод тарих байршил */
-const ROW_DIMS = [
-  { id: "district", label: "Дүүрэг" },
-  { id: "activity", label: "Үйл ажиллагааны чиглэл" },
-  { id: "landuse", label: "Газрын зориулалт" },
-] as const;
-type RowDim = (typeof ROW_DIMS)[number]["id"];
-
 type ImplementerRow = {
   name: string;
   n: number;
@@ -93,11 +85,15 @@ type ImplementerRow = {
 
    Бүтэц (ерөнхий үнэлгээний толин тусгал — зураг ЗҮҮНД):
      шүүлтүүрийн мөр → үзүүлэлтийн зурвас
-     → бүтэн өргөнөөр МОД ТАРИХ БАЙРШЛЫН ЗУРВАС (100%-ийн харьцаа)
-     → ЗҮҮН: газрын зураг, байршлаар өнгөлсөн, тайлбартай
-     → БАРУУН: мод тарих байршил × (дүүрэг | чиглэл | зориулалт)
-       хүснэгт · төсөл хэрэгжүүлэгчийн хүснэгт (тоо, талбай, задаргаа).
-   Мөрөн диаграм БАЙХГҮЙ.
+     → ЗҮҮН: мод тарих байршил · дүүрэг · үйл ажиллагааны чиглэл
+     → ГОЛ: газрын зураг, байршлаар өнгөлсөн, тайлбартай
+     → БАРУУН: газрын зориулалт · төсөл хэрэгжүүлэгчийн хүснэгт.
+   ⚠ Задаргаа бүр ӨӨРИЙН КАРТТАЙ (2026-10-05, хэрэглэгч: "Задаргаа
+   картыг задлаад нэг нэг чарт болго") — урьд нь гурав нь нэг картад
+   сэлгэгддэг байв.
+   ⚠ Диаграмын хэлбэрийг `SimpleChart` сонгоно (2026-10-05, хэрэглэгч:
+   "бүх диаграмыг энгийн болго"). Урьд нь 100%-ийн зурвас ба
+   давхарласан харьцуулалт байсан.
    -------------------------------------------------------------------------- */
 
 export function BomtDashboard() {
@@ -110,7 +106,6 @@ export function BomtDashboard() {
   const [landuse, setLanduse] = React.useState<string | null>(null);
   const [implementer, setImplementer] = React.useState<string | null>(null);
   const [picked, setPicked] = React.useState<number | null>(null);
-  const [rowDim, setRowDim] = React.useState<RowDim>("district");
   const [basemap, setBasemap] = React.useState<Basemap>(() => defaultBasemap());
 
   const tip = useMapTip();
@@ -186,41 +181,6 @@ export function BomtDashboard() {
   const districtMenu = React.useMemo(() => menu("district"), [menu]);
   const landuseMenu = React.useMemo(() => menu("landuse"), [menu]);
   const implementerMenu = React.useMemo(() => menu("implementer"), [menu]);
-
-  /* ---------------- Хүснэгт: мөрийн хэмжээс × мод тарих байршил ---------------- */
-  const matrix = React.useMemo(() => {
-    const base = (rows ?? []).filter((r) => passes(r, rowDim, "planting"));
-    const rowTotal = new Map<string, number>();
-    const cells = new Map<string, number>();
-    const seenPlanting = new Set<string>();
-    for (const r of base) {
-      const rk = dimOf(r, rowDim);
-      rowTotal.set(rk, (rowTotal.get(rk) ?? 0) + 1);
-      seenPlanting.add(r.planting);
-      const ck = `${rk}\u001f${r.planting}`;
-      cells.set(ck, (cells.get(ck) ?? 0) + 1);
-    }
-    let rowKeys: Key[];
-    if (rowDim === "activity") {
-      rowKeys = ACTIVITIES.filter((a) => rowTotal.has(a.id)).map((a) => ({ key: a.id, label: a.label }));
-    } else {
-      rowKeys = [...rowTotal]
-        .sort((a, b) => b[1] - a[1])
-        .map(([k]) => ({ key: k, label: k }));
-    }
-    const colKeys: Key[] = PLANTING.filter((p) => seenPlanting.has(p.id)).map((p) => ({
-      key: p.id,
-      label: p.label,
-    }));
-    return { rowKeys, colKeys, cell: (r: string, c: string) => cells.get(`${r}\u001f${c}`) ?? 0 };
-  }, [rows, passes, rowDim, dimOf]);
-
-  const rowSel = rowDim === "district" ? district : rowDim === "activity" ? activity : landuse;
-  const setRowSel = (k: string | null) => {
-    if (rowDim === "district") setDistrict(k);
-    else if (rowDim === "activity") setActivity(k);
-    else setLanduse(k);
-  };
 
   /* ---------------- Төсөл хэрэгжүүлэгчийн хүснэгт ---------------- */
   const implementers = React.useMemo<ImplementerRow[]>(() => {
@@ -380,40 +340,62 @@ export function BomtDashboard() {
       </FilterBar>
 
       {/* ============ ҮЗҮҮЛЭЛТИЙН ЗУРВАС ============ */}
-      <Card className="shrink-0">
-        <div className="grid grid-cols-2 divide-x divide-y divide-line sm:grid-cols-3 lg:grid-cols-5 lg:divide-y-0">
-          <Stat icon={ScrollText} label="Менежментийн төлөвлөгөө" value={num(stats.n)} sub="2026 оны нэгтгэл" />
-          <Stat icon={Users} label="Төсөл хэрэгжүүлэгч" value={num(stats.implementers)} />
-          <Stat icon={Ruler} label="Нийт талбай, га" value={stats.ha.toFixed(1)} />
-          <Stat icon={Sprout} label="Төслийн талбайд мод тарих" value={num(stats.site)} sub={`${pct(stats.site)} · ${num(stats.n)}-аас`} />
-          <Stat icon={TreePine} label="Мод тарих байршил: НБОГ" value={num(stats.nbog)} sub={`${pct(stats.nbog)} · ${num(stats.n)} төлөвлөгөөнөөс`} />
-        </div>
-      </Card>
+      <StatStrip>
+        <Stat icon={ScrollText} label="Менежментийн төлөвлөгөө" value={num(stats.n)} sub="2026 оны нэгтгэл" />
+        <Stat icon={Users} label="Төсөл хэрэгжүүлэгч" value={num(stats.implementers)} />
+        <Stat icon={Ruler} label="Нийт талбай, га" value={stats.ha.toFixed(1)} />
+        <Stat icon={Sprout} label="Төслийн талбайд мод тарих" value={num(stats.site)} sub={`${pct(stats.site)} · ${num(stats.n)}-аас`} />
+        <Stat icon={TreePine} label="Мод тарих байршил: НБОГ" value={num(stats.nbog)} sub={`${pct(stats.nbog)} · ${num(stats.n)} төлөвлөгөөнөөс`} />
+      </StatStrip>
 
-      {/* ============ МОД ТАРИХ БАЙРШИЛ — бүтэн өргөн ============ */}
-      <Card className="shrink-0">
-        <Head title="Мод тарих байршил">
-          <span className="text-[10.5px] text-ink-3">төлөвлөгөөний тоо ба хувь</span>
-        </Head>
-        <div className="px-3 py-2.5">
-          <Composition
-            data={plantingData}
-            colorOf={(k) => PLANTING_COLOR.get(k) ?? FALLBACK}
-            selected={planting}
-            onSelect={setPlanting}
-            unit="төлөвлөгөө"
-          />
+      {/* ============ ГОЛ СҮЛЖЭЭ: диаграм · зураг · хүснэгт ============
+          ⚠ ДИАГРАМ ЗУРГИЙН ДЭЭР, ДООР СУУХГҮЙ (2026-10-05, хэрэглэгч:
+          "мапын доор дээр чарт байрлуулахгүй, маш зохисгүй"). Урьд нь
+          мод тарих байршлын задаргаа зургийн дээр бүтэн өргөнөөр сууж
+          байв — одоо зүүн баганад, бусад диаграмтай хамт. */}
+      <Columns layout="flex" id="bomt-4" left={340} right={420} className="min-h-0 flex-1">
+        {/* ---- ЗҮҮН: диаграмууд ---- */}
+        <div className="flex min-h-0 flex-col gap-2.5 overflow-y-auto xl:w-(--col-l) xl:shrink-0">
+          <Card className="shrink-0">
+            <Head title="Мод тарих байршил">
+              <span className="text-[10.5px] text-ink-3">төлөвлөгөөний тоо</span>
+            </Head>
+            <div className="px-3 py-2.5">
+              <SimpleChart
+                data={plantingData}
+                share
+                ordered
+                unit="төлөвлөгөө"
+                selected={planting}
+                onSelect={setPlanting}
+              />
+            </div>
+          </Card>
+          <Card className="shrink-0">
+            <Head title="Дүүрэг">
+              <span className="text-[10.5px] text-ink-3">төлөвлөгөөний тоо</span>
+            </Head>
+            <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2">
+              <SimpleChart data={districtMenu} share unit="төлөвлөгөө" selected={district} onSelect={setDistrict} />
+            </div>
+          </Card>
+          <Card className="min-h-[140px] flex-1">
+            <Head title="Үйл ажиллагааны чиглэл">
+              <span className="text-[10.5px] text-ink-3">төлөвлөгөөний тоо</span>
+            </Head>
+            <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2">
+              <SimpleChart data={activityMenu} share unit="төлөвлөгөө" selected={activity} onSelect={setActivity} />
+            </div>
+          </Card>
         </div>
-      </Card>
 
-      {/* ============ ГОЛ СҮЛЖЭЭ: зүүнд зураг, баруунд хүснэгтүүд ============ */}
-      <Columns layout="flex" id="bomt-3" left={540} className="min-h-0 flex-1">
-        <Card className="relative min-h-[320px] overflow-hidden xl:w-(--col-l) xl:shrink-0">
+        {/* ---- ГОЛ: газрын зураг ---- */}
+        <Card className="relative min-h-[320px] min-w-0 flex-1 overflow-hidden">
           <div className="relative h-full w-full">
             <PolygonMap
               points={NO_POINTS}
               visible={NO_INDEX}
-              shapes={{ data: shapes, selected: picked, glow: true }}
+              shapes={{ data: shapes, selected: picked, outline: true }}
               basemap={basemap}
               onSelect={(oid) => setPicked(picked === oid ? null : oid)}
               onHover={tip.onHover}
@@ -482,26 +464,17 @@ export function BomtDashboard() {
           </div>
         </Card>
 
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2.5">
-          <Card className="min-h-[150px] flex-1">
-            <Head title="Мод тарих байршлаар задаргаа">
-              <Segments options={ROW_DIMS} value={rowDim} onChange={setRowDim} />
+        {/* ---- БАРУУН: газрын зориулалт, төсөл хэрэгжүүлэгчийн хүснэгт ---- */}
+        <div className="flex min-h-0 min-w-0 flex-col gap-2.5 xl:w-(--col-r) xl:shrink-0">
+          <Card className="min-h-[140px] flex-1">
+            <Head title="Газрын зориулалт">
+              <span className="text-[10.5px] text-ink-3">төлөвлөгөөний тоо</span>
             </Head>
-            <StackedComparison
-              rows={matrix.rowKeys}
-              cols={matrix.colKeys}
-              cell={matrix.cell}
-              selectedRow={rowSel}
-              selectedCol={planting}
-              onSelect={(r, c) => {
-                setRowSel(r);
-                setPlanting(c);
-              }}
-              colorOf={(key) => PLANTING_COLOR.get(key) ?? FALLBACK}
-            />
+            <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2">
+              <SimpleChart data={landuseMenu} share unit="төлөвлөгөө" selected={landuse} onSelect={setLanduse} />
+            </div>
           </Card>
-
-          <Card className="min-h-[150px] flex-1">
+          <Card className="min-h-[220px] flex-1">
             <Head title="Төсөл хэрэгжүүлэгчээр">
               <span className="num text-[10.5px] text-ink-3">{num(implementers.length)} хэрэгжүүлэгч</span>
             </Head>

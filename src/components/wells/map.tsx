@@ -711,6 +711,21 @@ export function WellsMap({
      */
     glow?: boolean;
     /**
+     * ТОД ХҮРЭЭ, БҮДЭГ ДҮҮРГЭЛТ — хоёулаа ИЖИЛ өнгөөр.
+     *
+     * Байгаль орчны үнэлгээний хэлтсийн газрын зурагт (цаг агаараас
+     * бусад; хэрэглэгч, 2026-10-06: "polygon бол outline нарийхан тод
+     * өнгөтэй, fill transparency өгсөн байх шаардлагатай — товчхондоо
+     * outline тод, fill бүдэг, гэхдээ 2 ижил өнгөтэй"). Анхдагч хэв нь
+     * 42%-ийн дүүргэлт + бараан касинг тул хүрээ нь бараан, дүүргэлт нь
+     * өтгөн харагддаг байв.
+     * ⚠ Асаахад: дүүргэлт 12% (сонгогдвол 26%), касинг ба `glow`
+     * ЗУРАГДАХГҮЙ (тэд хүрээг бараан, бүдүүн болгодог), хүрээ нь бүтэн
+     * тод, нарийн (1.1 → 1.6px). Бусад хэлтсийн зураг ХӨНДӨГДӨХГҮЙ.
+     * ЗӨВХӨН анхны зурагдалтад уншигдана.
+     */
+    outline?: boolean;
+    /**
      * Давхаргын өнгө (hex). Өгөөгүй бол платформын дата өнгө.
      * ЗӨВХӨН анхны зурагдалтад уншигдана.
      */
@@ -942,7 +957,8 @@ export function WellsMap({
     gradedFire: Boolean(grades?.firefly),
     gradedFireColor: grades?.firefly === "graded",
     shaped: Boolean(shapes),
-    shapeGlow: Boolean(shapes?.glow),
+    shapeGlow: Boolean(shapes?.glow) && !shapes?.outline,
+    shapeOutline: Boolean(shapes?.outline),
     shapeColor: shapes?.color,
     fire: firefly ?? FIREFLY,
     tinted: Boolean(colors),
@@ -1002,7 +1018,10 @@ export function WellsMap({
       container: holder.current,
       style: baseStyle(basemapRef.current),
       center: back?.center ?? [106.9, 47.9],
-      zoom: back?.zoom ?? 9,
+      /* Масштаб заагдсан бол АНХНААСАА тэр хэмжээнд — олон өнцөгт л
+         харуулдаг зурагт цэгийн тааруулалт (`fitted`) ажилладаггүй тул
+         энд тавихгүй бол 9-д үлдэнэ */
+      zoom: back?.zoom ?? (modeRef.current.scale ? zoomForScale(modeRef.current.scale) : 9),
       /*
         ⚠ ДЭЭД ОЙРТОЛТЫГ хязгаарлана. Суурь зургийн бодит хамрах
         хүрээнээс цааш ойртвол MapLibre сүүлчийн хавтанг улам бүр
@@ -1212,7 +1231,9 @@ export function WellsMap({
           filter: ["in", ["geometry-type"], ["literal", ["Polygon", "MultiPolygon"]]],
           paint: {
             "fill-color": ["coalesce", ["get", "c"], modeRef.current.shapeColor ?? SHAPE_FALLBACK] as unknown as ExpressionSpecification,
-            "fill-opacity": ["case", SHAPE_LIT, 0.68, 0.42],
+            "fill-opacity": modeRef.current.shapeOutline
+              ? (["case", SHAPE_LIT, 0.26, 0.12] as unknown as ExpressionSpecification)
+              : (["case", SHAPE_LIT, 0.68, 0.42] as unknown as ExpressionSpecification),
           },
         });
 
@@ -1232,13 +1253,16 @@ export function WellsMap({
           ⚠ Горимоос ҮЛ ХАМААРНА: тогтмол rgba — платформын токен
           зураг дотор орохгүй ("газрын зураг хоёр горимд ижил" дүрэм).
         */
+        /* `outline` горимд касинг ЗУРАГДАХГҮЙ — хүрээ тод хэвээр байх ёстой.
+           Давхарга нь байх ёстой (бусад код `beforeId`-ээр иш татаж
+           магадгүй) тул нуухын оронд тунгалаг болгоно */
         m.addLayer({
           id: "shape-case",
           type: "line",
           source: "shapes",
           layout: { "line-join": "round" },
           paint: {
-            "line-color": "rgba(8,14,20,.55)",
+            "line-color": modeRef.current.shapeOutline ? "rgba(0,0,0,0)" : "rgba(8,14,20,.55)",
             "line-width": [
               "interpolate",
               ["linear"],
@@ -1266,11 +1290,15 @@ export function WellsMap({
               ["linear"],
               ["zoom"],
               8,
-              ["case", SHAPE_LIT, 1.8, 0.5],
+              modeRef.current.shapeOutline
+                ? ["case", SHAPE_LIT, 2.2, 1.1]
+                : ["case", SHAPE_LIT, 1.8, 0.5],
               14,
-              ["case", SHAPE_LIT, 2.6, 1.2],
+              modeRef.current.shapeOutline
+                ? ["case", SHAPE_LIT, 2.8, 1.6]
+                : ["case", SHAPE_LIT, 2.6, 1.2],
             ] as unknown as ExpressionSpecification,
-            "line-opacity": 0.9,
+            "line-opacity": modeRef.current.shapeOutline ? 1 : 0.9,
           },
         });
 
@@ -2265,7 +2293,12 @@ export function WellsMap({
      зөвхөн сонголт өөрчлөгдөх мөчид л хөдөлнө. */
   React.useEffect(() => {
     if (!live) return;
-    const target = focus ?? (zoomed.current ? home.current : null);
+    /* Масштаб заагдсан зурагт буцах байрлал ҮРГЭЛЖ бий — цэггүй (зөвхөн
+       олон өнцөгт) зурагт `home` нь цэгийн тааруулалтаас тавигддаггүй тул
+       шүүлт цэвэрлэхэд зураг хөдлөхгүй үлдэх байв. Тэр үед УБ-ын төв. */
+    const back =
+      home.current ?? (modeRef.current.scale ? ([106.9, 47.9, 106.9, 47.9] as Extent) : null);
+    const target = focus ?? (zoomed.current ? back : null);
     if (!target) return;
     zoomed.current = focus != null;
 

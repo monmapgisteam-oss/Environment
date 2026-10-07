@@ -1887,6 +1887,16 @@
    монолитын зураг 400px өндөртэй тул хуваасан өндөрт багтахгүй,
    картынхаа дотор чимээгүй тасарч байв. Гүйлт нь БАГАНАД — гурван
    картад тус тусад нь биш. */
+/* Агуулгаараа бүтэн өндөрсөх карт (`CutCard fit`) — дотроо гүйхгүй */
+.analytics-chart-card.is-fit {
+  flex: 0 0 auto;
+  min-height: 0;
+  max-height: none;
+}
+.analytics-chart-card.is-fit .analytics-chart-body {
+  overflow: visible;
+  max-height: none;
+}
 .soil-side .analytics-chart-card {
   flex: 0 0 auto;
   min-height: 0;
@@ -1994,6 +2004,37 @@
 }
 .ue-map-legend summary:hover {
   color: var(--ink);
+}
+/* Нууж, гаргадаг толгой (`LegendShell`) — `summary`-тай ижил төрх */
+.ue-map-legend-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 6px 8px;
+  font-size: 11px;
+  line-height: 1.3;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  font-weight: 600;
+  color: var(--ink-3);
+  text-align: left;
+}
+.ue-map-legend-toggle:hover {
+  color: var(--ink);
+}
+/* Нуугдсан үед зөвхөн товч — хайрцаг агуулгаараа нарийсна */
+.ue-map-legend.is-hidden {
+  width: auto;
+}
+/* Нуугдсан товч НАМ (хэрэглэгч, 2026-10-06: "өндрийг багасга") —
+   ~26px-ээс ~19px: зай 6/8 → 3/6, бичвэр 11 → 10px */
+.ue-map-legend.is-hidden .ue-map-legend-toggle {
+  padding: 3px 6px;
+  font-size: 10px;
+  line-height: 1.2;
+  letter-spacing: 0.1em;
+  gap: 5px;
 }
 .ue-map-legend-body {
   max-height: 164px;

@@ -15,7 +15,7 @@ import {
   ScrollText,
   Users,
 } from "lucide-react";
-import { BarChart, type Datum } from "@/components/charts";
+import type { Datum } from "@/components/charts";
 import { BasemapGallery } from "@/components/map/basemap-gallery";
 import { MapTip, MapTipRow, useMapTip } from "@/components/map/hover-tip";
 import { FilterBar, FilterMenu, PickList } from "@/components/wells/filter-bar";
@@ -40,9 +40,8 @@ import {
 import { Bounds } from "@/lib/extent";
 import { spreadRamp } from "@/lib/tone-ramp";
 import { cn, num } from "@/lib/utils";
-import { Card, Field, Head, MapLegend, Pending, Stat, type LegendItem } from "./ui";
-import { Composition, Matrix, Segments, type Key } from "./viz";
-import { TrendChart } from "./subject-charts";
+import { Card, Field, Head, MapLegend, Pending, Stat, StatStrip, type LegendItem } from "./ui";
+import { SimpleChart } from "./subject-charts";
 
 const PolygonMap = dynamic(
   () => import("@/components/wells/map").then((m) => m.WellsMap),
@@ -68,15 +67,6 @@ const ACTIVITY_LABEL = new Map<string, string>(
 );
 const SIZE_LABEL = new Map<string, string>(SIZE_CLASSES.map((s) => [s.id, s.label]));
 
-/** Хүснэгтийн МӨРИЙН хэмжээс — багана нь үргэлж дүүрэг */
-const ROW_DIMS = [
-  { id: "activity", label: "Үйл ажиллагааны чиглэл" },
-  { id: "landuse", label: "Газрын зориулалт" },
-  { id: "right", label: "Эрхийн хэлбэр" },
-  { id: "size", label: "Талбайн хэмжээ" },
-] as const;
-type RowDim = (typeof ROW_DIMS)[number]["id"];
-
 /*
   ГАЗРЫН ЗУРГИЙН ӨНГӨ — хоёр горим, тайлбарын толгойд сэлгэнэ.
   Платформын дүрмээр ангилал ЗУРГААС ОЛОН бол өнгөөр ялгахгүй
@@ -96,17 +86,21 @@ const FALLBACK = "#67d7e4";
  * бичигдсэн (хэрэглэгч: "бүтэц, харагдах байдал огт таалагдахгүй,
  * диаграмууд ойлгомжгүй, нэг хэвийн").
  *
- * Мөрөн диаграм ОГТ БАЙХГҮЙ. Бүтэц:
+ * Бүтэц:
  *   шүүлтүүрийн мөр (он сонголттой)
  *   → үзүүлэлтийн зурвас (тав)
- *   → ЗҮҮН: сарын баганан диаграм · ДҮҮРГЭЭР ЗАДАРГАА (хоёр хэмжээсийн
- *     хүснэгт, мөрийн хэмжээс сэлгэнэ) · эрхийн хэлбэрийн зурвас ба
- *     талбайн хэмжээний тархалт
- *   → БАРУУН: газрын зураг, өнгөт тайлбартай.
+ *   → ЗҮҮН: сарын талбайн диаграм · үйл ажиллагааны чиглэл · газрын
+ *     зориулалт
+ *   → ГОЛ: газрын зураг, өнгөт тайлбартай
+ *   → БАРУУН: дүүрэг · эрхийн хэлбэр · талбайн хэмжээ.
  *
- * Гол зүйл нь ХҮСНЭГТ: "аль дүүрэгт ямар үйл ажиллагаа хэр олон" гэдэг
- * нь хоёр тусдаа мөрөн диаграмаас уншигддаггүй байсан. Мөр, багана,
- * нүд бүр товшигдож шүүнэ; зураг, бусад диаграм дагаж хумигдана.
+ * ⚠ Задаргаа бүр ӨӨРИЙН КАРТТАЙ (2026-10-05, хэрэглэгч: "Задаргаа
+ * картыг задлаад нэг нэг чарт болго") — урьд нь гурав нь нэг картад
+ * сэлгэгддэг байв.
+ * ⚠ Диаграмын хэлбэрийг {@link SimpleChart} сонгоно (2026-10-05,
+ * хэрэглэгч: "бүх диаграмыг энгийн болго"). Урьд нь дүүрэг × ангиллын
+ * дулааны хүснэгт, 100%-ийн зурвас байсан. Бүгд товшигдож шүүнэ;
+ * зураг, бусад диаграм дагаж хумигдана.
  */
 export function UnelgeeDashboard() {
   const [year, setYear] = React.useState<AssessmentYear>(
@@ -122,7 +116,6 @@ export function UnelgeeDashboard() {
   const [size, setSize] = React.useState<string | null>(null);
   const [period, setPeriod] = React.useState<string | null>(null);
   const [picked, setPicked] = React.useState<number | null>(null);
-  const [rowDim, setRowDim] = React.useState<RowDim>("activity");
   const [colorMode, setColorMode] = React.useState<ColorMode>("right");
 
   const clearAll = React.useCallback(() => {
@@ -299,43 +292,6 @@ export function UnelgeeDashboard() {
     return out;
   }, [rows, passes]);
 
-  /* ---------------- Хүснэгт: мөрийн хэмжээс × дүүрэг ---------------- */
-  const matrix = React.useMemo(() => {
-    const base = (rows ?? []).filter((r) => passes(r, rowDim, "district"));
-    const rowTotal = new Map<string, number>();
-    const colTotal = new Map<string, number>();
-    const cells = new Map<string, number>();
-    for (const r of base) {
-      const rk = dimOf(r, rowDim);
-      rowTotal.set(rk, (rowTotal.get(rk) ?? 0) + 1);
-      colTotal.set(r.district, (colTotal.get(r.district) ?? 0) + 1);
-      const ck = `${rk}\u001f${r.district}`;
-      cells.set(ck, (cells.get(ck) ?? 0) + 1);
-    }
-    let rowKeys: Key[];
-    if (rowDim === "activity") {
-      rowKeys = ACTIVITIES.filter((a) => rowTotal.has(a.id)).map((a) => ({ key: a.id, label: a.label }));
-    } else if (rowDim === "size") {
-      rowKeys = SIZE_CLASSES.filter((s) => rowTotal.has(s.id)).map((s) => ({ key: s.id, label: s.label }));
-    } else {
-      rowKeys = [...rowTotal]
-        .sort((a, b) => b[1] - a[1])
-        .map(([k]) => ({ key: k, label: k }));
-    }
-    const colKeys: Key[] = [...colTotal]
-      .sort((a, b) => b[1] - a[1])
-      .map(([k]) => ({ key: k, label: k }));
-    return { rowKeys, colKeys, cell: (r: string, c: string) => cells.get(`${r}\u001f${c}`) ?? 0 };
-  }, [rows, passes, rowDim, dimOf]);
-
-  const rowSel = rowDim === "activity" ? activity : rowDim === "landuse" ? landuse : rowDim === "right" ? right : size;
-  const setRowSel = (k: string | null) => {
-    if (rowDim === "activity") setActivity(k);
-    else if (rowDim === "landuse") setLanduse(k);
-    else if (rowDim === "right") setRight(k);
-    else setSize(k);
-  };
-
   /** Зургийн тайлбар */
   const legend = React.useMemo<LegendItem[]>(() => {
     if (colorMode === "right") {
@@ -492,108 +448,69 @@ export function UnelgeeDashboard() {
       </FilterBar>
 
       {/* ============ ҮЗҮҮЛЭЛТИЙН ЗУРВАС ============ */}
-      <Card className="shrink-0">
-        <div className="grid grid-cols-2 divide-x divide-y divide-line sm:grid-cols-3 lg:grid-cols-5 lg:divide-y-0">
-          <Stat icon={FileCheck2} label="Ерөнхий үнэлгээ" value={num(stats.n)} sub={`${year} он · ${stats.span}`} />
-          <Stat icon={Ruler} label="Нийт талбай, га" value={stats.ha.toFixed(1)} />
-          <Stat icon={Users} label="Хүсэлт гаргагч" value={num(stats.applicants)} />
-          <Stat icon={CalendarRange} label="Сарын дундаж" value={stats.perMonth.toFixed(1)} sub="үнэлгээ / сар" />
-          <Stat
-            icon={CalendarDays}
-            label="Хамгийн олон үнэлгээтэй сар"
-            value={stats.peak ? stats.peak.label : "—"}
-            sub={stats.peak ? `${num(stats.peak.n)} үнэлгээ` : undefined}
-          />
-        </div>
-      </Card>
+      <StatStrip>
+        <Stat icon={FileCheck2} label="Ерөнхий үнэлгээ" value={num(stats.n)} sub={`${year} он · ${stats.span}`} />
+        <Stat icon={Ruler} label="Нийт талбай, га" value={stats.ha.toFixed(1)} />
+        <Stat icon={Users} label="Хүсэлт гаргагч" value={num(stats.applicants)} />
+        <Stat icon={CalendarRange} label="Сарын дундаж" value={stats.perMonth.toFixed(1)} sub="үнэлгээ / сар" />
+        <Stat
+          icon={CalendarDays}
+          label="Хамгийн олон үнэлгээтэй сар"
+          value={stats.peak ? stats.peak.label : "—"}
+          sub={stats.peak ? `${num(stats.peak.n)} үнэлгээ` : undefined}
+        />
+      </StatStrip>
 
-      {/* ============ ГОЛ СҮЛЖЭЭ: зүүнд диаграмууд, баруунд зураг ============ */}
-      <Columns layout="flex" id="assessment-3" right={560} className="min-h-0 flex-1">
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2.5">
-          {/* Сарын баганан диаграм — хугацаа нь энэ бүртгэлийн цорын ганц тэнхлэг */}
+      {/* ============ ГОЛ СҮЛЖЭЭ: диаграм · зураг · диаграм ============
+          ⚠ Диаграмууд зургийн ХОЁР ТАЛД хуваагдана (2026-10-05,
+          хэрэглэгч: "чартуудыг баруун, зүүн панел болгоод хуваа — тэгээд
+          мапын зүүн баруун"). Урьд нь бүгд зүүн НЭГ баганад цуварч,
+          эрхийн хэлбэр ба талбайн хэмжээ доод талдаа шахагддаг байв. */}
+      <Columns layout="flex" id="assessment-4" left={380} right={340} className="min-h-0 flex-1">
+        {/* ---- ЗҮҮН: хугацаа, үйл ажиллагааны чиглэл, газрын зориулалт ---- */}
+        <div className="flex min-h-0 min-w-0 flex-col gap-2.5 overflow-y-auto xl:w-(--col-l) xl:shrink-0">
+          {/* Сарын талбайн диаграм — хугацаа нь энэ бүртгэлийн цорын ганц тэнхлэг */}
           <Card className="shrink-0">
             <Head title="Шийдвэрлэсэн үнэлгээ, сараар">
               <span className="num text-[10.5px] text-ink-3">{year} он</span>
             </Head>
             <div className="px-3 pt-2 pb-1">
-              <TrendChart
-                data={monthData.map((d) => ({ ...d, label: `${Number(d.key.slice(5))}-р сар` }))}
+              <SimpleChart
+                time
+                data={monthData}
                 unit="үнэлгээ"
                 selected={period}
                 onSelect={setPeriod}
+                formatTick={(d) => `${Number(d.key.slice(5))}-р сар`}
               />
             </div>
           </Card>
 
-          {/* ДҮҮРГЭЭР ЗАДАРГАА — хоёр хэмжээсийн хүснэгт */}
-          <Card className="min-h-[160px] flex-1">
-            <Head title="Дүүргээр задаргаа">
-              <Segments options={ROW_DIMS} value={rowDim} onChange={setRowDim} />
+          <Card className="min-h-[140px] flex-1">
+            <Head title="Үйл ажиллагааны чиглэл">
+              <span className="text-[10.5px] text-ink-3">үнэлгээний тоо</span>
             </Head>
-            <Matrix
-              rows={matrix.rowKeys}
-              cols={matrix.colKeys}
-              cell={matrix.cell}
-              rowSel={rowSel}
-              colSel={district}
-              onRow={setRowSel}
-              onCol={setDistrict}
-              onCell={(r, c) => {
-                setRowSel(r);
-                setDistrict(c);
-              }}
-              colorOf={
-                rowDim === "right"
-                  ? (k) => rightColor.get(k) ?? FALLBACK
-                  : rowDim === "size"
-                    ? (k) => sizeColor.get(k) ?? FALLBACK
-                    : undefined
-              }
-              unit="үнэлгээний тоо"
-            />
+            <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2">
+              <SimpleChart data={activityMenu} share unit="үнэлгээ" selected={activity} onSelect={setActivity} />
+            </div>
           </Card>
-
-          {/* Доод мөр: харьцаа ба тархалт */}
-          <div className="grid shrink-0 grid-cols-1 gap-2.5 md:grid-cols-2">
-            <Card>
-              <Head title="Газрын эрхийн хэлбэр">
-                <span className="text-[10.5px] text-ink-3">үнэлгээний тоо</span>
-              </Head>
-              <div className="p-3">
-                <Composition
-                  data={rightData}
-                  colorOf={(k) => rightColor.get(k) ?? FALLBACK}
-                  selected={right}
-                  onSelect={setRight}
-                  unit="үнэлгээ"
-                />
-              </div>
-            </Card>
-            <Card>
-              <Head title="Талбайн хэмжээгээр">
-                <span className="text-[10.5px] text-ink-3">үнэлгээний тоо</span>
-              </Head>
-              <div className="px-3 pt-2 pb-1">
-                <BarChart
-                  data={sizeData}
-                  height={78}
-                  labels
-                  unit="үнэлгээ"
-                  selected={size}
-                  onSelect={setSize}
-                />
-              </div>
-            </Card>
-          </div>
+          <Card className="min-h-[140px] flex-1">
+            <Head title="Газрын зориулалт">
+              <span className="text-[10.5px] text-ink-3">үнэлгээний тоо</span>
+            </Head>
+            <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2">
+              <SimpleChart data={landuseMenu} share unit="үнэлгээ" selected={landuse} onSelect={setLanduse} />
+            </div>
+          </Card>
         </div>
 
-        {/* ---- БАРУУН: газрын зураг ---- */}
-        <Card className="relative min-h-[320px] overflow-hidden xl:w-(--col-r) xl:shrink-0">
+        {/* ---- ГОЛ: газрын зураг ---- */}
+        <Card className="relative min-h-[320px] min-w-0 flex-1 overflow-hidden">
           <div className="relative h-full w-full">
             <PolygonMap
               points={NO_POINTS}
               visible={NO_INDEX}
-              shapes={{ data: shapes, selected: picked, glow: true }}
+              shapes={{ data: shapes, selected: picked, outline: true }}
               basemap={basemap}
               onSelect={(oid) => setPicked(picked === oid ? null : oid)}
               onHover={tip.onHover}
@@ -674,6 +591,47 @@ export function UnelgeeDashboard() {
             ) : null}
           </div>
         </Card>
+
+        {/* ---- БАРУУН: дүүрэг, эрхийн хэлбэр, талбайн хэмжээ ---- */}
+        <div className="flex min-h-0 min-w-0 flex-col gap-2.5 overflow-y-auto xl:w-(--col-r) xl:shrink-0">
+          <Card className="shrink-0">
+            <Head title="Дүүрэг">
+              <span className="text-[10.5px] text-ink-3">үнэлгээний тоо</span>
+            </Head>
+            <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2">
+              <SimpleChart data={districtMenu} share unit="үнэлгээ" selected={district} onSelect={setDistrict} />
+            </div>
+          </Card>
+          <Card className="shrink-0">
+            <Head title="Газрын эрхийн хэлбэр">
+              <span className="text-[10.5px] text-ink-3">үнэлгээний тоо</span>
+            </Head>
+            <div className="px-3 py-2">
+              <SimpleChart
+                data={rightData}
+                share
+                unit="үнэлгээ"
+                selected={right}
+                onSelect={setRight}
+              />
+            </div>
+          </Card>
+          <Card className="shrink-0">
+            <Head title="Талбайн хэмжээгээр">
+              <span className="text-[10.5px] text-ink-3">үнэлгээний тоо</span>
+            </Head>
+            <div className="px-3 py-2">
+              <SimpleChart
+                data={sizeData}
+                share
+                ordered
+                unit="үнэлгээ"
+                selected={size}
+                onSelect={setSize}
+              />
+            </div>
+          </Card>
+        </div>
       </Columns>
 
       <p className="shrink-0 px-0.5 text-[10.5px] leading-none text-ink-3">
