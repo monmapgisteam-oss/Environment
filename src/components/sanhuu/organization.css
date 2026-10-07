@@ -54,9 +54,16 @@
    хязгаараас ДООШ ороогүй (`ink-3`-ийн контраст). Холбоосын
    шугамуудын өндөр нь тороны зайтай хамт өөрчлөгдөнө: зөвхөн нэгийг
    нь сольвол зураас зангилаанаасаа тасарна */
-.org-chart { padding: 12px 16px 20px; }
-.org-root { position: relative; width: min(100%, 360px); margin: 0 auto 29px; }
-.org-root::after { content: ''; position: absolute; left: 50%; top: 100%; height: 16px; border-left: 1px solid var(--line-2); }
+/* ⚠⚠ ШАТ ХООРОНДЫН ЗАЙ ХОЁР ХУВЬСАГЧААС (хэрэглэгчийн хүсэлт,
+   2026-10-05: "карт хоорондын зайг холдуулмаар, босоо зураасуудыг
+   сунга"). Эцгээс унжих зураас (`--org-drop`) + хэвтээ төмрөөс
+   хүүхэд рүү унжих зураас (`--org-rise`) = эгнээ хоорондын зай.
+   Урьд нь 16 / 14 / 29 гэсэн гурван тоо тус тусдаа бичигдсэн тул
+   нэгийг нь сольвол зураас зангилаанаасаа тасардаг байв. ⚠ Нэг
+   пикселийн давхцал (−1) нь зураасыг төмөртэй ЗАЛГАНА. */
+.org-chart { --org-drop: 38px; --org-rise: 34px; --org-gap: calc(var(--org-drop) + var(--org-rise) - 1px); padding: 12px 16px 20px; }
+.org-root { position: relative; width: min(100%, 360px); margin: 0 auto var(--org-gap); }
+.org-root::after { content: ''; position: absolute; left: 50%; top: 100%; height: var(--org-drop); border-left: 1px solid var(--line-2); }
 /* ⚠ Багана нь дэлгэцийн өргөнийг ДҮҮРГЭХГҮЙ (хэрэглэгчийн хүсэлт,
    2026-09-21: "картуудын өргөнг багасга"). `1fr` үед дөрөв нь бүтэн
    өргөнийг хувааж, богино нэртэй зангилаанууд хагас хоосон карт болж
@@ -75,12 +82,12 @@
 .org-branch { position: relative; display: flex; flex-direction: column; align-items: center; min-width: 0; }
 /* Картын өргөн нь тогтмол: мөчир өөрөө хүүхдүүдээсээ өргөн болно */
 .org-branch > .org-node { width: 272px; max-width: 100%; }
-/* Хүүхдийн эгнээ хүртэлх зай нь `.org-root`-ийнхтой ижил (16 + 14) */
-.org-branch > .org-branches { margin-top: 29px; }
+/* Хүүхдийн эгнээ хүртэлх зай нь `.org-root`-ийнхтой ижил */
+.org-branch > .org-branches { margin-top: var(--org-gap); }
 /* Эцэг картаас доош унжаа. ⚠ `.org-node` нь `overflow: hidden` тул
    унжааг картан дээр биш ХҮҮХДИЙН ЭГНЭЭН дээр зурна — эс тэгвээс
    картын ирмэг дээр тасарна. */
-.org-branch > .org-branches::before { content: ''; position: absolute; left: 50%; top: -29px; height: 16px; border-left: 1px solid var(--line-2); }
+.org-branch > .org-branches::before { content: ''; position: absolute; left: 50%; top: calc(var(--org-gap) * -1); height: var(--org-drop); border-left: 1px solid var(--line-2); }
 /* ⚠⚠ БҮТЭН ЗАДАРГААНД МӨР ТАСЛАХГҮЙ. Үндсэн харагдац дөрвөн картаа
    мөрөнд нь буулгаж болдог (хажуугийн зай хэмнэнэ) ч мод дээр тэр нь
    БҮТЦИЙГ ЭВДЭНЭ: "Тендер" нь ах дүү хоёрынхоо хажуугаас доош бууж,
@@ -94,11 +101,18 @@
    ажиллана. Холбоос зураасны шилжилт (±17px) нь ЗАЙНААС гардаг тул
    өргөн өөрчлөгдөхөд хөндөгдөхгүй. */
 .org-chart.is-full .org-branch > .org-node { width: 240px; }
+/* ⚠ Нэгтгэсэн зангилаа ӨРГӨН (хэрэглэгчийн хүсэлт, 2026-10-05).
+   "Хөрөнгө оруулалт, тендер, ШХА" нь гурван салааны дээд карт тул
+   240px-д нэр нь гурван мөрөнд хуваагдаж байв; доорх салаанууд
+   ~790px эзэлдэг тул өргөн карт тэдний дээр багтана. */
+.org-chart.is-full .org-branch[data-unit="hurungu_tender"] > .org-node { width: 340px; }
 .org-chart.is-full .org-canvas { width: max-content; min-width: 100%; }
-.org-branches > .org-branch::before { content: ''; position: absolute; top: -14px; height: 14px; left: -17px; right: -17px; border-top: 1px solid var(--line-2); }
+/* Хоёр тэнхлэгээр гүйх үед ирмэгийн карт зурвасанд наалдахгүй */
+.org-chart.is-full { padding: 14px 28px 28px; }
+.org-branches > .org-branch::before { content: ''; position: absolute; top: calc(var(--org-rise) * -1); height: var(--org-rise); left: -17px; right: -17px; border-top: 1px solid var(--line-2); }
 .org-branches > .org-branch:first-child::before { left: 50%; }
 .org-branches > .org-branch:last-child::before { right: 50%; }
-.org-branches > .org-branch::after { content: ''; position: absolute; top: -14px; left: 50%; height: 14px; border-left: 1px solid var(--line-2); }
+.org-branches > .org-branch::after { content: ''; position: absolute; top: calc(var(--org-rise) * -1); left: 50%; height: var(--org-rise); border-left: 1px solid var(--line-2); }
 /* Surface redesign is scoped to the organization chart. Typography, card
    dimensions and hierarchy stay unchanged. */
 .org-node { position: relative; min-width: 0; overflow: hidden; border: 1px solid transparent; border-radius: 13px; background: linear-gradient(155deg, var(--org-surface), var(--org-inset)) padding-box, linear-gradient(135deg, var(--org-edge-light), var(--org-edge-dark) 48%, var(--org-border)) border-box; box-shadow: 0 8px 18px #07121f26, inset 0 0 0 3px color-mix(in srgb, var(--org-surface) 65%, transparent); transition: box-shadow .18s; }
@@ -243,6 +257,33 @@
    алга болно. */
 .org-body { flex: 1; min-height: 0; overflow: auto; }
 .org-body.is-focus { display: flex; align-items: stretch; overflow: hidden; }
+
+/* ⚠⚠ МОДНЫ ГҮЙЛГҮҮР (хэрэглэгчийн хүсэлт, 2026-10-05: "scroll нь гоё
+   дизайн байх хэрэгтэй"). Бүтэн мод ХОЁР ТЭНХЛЭГЭЭР гүйдэг тул
+   платформын 4px-ийн бараг үл үзэгдэх зурвас энд хангалтгүй — хаана
+   байгаагаа, хэр их үлдсэнийг зурвас өөрөө хэлэх ёстой.
+   Зам нь бүдэг суваг, бариул нь түүн дотор хөвөх капсул: тунгалаг
+   хүрээ + `background-clip`-ээр нарийсгаж, хүрэхэд бүдүүсэж, хэлтсийн
+   өнгөөр асна. Хоёр зурвасын уулзвар (булан) нь сувагтайгаа нэг өнгө.
+   ⚠ `scrollbar-width`/`scrollbar-color`-ийг ЗӨВХӨН Firefox-д —
+   Chrome/Edge нь тэдгээрийг өгвөл `::-webkit-scrollbar`-ыг бүхэлд нь
+   үл тоодог (globals.css-ийн тайлбарыг үз). */
+.org-body:not(.is-focus)::-webkit-scrollbar { width: 12px; height: 12px; }
+.org-body:not(.is-focus)::-webkit-scrollbar-track,
+.org-body:not(.is-focus)::-webkit-scrollbar-corner { background: color-mix(in srgb, var(--org-inset) 70%, transparent); }
+.org-body:not(.is-focus)::-webkit-scrollbar-track:vertical { border-left: 1px solid var(--line); }
+.org-body:not(.is-focus)::-webkit-scrollbar-track:horizontal { border-top: 1px solid var(--line); }
+.org-body:not(.is-focus)::-webkit-scrollbar-thumb {
+  border: 3px solid transparent;
+  border-radius: 99px;
+  background: color-mix(in srgb, var(--org-accent) 45%, var(--line-2)) padding-box;
+  min-height: 40px;
+}
+.org-body:not(.is-focus)::-webkit-scrollbar-thumb:hover { border-width: 2px; background-color: color-mix(in srgb, var(--tone) 70%, var(--org-accent)); }
+.org-body:not(.is-focus)::-webkit-scrollbar-thumb:active { border-width: 2px; background-color: var(--tone); }
+@supports not selector(::-webkit-scrollbar) {
+  .org-body:not(.is-focus) { scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--org-accent) 55%, var(--line-2)) color-mix(in srgb, var(--org-inset) 70%, transparent); }
+}
 .org-body.is-focus > .org-chart { flex: 0 0 440px; padding: 14px 16px 20px; overflow-y: auto; }
 .org-tasks { flex: 1; min-width: 0; overflow-y: auto; border-left: 1px solid var(--line); background: var(--paper-2); }
 .org-chart.is-deep .org-root { width: 100%; margin-bottom: 14px; }

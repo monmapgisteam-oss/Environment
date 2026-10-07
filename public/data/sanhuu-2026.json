@@ -44,34 +44,28 @@
       "label": "Байгаль хамгаалал, нөхөн сэргээлтийн зардал"
     },
     {
-      "id": "hurungu",
+      "id": "hurungu_tender",
       "parent": "g1",
       "no": "",
-      "label": "Хөрөнгө оруулалт"
-    },
-    {
-      "id": "niislel",
-      "parent": "hurungu",
-      "no": "",
-      "label": "Нийслэлийн төсөв"
-    },
-    {
-      "id": "tender",
-      "parent": "g1",
-      "no": "",
-      "label": "Тендер"
+      "label": "Хөрөнгө оруулалт, тендер, ШХА"
     },
     {
       "id": "shalgaruulalt",
-      "parent": "tender",
+      "parent": "hurungu_tender",
       "no": "",
       "label": "Тендер шалгаруулалт"
     },
     {
       "id": "shuud",
-      "parent": "tender",
+      "parent": "hurungu_tender",
       "no": "",
       "label": "Шууд худалдан авалт"
+    },
+    {
+      "id": "hurungu",
+      "parent": "hurungu_tender",
+      "no": "",
+      "label": "Хөрөнгө оруулалт"
     },
     {
       "id": "g2",
@@ -151,7 +145,7 @@
     {
       "name": "Ц.Биндэрьяа",
       "position": "Шуурхай хурал, олон нийттэй харилцах ажилтан",
-      "unit": "heltes"
+      "unit": "g4"
     }
   ],
   "categories": [
@@ -638,7 +632,7 @@
       "dueMonth": 12,
       "days": 364,
       "staff": "Ц.Биндэрьяа",
-      "unit": "heltes",
+      "unit": "g4",
       "target": 100,
       "progress": 0,
       "status": "",
@@ -654,7 +648,7 @@
       "dueMonth": 12,
       "days": 364,
       "staff": "Ц.Биндэрьяа",
-      "unit": "heltes",
+      "unit": "g4",
       "target": 100,
       "progress": 0,
       "status": "",
@@ -670,7 +664,7 @@
       "dueMonth": 12,
       "days": 364,
       "staff": "Ц.Биндэрьяа",
-      "unit": "heltes",
+      "unit": "g4",
       "target": 100,
       "progress": 0,
       "status": "",
@@ -686,7 +680,7 @@
       "dueMonth": 12,
       "days": 364,
       "staff": "Ц.Биндэрьяа",
-      "unit": "heltes",
+      "unit": "g4",
       "target": 100,
       "progress": 0,
       "status": "",
@@ -702,7 +696,7 @@
       "dueMonth": 12,
       "days": 364,
       "staff": "Ц.Биндэрьяа",
-      "unit": "heltes",
+      "unit": "g4",
       "target": 100,
       "progress": 0,
       "status": "",
@@ -718,7 +712,7 @@
       "dueMonth": 12,
       "days": 364,
       "staff": "Ц.Биндэрьяа",
-      "unit": "heltes",
+      "unit": "g4",
       "target": 100,
       "progress": 0,
       "status": "",
@@ -734,7 +728,7 @@
       "dueMonth": 12,
       "days": 364,
       "staff": "Ц.Биндэрьяа",
-      "unit": "heltes",
+      "unit": "g4",
       "target": 100,
       "progress": 0,
       "status": "",
@@ -750,7 +744,7 @@
       "dueMonth": 12,
       "days": 364,
       "staff": "Ц.Биндэрьяа",
-      "unit": "heltes",
+      "unit": "g4",
       "target": 100,
       "progress": 0,
       "status": "",
@@ -766,7 +760,7 @@
       "dueMonth": 12,
       "days": 364,
       "staff": "Ц.Биндэрьяа",
-      "unit": "heltes",
+      "unit": "g4",
       "target": 100,
       "progress": 0,
       "status": "",
@@ -782,7 +776,7 @@
       "dueMonth": 12,
       "days": 364,
       "staff": "Ц.Биндэрьяа",
-      "unit": "heltes",
+      "unit": "g4",
       "target": 100,
       "progress": 0,
       "status": "",
@@ -798,7 +792,7 @@
       "dueMonth": 12,
       "days": 364,
       "staff": "Ц.Биндэрьяа",
-      "unit": "heltes",
+      "unit": "g4",
       "target": 100,
       "progress": 0,
       "status": "",
@@ -814,7 +808,7 @@
       "dueMonth": 12,
       "days": 364,
       "staff": "Ц.Биндэрьяа",
-      "unit": "heltes",
+      "unit": "g4",
       "target": 100,
       "progress": 0,
       "status": "",
@@ -830,7 +824,7 @@
       "dueMonth": 12,
       "days": 364,
       "staff": "Ц.Биндэрьяа",
-      "unit": "heltes",
+      "unit": "g4",
       "target": 100,
       "progress": 0,
       "status": "",
