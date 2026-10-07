@@ -305,6 +305,78 @@ export type LayerSet = {
    */
   cross?: Readonly<Record<string, readonly [string, string]>>;
   /**
+   * АНГИЛЛЫН ДИАГРАМЫН ДЭЭД ТОО — анхдагч {@link MAX_CATEGORIES} (4).
+   *
+   * Нийслэлийн худаг (2026-10-07, токеноор шалгасан): дөрвөн суудлыг
+   * дүүрэг · зөвшөөрөл · ажиллагаа · (утгагүй) бүртгэсэн огноо эзэлж,
+   * хэлтсийн гол хоёр задаргаа — ашиглалтын зориулалт, худгийн төрөл —
+   * огт гардаггүй байв. Хөндлөн хүснэгтэд орсон хоёр тэнхлэг нэгдсэн
+   * картаас хасагддаг тул суудал нэмэх нь картыг уртасгахгүй.
+   */
+  maxCategories?: number;
+  /**
+   * АНГИЛЛЫН БҮТЭН ӨНГӨ (hex) — давхаргын нэр → утга → өнгө.
+   * {@link valueHues}-ээс ялгаатай нь гэрэлтэлт, ханалтыг ч заана:
+   * ангилал нь ДОХИО үүрэх үед (хийгдсэн `--water` · анхаарах `--ochre`
+   * · тэмдэглээгүй саарал) — шилэн барилгын стикертэй нэг зарчим.
+   * ⚠ Тогтмол hex: газрын зураг хоёр горимд ижил байх ёстой.
+   */
+  valueColors?: Record<string, Record<string, string>>;
+  /**
+   * ЦЭГ ТОД, ЖИЖИГ — firefly гэрэлгүй ({@link WellsMap} `dots`). Утга нь
+   * ангиллын түлхүүр → зурах дараалал (их нь ДЭЭР), давхаргын нэрээр.
+   * Олон мянган цэгтэй давхаргад: гэрэл нь нийлж толбо болдог.
+   */
+  dots?: Record<string, Record<string, number>>;
+  /**
+   * ЦЭГИЙГ БӨӨГНӨРҮҮЛНЭ — холоос тоотой дугуй, ойртоход задарна
+   * ({@link WellsMap} `cluster`). Анхдагч нь бөөгнөрөлгүй.
+   */
+  cluster?: boolean;
+  /**
+   * ДИАГРАМ БҮР ӨӨРИЙН КАРТТАЙ — нэгдсэн картын тэнхлэг сэлгэгч, он/сарын
+   * сэлгэгч ГАРАХГҮЙ; бүх задаргаа зэрэг харагдана ({@link LayerSet.tidy}
+   * бүрдэлд). Гүний худгийн паспорт (хэрэглэгч, 2026-10-07: "бүх
+   * мэдээлэл ойлгомжтой харагдах чартууд").
+   */
+  unfold?: boolean;
+  /**
+   * ЗӨВХӨН УЛААНБААТАР — давхаргын нэрс ({@link inUlaanbaatar}). Хилээс
+   * гадуурх координаттай бүртгэл зураг, диаграм, тоо ГУРВУУЛАНГААС
+   * хасагдана. Координатгүй бүртгэл ҮЛДЭНЭ (байршил нь мэдэгдэхгүй).
+   */
+  withinUB?: readonly string[];
+  /**
+   * ЭХНИЙ 20-ООР ХУРААСАН ТООЛЛЫН ДИАГРАМ — давхаргын нэр → талбарууд.
+   * Автомат задаргаа нь 25-аас олон утгатай талбарыг ангилал гэж үздэггүй
+   * тул гүйцэтгэгч компани (687 нэр) зэрэг "хэн хамгийн их" гэсэн асуулт
+   * хаана ч гардаггүй байв. Автомат диаграмуудын ДАРАА нэмэгдэнэ; нэгдсэн
+   * картын нэг тэнхлэг болно. Гарчиг нь "(эхний 20)" гэж ил хэлнэ.
+   */
+  topCharts?: Record<string, readonly string[]>;
+  /** {@link topCharts}-ийн мөрийн тоо (анхдагч 20) */
+  topN?: number;
+  /**
+   * СУЛ НЭГТГЭЛ — давхаргын нэр → талбарын нэрийн хэв. Үсгийн том,
+   * жижгээс ГАДНА хашилт, зай, давхар үсэг, "ХХК"-ийн бичиглэлийг
+   * үл тоож нэг утга болгоно ({@link foldSpelling}); канон нь хамгийн
+   * түгээмэл бичиглэл. Компанийн нэрэнд: "Эрдэнэдрийлинг ХХК" 6 хувилбартай
+   * (3,028 · 196 "Эрдэнэдрийллинг" · 85 "ххк" · 17 хашилттай …).
+   * ⚠ Хүний нэр, газрын нэрэнд БҮҮ хэрэглэ — давхар үсгээр ялгаатай
+   * өөр нэрс нийлнэ.
+   */
+  foldLoose?: Record<string, RegExp>;
+  /** Бөөгнөрөл ЭНЭ түвшнээс цааш задарна (анхдагч 15) */
+  clusterMaxZoom?: number;
+  /** Анхны суурь зураг ({@link BASEMAPS}-ийн `id`) — өгөөгүй бол хиймэл дагуул */
+  basemap?: string;
+  /**
+   * СУУРЬ НЭГЖ ТАЛБАРЫН ЗУРААС — бүрдлээр. Анхдагч нь цайвар саарал
+   * `#c3cad3` (бүсийн цэсүүдэд сонгогдсон). Дата нь ЦЭГ байх цэсэд
+   * (нийслэлийн худаг) тор нь цэгтэй өрсөлдөхгүйн тулд бүдэг байна.
+   */
+  parcelLine?: { color: string; opacity: number; width?: number };
+  /**
    * ҮЗҮҮЛЭЛТИЙН ЗУРВАС — НЭГ ДАВХАРГЫГ ХОЁР БҮЛЭГТ хуваана
    * (хэрэглэгч 2026-10-06, ойн хэлтэс: "индикаторт нийт хэдэн ТХГН
    * байгаа болон тэдгээрт хамаарах газруудын тоо, талбай нь л байхад
@@ -336,6 +408,13 @@ export type LayerSet = {
    * дахин энэ рүү сэргээв. Ногоон бүсийн хүснэгт ХӨНДӨГДӨӨГҮЙ.
    */
   axisBars?: boolean;
+  /**
+   * ГАЗРЫН ЖАГСААЛТ — баруун баганын ёроолд давхаргын бүртгэлүүд
+   * (нэр · ангилал · дүүрэг · хэмжилт) үлдсэн өндрийг дүүргэнэ; мөр
+   * дарахад зураг тэр цэг рүү ойртоно. Давхаргын нэрсээр.
+   * Ногоон бүсийн намгархаг газар (хэрэглэгч, 2026-10-07).
+   */
+  recordList?: string[];
   /**
    * ГАНЦ КАРТТАЙ ДАВХАРГА БАГАНАА ДҮҮРГЭНЭ — карт `max-content`-оор
    * таглагдахгүй, зурвасын мөрүүд өндрийг хуваалцаж томорно.
@@ -1500,6 +1579,17 @@ function foldScript(rows: Record<number, Row>, info: LayerInfo) {
  * "Байнгын урсацтай" нь ӨӨР бичиглэл бөгөөд аль нь алийг товчилсон
  * нь ТААМАГ тул ХӨНДӨХГҮЙ — эх сурвалжийн эзэн шийднэ (`values`).
  */
+/** Компанийн нэрийн сул түлхүүр ({@link LayerSet.foldLoose}) */
+function looseKey(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/["'«»“”„]/g, "")
+    /* Кирилл дээр `\b` ажилладаггүй — араас нь үсэг ирэхгүй "ххк" */
+    .replace(/х+к(?![а-яөү])|x+k(?![a-z])/g, "")
+    .replace(/\s+/g, "")
+    .replace(/(.)\1+/g, "$1");
+}
+
 function foldSpelling(rows: Record<number, Row>, info: LayerInfo) {
   const list = Object.values(rows);
   if (list.length < 2) return;
@@ -1514,11 +1604,14 @@ function foldSpelling(rows: Record<number, Row>, info: LayerInfo) {
       if (!t) continue;
       seen.set(t, (seen.get(t) ?? 0) + 1);
     }
-    /* Жижиг үсгийн хэлбэр → хамгийн түгээмэл бичиглэл */
+    /* Жижиг үсгийн хэлбэр → хамгийн түгээмэл бичиглэл. Бүртгэл заасан
+       талбарт СУЛ түлхүүр ({@link LayerSet.foldLoose}) */
+    const loose = info.set.foldLoose?.[info.id]?.test(f.name);
+    const keyOf = loose ? looseKey : (t: string) => t.toLowerCase();
     const canon = new Map<string, string>();
     const best = new Map<string, number>();
     for (const [text, n] of seen) {
-      const k = text.toLowerCase();
+      const k = keyOf(text);
       if (n > (best.get(k) ?? 0)) {
         best.set(k, n);
         canon.set(k, text);
@@ -1530,7 +1623,7 @@ function foldSpelling(rows: Record<number, Row>, info: LayerInfo) {
       const v = row[f.name];
       if (typeof v !== "string") continue;
       const t = v.replace(/\s+/g, " ").trim();
-      const hit = t && canon.get(t.toLowerCase());
+      const hit = t && canon.get(keyOf(t));
       if (hit && hit !== v) row[f.name] = hit;
     }
   }
@@ -2498,9 +2591,14 @@ function scoreOf(values: Datum[]): number {
 */
 const FORCED_TOP = 20;
 const FORCED_CATEGORY_MAX = 12;
-function forcedCharts(info: LayerInfo, rows: Row[], names: readonly string[]): Breakdown[] {
+function forcedCharts(
+  info: LayerInfo,
+  rows: Row[],
+  names: readonly string[],
+  topN = FORCED_TOP,
+): Breakdown[] {
   const out: Breakdown[] = [];
-  const cut = (vs: Datum[]) => (vs.length > FORCED_TOP ? vs.slice(0, FORCED_TOP) : vs);
+  const cut = (vs: Datum[]) => (vs.length > topN ? vs.slice(0, topN) : vs);
   let group: { field: LayerField; keyOf: (row: Row) => string[] } | null = null;
   const sums: LayerField[] = [];
   if (process.env.NODE_ENV !== "production") {
@@ -2541,7 +2639,7 @@ function forcedCharts(info: LayerInfo, rows: Row[], names: readonly string[]): B
       field: f.name,
       label: f.alias,
       kind: "count",
-      top: all.length > FORCED_TOP ? FORCED_TOP : undefined,
+      top: all.length > topN ? topN : undefined,
       keyOf,
       recount: (rs) => ({ values: cut(tally(rs.map(keyOf))) }),
       values: cut(all),
@@ -3576,6 +3674,20 @@ function chartInfo(info: LayerInfo): LayerInfo {
 }
 
 export function breakdowns(full: LayerInfo, data: LayerFeatures): Breakdown[] {
+  const out = autoBreakdowns(full, data);
+  /* Бүртгэлийн нэмэлт хураасан диаграм ({@link LayerSet.topCharts}) */
+  const extra = full.set.topCharts?.[full.id];
+  if (!extra?.length || !out.length) return out;
+  const have = new Set(out.map((b) => b.field));
+  const want = extra.filter((n) => !have.has(n));
+  if (!want.length) return out;
+  return [
+    ...out,
+    ...forcedCharts(chartInfo(full), Object.values(data.rows), want, full.set.topN),
+  ];
+}
+
+function autoBreakdowns(full: LayerInfo, data: LayerFeatures): Breakdown[] {
   const info = chartInfo(full);
   const rows = Object.values(data.rows);
   if (!rows.length || info.set.noCharts) return [];
@@ -3644,7 +3756,7 @@ export function breakdowns(full: LayerInfo, data: LayerFeatures): Breakdown[] {
   */
   const kept: Candidate[] = [];
   for (const c of cats) {
-    if (kept.length >= MAX_CATEGORIES) break;
+    if (kept.length >= (info.set.maxCategories ?? MAX_CATEGORIES)) break;
     if (kept.some((k) => samePartition(k, c))) continue;
     kept.push(c);
   }

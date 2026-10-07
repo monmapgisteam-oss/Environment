@@ -609,7 +609,16 @@ export function AreaChart({
     налж, ямар ч ашиггүйгээр 28px өндөр иднэ. Зөвхөн уртаар шийдвэл
     цөөхөн жилийн цуваа дэмий налах байв.
   */
-  const tilt = data.length > 8 && ticks.some((t) => t.length >= 4);
+  /*
+    ⚠ ШОШГО НЬ СИЙРЭГ бол ХЭВТЭЭ (хэрэглэгч, 2026-10-07: "үүнийг
+    хэвтүүл"). Оны тэнхлэг одоо бүтэн дөрвөн оронтой ч зөвхөн тав, хоёр
+    тутамд бичигддэг (`tickOf`) — найм ба түүнээс цөөн шошгын хооронд
+    хоосон нүд үлддэг тул давхцахгүй, налуулах шаардлагагүй.
+  */
+  const tilt =
+    data.length > 8 &&
+    ticks.some((t) => t.length >= 4) &&
+    ticks.filter(Boolean).length > 8;
 
   return (
     <div className={cn(fill && "flex h-full flex-col")}>
