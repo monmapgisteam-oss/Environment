@@ -468,6 +468,59 @@ body {
   height: 26px;
 }
 
+/*
+  ХОГ ХАЯГДЛЫН ХОЁР ТЭМДЭГ (хяналтын ландфилл).
+
+  Хоёр давхарга нэг зураг дээр зэрэг суудаг тул ӨНГӨ, ХЭЛБЭР, ИКОН
+  гурвуулаар ялгагдана: аюултай нь дугуй + гурвалжин, энгийн нь
+  дөрвөлжин + хогийн сав. Өнгө ялгах чадвар султай хүн хэлбэрээр нь
+  уншина. Өнгө нь `waste-dashboard.tsx`-ийн `HAZARD_HEX`/`COMMON_HEX`
+  -тэй ЯГ ИЖИЛ — тэмдэглэгээ суурь зураг дээр суудаг тул горимоос үл
+  хамаарах hex. Дэвсгэр нь `place`-тэй ижил шалтгаанаар тогтмол бараан.
+*/
+.species-pin:has(svg[data-pin="hazard"]),
+.species-pin:has(svg[data-pin="landfill"]) {
+  width: 18px;
+  height: 18px;
+  border-width: 1.5px;
+  background: #111a22;
+  border-color: var(--waste-pin);
+  color: var(--waste-pin);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.5),
+    0 0 12px -3px color-mix(in oklab, var(--waste-pin) 85%, transparent);
+}
+.species-pin:has(svg[data-pin="hazard"]) {
+  --waste-pin: #00c2e1;
+}
+.species-pin:has(svg[data-pin="landfill"]) {
+  --waste-pin: #00c899;
+  border-radius: 3px;
+}
+.species-pin:has(svg[data-pin="hazard"]) svg,
+.species-pin:has(svg[data-pin="landfill"]) svg {
+  width: 10px;
+  height: 10px;
+}
+.species-pin:has(svg[data-pin="hazard"]):hover,
+.species-pin:has(svg[data-pin="landfill"]):hover {
+  width: 21px;
+  height: 21px;
+}
+/* Сонгосон тэмдэг — томорч, өнгөөрөө дүүрнэ, икон нь бараан */
+.species-pin.is-picked:has(svg[data-pin="hazard"]),
+.species-pin.is-picked:has(svg[data-pin="landfill"]) {
+  width: 22px;
+  height: 22px;
+  background: var(--waste-pin);
+  color: #111a22;
+  z-index: 2;
+  box-shadow:
+    0 0 0 1.5px #111a22,
+    0 0 0 3px var(--waste-pin),
+    0 0 12px -2px var(--waste-pin);
+}
+
 .species-pin:has(svg[data-pin="from"]) {
   border-color: var(--ochre);
   box-shadow:
