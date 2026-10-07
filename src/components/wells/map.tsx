@@ -711,6 +711,24 @@ export function WellsMap({
      */
     glow?: boolean;
     /**
+     * ТОД ХҮРЭЭ, БҮДЭГ ДҮҮРГЭЛТ — хоёулаа ИЖИЛ өнгөөр.
+     *
+     * Байгаль орчны үнэлгээний хэлтсийн газрын зурагт (цаг агаараас
+     * бусад; хэрэглэгч, 2026-10-06: "polygon бол outline нарийхан тод
+     * өнгөтэй, fill transparency өгсөн байх шаардлагатай — товчхондоо
+     * outline тод, fill бүдэг, гэхдээ 2 ижил өнгөтэй"). Анхдагч хэв нь
+     * 42%-ийн дүүргэлт + бараан касинг тул хүрээ нь бараан, дүүргэлт нь
+     * өтгөн харагддаг байв.
+     * ⚠ Асаахад: дүүргэлт 12% (сонгогдвол 26%), касинг ба `glow`
+     * ЗУРАГДАХГҮЙ (тэд хүрээг бараан, бүдүүн болгодог), хүрээ нь бүтэн
+     * тод, нарийн (1.1 → 1.6px). Бусад хэлтсийн зураг ХӨНДӨГДӨХГҮЙ.
+     * ЗӨВХӨН анхны зурагдалтад уншигдана.
+     * ⚠ Нэр нь `crisp`, `outline` БИШ: `outline` нь ХҮРЭЭ ГАРАХ ЭСЭХ
+     * (анхдагчаар гарна) гэсэн өөр утгатай — хоёр салааг нийлүүлэхэд
+     * (2026-10-07) ижил нэр хоёр эсрэг утга авсан байв.
+     */
+    crisp?: boolean;
+    /**
      * Давхаргын өнгө (hex). Өгөөгүй бол платформын дата өнгө.
      * ЗӨВХӨН анхны зурагдалтад уншигдана.
      */
@@ -978,7 +996,8 @@ export function WellsMap({
     gradedFire: Boolean(grades?.firefly),
     gradedFireColor: grades?.firefly === "graded",
     shaped: Boolean(shapes),
-    shapeGlow: Boolean(shapes?.glow),
+    shapeGlow: Boolean(shapes?.glow) && !shapes?.crisp,
+    shapeCrisp: Boolean(shapes?.crisp),
     shapeColor: shapes?.color,
     fire: firefly ?? FIREFLY,
     tinted: Boolean(colors),
@@ -1041,7 +1060,10 @@ export function WellsMap({
       container: holder.current,
       style: baseStyle(basemapRef.current),
       center: back?.center ?? [106.9, 47.9],
-      zoom: back?.zoom ?? 9,
+      /* Масштаб заагдсан бол АНХНААСАА тэр хэмжээнд — олон өнцөгт л
+         харуулдаг зурагт цэгийн тааруулалт (`fitted`) ажилладаггүй тул
+         энд тавихгүй бол 9-д үлдэнэ */
+      zoom: back?.zoom ?? (modeRef.current.scale ? zoomForScale(modeRef.current.scale) : 9),
       /*
         ⚠ ДЭЭД ОЙРТОЛТЫГ хязгаарлана. Суурь зургийн бодит хамрах
         хүрээнээс цааш ойртвол MapLibre сүүлчийн хавтанг улам бүр
@@ -1251,7 +1273,9 @@ export function WellsMap({
           filter: ["in", ["geometry-type"], ["literal", ["Polygon", "MultiPolygon"]]],
           paint: {
             "fill-color": ["coalesce", ["get", "c"], modeRef.current.shapeColor ?? SHAPE_FALLBACK] as unknown as ExpressionSpecification,
-            "fill-opacity": ["case", SHAPE_LIT, 0.68, 0.42],
+            "fill-opacity": modeRef.current.shapeCrisp
+              ? (["case", SHAPE_LIT, 0.26, 0.12] as unknown as ExpressionSpecification)
+              : (["case", SHAPE_LIT, 0.68, 0.42] as unknown as ExpressionSpecification),
           },
         });
 
@@ -1292,13 +1316,16 @@ export function WellsMap({
             ? ["case", SHAPE_LIT, lit, plain]
             : ["case", SHAPE_LIT, thin, ["in", ["geometry-type"], ["literal", ["Polygon", "MultiPolygon"]]], 0, plain]) as unknown as ExpressionSpecification;
 
+        /* `crisp` горимд касинг ЗУРАГДАХГҮЙ — хүрээ тод хэвээр байх ёстой.
+           Давхарга нь байх ёстой (бусад код `beforeId`-ээр иш татаж
+           магадгүй) тул нуухын оронд тунгалаг болгоно */
         m.addLayer({
           id: "shape-case",
           type: "line",
           source: "shapes",
           layout: { "line-join": "round" },
           paint: {
-            "line-color": "rgba(8,14,20,.55)",
+            "line-color": modeRef.current.shapeCrisp ? "rgba(0,0,0,0)" : "rgba(8,14,20,.55)",
             /* Нимгэн горимд ойролцоогоор хагас ({@link shapes.edge});
                хүрээгүй горимыг `strokeAt` барина */
             "line-width": (modeRef.current.shapeThin
@@ -1333,7 +1360,17 @@ export function WellsMap({
             /* `["zoom"]` нь дээд түвшний `interpolate`-ийн шууд оролт
                байх ёстой — сонголтын шалгалтыг СУУДАЛ бүрийн дотор
                оруулав, эсрэгээр бичвэл давхарга чимээгүйхэн гологдоно */
-            "line-width": (modeRef.current.shapeThin
+            "line-width": (modeRef.current.shapeCrisp
+              ? [
+                  "interpolate",
+                  ["linear"],
+                  ["zoom"],
+                  8,
+                  ["case", SHAPE_LIT, 2.2, 1.1],
+                  14,
+                  ["case", SHAPE_LIT, 2.8, 1.6],
+                ]
+              : modeRef.current.shapeThin
               ? [
                   "interpolate",
                   ["linear"],
@@ -1352,7 +1389,7 @@ export function WellsMap({
                   14,
                   strokeAt(2.6, 1.2, 1.4),
                 ]) as unknown as ExpressionSpecification,
-            "line-opacity": 0.9,
+            "line-opacity": modeRef.current.shapeCrisp ? 1 : 0.9,
           },
         });
 
@@ -2347,7 +2384,12 @@ export function WellsMap({
      зөвхөн сонголт өөрчлөгдөх мөчид л хөдөлнө. */
   React.useEffect(() => {
     if (!live) return;
-    const target = focus ?? (zoomed.current ? home.current : null);
+    /* Масштаб заагдсан зурагт буцах байрлал ҮРГЭЛЖ бий — цэггүй (зөвхөн
+       олон өнцөгт) зурагт `home` нь цэгийн тааруулалтаас тавигддаггүй тул
+       шүүлт цэвэрлэхэд зураг хөдлөхгүй үлдэх байв. Тэр үед УБ-ын төв. */
+    const back =
+      home.current ?? (modeRef.current.scale ? ([106.9, 47.9, 106.9, 47.9] as Extent) : null);
+    const target = focus ?? (zoomed.current ? back : null);
     if (!target) return;
     zoomed.current = focus != null;
 

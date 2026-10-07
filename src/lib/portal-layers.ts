@@ -96,6 +96,93 @@ export type LayerSet = {
    */
   hues: number[];
   /**
+   * Давхаргын өнгөний ГЭРЭЛТЭЛТ ба ХАНАЛТ (OKLCH) — анхдагч 0.74 / 0.15.
+   * Үерийн эрсдэлд ГҮН ЦЭНХЭР (хэрэглэгч, 2026-10-06: "гүн цэнхэр
+   * өнгөтэй байвал зүгээр, үер учраас") — агуулга нь өөрөө УС тул ойн
+   * ногоонтой ижил үндэслэлээр (`FOREST`) сэдвийн өнгө авна.
+   */
+  toneL?: number;
+  /**
+   * АНХНЫ МАСШТАБ (хуваарийн хуваарь: 1_000_000 → 1:1 000 000).
+   * Өгвөл зураг шүүлтгүй үед дүрсийн хүрээнд ТААРУУЛАХГҮЙ, тэр
+   * хэмжээндээ нээгдэж, шүүлт цэвэрлэхэд буцаж ирнэ. Шүүлт тавихад
+   * үлдсэн дүрс рүү ойртох нь хэвээр. Үерийн эрсдэл дээр 1:1 000 000
+   * (хэрэглэгч, 2026-10-06).
+   */
+  scale?: number;
+  /**
+   * Давхаргын индикаторын зурваст ({@link mapPicker}) ГАРАХГҮЙ давхаргууд.
+   * Давхарга өөрөө зураг, жагсаалтад хэвээр — зөвхөн тоо нь зурваст
+   * орохгүй (хэрэглэгч, 2026-10-06).
+   */
+  statSkip?: readonly string[];
+  /**
+   * Индикаторын зурвас нь ДАВХАРГА БҮРИЙН нийт бүртгэлийн тоо (үерийн
+   * эрсдэл). Өгөөгүй бол ердийн зурвас (сонгосон давхаргын бүртгэл, талбай …).
+   */
+  layerStats?: boolean;
+  /**
+   * ДИАГРАМГҮЙ бүрдэл — задаргаа огт тооцогдохгүй, баруун багана ба
+   * шүүлтүүрийн цэс гарахгүй; давхаргууд зөвхөн зурагт (эко-инфраструктур,
+   * хэрэглэгч 2026-10-06: "чарт хэрэггүй юм байна").
+   */
+  noCharts?: boolean;
+  /**
+   * Давхаргын АГУУЛГЫН тэмдэг — давхаргын дугаар → түлхүүр (tree · bike ·
+   * footprints · flower · shield). Өгөөгүй бол геометрийн тэмдэг.
+   */
+  icons?: Record<string, string>;
+  /**
+   * БҮРТГЭЛЭЭС ЗААСАН ИНДИКАТОР — ердийн зурвасын ОРОНД. `field`-гүй бол
+   * тухайн давхаргын бүртгэлийн тоо, `field`-тэй бол тэр тоон талбарын
+   * нийлбэр (нэр эсвэл албан нэрээр тааруулна). `icon` нь тэмдгийн
+   * түлхүүр: trees · flower · sprout · leaf · shapes.
+   */
+  stats?: readonly { label: string; layer: string; field?: RegExp; icon: string }[];
+  /**
+   * ДИАГРАМЫН ТАЛБАРЫГ ЗААНА — давхаргын дугаараар. Өгвөл тэр давхаргад
+   * хөдөлгүүрийн таамаглал (`breakdowns`) ажиллахгүй, зөвхөн эдгээр
+   * талбараар диаграм гарна (`forcedCharts`). `mapOnly` давхаргад ч
+   * диаграм гаргана — давхарга газрын зургийн цэсэндээ үлдэнэ.
+   */
+  charts?: Record<string, readonly string[]>;
+  /**
+   * ТООЛЛЫН ОРОНД НИЙЛБЭР — `by`-д таарах ангиллын (жишээ нь дүүрэг)
+   * диаграм бүртгэлийн тоо биш `measure`-д таарах тоон талбарын
+   * НИЙЛБЭРИЙГ харуулна (`sumInstead`). Хоёулаа талбарын нэр эсвэл
+   * албан нэрээр тааруулна.
+   */
+  sumBy?: { by: RegExp; measure: RegExp };
+  /**
+   * ХЭМЖИЛТЭЭРЭЭ ХАСАГДАХ карт — хэмжилтийн нэр (`measure`) нь таарвал
+   * тэр нийлбэр/дундажийн диаграм гарахгүй. Тооллын диаграм хөндөгдөхгүй.
+   */
+  dropMeasure?: RegExp;
+  /** ЗАДАРГААНЫ НЭРЭЭР хасагдах карт (жишээ нь "Байршлын байдал") */
+  dropCharts?: RegExp;
+  /** Харьцуулах диаграмаас ХАСАГДАХ цуваа — нэрээр (жишээ нь "Талбай") */
+  compareDrop?: RegExp;
+  /**
+   * Харьцуулах диаграмын цувааны ӨНЦӨГ — нэрээр. Гэрэлтэлт, ханалт нь
+   * тогтмол БҮДЭГ (OKLCH 0.78 / 0.08), зөвхөн өнцөг өөр.
+   */
+  seriesHues?: Record<string, number>;
+  /**
+   * ХАСАХ харьцуулах карт (`compare`) — гарчиг ба БҮХ цувааны нэрээр
+   * тааруулна, тэр ганц карт л хасагдана (`droppedCompare`).
+   */
+  dropCompare?: readonly { label: string; series: readonly string[] }[];
+  /**
+   * НЭГ ЗАДАРГААГ АГУУЛГААР НЬ ХЭДЭН КАРТАД ХУВААНА — давхаргын дугаараар.
+   *
+   * Эх сурвалж хоёр өөр зүйлийг нэг баганад хольсон үед (үерийн
+   * эрсдэлтэй цэгийн "Ангилал": эрсдэлтэй цэгийн төрөл ба бусад).
+   * `label` нь задаргааны нэр; хэсэг бүр `match`-д таарах ангиллыг авна,
+   * `match`-гүй хэсэг нь үлдэгдэл. Талбар, шүүлт НЭГ хэвээр.
+   */
+  splits?: Record<string, { label: string; parts: { title: string; match?: RegExp }[] }>;
+  toneC?: number;
+  /**
    * Давхаргуудыг НЭЭХЭД НЬ шууд асаах эсэх.
    *
    * Олон давхаргатай нийлмэл бүрдэл ХООСОН эхэлнэ — юуг нь харахыг
@@ -588,6 +675,32 @@ export type LayerSet = {
    * шошготой НЭГ эх сурвалж.
    */
   nameApart?: boolean;
+  /**
+   * `mapOnly` ДАВХАРГУУД ГАЗРЫН ЗУРАГ ДЭЭРХ СОНГОГЧИД (`MapLayerPicker`).
+   *
+   * {@link mapOnly}-д бүртгэгдсэн давхаргууд зүүн "Давхарга"
+   * жагсаалтад ОРОХГҮЙ; суурь зургийн тэмдгийн доор давхаргын тэмдэг
+   * гарч, дарахад тэдгээрийн хайрцагтай жагсаалт унжина. Асаахад зураг
+   * дээр гарна, hover тайлбар, бичлэгийн цонх ажиллана, диаграм
+   * гарахгүй — зөвхөн ДАВХЦУУЛЖ харахад.
+   * Бусад давхарга зүүн жагсаалтад үлдэх бөгөөд тэр жагсаалт НЭГИЙГ
+   * СОНГОДОГ болно (хэрэглэгч, 2026-10-05: "check биш сонгох болго") —
+   * нэгийг сонгоход өмнөх нь унтарна, зургийн цэснээс асаасан
+   * давхаргууд хэвээр. Толгойн "n / m" тоо гарахгүй.
+   *
+   * ⚠ Үерийн эрсдэл дээр асаалттай (хэрэглэгч, 2026-10-05). Аль
+   * давхарга зурагт л харьяалагдахыг ХЭРЭГЛЭГЧ заасан — датанаас
+   * таамаглаж ангилдаг байсныг хасав.
+   * ⚠ Сонгох жагсаалттай бүрдэлд л (`openAll`, `exclusive` биш)
+   * утгатай.
+   */
+  mapPicker?: boolean;
+  /**
+   * ЛАТИН, КИРИЛЛ ХОЛИЛДСОН ҮГИЙГ ЗАСНА (`foldScript`) — кирилл үгийн
+   * дундах ижил харагдах латин үсгийг кирилл рүү. Үерийн эрсдэл дээр
+   * (хэрэглэгч, 2026-10-05).
+   */
+  foldScript?: boolean;
   /**
    * АНГИЛЛЫН ӨНГӨ АСААХГҮЙ давхаргууд — ганц тонгоор зурагдана.
    *
@@ -1310,7 +1423,63 @@ async function loadLayerRows(info: LayerInfo): Promise<LayerRows> {
     }
   }
   if (info.set.tidy) foldSpelling(rows, info);
+  if (info.set.foldScript) {
+    foldScript(rows, info);
+    /* Латин үсэг засагдсаны ДАРАА дахин буулгана — эс тэгвээс холилдсон
+       бичиглэлтэй утга толинд таарахгүй үлдэнэ */
+    if (remap) for (const uid of Object.keys(rows)) rows[Number(uid)] = relabel(rows[Number(uid)], remap);
+  }
   return { rows, area };
+}
+
+/*
+  ЛАТИН, КИРИЛЛ ХОЛИЛДСОН ҮГ (хэрэглэгч, 2026-10-05: "ангилал дээр
+  латин кирилл холиод бичсэн байна уу шалга").
+
+  Гараар бичсэн утгад кирилл үгийн дунд ИЖИЛ ХАРАГДАХ латин үсэг
+  (a/а, c/с, e/е, o/о, p/р, x/х, y/у …) орсон байх нь түгээмэл —
+  нүдэнд ялгаагүй ч "Усны эрсдэл" нь ХОЁР ангилал болж, хайлтад ч
+  олдохгүй. Засвар нь ҮГ БҮРЭЭР:
+  · үгэнд кирилл үсэг БАЙХ бөгөөд үлдсэн латин үсэг БҮГД ижил
+    харагдах хос үсэгтэй бол → кирилл рүү хөрвүүлнэ;
+  · бүтэн латин үг (код, товчлол, "PLI") ХӨНДӨГДӨХГҮЙ;
+  · хос үсэггүй латин үсэг (f, g, q …) орсон үг ХӨНДӨГДӨХГҮЙ — тэр нь
+    санаатай латин бичиглэл байж болох тул таамаглахгүй.
+  ⚠ Татах мөчид хийгдэнэ — диаграм, шүүлтүүр, бичлэгийн цонх нэг
+  хэлбэр харуулна (`foldSpelling`-тэй ижил).
+  ⚠ Хөгжүүлэлтийн үед засагдсан утга бүр консолд бичигдэнэ — аль
+  давхаргын аль талбарт холилдсон бичиглэл байсныг шалгахад.
+*/
+const LOOKALIKE: Record<string, string> = {
+  A: "А", B: "В", C: "С", E: "Е", H: "Н", K: "К", M: "М", O: "О", P: "Р", T: "Т", X: "Х", Y: "У",
+  a: "а", c: "с", e: "е", o: "о", p: "р", x: "х", y: "у", k: "к",
+};
+
+function fixScript(text: string): string {
+  return text.replace(/[\p{L}]+/gu, (word) => {
+    if (!/\p{Script=Cyrillic}/u.test(word) || !/[A-Za-z]/.test(word)) return word;
+    const latin = word.match(/[A-Za-z]/g) ?? [];
+    if (!latin.every((ch) => ch in LOOKALIKE)) return word;
+    return word.replace(/[A-Za-z]/g, (ch) => LOOKALIKE[ch]);
+  });
+}
+
+function foldScript(rows: Record<number, Row>, info: LayerInfo) {
+  for (const f of info.fields) {
+    if (f.type !== "String") continue;
+    const fixed = new Map<string, string>();
+    for (const row of Object.values(rows)) {
+      const v = row[f.name];
+      if (typeof v !== "string") continue;
+      const t = fixScript(v);
+      if (t === v) continue;
+      row[f.name] = t;
+      fixed.set(v, t);
+    }
+    if (fixed.size && process.env.NODE_ENV !== "production") {
+      console.info(`[foldScript] ${info.id} · ${f.alias || f.name}:`, [...fixed].map(([a, b]) => `${a} → ${b}`));
+    }
+  }
 }
 
 /**
@@ -2314,6 +2483,98 @@ function scoreOf(values: Datum[]): number {
 }
 
 /** Утгуудыг тоолж, тоо буурахаар эрэмбэлнэ */
+/*
+  ЗААСАН ТАЛБАРЫН ДИАГРАМ ({@link LayerSet.charts}, хэрэглэгч 2026-10-06:
+  "uyrt_urtseun_negj_talbai дээр angilal, handle, BLDNG field ашигла").
+
+  Ерөнхий хөдөлгүүр (`breakdowns`) задаргааг ТААМАГЛАЖ сонгодог —
+  давтагдал, урт, дугаарын шинж зэргээр талбарыг хасдаг тул хэрэглэгчийн
+  нэрлэсэн талбар гарах баталгаагүй. Энд таамаг алга:
+  · бичвэр, эсвэл ≤12 өөр утгатай тоон талбар → утга тус бүрийн ТОО
+    (20-оос олон ангилалтай бол эхний 20, гарчигт ил);
+  · олон утгатай тоон талбар → эхний ангиллын талбараар НИЙЛБЭР.
+  ⚠ Талбарын нэрийг том, жижиг үсэг харгалзахгүй тааруулна (порталын
+  талбар жижиг үсэгтэй: `BLDNG` → `bldng`). Олдоогүй нэрийг алгасна.
+*/
+const FORCED_TOP = 20;
+const FORCED_CATEGORY_MAX = 12;
+function forcedCharts(info: LayerInfo, rows: Row[], names: readonly string[]): Breakdown[] {
+  const out: Breakdown[] = [];
+  const cut = (vs: Datum[]) => (vs.length > FORCED_TOP ? vs.slice(0, FORCED_TOP) : vs);
+  let group: { field: LayerField; keyOf: (row: Row) => string[] } | null = null;
+  const sums: LayerField[] = [];
+  if (process.env.NODE_ENV !== "production") {
+    /* Талбарын БОДИТ нэрсийг харуулна — заасан нэр зөрвөл эндээс засна */
+    console.info(
+      `[charts] ${info.id} талбарууд:`,
+      info.fields.map((x) => `${x.name} (${x.type}) — ${x.alias}`),
+    );
+  }
+  for (const name of names) {
+    const low = name.toLowerCase();
+    /* ЯГ таарсан нэр эхэлж; олдохгүй бол `BLDNG_…` гэх мэт УГТВАРААР
+       эхэлсэн ЭХНИЙ БИЧВЭР талбар (нэр, төрөл) — тоон `BLDNG_CURR`
+       зэрэг хэмжилтийг АВАХГҮЙ: тэдгээр нь заасан талбар биш */
+    const f =
+      info.fields.find((x) => x.name.toLowerCase() === low) ??
+      info.fields.find((x) => x.type === "String" && x.name.toLowerCase().startsWith(`${low}_`));
+    if (!f) {
+      if (process.env.NODE_ENV !== "production") console.warn(`[charts] ${info.id}: "${name}" талбар олдсонгүй`);
+      continue;
+    }
+    const numeric = NUMERIC.test(f.type);
+    const distinct = numeric
+      ? new Set(rows.map((r) => numberOf(r[f.name])).filter((v) => v != null)).size
+      : 0;
+    if (numeric && distinct > FORCED_CATEGORY_MAX) {
+      sums.push(f);
+      continue;
+    }
+    const keyOf = (row: Row): string[] => {
+      if (!numeric) return [categoryKey(row[f.name])];
+      const n = numberOf(row[f.name]);
+      return [n == null ? categoryKey(null) : String(n)];
+    };
+    const all = tally(rows.map(keyOf));
+    out.push({
+      id: `${f.name}:forced`,
+      field: f.name,
+      label: f.alias,
+      kind: "count",
+      top: all.length > FORCED_TOP ? FORCED_TOP : undefined,
+      keyOf,
+      recount: (rs) => ({ values: cut(tally(rs.map(keyOf))) }),
+      values: cut(all),
+    });
+    group ??= { field: f, keyOf };
+  }
+  for (const f of sums) {
+    if (!group) break;
+    const g = group;
+    const sumOf = (rs: Row[]): Datum[] => {
+      const m = new Map<string, number>();
+      for (const r of rs) {
+        const v = numberOf(r[f.name]);
+        const k = g.keyOf(r)[0];
+        if (v == null || k == null) continue;
+        m.set(k, (m.get(k) ?? 0) + v);
+      }
+      return cut([...m].map(([k, v]) => ({ key: k, label: k, value: v })).sort((a, b) => b.value - a.value));
+    };
+    out.push({
+      id: `${f.name}:forced-sum`,
+      field: g.field.name,
+      label: g.field.alias,
+      kind: "sum",
+      measure: f.alias,
+      keyOf: g.keyOf,
+      recount: (rs) => ({ values: sumOf(rs) }),
+      values: sumOf(rows),
+    });
+  }
+  return out;
+}
+
 function tally(keys: string[][]): Datum[] {
   const map = new Map<string, number>();
   for (const ks of keys) for (const k of ks) map.set(k, (map.get(k) ?? 0) + 1);
@@ -3317,7 +3578,15 @@ function chartInfo(info: LayerInfo): LayerInfo {
 export function breakdowns(full: LayerInfo, data: LayerFeatures): Breakdown[] {
   const info = chartInfo(full);
   const rows = Object.values(data.rows);
-  if (!rows.length) return [];
+  if (!rows.length || info.set.noCharts) return [];
+  /* Бүртгэл талбараа ЗААСАН бол таамаглалгүйгээр тэднийг л ({@link LayerSet.charts}) */
+  const forced = info.set.charts?.[info.id];
+  if (forced) {
+    const own = forcedCharts(info, rows, forced);
+    /* Заасан талбарын НЭГ Ч олдоогүй бол автомат задаргаа руу буцна —
+       нэр зөрсөн давхарга диаграмгүй хоосон үлдэх ёсгүй */
+    if (own.length) return own;
+  }
 
   const cards = measureCardCharts(info, rows);
   if (cards.length) return cards;
@@ -3488,7 +3757,14 @@ export function breakdowns(full: LayerInfo, data: LayerFeatures): Breakdown[] {
     }
   }
 
-  const list = foldMeasures(out, info.set.measureFirst === true);
+  /* Хэмжилтээрээ хасагдах карт ({@link LayerSet.dropMeasure}) */
+  const drop = info.set.dropMeasure;
+  const gone = info.set.dropCharts;
+  const list = sumInstead(info, rows, foldMeasures(out, info.set.measureFirst === true)).filter(
+    (b) =>
+      !(drop && b.measure && b.kind !== "count" && drop.test(b.measure)) &&
+      !(gone && gone.test(b.label.trim())),
+  );
   return info.set.tidy ? tidyCharts(list) : list;
 }
 
@@ -3564,6 +3840,44 @@ function tidyCharts(list: Breakdown[]): Breakdown[] {
  * ⚠ ШҮҮЛТ ТАВИХАД ХОЁУЛАНГ ДАХИН ТООЛНО — хоёр хуучин
  * `recount` хэвээр дуудагдана.
  */
+/*
+  ТООЛЛЫН ОРОНД НИЙЛБЭР ({@link LayerSet.sumBy}, хэрэглэгч 2026-10-06:
+  "нийт мод гээд field байгаа түүнийг ашигла, тэгээд дүүрэгт байгаа модны
+  тоо гарна"). "Дүүрэг" диаграм БҮРТГЭЛИЙН тоог (1,286 ногоон байгууламж)
+  харуулдаг байсныг тэр талбарын НИЙЛБЭРЭЭР (модны тоо) солино.
+  ⚠ Талбарын техникийн нэр мэдэгдэхгүй тул нэр ЭСВЭЛ албан нэрээр
+  (alias) таана. Хэмжилтийн талбар олдохгүй давхаргад диаграм хэвээр.
+  ⚠ Ангилал нь тооллын диаграмынхаа `keyOf`-оор — шүүлт, өнгө нэг дүрэм.
+*/
+function sumInstead(info: LayerInfo, rows: Row[], list: Breakdown[]): Breakdown[] {
+  const rule = info.set.sumBy;
+  if (!rule) return list;
+  const hit = (f: LayerField, re: RegExp) => re.test(f.name) || re.test(f.alias);
+  const m = info.fields.find((f) => NUMERIC.test(f.type) && hit(f, rule.measure));
+  if (!m) return list;
+  return list.map((b) => {
+    if (b.kind !== "count" || !rule.by.test(b.label)) return b;
+    const sumOf = (rs: Row[]): Datum[] => {
+      const acc = new Map<string, number>();
+      for (const r of rs) {
+        const v = numberOf(r[m.name]);
+        if (v == null) continue;
+        for (const k of b.keyOf(r)) acc.set(k, (acc.get(k) ?? 0) + v);
+      }
+      return [...acc].map(([k, v]) => ({ key: k, label: k, value: v })).sort((x, y) => y.value - x.value);
+    };
+    return {
+      ...b,
+      id: `${b.field}:sum:${m.name}`,
+      kind: "sum" as const,
+      measure: m.alias,
+      notes: undefined,
+      recount: (rs: Row[]) => ({ values: sumOf(rs) }),
+      values: sumOf(rows),
+    };
+  });
+}
+
 function foldMeasures(list: Breakdown[], measureFirst = false): Breakdown[] {
   /*
     Талбар бүрд ЭХНИЙ НИЙЛБЭРИЙН диаграм.

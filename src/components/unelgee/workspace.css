@@ -1,15 +1,16 @@
 .ue-workspace button:focus-visible, .ue-workspace summary:focus-visible { outline: 2px solid var(--tone); outline-offset: 3px; }
-.ue-topic-note { color: var(--ink-3); font-size: 12px; line-height: 1.5; padding-inline: 3px; }
 .ue-card { border-radius: 12px; }
 .ue-card-head { min-height: 43px; flex-wrap: wrap; gap: 8px; padding: 10px 14px; }
 .ue-card-head h2 { font-size: 12px; line-height: 1.5; font-weight: 600; letter-spacing: 0; text-transform: none; }
-.ue-stat { justify-content: flex-start; padding: 15px; gap: 12px; }
-.ue-stat > svg { width: 28px; }
-.ue-stat-label { font-size: 11px; line-height: 1.5; letter-spacing: 0; text-transform: none; }
-.ue-stat-value { font-size: 25px; line-height: 1.2; }
-.ue-layer-dashboard .analytics-chart-head { flex-wrap: wrap; align-items: flex-start; gap: 8px; }
-.ue-layer-dashboard .analytics-chart-head h2 { white-space: normal; line-height: 1.5; }
-.ue-color-action { display: inline-flex; align-items: center; gap: 5px; padding: 3px; font-size: 10px; }
+/* Гарчиг ТОМ ҮСГЭЭР — платформын диаграмын гарчигтай (`.analytics-chart-head h2`) ижил (2026-10-05).
+   ⚠⚠ ЦАГ АГААРЫН АЖИГЛАЛТЫН ТАБ ХАМРАГДАХГҮЙ (хэрэглэгч, 2026-10-05: "цаг агаарын ажиглалт цэс
+   дээр ажиллахгүй"). Тэр таб `Head`-ийг хуваалцдаг тул дүрэм нь түүнийг алгасна. */
+.ue-card-head:not(.weather-workspace *) h2 { letter-spacing: 0.02em; text-transform: uppercase; }
+/* Диаграмын толгой НАМХАН (2026-10-05, хэрэглэгч: "title хэсгийн
+   өндрийг багасга, зай эзлээд байна"): өнгөний товч хасагдсан тул
+   толгойд зөвхөн гарчиг — 9px → 6px зай, мөрийн өндөр 1.5 → 1.3. */
+.ue-layer-dashboard .analytics-chart-head { flex-wrap: wrap; gap: 8px; padding-block: 6px; }
+.ue-layer-dashboard .analytics-chart-head h2 { white-space: normal; line-height: 1.3; }
 .ue-chart-caption { display: flex; justify-content: space-between; gap: 10px; color: var(--ink-3); font-size: 10px; line-height: 1.5; padding-bottom: 9px; }
 .ue-chart-rows { display: flex; flex-direction: column; gap: 4px; }
 .ue-chart-row { width: 100%; text-align: left; border-radius: 6px; padding: 6px; }
@@ -24,50 +25,76 @@
 .ue-composition { display: flex; height: 22px; gap: 2px; overflow: hidden; border-radius: 5px; margin-bottom: 8px; }
 .ue-matrix-help { padding: 8px 12px; color: var(--ink-3); font-size: 10px; line-height: 1.6; border-bottom: 1px solid var(--line); }
 .ue-workspace .ue-matrix { min-width: 620px; }
-.ue-chart-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 14px; color: var(--ink-3); font-size: 10px; }
-.ue-chart-toolbar > div { display: flex; gap: 3px; }
-.ue-chart-toolbar button { padding: 4px 7px; border: 1px solid var(--line); border-radius: 5px; }
-.ue-chart-toolbar button[aria-pressed="true"] { color: var(--ink); background: var(--paper-hi); border-color: var(--tone); }
-.ue-column-scroll { overflow-x: auto; padding-top: 10px; }
-.ue-columns { position: relative; display: flex; gap: 10px; padding-left: 27px; }
-.ue-column { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: stretch; }
-.ue-column-plot { position: relative; display: block; height: 140px; margin: 10px 8px 0; }
-.ue-column-plot > i { position: absolute; width: 100%; left: 0; border-radius: 5px 5px 0 0; }
-.ue-column-plot > b { position: absolute; left: 50%; transform: translate(-50%, -4px); color: var(--ink); font-size: 11px; font-variant-numeric: tabular-nums; }
-.ue-zero { position: absolute; left: -8px; right: -8px; height: 1px; background: var(--line-2); }
-.ue-column-label { display: block; margin-top: 9px; font-size: 10px; line-height: 1.5; overflow-wrap: anywhere; color: var(--ink-2); text-align: center; }
-.ue-column-guides { position: absolute; top: 10px; left: 0; height: 140px; display: flex; flex-direction: column; justify-content: space-between; color: var(--ink-3); font-size: 9px; }
-.ue-column[aria-pressed="true"] .ue-column-label { color: var(--tone); font-weight: 700; }
-.ue-dot-axis { display: flex; justify-content: space-between; margin: 0 57px 6px 40%; color: var(--ink-3); font-size: 9px; }
-.ue-dot-row { display: grid; grid-template-columns: minmax(80px, 40%) minmax(55px, 1fr) 45px; align-items: center; gap: 12px; width: 100%; padding: 10px 4px; border-bottom: 1px solid var(--line); text-align: left; font-size: 11px; color: var(--ink-2); }
-.ue-dot-row strong { text-align: right; font-variant-numeric: tabular-nums; font-size: 11px; color: var(--ink); }
-.ue-dot-track { position: relative; height: 1px; background: var(--line-2); }
-.ue-dot-track i { position: absolute; height: 13px; top: -6px; width: 1px; background: var(--line-2); }
-.ue-dot-track b { position: absolute; top: -5px; width: 11px; height: 11px; transform: translateX(-50%); border-radius: 50%; box-shadow: 0 0 0 3px var(--paper-2); }
-.ue-dot-row[aria-pressed="true"] { background: var(--paper-hi); }
-.ue-share-total { display: flex; align-items: baseline; gap: 10px; margin-bottom: 14px; }
-.ue-share-total strong { font-size: 29px; font-variant-numeric: tabular-nums; color: var(--ink); }
-.ue-share-total span { font-size: 10px; color: var(--ink-3); }
-.ue-share-strip { display: flex; gap: 2px; height: 37px; overflow: hidden; border-radius: 6px; }
-.ue-share-strip button { min-width: 0; overflow: hidden; font-size: 11px; font-weight: 700; color: #102023; }
-.ue-share-key { display: flex; flex-direction: column; margin-top: 12px; gap: 9px; }
-.ue-share-key button { display: flex; align-items: center; gap: 8px; text-align: left; font-size: 11px; color: var(--ink-2); }
-.ue-share-key i, .ue-stack-key i { width: 9px; height: 9px; border-radius: 2px; flex-shrink: 0; }
-.ue-share-key span { flex: 1; }
-.ue-share-key small { width: 40px; text-align: right; font-size: 10px; color: var(--ink-3); }
-.ue-trend svg { width: 100%; min-width: 390px; display: block; }
-.ue-trend { overflow-x: auto; }
-.ue-trend-labels { display: flex; justify-content: space-between; min-width: 390px; padding: 0 3% 8px; }
-.ue-trend-labels button { flex: 1; font-size: 10px; padding: 3px; color: var(--ink-3); }
-.ue-trend-labels button[aria-pressed="true"] { color: var(--ink); background: var(--paper-hi); border-radius: 4px; }
-.ue-stacked-comparison { padding: 12px 14px; overflow: auto; }
-.ue-stack-key { display: flex; flex-wrap: wrap; gap: 10px; }
-.ue-stack-key button { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--ink-2); }
-.ue-stack-key button[aria-pressed="true"] { text-decoration: underline; }
-.ue-stack-row { margin-top: 16px; }
-.ue-stack-row > button { display: flex; width: 100%; justify-content: space-between; gap: 12px; font-size: 11px; color: var(--ink-2); text-align: left; margin-bottom: 7px; }
-.ue-stack-row > button strong { font-variant-numeric: tabular-nums; }
-.ue-stack-track { background: var(--paper-hi); border-radius: 4px; }
-.ue-stack-track > div { display: flex; height: 24px; gap: 1px; overflow: hidden; border-radius: 4px; }
-.ue-stack-track button { min-width: 0; font-size: 10px; color: #102023; font-weight: 600; }
-@media (max-width: 639px) { .ue-stat { padding: 10px; } .ue-stat-value { font-size: 21px; } }
+
+/* --------------------------------------------------------------------------
+   ИНДИКАТОР — цаг агаарын ажиглалтын `.observation-metric` (weather.css)
+   хэлбэрээр: тус бүр өөрийн хүрээтэй жижиг карт, агуулга нь голлоно,
+   шошго том үсгээр (2026-10-05).
+   ⚠ ӨНДӨР БАГАССАН (хэрэглэгч, 2026-10-05: "индикаторын өндрийг
+   багасга"): 64px-ийн карт 44px болов. Шошго НЭГ мөрөнд (хоёр мөрийн
+   суудал хасагдсан, халивал тайрагдана), нэмэлт тайлбар нь утгынхаа
+   ХАЖУУД — доор нь тусдаа мөр эзлэхгүй. Тэмдэг 24 → 20px, тоо 21 →
+   18px, шошго 12 → 11px.
+   ⚠ Давхаргын табууд платформын хуваалцсан `.analytics-stat`-ыг
+   хэрэглэдэг — түүнийг ЗӨВХӨН `.ue-layer-dashboard` дотор дарна,
+   бусад хэлтсийнх хөндөгдөхгүй. Цаг агаарын таб `Stat`-ыг
+   хэрэглэдэггүй тул хамаарахгүй.
+   -------------------------------------------------------------------------- */
+.ue-stat-grid, .ue-layer-dashboard .analytics-overview { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); grid-auto-flow: row; gap: 5px; padding: 5px; flex-shrink: 0; border: 1px solid var(--line); border-radius: 10px; background: var(--paper); }
+.ue-layer-dashboard .analytics-overview { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
+.ue-stat, .ue-layer-dashboard .analytics-stat { display: flex; align-items: center; justify-content: center; gap: 8px; min-width: 0; min-height: 44px; padding: 5px 10px; border: 1px solid var(--line); border-radius: 5px; background: var(--paper-2); }
+.ue-stat > svg { width: 20px; height: 20px; flex-shrink: 0; color: var(--tone); }
+.ue-layer-dashboard .analytics-stat-icon { display: flex; width: auto; height: auto; border-radius: 0; background: none; color: var(--tone); }
+.ue-layer-dashboard .analytics-stat-icon svg { width: 20px; height: 20px; stroke-width: 1.6; }
+.ue-stat > div, .ue-layer-dashboard .analytics-stat > div { display: flex; flex: 0 1 auto; min-width: 0; flex-direction: column; }
+.ue-stat-label, .ue-layer-dashboard .analytics-stat-label { display: block; margin: 0; font-size: 11px; font-weight: 600; line-height: 1.2; letter-spacing: .03em; text-transform: uppercase; color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ue-stat-line { display: flex; align-items: baseline; gap: 6px; min-width: 0; margin-top: 3px; }
+.ue-stat-value, .ue-layer-dashboard .analytics-stat-value { display: block; font-size: 18px; font-weight: 500; line-height: 1; letter-spacing: -.025em; color: var(--ink); white-space: nowrap; }
+.ue-layer-dashboard .analytics-stat-value { margin-top: 3px; }
+.ue-stat-sub { min-width: 0; font-size: 10.5px; line-height: 1; color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+@media (max-width: 1023px) { .ue-stat-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 639px) {
+  .ue-stat-grid, .ue-layer-dashboard .analytics-overview { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ue-stat, .ue-layer-dashboard .analytics-stat { padding: 5px 6px; gap: 6px; }
+  .ue-layer-dashboard .analytics-stat-icon { display: flex; }
+}
+
+/* Диаграмын мөрийн ТОО жижиг (2026-10-05, хэрэглэгч: "тооны хэмжээг
+   багасга" → "9px болго") — 11.5 → 9px. Зөвхөн энэ хэлтэст; цаг агаарын таб
+   зурвасан диаграмгүй тул хамаарахгүй. */
+.ue-workspace .row-chart .row-chart-heading strong,
+.ue-workspace .row-chart.is-dense .row-chart-heading strong,
+.ue-workspace .donut-legend-item strong { font-size: 9px; }
+
+/* Газрын зургийн тайлбарын ТОВШДОГ мөр, горимын товч (`MapLegend`,
+   ui.tsx). Үндсэн хэлбэр нь платформын `.ue-map-legend`-ийнх. */
+.ue-legend-row.is-pick { width: calc(100% + 8px); margin-inline: -4px; padding: 3px 4px; border-radius: 2px; text-align: left; transition: background-color .12s; }
+.ue-legend-row.is-pick:not(:disabled):hover, .ue-legend-row.is-pick[aria-pressed="true"] { background: var(--paper-hi); }
+.ue-legend-row.is-pick[aria-pressed="true"] > span:nth-child(2) { color: var(--ink); font-weight: 500; }
+.ue-legend-row.is-pick:disabled { cursor: default; }
+.ue-legend-modes { display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0 2px; }
+.ue-legend-modes button { padding: 2px 6px; border: 1px solid var(--line); border-radius: 2px; font-size: 10px; line-height: 1.4; color: var(--ink-3); transition: border-color .12s, color .12s; }
+.ue-legend-modes button:hover { border-color: var(--line-2); color: var(--ink); }
+.ue-legend-modes button[aria-pressed="true"] { border-color: color-mix(in oklab, var(--data) 45%, transparent); background: color-mix(in oklab, var(--data) 10%, transparent); color: var(--ink); }
+
+/* ДАВХАРГА БҮРИЙН ИНДИКАТОР (`mapPicker`, үерийн эрсдэл): долоон нүд нэг
+   эгнээнд багтана; давхаргын нэр урт ("Үерийн өндөр эрсдэлтэй барилга")
+   тул шошго ХОЁР мөрт, тайрахгүй. */
+.ue-layer-dashboard .analytics-overview.is-layers { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
+.ue-layer-dashboard .analytics-overview.is-layers .analytics-stat { justify-content: flex-start; }
+.ue-layer-dashboard .analytics-overview.is-layers .analytics-stat-label { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; line-height: 1.25; }
+
+/* Таних тэмдгийн дэвсгэр ТУНГАЛАГ (хэрэглэгч, 2026-10-06) — платформын
+   95%-ийн оронд 45%; уншигдацыг бүдгэрүүлэлт ба бичвэрийн сүүдэр барина.
+   Зөвхөн энэ хэлтэст. */
+.ue-workspace .ue-map-legend { background: color-mix(in oklab, var(--paper) 45%, transparent); backdrop-filter: blur(6px); }
+:root[data-theme="dark"] .ue-workspace .ue-map-legend :is(.ue-legend-row, h3, .ue-map-legend-toggle) { text-shadow: 0 1px 2px rgb(0 0 0 / 0.55); }
+:root[data-theme="light"] .ue-workspace .ue-map-legend :is(.ue-legend-row, h3, .ue-map-legend-toggle) { text-shadow: 0 0 3px rgb(255 255 255 / 0.8); }
+
+/* "Байршлын мэдээлэл"-ийн наалддаг бүлгийн толгой картын ДЭЭД ирмэгт
+   наалдана (хэрэглэгч, 2026-10-06: "дээшээ гүйлгэхээр тэр дээр яаж
+   гүйгээд байгаа нь харагдаад байна"). Толгой нь `sticky top-0` ч
+   картын бие 10px дотор зайтай тул тэр зайны ДООР наалдаж, дээрх
+   завсраар доорх мөрүүд гүйж харагддаг байв. Дотор зайгаа хасч
+   (−10px) завсрыг толгой өөрөө хучна. */
+.ue-layer-dashboard .analytics-chart-body .sticky.top-0 { top: -10px; }

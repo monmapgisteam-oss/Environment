@@ -1,16 +1,8 @@
 "use client";
 
 import type { Breakdown } from "@/lib/portal-layers";
-import { num } from "@/lib/utils";
-import { CategoryChart } from "./subject-charts";
-
-export const TOPIC_NOTES: Record<string, string> = {
-  "unelgee-flood": "Үерийн эрсдэлтэй болон үерт өртсөн газар, барилга, өрхийн орон зайн мэдээлэл",
-  "unelgee-green": "Ногоон байгууламж, цэцэрлэгт хүрээлэнгийн байршил, талбайн бүртгэл",
-  "unelgee-eco": "Бичил цэцэрлэг, явган болон дугуйн зам, бусад байгууламжийн бүртгэл",
-  "unelgee-waste": "Хог хаягдлын цэгийн байршил болон талбайн бүртгэл",
-  "unelgee-gas": "Хийн тоног төхөөрөмжийн байршил, бүртгэлийн үзүүлэлт",
-};
+import { SimpleChart } from "./subject-charts";
+import { LegendShell } from "./ui";
 
 export function recordUnit(id: string) {
   if (id.includes("ail_urh")) return "өрхийн бүртгэл";
@@ -37,7 +29,12 @@ export function topicChartTitle(b: Breakdown) {
   return `${b.label}${limit}`;
 }
 
-/** Exact values remain readable; bar length compares categories from a zero baseline. */
+/**
+ * Ангиллын задаргаа — хэлбэрийг {@link SimpleChart} сонгоно: 3-аас
+ * цөөн утгатай тоолол бөгж, бусад нь хэвтээ зурвас. Хугацааны
+ * задаргаа энд ирэхгүй — хуваалцсан самбар өөрөө талбайн диаграмаар
+ * зурна.
+ */
 export function TopicBreakdown({ breakdown: b, tone, palette, selected, onSelect, unit }: {
   breakdown: Breakdown;
   tone: string;
@@ -47,11 +44,17 @@ export function TopicBreakdown({ breakdown: b, tone, palette, selected, onSelect
   unit: string;
 }) {
   const share = !b.multi && !b.top && b.kind === "count";
-  const geographic = /дүүрэг|хороо/i.test(b.label);
   return (
     <div className="ue-breakdown">
-      <CategoryChart data={b.values} initial={share && !geographic && b.values.length <= 6 ? "composition" : b.kind === "count" && b.values.length <= 12 ? "columns" : "dots"} unit={b.kind === "count" ? unit : `${b.measure ?? "Утга"}${b.kind === "mean" ? " · дундаж" : ""}`} selected={selected} onSelect={onSelect} allowShare={share} colorOf={palette ? (key) => palette.get(key) ?? tone : undefined} />
-      <p className="ue-chart-note">{b.multi ? "Нэг бүртгэл хэд хэдэн ангилалд хамаарч болно." : b.top ? `Хамгийн их утгатай ${num(b.top)} ангиллыг харуулав.` : "Ангилал дээр дарж шүүнэ. Дахин дарж цуцална."}</p>
+      <SimpleChart
+        data={b.values}
+        share={share}
+        unit={b.kind === "count" ? unit : `${b.measure ?? "Утга"}${b.kind === "mean" ? " · дундаж" : ""}`}
+        tone={tone}
+        selected={selected}
+        onSelect={onSelect}
+        colorOf={palette ? (key) => palette.get(key) ?? tone : undefined}
+      />
     </div>
   );
 }
@@ -70,11 +73,13 @@ export function TopicBreakdown({ breakdown: b, tone, palette, selected, onSelect
  */
 export type LayerLegendGroup = { id: string; name: string; geometry: string; field?: string; solo?: boolean; items: { key: string; label: string; color: string }[] };
 
-export function TopicMapLegend({ groups }: { groups: LayerLegendGroup[] }) {
+export function TopicMapLegend({ groups, hideable = false }: {
+  groups: LayerLegendGroup[];
+  /** Нүдний товчоор бүхэлд нь нууж, гаргана ({@link LegendShell}) — үнэлгээний хэлтэст */
+  hideable?: boolean;
+}) {
   if (!groups.length) return null;
-  return <details open className="ue-map-legend">
-    <summary>Таних тэмдэг</summary>
-    <div className="ue-map-legend-body">
+  const body = <div className="ue-map-legend-body">
       {groups.map((group) => <section key={group.id} className={group.solo ? "is-solo" : undefined}>
         {group.solo ? null : <h3>{group.name}</h3>}
         {group.field && !group.solo ? <p>Өнгөөр ялгасан үзүүлэлт: {group.field}</p> : null}
@@ -83,6 +88,10 @@ export function TopicMapLegend({ groups }: { groups: LayerLegendGroup[] }) {
           <span title={item.label}>{item.label}</span>
         </div>)}
       </section>)}
-    </div>
+    </div>;
+  if (hideable) return <LegendShell>{body}</LegendShell>;
+  return <details open className="ue-map-legend">
+    <summary>Таних тэмдэг</summary>
+    {body}
   </details>;
 }
