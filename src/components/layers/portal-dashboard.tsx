@@ -74,6 +74,14 @@ import {
 } from "@/components/wells/map";
 import { FIREFLY, oklchHex } from "@/components/wells/colors";
 import { Bounds } from "@/lib/extent";
+import { districtsOf, placeNamesOf } from "@/lib/places";
+
+/**
+ * ТООЦООЛСОН ДҮҮРГИЙН ШҮҮЛТИЙН ТҮЛХҮҮР ({@link LayerSet.districts}).
+ * Эх сурвалжийн талбар биш — `views`-ийн `keyBy` түүнийг дүрсийн
+ * дугаараар (`districtsOf`) хариулна.
+ */
+const DISTRICT_KEY = "__district";
 import {
   breakdowns,
   categoryKey,
@@ -1091,6 +1099,29 @@ export function PortalLayersDashboard({
   }, []);
 
   /*
+    ДҮРС БҮРИЙН ДҮҮРЭГ ({@link LayerSet.districts}) — давхаргад дүүргийн
+    талбар байхгүй тул хилээс тооцоолно. Давхарга бүрд НЭГ удаа.
+    `null` нь "уншигдсангүй" (хил татагдаагүй) — чарт түүнийг хэлнэ.
+  */
+  const [districts, setDistricts] = React.useState<
+    Record<string, Map<number, string> | null>
+  >({});
+  const districtsAsked = React.useRef(new Set<string>());
+  React.useEffect(() => {
+    for (const id of set.districts ?? []) {
+      const feats = loaded[id]?.data.shapes.features;
+      if (!feats?.length || districtsAsked.current.has(id)) continue;
+      districtsAsked.current.add(id);
+      districtsOf(feats)
+        .then((m) => setDistricts((d) => ({ ...d, [id]: m })))
+        .catch(() => {
+          districtsAsked.current.delete(id);
+          setDistricts((d) => ({ ...d, [id]: null }));
+        });
+    }
+  }, [set.districts, loaded]);
+
+  /*
     ХАРАГДАЦ — асаалттай давхарга бүр шүүлтээрээ дамжсан хувилбар.
 
     Cross-filter-ийн гол дүрэм: диаграм бүр ӨӨРИЙНХӨӨ талбарыг
@@ -1145,6 +1176,19 @@ export function PortalLayersDashboard({
       const keyBy = new Map<string, (row: Row) => string[]>();
       for (const b of hit.charts)
         if (!keyBy.has(filterKey(b))) keyBy.set(filterKey(b), b.keyOf);
+      /* Тооцоолсон дүүрэг ({@link DISTRICT_KEY}) — мөрөөс дугаараар нь */
+      const dist = districts[id];
+      if (dist) {
+        const byRow = new Map<Row, string>();
+        for (const [oid, row] of Object.entries(hit.data.rows)) {
+          const d = dist.get(Number(oid));
+          if (d) byRow.set(row, d);
+        }
+        keyBy.set(DISTRICT_KEY, (row) => {
+          const d = byRow.get(row);
+          return d ? [d] : [];
+        });
+      }
 
       const passes = (row: Row, skip: readonly string[] = []) =>
         fields.every((f) => {
@@ -1232,7 +1276,16 @@ export function PortalLayersDashboard({
     }
 
     return out;
-  }, [on, loaded, filters, picked, set.layers, set.mapOnly, set.charts]);
+  }, [
+    on,
+    loaded,
+    filters,
+    picked,
+    districts,
+    set.layers,
+    set.mapOnly,
+    set.charts,
+  ]);
 
   /**
    * ХАМГИЙН УРТ ДИАГРАМ ЗҮҮН БАГАНАД (хэрэглэгчийн хүсэлт, 2026-09-21:
@@ -1429,6 +1482,88 @@ export function PortalLayersDashboard({
     [],
   );
 
+  /**
+   * БҮЛГЭЭР ШҮҮХ — талбарын шүүлтийг яг `keys` болгоно; аль хэдийн яг
+   * тэр бүрдэл бол цуцална ({@link ShareGroups}-ийн бүлгийн толгой).
+   */
+  const pickSet = React.useCallback(
+    (id: string, field: string, keys: readonly string[]) => {
+      setFilters((f) => {
+        const layer = { ...(f[id] ?? {}) };
+        const now = layer[field] ?? [];
+        const same =
+          now.length === keys.length && keys.every((k) => now.includes(k));
+        if (same || !keys.length) delete layer[field];
+        else layer[field] = [...keys];
+        return Object.keys(layer).length
+          ? { ...f, [id]: layer }
+          : Object.fromEntries(Object.entries(f).filter(([k]) => k !== id));
+      });
+      setPicked(null);
+    },
+    [],
+  );
+
+  /**
+   * ДҮҮРГИЙН МӨРҮҮД ({@link ShareGroups}-ийн "Дүүргээр"). Дүүргийн
+   * шүүлтээс БУСАД шүүлт үйлчилнэ — өөр дүүрэг рүү шилжих боломж үлдэнэ.
+   * Бүлэг нь {@link LayerSet.valueGroups}; бүлэгт ороогүй ангилал "Бусад".
+   */
+  const districtRows = (
+    id: string,
+    hit: Loaded,
+    b: Breakdown,
+    passes: (row: Row, skip?: readonly string[]) => boolean,
+    colorOf: (key: string) => string,
+  ) => {
+    const dist = districts[id];
+    if (dist === undefined) return "loading" as const;
+    if (dist === null) return "failed" as const;
+    /* Бүлэггүй давхаргад ангилал бүр ӨӨРИЙН хэсэг (хэсэглэл: ДЦГ ·
+       бүртгэгдээгүй) */
+    const defs =
+      set.valueGroups?.[id] ??
+      b.values.map((v) => ({ label: v.label, keys: [v.key] }));
+    const area = b.notes;
+    const parts = defs.map((g) => {
+      const lead = [...g.keys].sort(
+        (x, y) => (area?.get(y) ?? 0) - (area?.get(x) ?? 0),
+      )[0];
+      return { label: g.label, color: colorOf(lead), keys: [...g.keys] };
+    });
+    const gi = new Map<string, number>();
+    defs.forEach((g, i) => g.keys.forEach((k) => gi.set(k, i)));
+    const k = hit.info.areaInHa ? 1 : 1 / 10000;
+    const by = new Map<string, { ha: number; parts: number[] }>();
+    let loose = false;
+    for (const [oid, row] of Object.entries(hit.data.rows)) {
+      if (!passes(row, [DISTRICT_KEY])) continue;
+      const name = dist.get(Number(oid)) ?? "Тодорхойгүй";
+      const v = (hit.data.area[Number(oid)] ?? 0) * k;
+      const key = b.keyOf(row)[0];
+      let i = key == null ? undefined : gi.get(key);
+      if (i == null) {
+        i = defs.length;
+        loose = true;
+      }
+      const e = by.get(name) ?? { ha: 0, parts: [] as number[] };
+      e.ha += v;
+      e.parts[i] = (e.parts[i] ?? 0) + v;
+      by.set(name, e);
+    }
+    if (loose) parts.push({ label: "Бусад", color: "#8a96a3", keys: [] });
+    return {
+      rows: [...by]
+        .map(([name, e]) => ({
+          name,
+          ha: e.ha,
+          parts: parts.map((_, i) => e.parts[i] ?? 0),
+        }))
+        .sort((x, y) => y.ha - x.ha),
+      parts,
+    };
+  };
+
   /** Нэг оныг нэмэх, хасах — талбарын шүүлттэй ижил зан төлөв */
   const pickYear = React.useCallback((id: string, key: string | null) => {
     setSeries((v) => {
@@ -1548,10 +1683,14 @@ export function PortalLayersDashboard({
       /* Бүртгэлээр заасан өнцөг ({@link LayerSet.valueHues}) шатлалыг
          дарна — гэрэлтэлт, ханалт нь давхаргынхтай адил хэвээр */
       const fixed = set.valueHues?.[id];
+      /* Бүтэн OKLCH ({@link LayerSet.valueTones}) өнцгөөс ч давуу */
+      const tones = set.valueTones?.[id];
       out[id] = {
         keyOf: b.keyOf,
         colors: new Map(
           b.values.map((v, i) => {
+            const tone = tones?.[v.key];
+            if (tone) return [v.key, oklchHex(tone[0], tone[1], tone[2])];
             const hue = fixed?.[v.key];
             return [v.key, hue == null ? ramp[i] : toneOfHue(hue)];
           }),
@@ -1559,7 +1698,15 @@ export function PortalLayersDashboard({
       };
     }
     return out;
-  }, [on, loaded, colorField, hueOf, set.valueHues, set.hueSpan]);
+  }, [
+    on,
+    loaded,
+    colorField,
+    hueOf,
+    set.valueHues,
+    set.valueTones,
+    set.hueSpan,
+  ]);
 
   /*
     Асаалттай давхаргуудыг НЭГ цуглуулгад нийлүүлнэ.
@@ -1789,8 +1936,32 @@ export function PortalLayersDashboard({
     ⚠ Талбай нь ШҮҮГДСЭН дүрсээс тоологдоно — үзүүлэлттэй зөрөх
     ёсгүй.
   */
+  /*
+    ДҮРСИЙН БАЙРШЛЫН НЭР ({@link LayerSet.placeNames}) — нэрийн багана
+    огт байхгүй давхаргад "№ 1"-ийн оронд тэр дүрс аль сум, дүүрэгт
+    оршихыг засаг захиргааны хилээс тооцно ({@link placeNamesOf}).
+    ⚠ Давхарга бүрд НЭГ л удаа (`placesAsked`) — геометр нь шүүлтээс үл
+    хамаарна. Унавал дугаараараа үлдэнэ (нэмэлт мэдээлэл).
+  */
+  const [places, setPlaces] = React.useState<
+    Record<string, Map<number, string>>
+  >({});
+  const placesAsked = React.useRef(new Set<string>());
+  React.useEffect(() => {
+    for (const id of set.placeNames ?? []) {
+      const feats = loaded[id]?.data.shapes.features;
+      if (!feats?.length || placesAsked.current.has(id)) continue;
+      placesAsked.current.add(id);
+      placeNamesOf(feats)
+        .then((m) => setPlaces((p) => ({ ...p, [id]: m })))
+        .catch(() => placesAsked.current.delete(id));
+    }
+  }, [set.placeNames, loaded]);
+
+
   const areaRowsOf = React.useCallback(
     (hit: Loaded, oids: Set<number>, plain = false): Datum[] => {
+      const place = places[hit.info.id];
       const out: Datum[] = [];
       /* Тэргүүлэх тооллын задаргаа — нэргүй дүрсийг түүгээр тодорхойлно
          (доор). `plain` үед (ангиллаараа хуваасан бүсийн дотор) ангилал
@@ -1822,7 +1993,22 @@ export function PortalLayersDashboard({
         const tag = group
           ? categoryKey(hit.data.rows[oid]?.[group])
           : "Бүртгэгдээгүй";
-        const no = tag !== "Бүртгэгдээгүй" ? `${tag} · № ${oid}` : `№ ${oid}`;
+        /* Ангилалгүй бол байршлын нэр ({@link LayerSet.placeNames}) —
+           дугаар нь танигч болж хэвээр */
+        /* Байршлын нэр ганцаараа (хэрэглэгч, 2026-10-07: "нэрийг нь
+           богиносго") — давхаргын ӨӨР дүрс ижил нэртэй үед л дугаар
+           нэмнэ, эс тэгвээс хоёр мөр ялгагдахгүй */
+        const at = tag === "Бүртгэгдээгүй" ? place?.get(oid) : undefined;
+        const twin =
+          at != null &&
+          [...(place?.entries() ?? [])].some(([o, n]) => o !== oid && n === at);
+        const no = at
+          ? twin
+            ? `${at} · № ${oid}`
+            : at
+          : tag !== "Бүртгэгдээгүй"
+            ? `${tag} · № ${oid}`
+            : `№ ${oid}`;
         out.push({
           key: String(oid),
           label: name && name !== "Бүртгэгдээгүй" ? name : no,
@@ -1831,7 +2017,7 @@ export function PortalLayersDashboard({
       }
       return out.sort((a, b) => b.value - a.value);
     },
-    [],
+    [places],
   );
 
   /*
@@ -2264,6 +2450,8 @@ export function PortalLayersDashboard({
       /** Хуваасан бүсийн ШҮҮЛТ — тэнхлэг ба утга (`pickOnly`) */
       axis?: string;
       key?: string;
+      /** Дүрс тус бүр нэг бүс ({@link LayerSet.splitShapes}) — дүрсийн дугаар */
+      shape?: number;
     };
     /*
       ⚠⚠ БҮСИЙН КАРТ ГАНЦААРАА ЗОГСДОГ ЦЭСЭД ТОО НЬ СОНГОЛТООС ҮЛ
@@ -2291,6 +2479,23 @@ export function PortalLayersDashboard({
         const hit = loaded[id];
         if (!hit || hit.info.geometry === "Point") continue;
         const all = new Set(Object.keys(hit.data.rows).map(Number));
+        /* Дүрс бүр өөрийн бүс ({@link LayerSet.splitShapes}) — нэгтгэсэн
+           нэг мөрийн оронд (хэрэглэгч, 2026-10-07: "нэгтгэхгүйгээр
+           зүгээр 2-уулыг нь л харуул"). Нэр нь `zones`-д (байршлын нэр
+           ирэх хүртэл хэсгийг дахин угсрахгүйн тулд) */
+        if (set.splitShapes) {
+          for (const oid of all)
+            out.push({
+              id: `${id}\u0000#${oid}`,
+              layer: id,
+              label: hit.info.name,
+              tone: toneOf(id),
+              hit,
+              oids: new Set([oid]),
+              shape: oid,
+            });
+          continue;
+        }
         const field = set.splitZones ? leadGroup(hit) : undefined;
         const b = field
           ? hit.charts.find((c) => c.field === field && c.kind === "count")
@@ -2336,6 +2541,7 @@ export function PortalLayersDashboard({
     set.zones,
     set.zonesOnly,
     set.splitZones,
+    set.splitShapes,
     on,
     loaded,
     views,
@@ -2384,7 +2590,11 @@ export function PortalLayersDashboard({
       return {
         id: p.id,
         layer: p.layer,
-        label: p.label,
+        /* Дүрсийн бүс — жагсаалтын мөртэй НЭГ нэр (байршил · дугаар) */
+        label:
+          p.shape != null
+            ? (areaRowsOf(p.hit, p.oids)[0]?.label ?? p.label)
+            : p.label,
         tone: p.tone,
         ha,
         parcels: overlap[p.id],
@@ -2393,12 +2603,22 @@ export function PortalLayersDashboard({
         features: zoneShapes(p),
         axis: p.axis,
         key: p.key,
+        shape: p.shape,
       };
     });
     /* Хуваасан бүсүүд том нь эхэндээ; давхаргын бүсүүд бүртгэлийн
        дарааллаараа (тэжээгдэл → хязгаарлалт → хориглолт) */
-    return set.splitZones ? out.sort((a, b) => b.ha - a.ha) : out;
-  }, [zoneParts, overlap, areaRowsOf, zoneShapes, set.splitZones]);
+    return set.splitZones || set.splitShapes
+      ? out.sort((a, b) => b.ha - a.ha)
+      : out;
+  }, [
+    zoneParts,
+    overlap,
+    areaRowsOf,
+    zoneShapes,
+    set.splitZones,
+    set.splitShapes,
+  ]);
 
   /*
     Бүсийн карт гарах эсэх. Ердийн олон давхаргат цэсэд ХОЁРООС цөөн
@@ -2585,7 +2805,7 @@ export function PortalLayersDashboard({
       full
       action={
         /* Хуваасан бүс задрахгүй — товч хэрэггүй */
-        set.splitZones ? undefined : (
+        set.splitZones || set.splitShapes ? undefined : (
           /* Бүгдийг НЭГ товшилтоор — гурвыг зэрэг харах нь энэ картын
              гол хэрэглээ тул гурван удаа товшуулахгүй */
           <button
@@ -2615,6 +2835,53 @@ export function PortalLayersDashboard({
             зураг тэр сав газраар ШҮҮГДЭНЭ (`pickOnly` — дахин товшиход
             цуцлагдана); карт өөрөө шүүгдэхгүй тул бусад мөр харагдсаар.
           */
+          /*
+            ДҮРСИЙН БҮС ({@link LayerSet.splitShapes}) — нэг эгнээ: нэр ·
+            талбай · нэгж талбар. Товшиход тэр дүрс СОНГОГДОЖ зураг түүн
+            рүү ойртоно (диаграмын мөрөөс сонгохтой ижил `rowPick`);
+            дахин товшиход цуцлагдана.
+          */
+          if (z.shape != null) {
+            const uid = uidBase(z.layer) + z.shape;
+            const on = picked === uid;
+            return (
+              <button
+                key={z.id}
+                type="button"
+                aria-pressed={on}
+                onClick={() => {
+                  setPicked(on ? null : uid);
+                  setRowPick(on ? null : uid);
+                  setParcelPick(null);
+                }}
+                className={cn(
+                  "grid w-full grid-cols-[10px_minmax(0,1fr)_auto_auto] items-baseline gap-x-3 px-1.5 py-1.5 text-left hover:bg-paper-hi focus-visible:outline-offset-[-2px]",
+                  on && "bg-paper-hi",
+                )}
+                style={
+                  on ? { boxShadow: `inset 2px 0 0 ${z.tone}` } : undefined
+                }
+              >
+                <span
+                  aria-hidden
+                  className="size-2.5 self-center rounded-[1px]"
+                  style={{ background: z.tone }}
+                />
+                <span
+                  className="truncate text-[12.5px] text-ink"
+                  title={z.label}
+                >
+                  {z.label}
+                </span>
+                <span className="num text-right text-[12.5px] font-medium whitespace-nowrap text-ink">
+                  {num(Math.round(z.ha))} га
+                </span>
+                <span className="num w-[118px] text-right text-[11px] whitespace-nowrap text-ink-3">
+                  {z.parcels == null ? "…" : `${num(z.parcels)} нэгж талбар`}
+                </span>
+              </button>
+            );
+          }
           if (set.splitZones && z.axis && z.key) {
             const axis = z.axis;
             const key = z.key;
@@ -3065,6 +3332,7 @@ export function PortalLayersDashboard({
         тоо өөр хаана ч гарахгүй тул карт нь хэвээр.
       */
       const soloDup = areas.length === 1 && zoneMode;
+      const shortNames = areas.every((d) => d.label.length <= 12);
       const base = uidBase(id);
       const areaCard =
         areas.length && !soloDup ? (
@@ -3097,7 +3365,13 @@ export function PortalLayersDashboard({
                 data={areas.slice(0, AREA_TOP)}
                 tone={tone}
                 format={(v) => num(Math.round(v))}
-                inline
+                /* Нэг эгнээний мөр нь нэрийн 92px баганатай — зөвхөн
+                   "№ 12" мэт богино танигчид. Байршлын нэр
+                   ({@link LayerSet.placeNames}) тэнд тасрах тул нэр нь
+                   зурвасын ДЭЭР бүтэн өргөнөөр гарна */
+                inline={shortNames}
+                dense={!shortNames}
+                clamp={!shortNames}
                 selected={
                   picked != null && picked >= base && picked < base + STRIDE
                     ? String(picked - base)
@@ -3165,10 +3439,68 @@ export function PortalLayersDashboard({
       const inAxis = new Set(
         oneCard ? axes.flatMap((a) => a.list.map((b) => b.id)) : [],
       );
+      /*
+        ДҮҮРГЭЭР — тусдаа карт ({@link LayerSet.districts}; хэрэглэгч
+        2026-10-07, ойн хэсэглэл: "хоосон зайд юу хийх вэ" → "Дүүргээр").
+        Ялгарал нь сэлгэгчтэй (`shareChart`) тул энд ОРОХГҮЙ. Дүүрэг нь
+        хилээс ТООЦООЛСОН, хэсгүүд нь газрын зургийг будаж буй талбарын
+        ангиллууд (өнгө нь зургийнх); мөр дарахад шүүнэ.
+      */
+      const distB =
+        set.districts?.includes(id) && !set.shareChart?.includes(id)
+          ? charts.find((c) => c.field === colorField(id) && c.kind === "count")
+          : undefined;
+      const distData = distB
+        ? districtRows(id, hit, distB, passes, (k) => palettes[id]?.colors.get(k) ?? tone)
+        : null;
+      const districtCard =
+        distB && distData ? (
+          <CutCard
+            key={`${id}:district`}
+            title="Дүүргээр — талбай, га"
+            tone={tone}
+            fill
+            meta={
+              typeof distData === "object"
+                ? `${num(Math.round(distData.rows.reduce((n, r) => n + r.ha, 0)))} га · ${num(distData.rows.length)} дүүрэг`
+                : undefined
+            }
+          >
+            {distData === "loading" ? (
+              <p className="px-1 py-3 text-[12px] text-ink-3">
+                Дүүргийг тооцоолж байна.
+              </p>
+            ) : distData === "failed" ? (
+              <p className="px-1 py-3 text-[12px] text-clay">
+                Дүүргийн хил уншигдсангүй.
+              </p>
+            ) : (
+              <DistrictBars
+                rows={distData.rows}
+                parts={distData.parts}
+                unit="га"
+                selected={sel[DISTRICT_KEY]?.[0] ?? null}
+                onSelect={(n) =>
+                  n == null
+                    ? pick(id, DISTRICT_KEY, null)
+                    : pickOnly(id, [[DISTRICT_KEY, n]])
+                }
+                chosen={sel[filterKey(distB)] ?? []}
+                onPart={(keys) => pickSet(id, filterKey(distB), keys)}
+                fill
+              />
+            )}
+          </CutCard>
+        ) : null;
+
       /* Давхарга ГАНЦ карттай бол тэр нь баганаа дүүргэнэ
          ({@link LayerSet.fillSolo}) — хоосон доод талыг үлдээхгүй */
       const solo =
-        Boolean(set.fillSolo) && cuts.length === 1 && !crossCard && !areaCard;
+        Boolean(set.fillSolo) &&
+        cuts.length === 1 &&
+        !crossCard &&
+        !areaCard &&
+        !districtCard;
 
       /* Салгасан нэрийн тэнхлэг — нэгдсэн картын ДООР ({@link named}) */
       const nameCard = named.length ? (
@@ -3226,14 +3558,21 @@ export function PortalLayersDashboard({
               key={`${id}:axes`}
               /* Нэрийн карт доор нь байвал дүүргийн хүснэгт БҮТЭН
                  үлдэнэ — агших, гүйх нь нэрийн картын ажил (хэрэглэгч,
-                 2026-10-06) */
-              full={named.length > 0}
+                 2026-10-06). Дүүргийн карт доор нь байвал мөн адил. */
+              full={named.length > 0 || Boolean(districtCard)}
               axes={axes}
               tone={tone}
               first={b.id === leadId && !crossCard}
               records={rows.length}
               word={set.record}
               bars={set.axisBars}
+              /* Зөвхөн ТОДОРХОЙ палитртай давхаргад ({@link LayerSet.valueTones})
+                 — бусад цэсийн чарт хөндөгдөхгүй */
+              paletteOf={(axis) =>
+                set.valueTones?.[id] && axis === colorField(id)
+                  ? palettes[id]?.colors
+                  : undefined
+              }
               selectedOf={(axis) => (sel[axis] ?? [])[0] ?? null}
               onPick={(axis, key) =>
                 key == null ? pick(id, axis, null) : pickOnly(id, [[axis, key]])
@@ -3250,6 +3589,15 @@ export function PortalLayersDashboard({
         /* Энэ талбарын сонгогдсон утга. Нэрийг `on` гэж БҮҮ бич —
            тэр нь энэ файлд "асаалттай давхаргууд" гэсэн утгатай */
         const chosen = sel[filterKey(b)] ?? null;
+        /* Талбайн бүтэц + жагсаалт ({@link LayerSet.shareChart}) —
+           зөвхөн талбай нь шингэсэн тооллын диаграм дээр */
+        const shareArea =
+          set.shareChart?.includes(id) &&
+          b.kind === "count" &&
+          !b.multi &&
+          b.notes
+            ? b.notes
+            : null;
         const onPick = (key: string | null) => pick(id, filterKey(b), key);
 
         /*
@@ -3313,9 +3661,19 @@ export function PortalLayersDashboard({
             first={b.id === leadId && !crossCard}
             weight={cardWeight(b)}
             fill={solo}
+            /* Дүүргийн карт доор нь байвал агуулгынхаа өндөртэй — үлдсэн
+               зайг дүүргийн карт авна (хэрэглэгч 2026-10-07: "картуудын
+               зайг янзлаач") */
+            full={Boolean(districtCard)}
             /* Нийт дүн ба ангиллын тоо — зурвасуудыг нүдээр нэмэх
                шаардлагагүй болно */
-            meta={set.tidy && !isTime(b) ? headMeta(b, set.record) : undefined}
+            meta={
+              shareArea
+                ? `${num(Math.round([...shareArea.values()].reduce((n, v) => n + v, 0)))}${b.note?.unit ? ` ${b.note.unit}` : ""} · ${num(b.values.length)} ангилал`
+                : set.tidy && !isTime(b)
+                  ? headMeta(b, set.record)
+                  : undefined
+            }
             /* ⚠ Энэ хэлтэст өнгөний товч ГАРАХГҮЙ (хэрэглэгч,
                2026-10-05: устгуул) — толгой нь намхан, зураг нь
                давхаргынхаа ганц өнгөөр */
@@ -3350,7 +3708,37 @@ export function PortalLayersDashboard({
               ) : null
             }
           >
-            {environment && !isTime(b) && b.kind !== "compare" ? (
+            {shareArea ? (
+              <ShareGroups
+                data={b.values}
+                area={shareArea}
+                unit={b.note?.unit}
+                groups={set.valueGroups?.[id]}
+                colorOf={(k) => palette?.get(k) ?? tone}
+                selected={chosen}
+                onSelect={onPick}
+                onGroup={(keys) => pickSet(id, filterKey(b), keys)}
+                countLabel={set.record?.count ?? "Дүрсийн тоо"}
+                fill={solo}
+                districts={
+                  set.districts?.includes(id)
+                    ? districtRows(
+                        id,
+                        hit,
+                        b,
+                        passes,
+                        (k) => palette?.get(k) ?? tone,
+                      )
+                    : undefined
+                }
+                districtSel={sel[DISTRICT_KEY]?.[0] ?? null}
+                onDistrict={(n) =>
+                  n == null
+                    ? pick(id, DISTRICT_KEY, null)
+                    : pickOnly(id, [[DISTRICT_KEY, n]])
+                }
+              />
+            ) : environment && !isTime(b) && b.kind !== "compare" ? (
               <TopicBreakdown
                 breakdown={b}
                 tone={tone}
@@ -3472,6 +3860,11 @@ export function PortalLayersDashboard({
               <BarChart
                 data={b.values}
                 tone={tone}
+                colorOf={
+                  palette && set.valueTones?.[id]
+                    ? (d) => soft(palette.get(d.key)) ?? tone
+                    : undefined
+                }
                 fill
                 height={600}
                 labels
@@ -3574,6 +3967,7 @@ export function PortalLayersDashboard({
           {crossCard}
           {cards}
           {nameCard}
+          {districtCard}
           {areaCard}
         </React.Fragment>
       );
@@ -4069,6 +4463,10 @@ export function PortalLayersDashboard({
               value={num(stats.layers)}
             />
           ) : null}
+          {/* Бүртгэлийн тоо утгагүй давхаргад гарахгүй
+              ({@link LayerSet.noCount}) */}
+          {on.length > 0 &&
+          on.every((id) => set.noCount?.includes(id)) ? null : (
           <Stat
             icon={Shapes}
             /* ⚠ "Бичлэг" нь МЭДЭЭЛЛИЙН САНГИЙН үг — эцсийн хэрэглэгч
@@ -4090,6 +4488,7 @@ export function PortalLayersDashboard({
                 : num(stats.records)
             }
           />
+          )}
           {stats.ha > 0 ? (
             <Stat
               icon={Ruler}
@@ -4617,6 +5016,9 @@ export function PortalLayersDashboard({
                   hit={active.hit}
                   row={active.row}
                   oid={(picked ?? 0) - uidBase(active.id)}
+                  place={places[active.id]?.get(
+                    (picked ?? 0) - uidBase(active.id),
+                  )}
                   /* Зургийн өнгөтэй НЭГ эх сурвалж — ангиллаар будсан бол
                      тэр ангиллын өнгө, эс бөгөөс давхаргынх */
                   tone={
@@ -5064,6 +5466,405 @@ function chartTitle(b: Breakdown): string {
  * бичлэгийн тоог хэмжиж байгаа тул хоёр дахь тоо юуных болох нь
  * ӨӨРӨӨСӨӨ уншигдах ёстой — гарчгаас хайж уншина гэж найдахгүй.
  */
+/**
+ * ЧАРТЫН ӨНГӨ ТУНГАЛАГ (хэрэглэгч 2026-10-07: "чартын өнгийг жаахан
+ * transparent хийгээд үз") — дүүргэлт ба түүнд харгалзах дөрвөлжин ~72%;
+ * бичвэр, тоо бүтэн тод хэвээр. Зөвхөн `#rrggbb` өнгөнд (газрын зургийн
+ * палитр); бусад хэлбэрийг хөндөхгүй.
+ */
+function soft(color: string | undefined): string | undefined {
+  return color && /^#[0-9a-f]{6}$/i.test(color) ? `${color}b8` : color;
+}
+
+/**
+ * БҮЛГЭЭР ЗАДАРСАН ТАЛБАЙН ЖАГСААЛТ ({@link LayerSet.shareChart},
+ * {@link LayerSet.valueGroups}; хэрэглэгч 2026-10-07, ойн ялгарал:
+ * газрын зураг утгаар бүлэглэсэн өнгөтэй болсны дараа "одоо чартыг" →
+ * гурван хувилбараас).
+ *
+ * Зурагтай ИЖИЛ бүлэг (ой, ойжилт · эвдрэл · ойгүй талбай): бүлэг бүрийн
+ * толгойд нийт га, нийтэд эзлэх нимгэн зурвас; доор нь ангиллууд
+ * өнгө · нэр · зурвас · га. ⚠ ХУВЬ ХАСАГДСАН (хэрэглэгч 2026-10-07:
+ * "хувийг хас") — attribute биш тооцоо байсан.
+ * ⚠ Мөрийн зурвас нь БҮЛЭГ ДОТРОО хуваарилагдана (бүлгийн хамгийн их
+ *   ангилал бүтэн) — нэг хуваарьт Ой (73%) бусдыг үл үзэгдэх зураас
+ *   болгодог байв. Бүлэг хоорондын харьцуулалт нь толгойн зурвас, хувь.
+ * ⚠ Бүлгийн толгой товшиход тэр бүлгийн БҮХ ангиллаар шүүнэ
+ *   (`onGroup`); дахин товшиход цуцлагдана. Мөр нь ганц ангиллаар.
+ * ⚠ Бүлэгт ороогүй ангилал "Бусад" бүлэгт — чимээгүй алга болохгүй.
+ *   Бүлэггүй давхаргад бүгд нэг гарчиггүй бүлэг.
+ * ⚠ Өмнөх дөрвөн хувилбар (`ShareList`, `ShareTreemap`, `ShareWaffle`,
+ *   `ShareSplit`) кодоос УСТСАН — дахин бүү санал болго.
+ */
+function ShareGroups({
+  data,
+  area,
+  unit,
+  groups,
+  colorOf,
+  selected,
+  onSelect,
+  onGroup,
+  countLabel,
+  fill,
+  districts,
+  districtSel,
+  onDistrict,
+}: {
+  data: Datum[];
+  /** Ангилал бүрийн талбай ({@link Breakdown.notes}) */
+  area: Map<string, number>;
+  unit?: string;
+  groups?: readonly { label: string; keys: readonly string[] }[];
+  colorOf: (key: string) => string;
+  selected: string[] | string | null;
+  onSelect: (key: string | null) => void;
+  onGroup: (keys: string[]) => void;
+  countLabel: string;
+  /** Ганц карт баганаа дүүргэх үед жагсаалт үлдсэн өндөрт гүйнэ */
+  fill?: boolean;
+  /**
+   * "Дүүргээр" харагдац ({@link LayerSet.districts}) — `undefined` бол
+   * сэлгэгч гарахгүй. Мөр бүр дүүргийн нийт га ба бүлэг тус бүрийн га.
+   */
+  districts?:
+    | "loading"
+    | "failed"
+    | {
+        rows: { name: string; ha: number; parts: number[] }[];
+        parts: { label: string; color: string }[];
+      };
+  districtSel?: string | null;
+  onDistrict?: (name: string | null) => void;
+}) {
+  const [mode, setMode] = React.useState<"cat" | "dist">("cat");
+  const rows = data
+    .map((d) => ({ ...d, ha: area.get(d.key) ?? 0 }))
+    .sort((a, b) => b.ha - a.ha);
+  const total = rows.reduce((n, r) => n + r.ha, 0) || 1;
+  const taken = new Set<string>();
+  const blocks = (groups ?? []).map((g) => {
+    const items = rows.filter((r) => g.keys.includes(r.key));
+    items.forEach((r) => taken.add(r.key));
+    return { label: g.label, items };
+  });
+  const loose = rows.filter((r) => !taken.has(r.key));
+  if (loose.length)
+    blocks.push({ label: groups?.length ? "Бусад" : "", items: loose });
+  const shown = blocks
+    .filter((b) => b.items.length)
+    .map((b) => ({ ...b, ha: b.items.reduce((n, r) => n + r.ha, 0) }))
+    .sort((a, b) => b.ha - a.ha);
+
+  const sel = Array.isArray(selected) ? selected : selected ? [selected] : [];
+  const isOn = (k: string) => sel.includes(k);
+  const any = sel.length > 0;
+  const dim = (k: string) => (any && !isOn(k) ? 0.4 : 1);
+  const ha = (v: number) => `${measureText(v)}${unit ? ` ${unit}` : ""}`;
+
+  const toggle =
+    districts !== undefined ? (
+      <div className="flex shrink-0 items-center gap-1 pb-1">
+        {(
+          [
+            ["cat", "Ангиллаар"],
+            ["dist", "Дүүргээр"],
+          ] as const
+        ).map(([v, label]) => (
+          <button
+            key={v}
+            type="button"
+            aria-pressed={mode === v}
+            onClick={() => setMode(v)}
+            className={cn(
+              "rounded-xs border px-2 py-0.5 text-[11.5px] transition-colors",
+              mode === v
+                ? "border-line-2 bg-paper-hi font-semibold text-ink"
+                : "border-transparent text-ink-3 hover:text-ink",
+            )}
+          >
+            {label}
+          </button>
+        ))}
+        {districtSel ? (
+          <button
+            type="button"
+            onClick={() => onDistrict?.(null)}
+            className="ml-auto inline-flex items-center gap-1 rounded-xs border border-line-2 px-1.5 py-0.5 text-[11px] text-ink-2 hover:text-ink"
+            title="Дүүргийн шүүлтийг цуцлах"
+          >
+            {districtSel}
+            <span aria-hidden>×</span>
+          </button>
+        ) : null}
+      </div>
+    ) : null;
+
+  if (mode === "dist" && districts !== undefined)
+    return (
+      <div className={cn("flex flex-col", fill && "min-h-0 flex-1")}>
+        {toggle}
+        {districts === "loading" ? (
+          <p className="px-1 py-3 text-[12px] text-ink-3">
+            Дүүргийг тооцоолж байна.
+          </p>
+        ) : districts === "failed" ? (
+          <p className="px-1 py-3 text-[12px] text-clay">
+            Дүүргийн хил уншигдсангүй.
+          </p>
+        ) : (
+          <DistrictBars
+            rows={districts.rows}
+            parts={districts.parts}
+            unit={unit}
+            selected={districtSel ?? null}
+            onSelect={(n) => onDistrict?.(n)}
+            chosen={
+              selected == null ? [] : Array.isArray(selected) ? selected : [selected]
+            }
+            onPart={(keys) => onGroup([...keys])}
+            fill={fill}
+          />
+        )}
+      </div>
+    );
+
+  return (
+    <div
+      className={cn(
+        "flex flex-col gap-2",
+        fill && "min-h-0 flex-1 overflow-y-auto",
+      )}
+    >
+      {toggle}
+      {shown.map((g) => {
+        const keys = g.items.map((r) => r.key);
+        const whole =
+          sel.length === keys.length && keys.every((k) => sel.includes(k));
+        const max = Math.max(...g.items.map((r) => r.ha)) || 1;
+        const lead = colorOf(g.items[0].key);
+        return (
+          <section
+            key={g.label || "_"}
+            className="shrink-0 border-line [&:not(:first-child)]:border-t [&:not(:first-child)]:pt-1.5"
+          >
+            {g.label ? (
+              <button
+                type="button"
+                aria-pressed={whole}
+                onClick={() => onGroup(keys)}
+                className="w-full rounded-xs px-1 pt-1.5 pb-1 text-left hover:bg-paper-hi"
+                style={{ opacity: any && !keys.some(isOn) ? 0.45 : 1 }}
+              >
+                <span className="flex items-baseline gap-2">
+                  <span className="text-[11.5px] font-semibold tracking-[0.04em] text-ink uppercase">
+                    {g.label}
+                  </span>
+                  <span className="num ml-auto text-[12px] font-semibold text-ink">
+                    {ha(g.ha)}
+                  </span>
+                </span>
+                <span className="mt-1 block h-1 overflow-hidden rounded-xs bg-paper-3">
+                  <span
+                    className="block h-full rounded-xs"
+                    style={{
+                      width: `${Math.max((g.ha / total) * 100, 0.5)}%`,
+                      background: soft(lead),
+                    }}
+                  />
+                </span>
+              </button>
+            ) : null}
+            {g.items.map((r) => (
+              <button
+                key={r.key}
+                type="button"
+                aria-pressed={isOn(r.key)}
+                onClick={() => onSelect(r.key)}
+                title={`${r.label} · ${countLabel} ${num(r.value)}`}
+                className="grid w-full grid-cols-[10px_132px_minmax(0,1fr)_76px] items-center gap-x-2.5 rounded-xs py-[4px] pr-1 pl-3 text-left text-[12px] hover:bg-paper-hi"
+                style={{ opacity: dim(r.key) }}
+              >
+                <span
+                  aria-hidden
+                  className="size-2.5 rounded-[2px]"
+                  style={{ background: soft(colorOf(r.key)) }}
+                />
+                <span className="truncate text-ink">{r.label}</span>
+                <span className="h-2 overflow-hidden rounded-xs bg-paper-3">
+                  <span
+                    className="block h-full rounded-xs"
+                    style={{
+                      width: `${Math.max((r.ha / max) * 100, r.ha > 0 ? 1 : 0)}%`,
+                      background: soft(colorOf(r.key)),
+                    }}
+                  />
+                </span>
+                <span className="num text-right text-ink">{ha(r.ha)}</span>
+              </button>
+            ))}
+          </section>
+        );
+      })}
+    </div>
+  );
+}
+
+/**
+ * ДҮҮРГЭЭР — дүүрэг бүр нэг мөр: нэр · бүлгээр ДАВХАРЛАСАН зурвас · нийт га
+ * ({@link ShareGroups}-ийн "Дүүргээр" харагдац). Зурвасын урт нь хамгийн
+ * том дүүрэгтэй харьцуулсан; хэсгүүд нь бүлэг тус бүрийн га (өнгө нь
+ * газрын зургийн гэр бүлийнх). Мөр дарахад тэр дүүргээр шүүнэ.
+ * ⚠ Хэсэг бүр БАГТАХ бол га-гаа бичнэ (16px зурвас, 10px бараан бичвэр —
+ *   өнгөнүүд дунд, цайвар гэрэлтэлттэй тул цагаан бичвэр уусна).
+ * ⚠ Дүүрэг нь ТООЦООЛСОН (`districtsOf`) — эх сурвалжийн талбар биш.
+ */
+function DistrictBars({
+  rows,
+  parts,
+  unit,
+  selected,
+  onSelect,
+  chosen,
+  onPart,
+  fill,
+}: {
+  rows: { name: string; ha: number; parts: number[] }[];
+  parts: { label: string; color: string; keys?: readonly string[] }[];
+  unit?: string;
+  selected: string | null;
+  onSelect: (name: string | null) => void;
+  /**
+   * ТАЙЛБАР нь ШҮҮЛТ (хэрэглэгч 2026-10-07, ойн хэсэглэл: "эндээс
+   * филтер") — мөр бүр газрын зургийг будаж буй талбарын ангилал тул
+   * товшиход тэр ангиллаар шүүнэ; дахин товшиход цуцлагдана. "Бусад"
+   * (түлхүүргүй) товшигдохгүй.
+   */
+  chosen?: readonly string[];
+  onPart?: (keys: readonly string[]) => void;
+  fill?: boolean;
+}) {
+  const partOn = (keys?: readonly string[]) =>
+    Boolean(keys?.length) && keys!.every((k) => chosen?.includes(k));
+  const anyPart = parts.some((p) => partOn(p.keys));
+  const max = Math.max(...rows.map((r) => r.ha), 0) || 1;
+  const ha = (v: number) => `${measureText(v)}${unit ? ` ${unit}` : ""}`;
+  /* Хэсэг бүрийн ШОШГО (хэрэглэгч 2026-10-07: "chart дээр нь label
+     харуулаарай") — зурвасын бодит өргөнийг хэмжиж, бичвэр БАГТАХ
+     хэсэгт л тоо бичнэ; тасарсан тоо худал уншигдана. Багтаагүй хэсгийн
+     утга `title`-д. */
+  const [track, setTrack] = React.useState(0);
+  const observer = React.useRef<ResizeObserver | null>(null);
+  const measure = React.useCallback((el: HTMLSpanElement | null) => {
+    observer.current?.disconnect();
+    if (!el) return;
+    observer.current = new ResizeObserver(([e]) =>
+      setTrack(e.contentRect.width),
+    );
+    observer.current.observe(el);
+  }, []);
+  React.useEffect(() => () => observer.current?.disconnect(), []);
+  return (
+    <div className={cn("flex flex-col", fill && "min-h-0 flex-1")}>
+      {/* Өнгөний тайлбар ДЭЭР: мөрүүд доошоо сунахад тайлбар ба мөрийн
+          хооронд хоосон зай үүсэхгүй */}
+      <div className="flex shrink-0 flex-wrap gap-x-3 gap-y-1 border-b border-line px-1 pb-2 text-[11px] text-ink-2">
+        {parts.map((p) => {
+          const swatch = (
+            <span
+              aria-hidden
+              className="size-2.5 rounded-[2px]"
+              style={{ background: soft(p.color) }}
+            />
+          );
+          if (!onPart || !p.keys?.length)
+            return (
+              <span key={p.label} className="inline-flex items-center gap-1.5">
+                {swatch}
+                {p.label}
+              </span>
+            );
+          const on = partOn(p.keys);
+          return (
+            <button
+              key={p.label}
+              type="button"
+              aria-pressed={on}
+              onClick={() => onPart(p.keys!)}
+              className={cn(
+                "inline-flex cursor-pointer items-center gap-1.5 rounded-xs hover:text-ink",
+                on && "font-semibold text-ink",
+              )}
+              style={{ opacity: anyPart && !on ? 0.4 : 1 }}
+            >
+              {swatch}
+              {p.label}
+            </button>
+          );
+        })}
+      </div>
+      <div
+        className={cn(
+          "pt-1",
+          fill && "flex min-h-0 flex-1 flex-col overflow-y-auto",
+        )}
+      >
+        {rows.map((r, ri) => {
+          const on = selected === r.name;
+          return (
+            <button
+              key={r.name}
+              type="button"
+              aria-pressed={on}
+              onClick={() => onSelect(on ? null : r.name)}
+              title={parts
+                .map((p, i) => `${p.label}: ${ha(r.parts[i] ?? 0)}`)
+                .join(" · ")}
+              className={cn(
+                "grid w-full grid-cols-[124px_minmax(0,1fr)_76px] items-center gap-x-2.5 rounded-xs px-1 py-[5px] text-left text-[12px] hover:bg-paper-hi",
+                /* Баганаа дүүргэх үед мөрүүд өндрийг хуваалцана (≤44px) */
+                fill && "max-h-11 min-h-[26px] flex-1",
+              )}
+              style={{ opacity: selected && !on ? 0.4 : 1 }}
+            >
+              <span className="truncate text-ink">{r.name}</span>
+              <span
+                ref={ri === 0 ? measure : undefined}
+                className="h-4 overflow-hidden rounded-xs bg-paper-3"
+              >
+                <span
+                  className="flex h-full"
+                  style={{ width: `${(r.ha / max) * 100}%` }}
+                >
+                  {r.parts.map((v, i) => {
+                    if (v <= 0) return null;
+                    const text = measureText(v);
+                    const px = track * (r.ha / max) * (v / r.ha);
+                    return (
+                      <span
+                        key={i}
+                        className="num flex h-full items-center justify-center overflow-hidden text-[10px] leading-none font-semibold whitespace-nowrap"
+                        style={{
+                          width: `${(v / r.ha) * 100}%`,
+                          background: soft(parts[i]?.color),
+                          color: "#0b1a14",
+                        }}
+                      >
+                        {px >= text.length * 6.2 + 8 ? text : null}
+                      </span>
+                    );
+                  })}
+                </span>
+              </span>
+              <span className="num text-right text-ink">{ha(r.ha)}</span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function noteOf(b: Breakdown): ((d: Datum) => string) | undefined {
   const { note, notes } = b;
   if (!note || !notes) return undefined;
@@ -5225,9 +6026,16 @@ function AxisCard({
   bars = false,
   dense = false,
   full = false,
+  paletteOf,
 }: {
   axes: { key: string; label: string; list: Breakdown[] }[];
   tone: string;
+  /**
+   * Тэнхлэгийн палитр — газрын зурагтай ИЖИЛ өнгө (хэрэглэгч 2026-10-07,
+   * ойн хэсэглэл: "чартын өнгийг бас"). Зургийг будаж буй талбарын
+   * тэнхлэгт л буцаана; бусад нь давхаргын ганц өнгө.
+   */
+  paletteOf?: (axis: string) => Map<string, string> | undefined;
   first: boolean;
   /** Хүснэгтийн оронд зурвас ({@link LayerSet.axisBars}) */
   bars?: boolean;
@@ -5318,6 +6126,7 @@ function AxisCard({
   }
 
   const picked = selectedOf(axis.key);
+  const pal = paletteOf?.(axis.key);
 
   /*
     ⚠⚠ **ТЕГРҮҮЛЕГЧ УТГА ТОДОРНО — ДҮҮРГЕЛТГҮЙ**
@@ -5385,12 +6194,13 @@ function AxisCard({
           <RowChart
             data={count.values}
             tone={tone}
+            colorOf={pal ? (d) => soft(pal.get(d.key)) ?? tone : undefined}
             selected={picked}
             onSelect={(k) => onPick(axis.key, k)}
             note={noteOf(count)}
             format={count.kind === "count" ? undefined : measureText}
             dense
-            clamp
+            clamp={!pal}
             share={false}
           />
         </div>
@@ -6180,6 +6990,7 @@ function RecordPanel({
   hit,
   row,
   oid,
+  place,
   tone,
   onClose,
 }: {
@@ -6187,6 +6998,8 @@ function RecordPanel({
   row: Record<string, unknown>;
   /** Давхарга доторх ТҮҮХИЙ дугаар (`objectid`) */
   oid: number;
+  /** Тооцоолсон байршлын нэр ({@link LayerSet.placeNames}) — ангилалгүй үед */
+  place?: string;
   tone: string;
   onClose: () => void;
 }) {
@@ -6262,7 +7075,9 @@ function RecordPanel({
       ? name
       : tag !== "Бүртгэгдээгүй"
         ? `${tag} · № ${oid}`
-        : `№ ${oid}`;
+        : place
+          ? place
+          : `№ ${oid}`;
   const rawArea = hit.data.area[oid];
   const ha =
     rawArea != null && Number.isFinite(rawArea)
