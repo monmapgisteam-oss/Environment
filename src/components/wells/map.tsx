@@ -146,6 +146,13 @@ export type Basemap = {
   /** Энэ суурь дээр гэрэлтэй бичээс тохирох эсэх (бараан суурь) */
   dark: boolean;
   maxzoom: number;
+  /** `services.arcgisonline.com`-оос ӨӨР хост дээрх хавтангийн хаяг */
+  url?: string;
+  /**
+   * Растерын засвар — Esri-ийн Firefly хавтан нь өнгө сулруулсан ч
+   * БАРААН биш тул гэрэлтэх цэг ялгарахгүй байв (зургаар шалгасан).
+   */
+  paint?: { "raster-brightness-max"?: number; "raster-saturation"?: number; "raster-contrast"?: number };
 };
 
 /** Хиймэл дагуул нь үндсэн суурь — цуглуулгын эхэнд байрлана */
@@ -176,6 +183,24 @@ export const BASEMAPS: Basemap[] = [
     солилцоо — саарал хоосон тор нь бүдэг зурагнаас хамаагүй дор.
   */
   { id: "imagery", name: "Хиймэл дагуул", service: "World_Imagery", dark: true, maxzoom: 17 },
+  /*
+    ⚠ FIREFLY СУУРЬ (хэрэглэгч, 2026-10-07: "firelight гэж мэдэх үү").
+    Esri-ийн бараан, өнгө сулруулсан хиймэл дагуул — гэрэлтэх цэгт
+    (`dots`) зориулагдсан. Хост нь `fly.maptiles.arcgis.com`,
+    түлхүүргүй; УБ-д z18 хүртэл бодит хавтан (16–20 КБ) буцаахыг
+    шалгасан — хязгаар нь бусадтай ижил 17.
+  */
+  {
+    id: "firefly",
+    name: "Бараан хиймэл дагуул",
+    service: "World_Imagery_Firefly",
+    dark: true,
+    maxzoom: 17,
+    /* Бараан болгоно: гэрэлтэлтийн дээд хязгаар 45%, өнгө бараг саарал —
+       Esri-ийн firefly жишгийн харагдац */
+    paint: { "raster-brightness-max": 0.45, "raster-saturation": -0.55, "raster-contrast": 0.1 },
+    url: "https://fly.maptiles.arcgis.com/arcgis/rest/services/World_Imagery_Firefly/MapServer/tile/{z}/{y}/{x}",
+  },
   { id: "dark", name: "Бараан", service: "Canvas/World_Dark_Gray_Base", dark: true, maxzoom: 16 },
   { id: "light", name: "Цайвар", service: "Canvas/World_Light_Gray_Base", dark: false, maxzoom: 16 },
   { id: "street", name: "Гудамж", service: "World_Street_Map", dark: false, maxzoom: 17 },
@@ -185,12 +210,12 @@ export const BASEMAPS: Basemap[] = [
 ];
 
 export function basemapTiles(b: Basemap) {
-  return ESRI(b.service);
+  return b.url ?? ESRI(b.service);
 }
 
 /** Цуглуулгын жижиг урьдчилсан харагдац — Монголыг харуулсан нэг хавтан */
 export function basemapThumb(b: Basemap) {
-  return ESRI(b.service).replace("{z}/{y}/{x}", "5/11/24");
+  return (b.url ?? ESRI(b.service)).replace("{z}/{y}/{x}", "5/11/24");
 }
 
 /*
@@ -457,7 +482,7 @@ function baseStyle(b: Basemap): StyleSpecification {
         maxzoom: b.maxzoom,
       },
     },
-    layers: [{ id: "base", type: "raster", source: "base" }],
+    layers: [{ id: "base", type: "raster", source: "base", paint: b.paint ?? {} }],
   };
 }
 
@@ -490,7 +515,7 @@ function applyBasemap(m: MapLibreMap, b: Basemap) {
     tileSize: 256,
     maxzoom: b.maxzoom,
   });
-  m.addLayer({ id: "base", type: "raster", source: "base" }, first);
+  m.addLayer({ id: "base", type: "raster", source: "base", paint: b.paint ?? {} }, first);
 }
 
 /*
@@ -527,6 +552,7 @@ export function WellsMap({
   onProbe,
   firefly,
   colors,
+  dots,
   highlight = null,
   overlays,
   field,
@@ -655,6 +681,19 @@ export function WellsMap({
    * газарт уусна (олон өнгөт шатлалтай ижил шалтгаан).
    */
   colors?: ArrayLike<string | undefined>;
+  /**
+   * ТОД ЖИЖИГ ЦЭГ — firefly гэрэлгүй (хэрэглэгч, 2026-10-07, нийслэлийн
+   * худгийн зургаар: "map маш муу байна"). 14 мянган цэгийн гэрэл
+   * (`wells-glow`, 7–18px сарнисан дугуй) нийлээд хотыг бүрхсэн НЭГ
+   * толбо болж, ангиллын өнгө, цөөн цэг (зөвшөөрөлгүй 1,996) доор нь
+   * дарагдаж байв. Энэ горимд ганц давхарга: ойртолтоор томордог жижиг
+   * дугуй, бараан нимгэн хүрээтэй — нягт газарт ч цэг бүр салж харагдана.
+   *
+   * `rank` — өнгө (hex) → зурах дараалал; их нь ДЭЭР. Цөөн ч чухал
+   * ангиллыг (анхааруулга) олонхын доор дарагдуулахгүй.
+   * ⚠ Эх сурвалж үүсэх МӨЧИД уншигдана.
+   */
+  dots?: { rank?: Record<string, number> };
   /**
    * Тодруулах цэгийн байрлал `[lon, lat]`. Өгвөл тэр цэгийг гэрэлтэх
    * цаграгаар тойруулна.
@@ -1001,6 +1040,7 @@ export function WellsMap({
     shapeColor: shapes?.color,
     fire: firefly ?? FIREFLY,
     tinted: Boolean(colors),
+    dots: dots ?? null,
     shapeLabelZoom: shapes?.labelZoom ?? 0,
     shapeFlow: Boolean(shapes?.flow),
     shapeLabelOnLine: shapes?.labelPlacement === "line-center",
@@ -1855,6 +1895,67 @@ export function WellsMap({
       const tint = (fallback: string): ExpressionSpecification =>
         ["coalesce", ["get", "c"], fallback] as unknown as ExpressionSpecification;
 
+      const dotMode = modeRef.current.dots;
+      if (dotMode) {
+        /*
+          ЖИЖИГ FIREFLY ЦЭГ ({@link dots}). Гурван давхарга (гэрэл → бие
+          → цагаан цөм) ердийн firefly-тэй ижил ч гэрэл нь ХАГАС хэмжээтэй:
+          14 мянган цэгийн 7–18px гэрэл нийлж нэг толбо болдог байсан
+          (хэрэглэгч, 2026-10-07). Бараан Firefly суурь дээр жижиг гэрэл
+          тод ялгарна.
+          ⚠ Бие нь `wells-halo` нэрээр — оноолт, hover, шүүлтийн хязгаар
+          өөрчлөгдөхгүй. Дараалал (`circle-sort-key`) гурвууланд.
+        */
+        const rank = Object.entries(dotMode.rank ?? {});
+        const sortKey = rank.length
+          ? {
+              "circle-sort-key": [
+                "match",
+                ["get", "c"],
+                ...rank.flatMap(([hex, r]) => [hex, r]),
+                0,
+              ] as unknown as ExpressionSpecification,
+            }
+          : {};
+        m.addLayer({
+          id: "wells-glow",
+          type: "circle",
+          source: "wells",
+          filter: ["!", ["has", "point_count"]],
+          layout: sortKey,
+          paint: {
+            "circle-radius": ["interpolate", ["linear"], ["zoom"], 9, 3.4, 12, 5.6, 14, 7.5, 17, 12],
+            "circle-color": tint(modeRef.current.fire.glow),
+            "circle-blur": 1,
+            "circle-opacity": 0.42,
+          },
+        });
+        m.addLayer({
+          id: "wells-halo",
+          type: "circle",
+          source: "wells",
+          filter: ["!", ["has", "point_count"]],
+          layout: sortKey,
+          paint: {
+            "circle-radius": ["interpolate", ["linear"], ["zoom"], 9, 1.6, 12, 2.5, 14, 3.4, 17, 5.4],
+            "circle-color": tint(modeRef.current.fire.mid),
+            "circle-blur": 0.2,
+            "circle-opacity": 0.95,
+          },
+        });
+        m.addLayer({
+          id: "wells-dot",
+          type: "circle",
+          source: "wells",
+          filter: ["!", ["has", "point_count"]],
+          layout: sortKey,
+          paint: {
+            "circle-radius": ["interpolate", ["linear"], ["zoom"], 9, 0.5, 12, 0.9, 14, 1.3, 17, 2.1],
+            "circle-color": "#ffffff",
+            "circle-opacity": 0.75,
+          },
+        });
+      } else {
       m.addLayer({
         id: "wells-glow",
         type: "circle",
@@ -1913,6 +2014,7 @@ export function WellsMap({
           "circle-opacity": 0.95,
         },
       });
+      }
       }
 
       /*
@@ -2535,6 +2637,27 @@ export function WellsMap({
       live.setLayerZoomRange("wells-label", pointLabelZoom, MAX_ZOOM);
     }
   }, [live, shapeLabelZoom, pointLabelZoom]);
+
+  /*
+    ЦЭГИЙН ЗУРАХ ДАРААЛАЛ ({@link dots}) АМЬД — ангиллын өнгө нь дата
+    ирсний дараа тогтдог тул эх сурвалж үүсэх мөчид дараалал хоосон
+    байж болно. Түлхүүр нь мөр болгосон дараалал: шинэ объект бүрд биш,
+    утга өөрчлөгдөхөд л шинэчилнэ.
+  */
+  const dotRank = dots?.rank ? JSON.stringify(dots.rank) : "";
+  React.useEffect(() => {
+    if (!live || !dotRank) return;
+    const rank = Object.entries(JSON.parse(dotRank) as Record<string, number>);
+    if (!rank.length) return;
+    const key = [
+      "match",
+      ["get", "c"],
+      ...rank.flatMap(([hex, r]) => [hex, r]),
+      0,
+    ] as unknown as ExpressionSpecification;
+    for (const id of ["wells-glow", "wells-halo", "wells-dot"])
+      if (live.getLayer(id)) live.setLayoutProperty(id, "circle-sort-key", key);
+  }, [live, dotRank]);
 
   /* ---------------- Дата олон өнцөгт ---------------- */
   const shapeData = shapes?.data;
