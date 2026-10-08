@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import dynamic from "next/dynamic";
-import { Box, Grid3x3, Loader2 } from "lucide-react";
+import { Box, Grid3x3, Loader2, Waves } from "lucide-react";
 import { useStoredTab } from "@/components/ui/source-tabs";
 import { cn } from "@/lib/utils";
 
@@ -17,6 +17,11 @@ const LatrineAnalysis = dynamic(
     import("@/components/analysis/latrine-dashboard").then(
       (m) => m.LatrineAnalysis,
     ),
+  { ssr: false, loading: spinner },
+);
+
+const FloodView = dynamic(
+  () => import("@/components/analysis/flood-view").then((m) => m.FloodView),
   { ssr: false, loading: spinner },
 );
 
@@ -63,6 +68,9 @@ const SoilScene = dynamic(
   ⚠ Код, багц нь 2026-10-01-нд УСТГАГДСАН (хэрэглэгч: "uyertei holbootoi
   medeelelee del hii uur hun hiij bgaa uur branch deer") — үерийг өөр хүн
   тусдаа салаа дээр хийж байна. git-д ороогүй байсан тул түүхэнд ч алга.
+  ✅ 2026-10-08-нд тэр хүний апп ("Flood_envi", 2D гүехэн усны GPU загвар,
+  10–30 м тор) "Үерийн симуляци" товчоор iframe-ээр буцаж орсон
+  ({@link src/components/analysis/flood-view.tsx}).
 
   ⚠ Сонгоогүй харагдац УНТАРНА (`dynamic` + нөхцөлт зурагдалт):
   нуусан контейнерт MapLibre хэмжээгээ алддаг бөгөөд хоёр дахь
@@ -74,6 +82,15 @@ const VIEWS = [
     label: "Хотын тархалт",
     note: "145,462 жорлон · хоёр зам",
     icon: Grid3x3,
+  },
+  /* ⚠ Үер нь "Хотын тархалт"-ын ДАРАА (хэрэглэгч 2026-10-08: "eneni ard
+     shine button"). Апп нь `public/flood/`-д, iframe-ээр
+     ({@link src/components/analysis/flood-view.tsx}). */
+  {
+    id: "flood",
+    label: "Үерийн симуляци",
+    note: "Бороо · гадаргын урсац",
+    icon: Waves,
   },
   {
     id: "soil",
@@ -138,6 +155,7 @@ export function AnalysisWorkspace() {
 
       <div className="min-h-0 flex-1">
         {view === "city" ? <LatrineAnalysis /> : null}
+        {view === "flood" ? <FloodView /> : null}
         {view === "soil" ? <SoilScene /> : null}
       </div>
     </div>

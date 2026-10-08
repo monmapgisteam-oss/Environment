@@ -1,0 +1,32 @@
+{
+ "crs": "EPSG:3857",
+ "x0": 11868840.0,
+ "y1": 6156945.0,
+ "res": 15.0,
+ "W": 4458,
+ "H": 5556,
+ "demF": 3,
+ "demW": 1486,
+ "demH": 1852,
+ "bounds": [
+  106.62,
+  47.8,
+  107.22,
+  48.3
+ ],
+ "groundScale": 0.6684818354539511,
+ "pitFill": {
+  "urbanMaxDepth": 3.0,
+  "otherMaxDepth": 0.5
+ },
+ "tuulInflow": [
+  4418,
+  4493
+ ],
+ "sources": {
+  "dem": "Copernicus GLO-30 DSM (ESA/Airbus), building bias removed, shallow pits filled",
+  "landcover": "ESA WorldCover 2021 v200 (10 m)",
+  "buildings": "merged_buildings_arkhai FeatureServer (322,855 footprints, floors x 3 m)",
+  "rivers": "OpenStreetMap waterways, burned as continuous downhill channels (breach \u2264 6 m)"
+ }
+}
