@@ -144,6 +144,10 @@ export function createPit3D(
   let alive = true;
   let paused = false;
 
+  /* Цооногийн давхаргын өнгө — ангиар (хайрга цайвар, шавар бараан) */
+  const DEEP_COL: Record<string, string> = {
+    sand: "#cfbd95", lsand: "#c3ad86", sloam: "#b59a74", scl: "#a6876a", loam: "#9c8770", cloam: "#8b796b", clay: "#7f7068",
+  };
   const tileKey = (n: string) => {
     const c = (n.replace(/[^A-Za-zА-Яа-я]/g, "")[0] || "C").toUpperCase();
     return c === "O" || c === "T" ? "A" : "AEBCR".includes(c) ? c : "C";
@@ -294,15 +298,33 @@ export function createPit3D(
     const M = MATS[p.mat];
     b.fillStyle = M.col;
     b.fillRect(0, 0, W, H);
-    const deepKey = p.mat === 6 ? "R" : p.mat === 5 ? "B" : "C";
-    const pd = pattern(b, deepKey);
-    if (pd) {
-      b.fillStyle = pd;
-      b.fillRect(0, hb * PPM, W, H - hb * PPM);
-    }
-    if (p.mat === 5) {
-      b.fillStyle = "rgba(150,70,40,.28)";
-      b.fillRect(0, hb * PPM, W, H - hb * PPM);
+    /* 2 м-ээс доош — баганын давхарга бүр: цооногийнх ангийн өнгөөр,
+       геологийн зурагных материалын өнгөөр (2D диаграмтай нэг) */
+    const deep = (p.col ?? []).filter((l) => l.kind !== 0);
+    if (!deep.length) deep.push({ top: hb, bot: 1e3, cls: M.t, Ks: 0, name: "", src: "", gravel: null, kind: 2 });
+    for (const l of deep) {
+      const y0 = Math.max(hb, l.top) * PPM;
+      const y1 = Math.min(H, l.bot * PPM);
+      if (y1 <= y0) continue;
+      const key = l.kind === 1 ? (/sand/.test(l.cls) ? "C" : "B") : p.mat === 6 ? "R" : p.mat === 5 ? "B" : "C";
+      b.fillStyle = l.kind === 1 ? (DEEP_COL[l.cls] ?? M.col) : M.col;
+      b.fillRect(0, y0, W, y1 - y0);
+      const pd = pattern(b, key);
+      if (pd) {
+        b.save();
+        /* цооногийн давхаргад бүтэц сул — ангийн өнгө нь давхарга хооронд ялгарна */
+        b.globalAlpha = l.kind === 1 ? 0.45 : 0.8;
+        b.fillStyle = pd;
+        b.fillRect(0, y0, W, y1 - y0);
+        b.restore();
+      }
+      if (l.kind === 2 && p.mat === 5) {
+        b.fillStyle = "rgba(150,70,40,.28)";
+        b.fillRect(0, y0, W, y1 - y0);
+      }
+      /* давхаргын зааг */
+      b.fillStyle = "rgba(30,20,12,.55)";
+      b.fillRect(0, y0, W, 2);
     }
     hz.forEach((o) => {
       const t = (o.t / 100) * PPM;
@@ -437,6 +459,16 @@ export function createPit3D(
     s = label(`Нүх · ${pit.toFixed(1)} м`, { size: LS, bold: true });
     s.position.set(-a - 0.1, -pit / 2, a + 0.25);
     g.add(s);
+    /* цооногийн давхарга бүрийн нэр — блокийн зүүн ирмэгт, давхаргынхаа дунд */
+    for (const l of p.col ?? []) {
+      if (l.kind !== 1) continue;
+      const y0 = Math.max(l.top, hb);
+      const y1 = Math.min(l.bot, Db);
+      if (y1 - y0 < 0.6) continue;
+      s = label(`${TEX[l.cls]?.n ?? l.cls} · ${l.src.replace(/^JICA цооног /, "цооног ")}`, { size: LS, bg: "rgba(30,24,18,.8)", color: "#f3ead9" });
+      s.position.set(-R - 0.15 - s.scale.x / 2, -(y0 + y1) / 2, R);
+      g.add(s);
+    }
     s = label("Жорлон", { size: LS, bold: true });
     s.position.set(-0.5, 2.55, -0.5);
     g.add(s);
@@ -638,7 +670,10 @@ export function createPit3D(
     const k0 = Math.min(F.nz - 1, F.jd) * F.nr; // нүхний ёроол доорх төвийн эс
     const vz0 = Math.max(1e-6, r.vZ[k0] || 1e-6);
     const L = Math.max(0.1, world.gw - world.pit);
-    const dps = Math.max(0.5, L / vz0 / 9); // ~9 секундэд гүний усанд хүрнэ
+    /* ⚠ Давхаргатай баганад хурд гүнээр өөр — нүхнээс гүний ус хүртэлх
+       мөр бүрийн h/v-ийн нийлбэр (`tTravel`); байхгүй бол нүхний доорх эсээр */
+    const tt = r.tTravel ?? L / vz0;
+    const dps = Math.max(0.5, tt / 9); // ~9 секундэд гүний усанд хүрнэ
     Object.assign(world, {
       pts, pos, col, cells, w, tot, dps,
       P: {
@@ -651,7 +686,7 @@ export function createPit3D(
       world.P.age[i] = -Math.random() * 12;
     }
     opts.onSpeed(
-      `Дуслууд хурдасгасан: 1 секунд ≈ ${dps < 2 ? dps.toFixed(1) : Math.round(dps)} хоног. Хөрсөөр доош ${L.toFixed(1)} м явахад ≈ ${fmtDays(L / vz0)}.`,
+      `Дуслууд хурдасгасан: 1 секунд ≈ ${dps < 2 ? dps.toFixed(1) : Math.round(dps)} хоног. Хөрсөөр доош ${L.toFixed(1)} м явахад ≈ ${fmtDays(tt)}.`,
     );
   }
   function fmtDays(d: number) {
@@ -721,7 +756,8 @@ export function createPit3D(
             Pp.r[i] = Math.abs(Pp.r[i] + vr * days + randn() * sd * 0.8);
             Pp.z[i] = Math.max(0.01, Pp.z[i] + vz * days + randn() * sd * 0.8);
           }
-          if (Pp.t[i] === 1 && Math.random() < 1 - Math.exp(-r.lamE * days)) {
+          const lam = r.lamRow ? r.lamRow[zj] : r.lamE;
+          if (Pp.t[i] === 1 && Math.random() < 1 - Math.exp(-lam * days)) {
             spawn(i);
             continue;
           }
@@ -768,6 +804,7 @@ export function createPit3D(
   /* ширхэгийн радиус (px, 600 px ≈ 2.5 мм) ба бүрхэц */
   const GR: Record<string, [number, number, number]> = {
     sand: [40, 68, 0.6], lsand: [30, 56, 0.6], sloam: [14, 48, 0.58], loam: [10, 32, 0.58], cloam: [7, 20, 0.6],
+    silt: [6, 24, 0.6], sil: [8, 28, 0.58], scl: [12, 40, 0.58], sicl: [6, 20, 0.6], sc: [8, 26, 0.6], sic: [5, 16, 0.62], clay: [5, 16, 0.62],
   };
   function grainsFor(tk: string): Grid {
     if (micro.grains[tk]) return micro.grains[tk];
@@ -837,7 +874,8 @@ export function createPit3D(
     const r = W.r;
     const z = micro.depth;
     const rr = micro.r;
-    const tk = MATS[P.mat].t;
+    /* ⚠ Ширхэг нь ТЭР ГҮНИЙ давхаргынх (давхаргатай багана) */
+    const tk: string = F?.lay ? F.lay[Math.min(F.nz - 1, Math.max(0, Math.floor(z / F.h)))].cls : MATS[P.mat].t;
     if (z >= W.gw) return { zone: "gw", Se: 1, v: (P.kaq * P.grad) / 0.25, dir: [1, 0], cN: Math.min(1, snap.Cgw / r.C0N), eLog: Math.min(snap.elog, C0E_LOG), tk, th: TEX[tk].ths };
     if (z < W.pit && rr < W.a) return { zone: "pit", Se: 1, v: 0, dir: [0, 1], cN: 1, eLog: C0E_LOG, tk, th: 1 };
     if (!F) return { zone: "soil", Se: 0.3, v: 0, dir: [0, 1], cN: 0, eLog: -9, tk, th: 0.2 };

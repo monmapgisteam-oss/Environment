@@ -2430,6 +2430,30 @@
   background: none;
   border-width: 1.5px 0 0;
 }
+/* ⚠ Зургийн икон, түүний цонх нь ХАЖУУГИЙН КАРТТАЙ НЭГ ДЭВСГЭРТЭЙ
+   (хэрэглэгч 2026-10-07: "map deer bga icon bolon hajuu cardiin background
+   ungu uur bn"). Esri-ийн calcite загвар өөрийн саарал (#242424 / #2b2b2b)
+   өгдөг байсан тул платформын токеноор ДАРНА. Хувьсагч нь shadow DOM руу
+   удамшдаг тул `calcite-action`-ийн дотоод товч ч дагана.
+   ⚠ SDK `.esri-ui` дээр `calcite-mode-dark|light` анги тавьж хувьсагчаа
+   ТЭНД дахин тодорхойлдог — тиймээс тэр элементэд ч заавал (0,2,0). */
+.soil-scene-view,
+.soil-scene-view .esri-ui,
+.soil-scene-view [class*="calcite-mode-"] {
+  --calcite-color-foreground-1: var(--paper-2);
+  --calcite-color-foreground-2: var(--paper-hi);
+  --calcite-color-foreground-3: var(--paper-hi);
+  --calcite-color-border-1: var(--line-2);
+  --calcite-color-border-2: var(--line);
+  --calcite-color-border-3: var(--line);
+  --calcite-color-text-1: var(--ink);
+  --calcite-color-text-2: var(--ink-2);
+  --calcite-color-text-3: var(--ink-3);
+}
+.soil-scene-view .esri-widget {
+  background-color: var(--paper-2);
+  color: var(--ink);
+}
 /* Давхаргын иконы цонх — порталын давхаргуудыг 3D-д асаана. Орчны
    цонхтой нэг загвар (`.soil-env`); мөр бүр өнгөт цэгтэй — тэр нь
    зураг дээрх тэмдгийн өнгө тул цонх нь тайлбарын үүрэг давхар гүйцэтгэнэ. */

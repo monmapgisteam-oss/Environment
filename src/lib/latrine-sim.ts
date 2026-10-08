@@ -31,16 +31,32 @@ import { asset } from "@/lib/base-path";
 import { arcgisJson } from "@/lib/arcgis";
 import { PIT_SERVICE } from "@/lib/toilets";
 import { fetchGeology } from "@/lib/geology";
+import { BOREHOLES, BORE_REACH, PROFILE_HZ, USCS_CLS, WOSIS, type Borehole } from "@/lib/subsurface";
 
 /* ── Хөрсний ангилал: van Genuchten–Mualem, Carsel & Parrish (1988) ──
    thr, ths, α (1/м), n, Ks (м/өдөр); lamE — E.coli устах+шүүгдэх хурд (1/өдөр) */
 export type Texture = { n: string; thr: number; ths: number; a: number; vn: number; Ks: number; lamE: number };
+/*
+  ⚠ Эхний тав нь эх хуудасных (хөндөгдөөгүй). Үлдсэн долоо нь Carsel &
+  Parrish (1988)-ийн 12 ангиллын бусад нь — хөрсний үе бүрийн механик
+  бүрэлдэхүүнээр анги тогтоох болсон тул нэмэгдэв (2026-10-07,
+  {@link src/lib/subsurface.ts}). Тэдний `lamE` нь эх сурвалжид БАЙХГҮЙ:
+  эх хуудасны шатлалыг (элс 0.4 … шаварлаг шавранцар 2.0) шаврын хувиар
+  үргэлжлүүлсэн утга.
+*/
 export const TEX: Record<string, Texture> = {
   sand: { n: "элс", thr: 0.045, ths: 0.43, a: 14.5, vn: 2.68, Ks: 7.128, lamE: 0.4 },
   lsand: { n: "шавранцар элс", thr: 0.057, ths: 0.41, a: 12.4, vn: 2.28, Ks: 3.502, lamE: 0.6 },
   sloam: { n: "элсэнцэр", thr: 0.065, ths: 0.41, a: 7.5, vn: 1.89, Ks: 1.061, lamE: 1.0 },
   loam: { n: "шавранцар", thr: 0.078, ths: 0.43, a: 3.6, vn: 1.56, Ks: 0.2496, lamE: 1.5 },
   cloam: { n: "шаварлаг шавранцар", thr: 0.095, ths: 0.41, a: 1.9, vn: 1.31, Ks: 0.0624, lamE: 2.0 },
+  silt: { n: "тоосонцор", thr: 0.034, ths: 0.46, a: 1.6, vn: 1.37, Ks: 0.06, lamE: 1.5 },
+  sil: { n: "тоосонцорлог шавранцар", thr: 0.067, ths: 0.45, a: 2.0, vn: 1.41, Ks: 0.108, lamE: 1.5 },
+  scl: { n: "элсэрхэг шавранцар", thr: 0.1, ths: 0.39, a: 5.9, vn: 1.48, Ks: 0.3144, lamE: 1.5 },
+  sicl: { n: "тоосонцорлог шаварлаг шавранцар", thr: 0.089, ths: 0.43, a: 1.0, vn: 1.23, Ks: 0.0168, lamE: 2.0 },
+  sc: { n: "элсэрхэг шавар", thr: 0.1, ths: 0.38, a: 2.7, vn: 1.23, Ks: 0.0288, lamE: 2.0 },
+  sic: { n: "тоосонцорлог шавар", thr: 0.07, ths: 0.36, a: 0.5, vn: 1.09, Ks: 0.0048, lamE: 2.5 },
+  clay: { n: "шавар", thr: 0.068, ths: 0.38, a: 0.8, vn: 1.09, Ks: 0.048, lamE: 2.5 },
 };
 
 /**
@@ -286,12 +302,101 @@ export function horizons(txt: string): Horizon[] {
     out.push({ n: nm, t, b });
     prev = b ?? t;
   }
-  return out.map((o, i) => ({ n: o.n, t: o.t, b: o.b ?? (i + 1 < out.length ? out[i + 1].t : 150) }));
+  /* ⚠ Эх сурвалж сүүлийн үеийг НЭЭЛТТЭЙ бичдэг ("C 69+", "Cg (аллюви)") —
+     хөрсний зүсэлттэй ИЖИЛ дүрмээр 200 см хүртэл сунгана (`dropSchematic`,
+     `R_BOTTOM`). Урьд нь 150 см-т тасалж доор нь геологи зурдаг тул нэг
+     жорлон хоёр харагдацад 150–200 см-т өөр үе харуулж байв (2026-10-07). */
+  return out.map((o, i) => ({ n: o.n, t: o.t, b: o.b ?? (i + 1 < out.length ? out[i + 1].t : 200) }));
 }
 export function hzCol(n: string): string {
   const c = n.replace(/[^A-Za-zА-Яа-я]/g, "")[0] || "C";
   return ({ O: "#3a2a1c", T: "#3a2a1c", A: "#5b4330", B: "#8a6a48", C: "#b89e76", R: "#8d8a86" } as Record<string, string>)[c.toUpperCase()] || "#9c8566";
 }
+
+/* ── Газрын доорх багана ────────────────────────────────────────────
+   Жорлон бүрийн доорх давхаргууд, гүнээр (м): 0–2 м нь хөрсний профайлын
+   үе (механик бүрэлдэхүүн нь {@link src/lib/subsurface.ts}), 2 м-ээс доош
+   нь ойрын цооногийн давхаргажилт (BORE_REACH дотор, ИЖИЛ геологийн ангид),
+   эс бөгөөс геологийн зургийн материал.
+   ⚠ Хөрсний үеийн Ks нь хайргаар багасна: Kb = Kf·(1 − хайрга) (Brakensiek
+   ба бусад, 1986) — хайрга нь зөвхөн нарийн ширхэгийн эзлэх хэсгийг
+   багасгадаг. Цооногийн давхаргад ХЭРЭГЛЭХГҮЙ: тэнд хайрга нь өөрөө үндсэн
+   бүрдэл (GP) бөгөөд анги нь түүнийг аль хэдийн тусгасан. */
+export type ColLayer = {
+  /** Гүн, м */
+  top: number;
+  bot: number;
+  /** `TEX`-ийн түлхүүр */
+  cls: string;
+  /** Ханасан шүүлтийн коэффициент, м/өдөр (хайрганы засвартай) */
+  Ks: number;
+  /** Үеийн нэр эсвэл давхаргын бичиглэл */
+  name: string;
+  /** Эх сурвалж: WoSIS-ийн цэг · SoilGrids · цооног · геологийн зураг */
+  src: string;
+  gravel: number | null;
+  /** 0 хөрсний үе · 1 цооног · 2 геологийн зураг */
+  kind: 0 | 1 | 2;
+};
+
+/** Хөрсний профайлын доод хил, м — түүнээс доош геологи */
+export const SOIL_BOTTOM = 2;
+
+/** Жорлонд хамаарах цооног: BORE_REACH дотор, ижил геологийн ангид, хамгийн ойр */
+export function boreholeFor(lon: number, lat: number, mat: number): Borehole | null {
+  if (!Number.isFinite(lon) || !Number.isFinite(lat)) return null;
+  const kx = 111320 * Math.cos((lat * Math.PI) / 180);
+  let best: Borehole | null = null;
+  let bd = BORE_REACH;
+  for (const b of BOREHOLES) {
+    if (b.mat !== mat) continue;
+    const d = Math.hypot((b.lon - lon) * kx, (b.lat - lat) * 110950);
+    if (d <= bd) {
+      bd = d;
+      best = b;
+    }
+  }
+  return best;
+}
+
+export function columnOf(d: SimData, i: number): ColLayer[] {
+  const soil = d.soil[i];
+  const mat = d.mat[i];
+  const rows = PROFILE_HZ[soil] ?? [];
+  const out: ColLayer[] = [];
+  horizons(d.profiles[soil]?.hz ?? "").forEach((h, k) => {
+    /* ⚠ Нэрээр нь, олдохгүй бол дарааллаар — хоёр багц нэг эх бичвэрээс */
+    const r = rows.find((x) => x[0] === h.n) ?? rows[k];
+    const cls = r && TEX[r[5]] ? r[5] : MATS[mat].t;
+    const gravel = r ? r[4] : null;
+    const top = h.t / 100;
+    const bot = Math.min(SOIL_BOTTOM, h.b / 100);
+    if (bot <= top) return;
+    out.push({
+      top, bot, cls, Ks: TEX[cls].Ks * (1 - (gravel ?? 0) / 100), name: h.n,
+      src: r ? (WOSIS[r[6]] ?? "SoilGrids 250 м") : "Геологийн зураг", gravel, kind: 0,
+    });
+  });
+  const start = out.length ? out[out.length - 1].bot : 0;
+  const bh = boreholeFor(d.lon[i], d.lat[i], mat);
+  if (bh) {
+    for (const l of bh.layers) {
+      if (!l.uscs || l.bot <= start) continue;
+      const cls = USCS_CLS[l.uscs] ?? MATS[mat].t;
+      out.push({ top: Math.max(start, l.top), bot: l.bot, cls, Ks: TEX[cls].Ks, name: l.name, src: `JICA цооног ${bh.id}`, gravel: l.gravel, kind: 1 });
+    }
+  }
+  const last = out.length ? out[out.length - 1].bot : 0;
+  const M = MATS[mat];
+  /* ⚠ Цооног 30 м-т дуусна — түүнээс доош (эсвэл цооноггүй бол 2 м-ээс)
+     геологийн зургийн материал */
+  out.push({ top: last, bot: 1e3, cls: M.t, Ks: TEX[M.t].Ks, name: M.n, src: "Геологийн зураг (JICA 2013)", gravel: null, kind: 2 });
+  return out;
+}
+
+/** Баганын тэмдэг — ижил баганатай жорлонгууд нэг тооцоог хуваалцана */
+export const colSig = (c: ColLayer[] | undefined) =>
+  c ? c.map((l) => `${l.top.toFixed(2)}:${l.cls}:${l.Ks.toPrecision(3)}`).join(",") : "";
 
 /* ── van Genuchten: K/Ks → θ ─────────────────────────────────────── */
 export function thetaFromK(T: Texture) {
@@ -339,6 +444,8 @@ export type SimParams = {
   mat: number;
   dens: number;
   soil: number;
+  /** Газрын доорх багана — байхгүй бол геологийн материал ганцаараа */
+  col?: ColLayer[];
 };
 
 /** Жорлонгийн анхдагч тохиргоо (эх хуудасны `defaults`) */
@@ -362,15 +469,52 @@ export function defaultParams(d: SimData, i: number): SimParams {
     mat: d.mat[i],
     dens: d.dens[i],
     soil: d.soil[i],
+    col: columnOf(d, i),
   };
 }
 
-/* ── 2D урсгал: квази-шугаман (Gardner) тогтвортой урсгал, тэгш хэмт r–z ── */
+/* ── 2D урсгал: квази-шугаман (Gardner) тогтвортой урсгал, тэгш хэмт r–z ──
+
+   ⚠⚠ ДАВХАРГАТАЙ БОЛСОН (2026-10-07). Үе бүр ӨӨРИЙН Ks-тэй, α нь багана
+   даяар НЭГ (Srivastava & Yeh 1991-ийн давхаргат Gardner-ийн шийдлийн
+   таамаглал): тэгэхэд u = K/Ks = e^{αψ} нь үеийн заагаар тасралтгүй,
+   тэгшитгэл ∇·(Ks/α ∇u) − ∂(Ks u)/∂z = 0 нь ШУГАМАН хэвээр тул нүхний
+   урсгалыг тааруулах суперпозиц (U1, U2), туузан Гаусс өөрчлөгдөөгүй —
+   хурд нь хуучинтайгаа ижил.
+   · Нийтлэг α — нүхний ёроолоос гүний ус хүртэлх үеийн α-ийн зузаанаар
+     жигнэсэн геометр дундаж (бохирдол тэр замаар явна).
+   · Босоо нүүр хоёр хагас эсийн цуваа: q = A₁u₁ − B₁uₘ = A₂uₘ − B₂u₂,
+     A = Ks·e/(e−1), B = Ks/(e−1), e = e^{αh/2} — ижил Ks үед хуучин
+     aa/b томьёотой ЯГ таарна (нэг давхаргатай баганаар тулгаж шалгасан).
+   · Хэвтээ нүүр нэг мөрөнд — нэг үе, нэг Ks.
+   · Чийг θ — ҮЕ БҮРИЙН өөрийн ус барих муруйгаар (K/Ks-ээс), тиймээс
+     шаварт ижил урсгалд θ их → хурд бага; хайрганд эсрэгээрээ.
+   ⚠ Таамаглалын үнэ: хялгасан хүчний ялгаа (элс/шаврын хил дээрх
+   "хялгасан саад") тусгагдахгүй. */
 export type Flow = ReturnType<typeof flowField>;
+/** Баганаас мөр бүрийн давхарга (эсийн төвийн гүнээр) ба нийтлэг α */
+function rowsOf(col: ColLayer[], nz: number, h: number, from: number, to: number) {
+  const lay = new Array<ColLayer>(nz);
+  let k = 0;
+  for (let j = 0; j < nz; j++) {
+    const z = (j + 0.5) * h;
+    while (k < col.length - 1 && col[k].bot <= z) k++;
+    lay[j] = col[k];
+  }
+  let w = 0;
+  let s = 0;
+  for (const l of col) {
+    const t = Math.min(l.bot, to) - Math.max(l.top, from);
+    if (t <= 0) continue;
+    w += t;
+    s += t * Math.log(TEX[l.cls].a);
+  }
+  return { lay, al: w > 0 ? Math.exp(s / w) : TEX[col[col.length - 1].cls].a };
+}
 export function flowField(p: SimParams, T: Texture) {
-  const al = T.a;
-  const Ks = T.Ks;
-  const PhiS = Ks / al;
+  const col: ColLayer[] = p.col?.length
+    ? p.col
+    : [{ top: 0, bot: 1e3, cls: MATS[p.mat].t, Ks: T.Ks, name: MATS[p.mat].n, src: "", gravel: null, kind: 2 }];
   const gw = p.gw;
   const d = p.pit;
   const L = gw - d;
@@ -388,8 +532,27 @@ export function flowField(p: SimParams, T: Texture) {
   const nc = nr * nz;
   const typ = new Uint8Array(nc); // 0 хөрс, 1 норсон нүх, 2 хуурай нүх
   for (let j = 0; j < jd; j++) for (let i = 0; i < ia; i++) typ[j * nr + i] = j >= jw ? 1 : 2;
-  const b = al / Math.expm1(al * h);
-  const aa = b + al;
+  /* мөр бүрийн давхарга, нийтлэг α (нүхний ёроолоос гүний ус хүртэл) */
+  const { lay, al } = rowsOf(col, nz, h, L > h ? d : 0, gw);
+  const Ksr = new Float64Array(nz);
+  for (let j = 0; j < nz; j++) Ksr[j] = lay[j].Ks;
+  const kap = (j: number) => Ksr[j] / al; // Ks/α — u-ийн урсгалын коэффициент
+  /* босоо нүүр: хагас эс бүрийн A, B (e = e^{αh/2}) */
+  const eh = Math.exp((al * h) / 2);
+  const Ah = (j: number) => (Ksr[j] * eh) / (eh - 1);
+  const Bh = (j: number) => Ksr[j] / (eh - 1);
+  const cD = new Float64Array(nz); // доош: u_дээд-ийн коэффициент
+  const cU = new Float64Array(nz); // доош: u_доод-ийн коэффициент
+  for (let j = 0; j < nz - 1; j++) {
+    const den = Bh(j) + Ah(j + 1);
+    cD[j] = (Ah(j) * Ah(j + 1)) / den;
+    cU[j] = (Bh(j) * Bh(j + 1)) / den;
+  }
+  /* нүхнээс доош (нүхний эсэд Ks байхгүй — доорх эсийнхээр, бүтэн h) */
+  const E = Math.exp(al * h);
+  const pD = (j: number) => (Ksr[j] * E) / (E - 1);
+  const pU = (j: number) => Ksr[j] / (E - 1);
+  /* ёроол: хагас эс, гүний ус u = 1 */
   const b2 = al / Math.expm1((al * h) / 2);
   const a2 = b2 + al;
   const qb = p.rch / 1000 / (ACT1 - ACT0); // гадаргаас нэвчих хур борооны ус, м/өдөр
@@ -408,35 +571,36 @@ export function flowField(p: SimParams, T: Texture) {
       const Ae = (i + 1) * h;
       const Aw = i * h;
       const Av = ri;
+      const kj = kap(j);
       if (i < nr - 1) {
-        diag[k] += Ae / h;
-        cE[k] = Ae / h;
+        diag[k] += (Ae / h) * kj;
+        cE[k] = (Ae / h) * kj;
       }
       if (i > 0) {
         const t = typ[k - 1];
         if (t === 0) {
-          diag[k] += Aw / h;
-          cW[k] = Aw / h;
+          diag[k] += (Aw / h) * kj;
+          cW[k] = (Aw / h) * kj;
         } else if (t === 1) {
-          diag[k] += Aw / h;
-          kPit[k] += Aw / h;
+          diag[k] += (Aw / h) * kj;
+          kPit[k] += (Aw / h) * kj;
         }
       }
       if (j === nz - 1) {
-        diag[k] += Av * a2;
-        bOth[k] += Av * b2 * PhiS;
+        diag[k] += Av * kj * a2;
+        bOth[k] += Av * kj * b2;
       } else {
-        diag[k] += Av * aa;
-        cS[k] = Av * b;
+        diag[k] += Av * cD[j];
+        cS[k] = Av * cU[j];
       }
       if (j > 0) {
         const t = typ[k - nr];
         if (t === 0) {
-          diag[k] += Av * b;
-          cN[k] = Av * aa;
+          diag[k] += Av * cU[j - 1];
+          cN[k] = Av * cD[j - 1];
         } else if (t === 1) {
-          diag[k] += Av * b;
-          kPit[k] += Av * aa;
+          diag[k] += Av * pU(j);
+          kPit[k] += Av * pD(j);
         }
       } else bOth[k] += Av * qb;
     }
@@ -497,23 +661,27 @@ export function flowField(p: SimParams, T: Texture) {
     for (const k of soil) {
       const i = k % nr;
       const j = (k - i) / nr;
-      if (i > 0 && typ[k - 1] === 1) q += ((i * h) / h) * (Pv - U[k]);
-      if (j > 0 && typ[k - nr] === 1) q += (i + 0.5) * h * (aa * Pv - b * U[k]);
+      if (i > 0 && typ[k - 1] === 1) q += ((i * h) / h) * kap(j) * (Pv - U[k]);
+      if (j > 0 && typ[k - nr] === 1) q += (i + 0.5) * h * (pD(j) * Pv - pU(j) * U[k]);
     }
     return q;
   };
   const Q1 = pitIn(U1, 1) * 2 * Math.PI * h;
   const Q2 = pitIn(U2, 0) * 2 * Math.PI * h;
   const Qt = ((p.hh * p.lpp) / 1000) * (365 / (ACT1 - ACT0));
-  let Phi0 = (Qt - Q2) / Q1;
+  /* нүхний ханан дээрх u (= K/Ks); 1 нь ханасан — түүнээс их бол нүх дүүрнэ */
+  let u0 = (Qt - Q2) / Q1;
   let pond = false;
-  if (Phi0 > PhiS) {
-    Phi0 = PhiS;
+  if (u0 > 1) {
+    u0 = 1;
     pond = true;
   }
-  const Phi = new Float64Array(nc);
-  for (let k = 0; k < nc; k++) Phi[k] = typ[k] === 1 ? Phi0 : Phi0 * U1[k] + U2[k];
-  const Qin = Phi0 * Q1 + Q2;
+  const u = new Float64Array(nc);
+  for (let k = 0; k < nc; k++) u[k] = typ[k] === 1 ? u0 : u0 * U1[k] + U2[k];
+  /* эс бүрийн шүүлтийн коэффициент K = Ks·u, м/өдөр */
+  const K = new Float64Array(nc);
+  for (const k of soil) K[k] = Ksr[Math.floor(k / nr)] * u[k];
+  const Qin = u0 * Q1 + Q2;
   /* нүүрний урсгал, м³/өдөр (эерэг = гадагш, доош) */
   const tw = 2 * Math.PI * h;
   const Fe = new Float64Array(nc);
@@ -526,13 +694,17 @@ export function flowField(p: SimParams, T: Texture) {
     const j = (k - i) / nr;
     const ri = (i + 0.5) * h;
     const Ae = (i + 1) * h;
-    Fe[k] = (i === nr - 1 || typ[k + 1] ? 0 : (Ae / h) * (Phi[k] - Phi[k + 1])) * tw;
-    Fs[k] = (j === nz - 1 ? ri * (a2 * Phi[k] - b2 * PhiS) : ri * (aa * Phi[k] - b * Phi[k + nr])) * tw;
-    if (i > 0 && typ[k - 1] === 1) FpR[k] = ((i * h) / h) * (Phi0 - Phi[k]) * tw;
-    if (j > 0 && typ[k - nr] === 1) FpZ[k] = ri * (aa * Phi0 - b * Phi[k]) * tw;
+    const kj = kap(j);
+    Fe[k] = (i === nr - 1 || typ[k + 1] ? 0 : (Ae / h) * kj * (u[k] - u[k + 1])) * tw;
+    Fs[k] = (j === nz - 1 ? ri * kj * (a2 * u[k] - b2) : ri * (cD[j] * u[k] - cU[j] * u[k + nr])) * tw;
+    if (i > 0 && typ[k - 1] === 1) FpR[k] = ((i * h) / h) * kj * (u0 - u[k]) * tw;
+    if (j > 0 && typ[k - nr] === 1) FpZ[k] = ri * (pD(j) * u0 - pU(j) * u[k]) * tw;
     Fp[k] = FpR[k] + FpZ[k];
   }
-  return { h, nr, nz, R, a, ia, jd, jw, typ, soil, Phi, Phi0, PhiS, Fe, Fs, Fp, FpR, FpZ, Qin, Qt, pond, al, qb };
+  /* хуучин нэршил: Φ = K/α (гадагш ашиглагддаггүй, тулгалтад) */
+  const Phi = new Float64Array(nc);
+  for (const k of soil) Phi[k] = K[k] / al;
+  return { h, nr, nz, R, a, ia, jd, jw, typ, soil, u, K, Phi, Fe, Fs, Fp, FpR, FpZ, Qin, Qt, pond, al, qb, lay, Ksr };
 }
 
 /* ── СИМУЛЯЦИ ────────────────────────────────────────────────────── */
@@ -568,6 +740,10 @@ export type SimResult = {
   vR?: Float32Array;
   vZ?: Float32Array;
   lamE?: number;
+  /** E.coli устах хурд мөр бүрээр, 1/өдөр */
+  lamRow?: Float64Array;
+  /** Төвийн баганаар нүхнээс гүний ус хүртэл явах хугацаа, дулаан улирлын хоног */
+  tTravel?: number;
   Cgw: number;
 };
 
@@ -608,14 +784,17 @@ export function simulate(p: SimParams): SimResult {
   }
   const F = flowField(p, T);
   Object.assign(out, { F, pond: F.pond, Qin: F.Qin });
-  const { h, nr, nz, soil, typ, Fe, Fs, Fp, Phi } = F;
+  const { h, nr, nz, soil, typ, Fe, Fs, Fp } = F;
   const nc = nr * nz;
-  const th = thetaFromK(T);
+  /* ⚠ Чийг ҮЕ БҮРИЙН өөрийн муруйгаар; Ks нь хайргын засвартай тул
+     муруйг тэр Ks-тэй хуулбараар бодно (K/Ks харьцаа зөв байх ёстой) */
+  const thOf = new Map<ColLayer, (k: number) => number>();
+  for (const l of F.lay) if (!thOf.has(l)) thOf.set(l, thetaFromK({ ...TEX[l.cls], Ks: l.Ks }));
   const TH = new Float64Array(nc);
   const VOL = new Float64Array(nc);
   for (const k of soil) {
     const i = k % nr;
-    TH[k] = th(F.al * Phi[k]);
+    TH[k] = thOf.get(F.lay[(k - i) / nr])!(F.K[k]);
     VOL[k] = 2 * Math.PI * (i + 0.5) * h * h * h;
   }
   /* эсийн хурд (дисперсэд) */
@@ -642,7 +821,17 @@ export function simulate(p: SimParams): SimResult {
     vR[k] = (inR + Fe[k]) / 2 / (2 * Math.PI * ri * h * TH[k]);
     vZ[k] = (inZ + Fs[k]) / 2 / (2 * Math.PI * ri * h * TH[k]);
   }
-  Object.assign(out, { TH, vR, vZ, lamE });
+  /* E.coli устах хурд — ҮЕ БҮРИЙН ангиар; `lamE` нь нүхнээс доош дундаж (дуслын харагдацад) */
+  const lamRow = new Float64Array(nz);
+  let lw = 0;
+  for (let j = 0; j < nz; j++) {
+    lamRow[j] = TEX[F.lay[j].cls].lamE * p.lamx;
+    if (j >= F.jd) lw += lamRow[j];
+  }
+  /* төвийн баганаар нүхний ёроолоос гүний ус хүртэл явах хугацаа, хоног (дулаан улирлын) */
+  let tTravel = 0;
+  for (let j = F.jd; j < nz; j++) tTravel += h / Math.max(1e-9, vZ[j * nr]);
+  Object.assign(out, { TH, vR, vZ, lamE: nz > F.jd ? lw / (nz - F.jd) : lamE, lamRow, tTravel });
   const aL = 0.1;
   const aT = 0.01;
   const Dm = 1e-5;
@@ -681,7 +870,7 @@ export function simulate(p: SimParams): SimResult {
   const cE = new Float64Array(nc);
   const dN = new Float64Array(nc);
   const dE = new Float64Array(nc);
-  const decE = Math.exp(-lamE * dt);
+  const decR = lamRow.map((l) => Math.exp(-l * dt));
   for (let d = 0; d < days; d++) {
     const doy = d % 365;
     const act = doy >= ACT0 && doy < ACT1;
@@ -744,9 +933,9 @@ export function simulate(p: SimParams): SimResult {
         for (const k of soil) {
           const w = dt / (TH[k] * VOL[k]);
           cN[k] += dN[k] * w;
-          cE[k] = (cE[k] + dE[k] * w) * decE;
+          cE[k] = (cE[k] + dE[k] * w) * decR[(k - (k % nr)) / nr];
         }
-      } else for (const k of soil) cE[k] *= decE;
+      } else for (const k of soil) cE[k] *= decR[(k - (k % nr)) / nr];
     }
     const J = Jrel * 1000 * C0N; // мг/өдөр гүний усанд
     Cgw += (p.dens * J) / (V * 1000) - (Cgw * Qth) / V - Cgw * kDn;

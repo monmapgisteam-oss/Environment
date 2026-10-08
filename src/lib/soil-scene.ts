@@ -107,7 +107,7 @@ export type SoilScene = {
    хэрэглэдэг гишүүдийг нь бүтцээрээ тодорхойлно */
 type Obj = Record<string, unknown>;
 type C<T = Obj> = new (p?: object) => T;
-type GLayer = { removeAll: () => void; add: (g: unknown) => void; addMany: (g: unknown[]) => void };
+type GLayer = { removeAll: () => void; add: (g: unknown) => void; addMany: (g: unknown[]) => void; opacity: number };
 type Reactive = { watch: (get: () => unknown, cb: () => void) => { remove: () => void } };
 type Analysis = { shape: Obj | null; excludedLayers: unknown[]; excludeGroundSurface: boolean };
 type Widget = { destroy: () => void };
@@ -312,7 +312,7 @@ export async function createSoilScene(opts: {
   */
   const TRANS: number = 150;
   /** Катенагийн холилдол — тухайн цэг дэх зузааны вектор ба гүний ус */
-  function profAt(lon: number, lat: number): Blend {
+  function catenaAt(lon: number, lat: number): Blend {
     const w = new Float32Array(profiles.length);
     let W = 0;
     if (TRANS > 0) {
@@ -345,6 +345,85 @@ export async function createSoilScene(opts: {
       for (let k = 0; k < T.length; k++) T[k] += f * thick[p][k];
     });
     return { T, gw, w };
+  }
+
+  /*
+    ⚠⚠ ЖОРЛОНГИЙН БЭХЭЛГЭЭ (хэрэглэгч 2026-10-07: нэг жорлон дээр дарж
+    харсан хөрс ба зүсэлтийн хөрсний үеийн өндөр зөрдөг — "hursnii uyiin
+    undriig zuw haruulah ystoi"). Хоёр харагдац НЭГ 20 профайлтай ч
+    зүсэлт нь (1) хөрсний хилийн 150 м дотор хөрш хөрсний зузааныг
+    хольдог (катена — жорлонгийн 11%), (2) профайлыг 75 м-ийн тороос
+    уншдаг (0.8%-д нь өөр хөрс), (3) үеийн хилийг ±8 см долгиолуулдаг.
+    Порталын 145,462 жорлонгоор хэмжиж тогтоосон.
+    ✅ Жорлонгоос `A_IN` дотор цэг нь тэр жорлонгийн ӨӨРИЙН профайл
+    (`latrine-sim.bin`-ийн `soil` — нэг жорлонгийн харагдац яг түүнийг
+    зурдаг) бөгөөд хил долгиолохгүй; `A_OUT` хүртэл катена руу зөөлөн
+    шилжинэ. Бохирдол бүр нэг жорлонгийн харагдацтай ИЖИЛ үе дотор сууна.
+    ⚠ Жорлонгүй газарт (хот гадна, ой) юу ч өөрчлөгдөхгүй.
+    ⚠ Багц порталаас ирэх хүртэл бэхэлгээгүй; ирмэгц блок, таглаа дахин
+    баригдана (`anchorReady`).
+    ⚠ Профайлын дугаар хоёр багцад ижил дараалалтай (20/20 нэр, түлхүүр
+    таарсан) — гэхдээ ДАРААЛАЛД НАЙДАХГҮЙ, түлхүүр + нэрээр холбоно.
+  */
+  const A_IN = 6;
+  const A_OUT = 24;
+  const AG = 25;
+  let anchor: { lon: Float32Array; lat: Float32Array; prof: Int16Array; cell: Map<number, number[]> } | null = null;
+  const agKey = (cx: number, cy: number) => cx * 1_000_003 + cy;
+  function buildAnchor(d: { n: number; lon: Float32Array; lat: Float32Array; soil: Uint8Array; profiles: { key: string; name: string }[] }) {
+    const idx = d.profiles.map((sp) => profiles.findIndex((p) => p.key === sp.key && p.name === sp.name));
+    const prof = new Int16Array(d.n).fill(-1);
+    const cell = new Map<number, number[]>();
+    for (let i = 0; i < d.n; i++) {
+      const p = idx[d.soil[i]] ?? -1;
+      if (p < 0 || !Number.isFinite(d.lon[i]) || !Number.isFinite(d.lat[i])) continue;
+      prof[i] = p;
+      const k = agKey(Math.floor((d.lon[i] * mLon) / AG), Math.floor((d.lat[i] * mLat) / AG));
+      const list = cell.get(k);
+      if (list) list.push(i);
+      else cell.set(k, [i]);
+    }
+    anchor = { lon: d.lon, lat: d.lat, prof, cell };
+  }
+  /** Хамгийн ойр жорлон `A_OUT` дотор: [дугаар, зай м] */
+  function nearLatrine(lon: number, lat: number): [number, number] | null {
+    if (!anchor) return null;
+    const X = lon * mLon;
+    const Y = lat * mLat;
+    const cx = Math.floor(X / AG);
+    const cy = Math.floor(Y / AG);
+    let best = -1;
+    let bd = A_OUT * A_OUT;
+    for (let i = -1; i <= 1; i++)
+      for (let j = -1; j <= 1; j++) {
+        const list = anchor.cell.get(agKey(cx + i, cy + j));
+        if (!list) continue;
+        for (const k of list) {
+          const ddx = anchor.lon[k] * mLon - X;
+          const ddy = anchor.lat[k] * mLat - Y;
+          const d2 = ddx * ddx + ddy * ddy;
+          if (d2 < bd) {
+            bd = d2;
+            best = k;
+          }
+        }
+      }
+    return best < 0 ? null : [best, Math.sqrt(bd)];
+  }
+  function profAt(lon: number, lat: number): Blend {
+    const cat = catenaAt(lon, lat);
+    const near = nearLatrine(lon, lat);
+    if (!near) return cat;
+    const [k, dist] = near;
+    const p = anchor!.prof[k];
+    const u = Math.max(0, Math.min(1, (A_OUT - dist) / (A_OUT - A_IN)));
+    /* smoothstep — хил дээр гэнэт үсрэхгүй */
+    const a = u * u * (3 - 2 * u);
+    if (a <= 0) return cat;
+    const w = cat.w.map((v) => v * (1 - a));
+    w[p] += a;
+    const T = cat.T.map((v, i) => v * (1 - a) + a * thick[p][i]);
+    return { T, gw: cat.gw * (1 - a) + a * gwcm[p], w, calm: a };
   }
 
   /* ── Mesh бүтээгч ──────────────────────────────────────────────── */
@@ -397,10 +476,12 @@ export async function createSoilScene(opts: {
     const y = lat * mLat;
     return 3 * Math.sin(x / 41 + 0.7 * Math.sin(y / 53)) + 2 * Math.sin((x - y) / 29);
   };
-  const wav = (t: number, ph: number, ph2: number) =>
-    t <= 0 || t >= R_BOTTOM
+  /* `amp` — жорлонгийн ойролцоо (`Blend.calm`) долгион унтарна: тэнд үеийн
+     хил нэг жорлонгийн харагдацтай ЯГ ижил гүнд байх ёстой */
+  const wav = (t: number, ph: number, ph2: number, amp = 1) =>
+    t <= 0 || t >= R_BOTTOM || amp <= 0
       ? t
-      : t + 8 * Math.sin((Math.PI * t) / R_BOTTOM) * (0.7 * Math.sin(0.07 * t + ph) + 0.3 * Math.sin(0.13 * t + ph2));
+      : t + 8 * amp * Math.sin((Math.PI * t) / R_BOTTOM) * (0.7 * Math.sin(0.07 * t + ph) + 0.3 * Math.sin(0.13 * t + ph2));
 
   /** Шилжилтийн бүсийн ХАГАС өргөн, см — ДЭЭД давхаргын хилийн тодролоор
       (FAO: abrupt < 2 · clear 2–5 · gradual 5–15 см). Хархүрэн хөрсний
@@ -414,9 +495,10 @@ export async function createSoilScene(opts: {
   /** Нэг үзүүрийн харагдах давхаргууд (тэг зузаантайг хасна) */
   function segsAt(pr: Blend, ph: number, ph2: number, top: number, lv: number): Seg[] {
     const out: Seg[] = [];
+    const amp = 1 - (pr.calm ?? 0);
     for (const b of bandsOf(pr, keys)) {
-      const t = Math.max(wav(b.t, ph, ph2), top);
-      const d = Math.max(wav(b.b, ph, ph2), t);
+      const t = Math.max(wav(b.t, ph, ph2, amp), top);
+      const d = Math.max(wav(b.b, ph, ph2, amp), t);
       if (d - t < 0.01) continue;
       out.push({ k: keyOf(b.c, b.sat, lv), c: b.c, t, d });
     }
@@ -486,10 +568,12 @@ export async function createSoilScene(opts: {
     const bA = bandsOf(prA, keys);
     const bB = bandsOf(prB, keys);
     for (let i = 0; i < bA.length; i++) {
-      const tA = Math.max(wav(bA[i].t, pA, qA), topA);
-      const tB = Math.max(wav(bB[i].t, pB, qB), topB);
-      const dA = Math.max(wav(bA[i].b, pA, qA), tA);
-      const dB = Math.max(wav(bB[i].b, pB, qB), tB);
+      const aA = 1 - (prA.calm ?? 0);
+      const aB = 1 - (prB.calm ?? 0);
+      const tA = Math.max(wav(bA[i].t, pA, qA, aA), topA);
+      const tB = Math.max(wav(bB[i].t, pB, qB, aB), topB);
+      const dA = Math.max(wav(bA[i].b, pA, qA, aA), tA);
+      const dB = Math.max(wav(bB[i].b, pB, qB, aB), tB);
       if (dA - tA < 0.01 && dB - tB < 0.01) continue; // энэ хэсэгт байхгүй / хуулагдсан давхарга
       put(keyOf(bA[i].c, bA[i].sat, lv), tA, tB, dA, dB, depthV);
     }
@@ -506,6 +590,8 @@ export async function createSoilScene(opts: {
   const floorL = new GraphicsLayer({ title: "Шуудууны ёроол", elevationInfo: { mode: "absolute-height" } });
   /** Зүсэлт дээрх жорлонгийн бохирдол — огтлолтоос чөлөөлөгдөнө ({@link createPlumes}) */
   const plumeL = new GraphicsLayer({ title: "Бохирдол", elevationInfo: { mode: "absolute-height" } });
+  /** Зурсан талбайн бохирдлыг харуулах үеийн блокийн тунгалаг (`onState`) */
+  const GHOST = 0.42;
   const map = new EsriMap({ basemap: "satellite", ground: "world-elevation", layers: [blockL, floorL, capL, plumeL, markL, lineL] }) as {
     ground: { opacity: number; navigationConstraint: { type: string } };
     add: (l: unknown) => void;
@@ -1975,6 +2061,20 @@ export async function createSoilScene(opts: {
     ⚠ Хасагдсан тал = heading + 180 (tilt 90) — таглаа нь тэр тал руу
     харна, бохирдол мөн тийшээ 0.8 м урагшилна.
   */
+  /* Жорлонгийн бэхэлгээ ({@link profAt}) — багц порталаас ирмэгц блок,
+     таглааг дахин барина. Ирэхээс өмнө зурсан хэсэг катенаар үлдэнэ. */
+  let gone = false;
+  void fetchLatrineSim().then(
+    (d) => {
+      if (gone) return;
+      buildAnchor(d);
+      clipBody = null;
+      rebuild();
+      updateCap();
+    },
+    () => {},
+  );
+
   const plumes = createPlumes({
     Mesh, MeshComponent, MeshMaterial, MeshTexture, Graphic,
     layer: plumeL,
@@ -1984,7 +2084,14 @@ export async function createSoilScene(opts: {
     mLon,
     mLat,
     SR,
-    onState: onPlumes,
+    onState: (st) => {
+      /* ⚠⚠ ХӨРС ТУНГАЛАГ (хэрэглэгч 2026-10-07: "хөрсийг тунгалаг болгоно") —
+         зурсан талбайд жорлон байвал блок хагас тунгалаг болж ДОТОРХ
+         жорлон бүрийн бохирдол харагдана ({@link createPlumes}). Ханын
+         үе давхарга бүдэг ч уншигдана. Шулуун зүсэлтэд блок хэвээр. */
+      blockL.opacity = clip && st.count > 0 ? GHOST : 1;
+      onPlumes(st);
+    },
   });
   function plumeCut() {
     const heading = (slice.shape as { heading: number } | null)?.heading;
@@ -2702,6 +2809,7 @@ export async function createSoilScene(opts: {
 
   return {
     destroy() {
+      gone = true;
       clickH.remove();
       dblH.remove();
       moveH.remove();

@@ -235,6 +235,12 @@ export type Blend = {
   gw: number;
   /** Профайл тутмын жин (нийлбэр 1) */
   w: Float32Array;
+  /**
+   * Жорлонгийн бэхэлгээ, 0…1 — 1 үед энэ цэг жорлонгийн ӨӨРИЙН профайлтай
+   * яг тэнцүү бөгөөд үеийн хил ДОЛГИОЛОХГҮЙ ({@link src/lib/soil-scene.ts}-ийн
+   * `profAt`). Өгөөгүй бол 0.
+   */
+  calm?: number;
 };
 
 export type Band = { c: string; t: number; b: number; sat: boolean };

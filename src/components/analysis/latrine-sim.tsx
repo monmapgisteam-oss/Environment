@@ -6,6 +6,7 @@ import { Card, Field } from "@/components/analysis/ui";
 import {
   MATS,
   NORM_N,
+  TEX,
   defaultParams,
   fetchLatrineSim,
   fmtSince,
@@ -424,7 +425,8 @@ export function SimSide({ sim }: { sim: LatrineSimState }) {
       <Card title="ҮР ДҮН">
         {result ? <Results r={result} p={params} /> : <p className="text-[11.5px] text-ink-3">Тооцоолж байна</p>}
       </Card>
-      <Info data={data} i={sel} />
+      <Column p={params} />
+      <Info data={data} i={sel} p={params} />
     </>
   );
 }
@@ -475,9 +477,67 @@ function Sliders({ list, p, set }: { list: Slider[]; p: SimParams; set: (f: (p: 
   );
 }
 
-function Info({ data, i }: { data: SimData; i: number }) {
+/**
+ * Газрын доорх багана — загварт орсон давхарга бүр гүнээрээ, шүүлтийн
+ * коэффициент, эх сурвалжтайгаа (хэрэглэгч 2026-10-07: "Үе бүрийн шүүрүүлэх
+ * чадвар … Цооногийн бичиглэл"). Нүхний ёроол орсон мөр тодорно; сүүлд нь
+ * гүний усны түвшин.
+ * ⚠ Ks-ийн өнгө нь ҮНЭ ЦЭНЭ БИШ, ХУРД: бүдүүн ширхэгтэй (хурдан) нь
+ * `--clay`, нарийн (удаан) нь `--moss` — бохирдлын эрсдэлийн чиглэлээр.
+ */
+function Column({ p }: { p: SimParams }) {
+  const rows = (p.col ?? []).filter((l) => l.top < p.gw - 1e-6).map((l) => ({ ...l, bot: Math.min(l.bot, p.gw) }));
+  if (!rows.length) return null;
+  const m = (v: number) => (v < 10 ? v.toFixed(2).replace(/\.?0+$/, "") : v.toFixed(1).replace(/\.0$/, ""));
+  const speed = (k: number) => (k >= 1 ? "var(--clay)" : k >= 0.15 ? "var(--ochre)" : "var(--moss)");
+  return (
+    <Card title="ГАЗРЫН ДООРХ БАГАНА">
+      <div className="grid grid-cols-[64px_1fr_auto] gap-x-2 border-b border-line pb-1 text-[10px] tracking-wide text-ink-3 uppercase">
+        <span>Гүн, м</span>
+        <span>Давхарга</span>
+        <span className="text-right">Шүүлт, м/өдөр</span>
+      </div>
+      <div className="divide-y divide-line">
+        {rows.map((l) => {
+          const pit = p.pit >= l.top && p.pit < l.bot;
+          return (
+            <div
+              key={`${l.top}-${l.name}`}
+              className={cn("grid grid-cols-[64px_1fr_auto] gap-x-2 py-1.5", pit && "bg-paper-3")}
+              style={pit ? { boxShadow: "inset 2px 0 0 var(--tone)" } : undefined}
+            >
+              <span className="num pl-1 text-[11px] text-ink-2">
+                {m(l.top)}–{m(l.bot)}
+              </span>
+              <span className="min-w-0 text-[11.5px] leading-snug text-ink">
+                {l.name}
+                <span className="block text-[10.5px] text-ink-3">
+                  {TEX[l.cls].n}
+                  {l.gravel ? ` · хайрга ${Math.round(l.gravel)}%` : ""}
+                  {pit ? " · нүхний ёроол" : ""}
+                </span>
+                <span className="block text-[10.5px] text-ink-3">{l.src}</span>
+              </span>
+              <span className="num text-right text-[11.5px] font-medium" style={{ color: speed(l.Ks) }}>
+                {fmtK(l.Ks)}
+              </span>
+            </div>
+          );
+        })}
+        <div className="grid grid-cols-[64px_1fr] gap-x-2 py-1.5 text-[11.5px]">
+          <span className="num pl-1 text-ink-2">{m(p.gw)}</span>
+          <span className="text-(--water)">Гүний усны түвшин</span>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+function Info({ data, i, p }: { data: SimData; i: number; p: SimParams }) {
   const pr = data.profiles[data.soil[i]];
   const m = MATS[data.mat[i]];
+  /* Нүхний ёроол орсон давхарга — баганаас */
+  const under = p.col?.find((l) => p.pit >= l.top && p.pit < l.bot);
   const g = data.gcodes[data.gcode[i]];
   return (
     <Card title="СОНГОСОН ЖОРЛОН">
@@ -485,7 +545,7 @@ function Info({ data, i }: { data: SimData; i: number }) {
         <Field label="Дугаар" value={`${data.id[i]}`} />
         <Field label="Хороо" value={data.khList[data.kh[i]] || "Тодорхойгүй"} />
         <Field label="Хөрсний хэв шинж" value={pr.name} />
-        <Field label="Нүхний доорх хөрс" value={m.tex} />
+        <Field label="Нүхний доорх хөрс" value={under ? TEX[under.cls].n : m.tex} />
         <Field label="1 га-д жорлон" value={`${data.dens[i]}`} />
         <Field label="Байршил" value={data.valley[i] ? "Хөндий" : "Тэгш тал, энгэр"} />
       </dl>

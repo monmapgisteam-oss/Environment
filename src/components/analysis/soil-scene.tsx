@@ -11,7 +11,7 @@ import { SOIL_EXAGGERATION, SOIL_MODULES, createSoilScene, type PickInfo, type S
 import { SectionCard } from "@/components/analysis/soil-section";
 import { RE3, RN3, loadThree, rampC, type Species } from "@/lib/latrine-sim-3d";
 import { SimSide, SimStage, useLatrineSim } from "@/components/analysis/latrine-sim";
-import { PLUME_X, STEP_DAYS, type PlumeState } from "@/lib/soil-plumes";
+import { INNER_X, PLUME_X, STEP_DAYS, type PlumeState } from "@/lib/soil-plumes";
 import { PlumeSection } from "@/components/analysis/plume-section";
 
 /* --------------------------------------------------------------------------
@@ -172,7 +172,7 @@ export function SoilScene() {
                   <span ref={scaleRef} className="num font-semibold text-ink empty:hidden after:font-normal after:text-ink-2 after:content-['_·_']" />
                   Босоо өсгөлт ×{SOIL_EXAGGERATION}
                   {/* ⚠ Гүний хэсэг өөр өсгөлттэй — гарч ирэх бүрд ИЛ хэлнэ */}
-                  {hasPlumes ? `, бохирдлын өргөн ×${PLUME_X}` : ""} · Товшиход профайл · Жорлон товшиход
+                  {hasPlumes ? `, бохирдлын өргөн ×${PLUME_X}${plumes?.inner ? `, талбайн дотор ×${INNER_X}` : ""}` : ""} · Товшиход профайл · Жорлон товшиход
                   нэвчилтийн симуляци · Alt + товшиход тэр цэгээр зүсэлт
                 </span>
                 {shown ? (
