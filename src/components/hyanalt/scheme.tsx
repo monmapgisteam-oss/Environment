@@ -1,15 +1,15 @@
 "use client";
 
 import * as React from "react";
-import { Archive, CalendarClock, FileOutput, Scale, ShieldCheck } from "lucide-react";
+import { Archive, CalendarClock, FileOutput, ShieldCheck } from "lucide-react";
 import { Columns } from "@/components/ui/resizable-columns";
+import { LegalBasisCard } from "@/components/hyanalt/legal-basis";
 import {
   BRANCHES,
   DECISION,
   DOCUMENTS,
   FINAL_STAGE,
   INSPECTION_TYPES,
-  LEGAL_BASIS,
   RECORD_KEEPING,
   STAGES,
   type Activity,
@@ -157,9 +157,9 @@ export function InspectionScheme() {
         <RefList icon={ShieldCheck} title="Ашиглах баримт бичиг" numbered>
           {DOCUMENTS}
         </RefList>
-        <RefList icon={Scale} title="Үндэслэл хууль, журам">
-          {LEGAL_BASIS}
-        </RefList>
+        {/* Ерөнхий үндэслэл + салбарын хууль тогтоомж (хэлтсийн Excel-ээс,
+            2026-10-07) — товшиход заалт, асуулт нь самбарт нээгдэнэ */}
+        <LegalBasisCard />
         <RefList icon={Archive} title="Хадгалах, бүртгэл">
           {RECORD_KEEPING}
         </RefList>
