@@ -214,11 +214,20 @@ export function SanhuuDashboard() {
   */
   const [breakdown, setBreakdown] = React.useState(false);
 
-  /** Тухайн нэгж задлах зүйлтэй эсэх — товшилтын хариу үүнээс гарна */
-  const hasKids = React.useCallback(
-    (id: string) => units.some((u) => u.parent === id),
-    [units],
-  );
+  /*
+    ⚠ Бүтэн мод дэлгэцээс өргөн тул гүйлтийн хүрээ анх ЗҮҮН ирмэгтээ
+    байвал дээд карт (хэлтэс) баруун тийш харагдахгүй үлдэнэ. Шат
+    солигдох бүрд хэвтээ гүйлтийг голлуулж, босоог эхэнд нь буцаана.
+    Албан хаагчийн товч зэрэг бусад өөрчлөлтөд байрлалд хүрэхгүй —
+    хэрэглэгчийн гүйлгэсэн газар хадгалагдана.
+  */
+  const bodyRef = React.useRef<HTMLDivElement>(null);
+  const loaded = data != null;
+  React.useLayoutEffect(() => {
+    const el = bodyRef.current;
+    if (!el || breakdown) return;
+    el.scrollTo({ left: (el.scrollWidth - el.clientWidth) / 2, top: 0 });
+  }, [focus, breakdown, loaded]);
 
   const resetTaskView = React.useCallback(() => {
     setRecordFilter("all");
@@ -228,18 +237,14 @@ export function SanhuuDashboard() {
   }, []);
 
   /**
-   * Доорх мөчрийн карт дээр товшсон үйлдэл.
+   * Доорх мөчрийн карт дээр товшсон үйлдэл — тэр нэгжийн задаргааг нээнэ.
    *
-   * ⚠⚠ ҮНДЭС ДЭЭР задлана, МӨЧИР ДОТОР задаргаа нээнэ. Үндсэн
-   * харагдац нь зөвхөн хоёр шат (хэлтэс ба түүний дөрвөн салаа) тул
-   * хүүхэдтэй салаа дээр товшихыг "энэ салааг задал" гэж уншина.
-   * Мөчир дотор харин БҮХ ШАТ аль хэдийн дэлгэгдсэн байдаг тул
-   * задлах зүйл үлдэхгүй — товшилт нь тэр нэгжийн ажлыг нээнэ.
-   *
-   * ⚠ Навчин нэгж дээр (Хууль, эрх зүй гэх мэт) үндэс дээр ч задаргаа
-   * шууд нээгдэнэ: 2026-09-22-нд "хүүхэдтэй бол л гүнзгийрнэ" гэсэн
-   * дүрэм навчин нэгжийг зөвхөн сонгоод дэлгэцийг хөдөлгөөнгүй
-   * үлдээж байсан гомдол энд хэвээр шийдэгдэнэ.
+   * ⚠⚠ ҮНДЭС ДЭЭР ЧИГ ГҮНЗГИЙРЭХ АЛХАМ БАЙХГҮЙ (хэрэглэгчийн шийдвэр,
+   * 2026-10-05: "санхүү төсөв хэсгийг эх мод руу нийлүүл"). Урьд нь
+   * үндсэн харагдац зөвхөн хоёр шат зурдаг тул хүүхэдтэй салаа дээр
+   * товшихыг "энэ салааг задал" гэж уншдаг байв. Одоо үндсэн мод БҮХ
+   * шатаа аль хэдийн дэлгэдэг тул задлах зүйл үлдэхгүй — товшилт бүр
+   * тэр нэгжийн ажлыг нээнэ.
    */
   const pickUnit = React.useCallback(
     (id: string) => {
@@ -247,9 +252,9 @@ export function SanhuuDashboard() {
       setUnit(id);
       setPerson(null);
       setFocus(id);
-      setBreakdown(!(focus === rootId && hasKids(id)));
+      setBreakdown(true);
     },
-    [resetTaskView, hasKids, focus, rootId],
+    [resetTaskView],
   );
 
   /**
@@ -435,7 +440,7 @@ export function SanhuuDashboard() {
             (хэрэглэгчийн шийдвэр, 2026-09-22). Карт бүр "12% хэрэгжилт ·
             72% хугацаа" гэж хоёр тоогоо өөрөө бичдэг тул тайлбар давхардал
             байв. */}
-        <div className="org-guide"><span>Салаа дээр товшиж бүтцийг бүтнээр задлаад, нэгж дээр товшиж ажлуудыг харна.</span></div>
+        <div className="org-guide"><span>Нэгж дээр товшиж ажлуудыг харна.</span></div>
           {/*
             ⚠⚠ МӨЧИР РҮҮ ОРСОН ҮЕД ХОЁР БАГАНА (хэрэглэгчийн санаа,
             2026-09-22: "Дотоод хяналт дээр дарлаа — бусад картууд
@@ -446,7 +451,7 @@ export function SanhuuDashboard() {
             ⚠ Картын АГУУЛГА хараахан эцэслээгүй — хэрэглэгч дараа нь
             хэлнэ; одоо ердийн карт томорсон хэлбэрээр.
           */}
-          <div className={cn("org-body", deep && "is-focus")}>
+          <div ref={bodyRef} className={cn("org-body", deep && "is-focus")}>
             <OrgChart
               units={units}
               tree={tree}
@@ -757,22 +762,17 @@ function OrgChart({
   */
   const deep = breakdown;
   /*
-    ⚠⚠ МӨЧИР ДОТОР БҮХ ШАТ НЭГ ДОР (хэрэглэгчийн шийдвэр, 2026-09-25:
-    "Санхүү төсөв дээр дарвал цааш задрахгүй бүх задарга харагдана").
-    Салаа руу орсон хэрэглэгч бүтцийг ХАРАХААР орж байгаа тул шат
-    бүрийг тусад нь товшиж нээх нь дэмий алхам байв.
-
-    ⚠ ҮНДЭС ДЭЭР ХОЁР ШАТ ХЭВЭЭР: хэлтсийн бүтэн мод нь найман навчтай
-    буюу ~2,400px өргөн болох тул гүйлгүүргүйгээр уншигдахгүй (2026-09-21-нд
-    яг ингэж оролдоод буцаасан). Салаа тус бүр харин таваас илүүгүй
-    навчтай — бүтнээрээ багтана.
+    ⚠⚠ ҮНДЭС ДЭЭР Ч БҮХ ШАТ НЭГ ДОР (хэрэглэгчийн шийдвэр, 2026-10-05:
+    "санхүү төсөв хэсгийг эх мод руу нийлүүл … scroll үүснэ"). Урьд нь
+    үндэс дээр зөвхөн хоёр шат зурж, "Санхүү төсөв"-ийн доторх бүтэц
+    тусдаа алхмаар нээгддэг байв. Хэлтсийн бүтэн мод ~2,200px өргөн
+    тул хэвтээ, босоо гүйлт ХҮЛЭЭН ЗӨВШӨӨРӨГДСӨН — гүйлгүүр нь
+    `.org-body`-ийн өөрийн загвартай (organization.css).
   */
-  const full = head.parent !== null;
-
-  const ctx = { units, tree, staff, people, selected, person, showStaff, full, onPick, onPickPerson };
+  const ctx = { units, tree, staff, people, selected, person, showStaff, onPick, onPickPerson };
 
   return (
-    <div className={cn("org-chart", deep && "is-deep", full && !deep && "is-full")}>
+    <div className={cn("org-chart", deep ? "is-deep" : "is-full")}>
       {/* ⚠ Гүйлтийн хүрээ ба агуулга нь ХОЁР ӨӨР элемент байна:
           нэг элемент зэрэг гүйж, зэрэг агуулгынхаа өргөнөөр тэлж
           чадахгүй. Дээд карт нь энэ давхаргын ДОТОР голлоно */}
@@ -811,8 +811,6 @@ function OrgChart({
  * ⚠ Рекурсив: хүүхэд бүр өөрийнхөө хүүхдүүдийг доороо агуулна.
  * Холбоос зураас нь `.org-branches > .org-branch`-ийн ::before/::after
  * -ээс гардаг тул гүн хэдэн ч шат байсан нэг л дүрмээр зурагдана.
- * ⚠ Үндсэн харагдацад (`full` худал) хүүхдүүд нь зурагдахгүй —
- * зөвхөн "Дэд бүтэц N ›" гэсэн дохио үлдэнэ.
  */
 function Branch({
   unit,
@@ -823,7 +821,6 @@ function Branch({
   selected,
   person,
   showStaff,
-  full,
   onPick,
   onPickPerson,
 }: {
@@ -835,14 +832,12 @@ function Branch({
   selected: string;
   person: string | null;
   showStaff: boolean;
-  /** Үр удмыг нь доор нь дэлгэх эсэх */
-  full: boolean;
   onPick: (id: string) => void;
   onPickPerson: (name: string) => void;
 }) {
   const kids = units.filter((u) => u.parent === unit.id);
   return (
-    <div className="org-branch">
+    <div className="org-branch" data-unit={unit.id}>
       <NodeCard
         unit={unit}
         tree={tree}
@@ -852,14 +847,14 @@ function Branch({
         person={person}
         showStaff={showStaff}
         kids={kids.length}
-        /* ⚠ Хүүхдүүд нь ДООРОО аль хэдийн зурагдсан бол сум хэрэггүй:
+        /* ⚠ Хүүхдүүд нь ДООРОО аль хэдийн зурагдсан тул сум хэрэггүй:
            тэр нь "товшвол задарна" гэсэн амлалт болж уншигдана */
-        kidsAction={!full}
+        kidsAction={false}
         depth={depthOf(unit.id, units)}
         onPick={() => onPick(unit.id)}
         onPickPerson={onPickPerson}
       />
-      {full && kids.length ? (
+      {kids.length ? (
         <div className="org-branches">
           {kids.map((k) => (
             <Branch
@@ -872,7 +867,6 @@ function Branch({
               selected={selected}
               person={person}
               showStaff={showStaff}
-              full={full}
               onPick={onPick}
               onPickPerson={onPickPerson}
             />
