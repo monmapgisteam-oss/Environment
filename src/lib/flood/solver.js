@@ -9,18 +9,21 @@
 export const G = 9.81;
 
 // ESA WorldCover class -> Manning n, Horton f0 / fc (mm/h). index = class / 10
+// s = soil water storage, mm (dry soil): once that much has soaked in, the soil is saturated and infiltration
+// drops to a tenth — long rain then runs off the mountains instead of vanishing into them (Horton alone never
+// saturates: 6 mm/h for 12 h on grass, fc 8 mm/h, made no runoff at all).
 export const LANDCOVER = [
-  { code: 0, name: 'Тодорхойгүй', n: 0.035, f0: 30, fc: 6 },
-  { code: 10, name: 'Ой мод', n: 0.10, f0: 60, fc: 15 },
-  { code: 20, name: 'Бут сөөг', n: 0.07, f0: 50, fc: 12 },
-  { code: 30, name: 'Бэлчээр, зүлэг', n: 0.035, f0: 40, fc: 8 },
-  { code: 40, name: 'Тариалан', n: 0.035, f0: 40, fc: 8 },
-  { code: 50, name: 'Барилгажсан', n: 0.02, f0: 4, fc: 1 },
-  { code: 60, name: 'Ил хөрс', n: 0.025, f0: 25, fc: 4 },
-  { code: 70, name: 'Цас, мөс', n: 0.02, f0: 0, fc: 0 },
-  { code: 80, name: 'Усан гадарга', n: 0.03, f0: 0, fc: 0 },
-  { code: 90, name: 'Намаг', n: 0.06, f0: 5, fc: 1 },
-  { code: 100, name: 'Хаг, хөвд', n: 0.04, f0: 30, fc: 6 },
+  { code: 0, name: 'Тодорхойгүй', n: 0.035, f0: 30, fc: 6, s: 40 },
+  { code: 10, name: 'Ой мод', n: 0.10, f0: 60, fc: 15, s: 80 },
+  { code: 20, name: 'Бут сөөг', n: 0.07, f0: 50, fc: 12, s: 60 },
+  { code: 30, name: 'Бэлчээр, зүлэг', n: 0.035, f0: 40, fc: 8, s: 50 },
+  { code: 40, name: 'Тариалан', n: 0.035, f0: 40, fc: 8, s: 60 },
+  { code: 50, name: 'Барилгажсан', n: 0.02, f0: 4, fc: 1, s: 15 },
+  { code: 60, name: 'Ил хөрс', n: 0.025, f0: 25, fc: 4, s: 30 },
+  { code: 70, name: 'Цас, мөс', n: 0.02, f0: 0, fc: 0, s: 0 },
+  { code: 80, name: 'Усан гадарга', n: 0.03, f0: 0, fc: 0, s: 0 },
+  { code: 90, name: 'Намаг', n: 0.06, f0: 5, fc: 1, s: 10 },
+  { code: 100, name: 'Хаг, хөвд', n: 0.04, f0: 30, fc: 6, s: 40 },
 ];
 
 const VS_FULL = `#version 300 es
@@ -53,27 +56,28 @@ uniform int uF;
 uniform ivec2 uFine;
 uniform ivec2 uOff;            // window origin on the fine grid (simulation area)
 uniform float uDemF;
-uniform vec3 uLc[11];          // n, f0, fc
+uniform vec4 uLc[11];          // n, f0, fc, soil storage mm
 uniform float uBldOn;          // 1 = buildings are obstacles
 layout(location=0) out float oZ;
 layout(location=1) out vec4 oP; // n, f0 mm/h, fc mm/h, building fraction (>= SOLID: wall, else porous)
-layout(location=2) out vec4 oG;  // ground with channels burned (display), urban fraction, natural ground (3D terrain), -
+layout(location=2) out vec4 oG;  // ground with channels burned (display), urban fraction, natural ground (3D terrain), soil storage mm
 layout(location=3) out vec2 oW;  // open width of the east / south face (0 = wall), from the fine building raster
 bool bldAt(ivec2 p){ return uBldOn > 0.5 && p.x >= 0 && p.y >= 0 && p.x < uFine.x && p.y < uFine.y && texelFetch(uBld, p, 0).r > 0u; }
 float dem(ivec2 p){ ivec2 s = textureSize(uDem, 0); return texelFetch(uDem, clamp(p, ivec2(0), s - 1), 0).r; }
 void main(){
   ivec2 c = ivec2(gl_FragCoord.xy);
-  float cnt = 0.0, ns = 0.0, a0 = 0.0, ac = 0.0, nb = 0.0, hb = 0.0, burn = 0.0, nu = 0.0;
-  for (int j = 0; j < 4; j++) for (int i = 0; i < 4; i++) {
+  float cnt = 0.0, ns = 0.0, a0 = 0.0, ac = 0.0, st = 0.0, nb = 0.0, hb = 0.0, burn = 0.0, nu = 0.0;
+  // F <= 8 (8 is the coarse city grid of lib/soil-flood.ts; the view itself uses 1..3)
+  for (int j = 0; j < 8; j++) for (int i = 0; i < 8; i++) {
     if (i >= uF || j >= uF) continue;
     ivec2 p = uOff + c * uF + ivec2(i, j);
     if (p.x >= uFine.x || p.y >= uFine.y) continue;
     uint lcv = texelFetch(uLC, p, 0).r;
     int k = min(int(lcv) / 10, 10);
-    vec3 prm = uLc[k];
+    vec4 prm = uLc[k];
     uint b = texelFetch(uBld, p, 0).r;
     burn = max(burn, float(texelFetch(uRiv, p, 0).r) * 0.1);
-    cnt += 1.0; ns += prm.x; a0 += prm.y; ac += prm.z;
+    cnt += 1.0; ns += prm.x; a0 += prm.y; ac += prm.z; st += prm.w;
     if (b > 0u) { nb += 1.0; hb += float(b); }
     if (b > 0u || lcv == 50u) nu += 1.0;       // served by street drainage (built-up)
   }
@@ -81,7 +85,7 @@ void main(){
   // A face is open along a fine row/column only where the fine cells on both sides are free: buildings
   // standing on the boundary between two cells block it, even when they cover little of either cell.
   float oe = 0.0, os = 0.0;
-  for (int k = 0; k < 4; k++) {
+  for (int k = 0; k < 8; k++) {
     if (k >= uF) continue;
     ivec2 e0 = uOff + c * uF + ivec2(uF - 1, k), s0 = uOff + c * uF + ivec2(k, uF - 1);
     if (!bldAt(e0) && !bldAt(e0 + ivec2(1, 0))) oe += 1.0;
@@ -96,7 +100,7 @@ void main(){
   float n = ns / cnt, f0 = a0 / cnt, fc = ac / cnt;
   float zNat = z;
   if (burn > 0.0) { z -= burn; n = 0.035; }
-  oG = vec4(z, nu / cnt, zNat, 0.0);
+  oG = vec4(z, nu / cnt, zNat, st / cnt);
   if (frac >= SOLID) { z += hb / max(nb, 1.0); f0 = 0.0; fc = 0.0; }
   else n += 0.10 * frac;               // porous cell: extra drag; infiltration applies to the open ground only
   oZ = z;
@@ -167,6 +171,7 @@ void main(){
 const FS_DEPTH = HEAD + `
 uniform sampler2D uH, uQ, uP, uM, uZ, uWf;
 uniform float uDt, uDx, uRain, uT, uInfMul, uHortonK, uTr, uDrain, uManMul;   // uDrain: storm-drain capacity, m/s
+uniform float uWet;            // rain fallen so far, mm (soil saturation)
 uniform sampler2D uGr;
 uniform vec4 uRainCircle;      // cx, cy, r (cells), enabled
 uniform vec4 uInflow[8];       // centre cell x, y (any point inside it), Q m^3/s, half-width (cells)
@@ -238,7 +243,12 @@ void main(){
   }
   vec4 p = texelFetch(uP, c, 0);
   float f = uInfMul * (p.z + (p.y - p.z) * exp(-uHortonK * uTr)) / 3.6e6;  // Horton, mm/h -> m/s
-  f += uDrain * texelFetch(uGr, c, 0).g;                                     // storm drains in built-up cells
+  vec4 gr = texelFetch(uGr, c, 0);
+  // soil saturation: what has soaked in is at most the rain fallen and at most Horton's cumulative capacity
+  float cap = uInfMul * (p.z * uTr + (p.y - p.z) * (1.0 - exp(-uHortonK * uTr)) / max(uHortonK, 1e-9)) / 3600.0;
+  float stor = gr.w * uInfMul;                                               // wet soil holds less
+  if (stor > 0.0) f *= 1.0 - 0.9 * smoothstep(0.7, 1.0, min(uWet, cap) / stor);
+  f += uDrain * gr.g;                                                        // storm drains in built-up cells
   h = max(h - f * uDt, 0.0);
   oH = h;
   float spd = 0.0;
@@ -445,7 +455,7 @@ export class FloodSolver {
   /**
    * @param gl    WebGL2 context (shared with the map)
    * @param data  {meta, dem: Float32Array, lc, bld, riv: Uint8Array}
-   * @param opts  {factor: 1|2|3, buildings: bool, window: [fx0, fy0, fx1, fy1] fine cells (simulation area, default all)}
+   * @param opts  {factor: 1..8, buildings: bool, window: [fx0, fy0, fx1, fy1] fine cells (simulation area, default all)}
    */
   constructor(gl, data, opts) {
     this.gl = gl;
@@ -561,7 +571,7 @@ export class FloodSolver {
     gl.uniform2i(pr.u.uOff, this.off[0], this.off[1]);
     gl.uniform1f(pr.u.uDemF, m.demF);
     gl.uniform1f(pr.u.uBldOn, buildings ? 1 : 0);
-    gl.uniform3fv(pr.u.uLc, LANDCOVER.flatMap(l => [l.n, l.f0, l.fc]));
+    gl.uniform4fv(pr.u.uLc, LANDCOVER.flatMap(l => [l.n, l.f0, l.fc, l.s]));
     this._draw(this.fbInit, this.W, this.H, 4);
     this._end();
     this.gridVersion = ++gridSerial;      // unique across solvers: a new area / resolution is a new grid
@@ -665,6 +675,7 @@ export class FloodSolver {
     gl.uniform1f(pr.u.uDt, dt); gl.uniform1f(pr.u.uDx, this.dx);
     gl.uniform1f(pr.u.uRain, f.rain); gl.uniform1f(pr.u.uT, this.t + dt);
     gl.uniform1f(pr.u.uInfMul, f.infMul); gl.uniform1f(pr.u.uHortonK, f.hortonK); gl.uniform1f(pr.u.uTr, f.tr);
+    gl.uniform1f(pr.u.uWet, f.wet || 0);
     gl.uniform4fv(pr.u.uRainCircle, f.circle);
     const inf = new Float32Array(32);
     f.inflows.slice(0, 8).forEach((p, i) => inf.set(p, i * 4));
@@ -817,6 +828,26 @@ export class FloodSolver {
       onRows(y, n, out);
     }
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  }
+
+  /**
+   * Нэг текстурыг БҮТНЭЭР нь (RGBA float, мөр 0 = хойд) уншина — "Үер ба
+   * нэвчилт" харагдацын CPU талын бохирдлын зөөвөрлөлтөд ({@link src/lib/soil-flood.ts}):
+   * 'h' гүн · 'q' зүүн/урд нүүрний урсац (RG) · 'p' n, f0, fc, барилгын хувь ·
+   * 'gr' газар (z, нийт давхаргын хуримтлал … w = хөрсний хадгалалт) · 'wf' нүүрний нээлттэй өргөн.
+   * ⚠ Синхрон (GPU түгжинэ) — толгойгүй тооцоонд л; амьд зурагт `readLayer` хэвээр.
+   */
+  readTex(which, out = null) {
+    const gl = this.gl;
+    const t = which === 'h' ? this.Hcur : which === 'q' ? this.Qcur : which === 'p' ? this.P : which === 'gr' ? this.Gr : which === 'wf' ? this.Wf : this.Z;
+    const fb = fbo(gl, [t]);
+    if (!out || out.length !== this.W * this.H * 4) out = new Float32Array(this.W * this.H * 4);   // `out` — дахин ашиглах буфер (хот даяар 4 алхам тутамд уншихад GC-г хөнгөлнө)
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
+    gl.readBuffer(gl.COLOR_ATTACHMENT0);
+    gl.readPixels(0, 0, this.W, this.H, gl.RGBA, gl.FLOAT, out);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.deleteFramebuffer(fb);
+    return out;
   }
 
   dispose() {

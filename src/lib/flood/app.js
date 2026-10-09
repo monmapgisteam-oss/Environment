@@ -4,16 +4,24 @@ import { drawChart } from './chart.js';
 import { writeGeoTIFF } from './geotiff.js';
 import { installHelp } from './help.js';
 import { ImpactAnalyzer, CLASSES, riskLevel } from './impact.js';
+import { createSolverGL, loadFloodData } from './data.js';
 
-const $ = id => document.getElementById(id);
+// ⚠ Элементийг АППЫН ҮНДЭС дотроос хайна (платформын хуудсанд өөр id байж болно).
+// Нэг удаад нэг л апп амьд байдаг тул модулийн хувьсагч хангалттай.
+let ROOT = null;
+const $ = id => ROOT?.querySelector('#' + id) ?? null;
 const R = 6378137;
 const themeColors = () => {
-  const cs = getComputedStyle(document.documentElement), v = n => cs.getPropertyValue(n).trim();
+  const cs = getComputedStyle(ROOT ?? document.documentElement), v = n => cs.getPropertyValue(n).trim();
   return { rain: v('--rain'), rainFill: v('--rain'), accent: v('--accent'), warn: v('--warn'), danger: v('--danger'), speed: v('--speed') };
 };
 const toLonLat = (x, y) => [x / R * 180 / Math.PI, (2 * Math.atan(Math.exp(y / R)) - Math.PI / 2) * 180 / Math.PI];
 
+// "Жишиг" нь ArcGIS Pro-гийн Flood Simulation хэрэгслийн анхдагч тохиргоотой ижил (40 мм/ц, 1 цаг, тэгш,
+// шингээлтгүй) — хэрэглэгч 2026-10-09-нд Pro-гийн бичлэгтэй харьцуулахаар анхдагч болгосон. `soil` өгсөн
+// хувилбар дарагдахад хөрсний сонголт мөн солигдоно; бусад нь хөрсийг хөндөхгүй.
 const PRESETS = [
+  { name: 'Жишиг', i: 40, d: 60, shape: 'uniform', lvl: 2, soil: 0 },
   { name: 'Шиврээ', i: 3, d: 360, shape: 'uniform', lvl: 1 },
   { name: 'Бага', i: 8, d: 60, shape: 'uniform', lvl: 1 },
   { name: 'Аадар', i: 30, d: 60, shape: 'tri', lvl: 2 },
@@ -31,16 +39,21 @@ const LEGENDS = {
   4: { title: 'Ус хүрэх хугацаа — бороо эхэлснээс хойш (гүн > 10 см)', grad: 'linear-gradient(90deg,#d90d40,#ff731a 15%,#ffe64d 35%,#4dccE6 60%,#334de6)', ticks: [] },
 };
 
-class App {
-  constructor() {
+export class App {
+  constructor(root) {
+    ROOT = root;
+    this.root = root;
+    this.alive = true;
+    // ⚠ Элементийн сонсогч бүгд энэ дохиотой — dev-ийн StrictMode ижил DOM дээр хоёр удаа эхлүүлдэг
+    this.abort = new AbortController();
     this.solver = null;
     this.data = null;
     this.grid = null;
     this.running = false;
     this.factor = 2;
-    this.scn = { i: 30, d: 60, shape: 'tri', area: 'all', center: null, radiusKm: 6, soil: 0.6, manning: 1,
+    this.scn = { i: 40, d: 60, shape: 'uniform', area: 'all', center: null, radiusKm: 6, soil: 0, manning: 1,
       tuulOn: false, tuulQ: 40, inflows: [], durH: 3, speed: 120, hortonK: 2 / 3600, drain: 10 };
-    this.display = { mode: 0, thr: 0.05, opacity: 0.85, hill: 0, particles: true, buildings: false, buildings3d: true, waterStyle: 2, arrows: true };
+    this.display = { mode: 0, thr: 0.02, opacity: 0.85, hill: 0, particles: true, buildings: false, buildings3d: true, waterStyle: 0, arrows: false, affected: false };   // Өнгөт (гүн) анхдагч — Pro-гийн тунгалаг цайвар→бараан хөх шатлалтай адил (хэрэглэгч 2026-10-09)
     this.viewSnapshot = null;
     this.area = null;           // simulation area [xmin, ymin, xmax, ymax] EPSG:3857, null = whole data extent
     this.areaDraft = null;
@@ -57,13 +70,11 @@ class App {
     this.bindUI();
     // solver gets its own WebGL2 context; the views only receive the packed visible window
     // OffscreenCanvas + transferToImageBitmap keeps the hand-over to the map's context on the GPU
-    const cv = typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(1024, 1024) : Object.assign(document.createElement('canvas'), { width: 1024, height: 1024 });
-    this.gl = cv.getContext('webgl2', { alpha: false, antialias: false, depth: false, stencil: false,
-      preserveDrawingBuffer: !cv.transferToImageBitmap, premultipliedAlpha: false, powerPreference: 'high-performance' });
     this.frameCache = {};
     try {
-      if (!this.gl) throw new Error('Энэ хөтөч WebGL2 дэмжихгүй байна. Chrome / Edge-ийн сүүлийн хувилбарыг ашиглана уу.');
+      this.gl = createSolverGL();
       const [data, E, impact] = await Promise.all([this.loadData(), loadArcGIS(), new ImpactAnalyzer().load()]);
+      if (!this.alive) return;   // хуудаснаас гарсан — дуусахыг хүлээсэн татац хаягдана
       this.impact = impact;
       this.data = data;
       this.mapc = new MapController(this, E);
@@ -71,29 +82,53 @@ class App {
       this.mapc.init(data.meta, $('view2d'), $('view3d'));
       this.mapc.updateOverlays();
       this.loop();
-    } catch (e) { this.fail(e); }
+    } catch (e) { if (this.alive) this.fail(e); }
+  }
+
+  /** Хуудаснаас гарахад: давталт, сонсогч, зураг, WebGL контекстыг бүгдийг чөлөөлнө */
+  destroy() {
+    this.alive = false;
+    this.abort.abort();
+    cancelAnimationFrame(this.raf);
+    clearInterval(this.chartTimer);
+    for (const [target, type, fn] of this.listeners ?? []) target.removeEventListener(type, fn);
+    this.helpOff?.();
+    try { this.mapc?.destroy(); } catch (e) { console.error(e); }
+    try { this.solver?.dispose(); } catch (e) { console.error(e); }
+    this.gl?.getExtension('WEBGL_lose_context')?.loseContext();
+    if (ROOT === this.root) ROOT = null;
+  }
+
+  /** Платформын сэдэв солигдоход (data-theme) — диаграм, 3D-ийн өнгө */
+  applyTheme() {
+    this.chartsDirty = true; this.drawCharts(); this.updateRainUI();
+    this.mapc?.applyTheme();
   }
 
   loop() {
     const frame = () => {
+      if (!this.alive) return;
       try { this.tick(); } catch (e) { console.error(e); }
       // 2D redraws are cheap; the SceneView paces its own water animation (see arcgis.js)
       if (this.running || this.hoverCell || (this.wantsAnimation() && this.mapc.mode === '2d')) this.mapc.requestRender();
-      requestAnimationFrame(frame);
+      this.raf = requestAnimationFrame(frame);
     };
-    requestAnimationFrame(frame);
+    this.raf = requestAnimationFrame(frame);
   }
 
   wantsAnimation() {
     const d = this.display;
     const wet = this.solver && this.solver.stats.wet > 0 && !this.viewSnapshot;
-    return this.running || !!(wet && ((d.particles && d.mode <= 2) || (d.arrows && d.mode <= 2) || (d.waterStyle > 0 && d.mode === 0)));
+    return this.running || !!(wet && ((d.particles && d.mode <= 2) || (d.arrows && d.mode <= 2) || d.mode === 0));   // гүний горим бүр цалгиатай тул үргэлж зурна
   }
 
   displayState() {
     // the animated look carries its own flow streaks: no tracer lines on top of it in depth mode
-    // arrows (or the animated look's own streaks) replace the white tracer lines
-    const particles = this.display.particles && !this.display.arrows && !(this.display.waterStyle === 2 && this.display.mode === 0);
+    // arrows replace the white tracer lines
+    // the realistic water draws no streaks of its own: the tracers (FlowRenderer-style streamlines) show the motion
+    // урсгалын цагаан зураас (FlowRenderer маяг) "Хөдөлгөөнт" БА "Өнгөт (гүн)" усанд (хэрэглэгч 2026-10-09:
+    // "хөдөлгөөнт дээр байгаа сумыг өнгөт гүн дээр бас оруул"); "Бодит" (1) усанд хэвээр үгүй
+    const particles = this.display.particles && !this.display.arrows && this.display.waterStyle !== 1;
     return { ...this.display, particles, history: !!this.viewSnapshot, tmax: Math.max(this.solver ? this.solver.t : 60, 60) / 60 };
   }
 
@@ -128,28 +163,9 @@ class App {
     return { frame, grid: g };
   }
 
+  /** Статик өгөгдөл — "Үер ба нэвчилт"-тэй хуваалцсан ачаалагч ({@link loadFloodData}) */
   async loadData() {
-    const msg = t => ($('loadMsg').textContent = t);
-    msg('meta.json…');
-    const meta = await (await fetch('data/meta.json')).json();
-    const bin = async (name, label) => {
-      msg(`${label} ачаалж байна…`);
-      const r = await fetch('data/' + name);
-      if (!r.ok) throw new Error(name + ' олдсонгүй (' + r.status + ')');
-      let buf = new Uint8Array(await r.arrayBuffer());
-      if (buf[0] === 0x1f && buf[1] === 0x8b) {
-        const s = new Blob([buf]).stream().pipeThrough(new DecompressionStream('gzip'));
-        buf = new Uint8Array(await new Response(s).arrayBuffer());
-      }
-      return buf;
-    };
-    const demB = await bin('dem.f32', 'Өндрийн загвар (Copernicus GLO-30)');
-    const dem = new Float32Array(demB.buffer, demB.byteOffset, meta.demW * meta.demH);
-    const lc = await bin('lc.u8.gz', 'Газрын бүрхэвч (WorldCover)');
-    const bld = await bin('bld.u8.gz', 'Барилга');
-    const riv = await bin('riv.u8.gz', 'Гол горхи');
-    msg('GPU бэлтгэж байна…');
-    return { meta, dem, lc, bld, riv };
+    return loadFloodData(t => ($('loadMsg').textContent = t));
   }
 
   createSolver() {
@@ -329,7 +345,7 @@ class App {
     const l = $('loading');
     l.classList.remove('hide'); l.classList.add('error');
     l.querySelector('.spin').style.display = 'none';
-    $('loadMsg').textContent = 'Алдаа: ' + e.message + (location.protocol === 'file:' ? ' — хуудсыг run.bat-аар (локал сервер) нээнэ үү.' : '');
+    $('loadMsg').textContent = 'Алдаа: ' + e.message;
   }
 
   // ------------------------------------------------------------------ scenario
@@ -366,7 +382,7 @@ class App {
       const c = this.cellOfMerc(...p.xy);
       inflows.push([Math.floor(c[0]) + 0.5, Math.floor(c[1]) + 0.5, p.q, hw]);
     }
-    return { rain: this.rainRate(t), rainArea, circle, inflows, infMul: sc.soil, hortonK: sc.hortonK, tr: t,
+    return { rain: this.rainRate(t), rainArea, circle, inflows, infMul: sc.soil, hortonK: sc.hortonK, tr: t, wet: this.cumRain(t),
       manning: sc.manning, theta: 0.8, drain: sc.drain, wallE };
   }
 
@@ -487,7 +503,7 @@ class App {
       const box = e && v.type !== '3d' ? [e.xmin - m.x0, m.y1 - e.ymax, e.xmax - m.x0, m.y1 - e.ymin] : null;
       const center = c ? [c.x - m.x0, m.y1 - c.y] : null;       // over the limit, the closest buildings are kept
       const limit = v.type === '3d' ? 4000 : 8000;      // 3D extrusions (and the base-layer filter) are costly               // footprints are cached, only new ones are fetched
-      await this.mapc.syncAffected(this.impact.result ? this.impact.affected(limit, box, center) : []);
+      await this.mapc.syncAffected(this.impact.result && this.display.affected ? this.impact.affected(limit, box, center) : []);
     } finally { this.affectedBusy = false; }
   }
 
@@ -499,7 +515,8 @@ class App {
     $('bldTotal').textContent = (r ? r.total : 0).toLocaleString();
     const tot = Math.max(1, r ? r.total : 0);
     $('bldBar').innerHTML = CLASSES.map((c, i) => `<div style="width:${r ? 100 * r.counts[i] / tot : 0}%;background:${c.color}" title="${c.name}"></div>`).join('');
-    $('bldLegend').innerHTML = CLASSES.map((c, i) => `<li style="--c:${c.color}" title="${c.note}">${c.name}<b>${r ? r.counts[i].toLocaleString() : 0}</b></li>`).join('');
+    // ангилал бүр нэг мөр: өнгө · гүн · нөлөө · тоо (нөлөөг title-д нуухгүй, 2026-10-09)
+    $('bldLegend').innerHTML = CLASSES.map((c, i) => `<li style="--c:${c.color}"><span class="nm">${c.name}</span><span class="nt">${c.note}</span><b>${r ? r.counts[i].toLocaleString() : 0}</b></li>`).join('');
   }
 
   alert(key, level, text) {
@@ -514,7 +531,7 @@ class App {
     if (!ul) return;
     ul.innerHTML = this.alerts.length
       ? this.alerts.slice(0, 40).map(a => `<li class="lv-${a.level}"><span class="dot"></span><span>${a.text}</span><time>${this.fmtClock(a.t).slice(0, 5)}</time></li>`).join('')
-      : '<li class="empty">Симуляци явахад чухал үйл явдлууд энд бүртгэгдэнэ.</li>';
+      : '<li class="empty">Үйл явдал бүртгэгдээгүй байна.</li>';
   }
 
   resetHistory() {
@@ -639,7 +656,7 @@ class App {
 
   // ------------------------------------------------------------------ UI
   bindUI() {
-    installHelp();
+    this.helpOff = installHelp(this.root);
     const seg = (id, fn) => {
       const el = $(id);
       if (!el) return;
@@ -648,7 +665,7 @@ class App {
         if (!b) return;
         el.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b));
         fn(b.dataset.v);
-      });
+      }, { signal: this.abort.signal });
     };
     const setSeg = (id, v) => $(id)?.querySelectorAll('button').forEach(x => x.classList.toggle('on', x.dataset.v === String(v)));
     const range = (id, fn, fmt = v => v) => {
@@ -659,7 +676,7 @@ class App {
         el.style.setProperty('--p', `${(v - el.min) / (el.max - el.min) * 100}%`);
         fn(v);
       };
-      el.addEventListener('input', upd);
+      el.addEventListener('input', upd, { signal: this.abort.signal });
       upd();
       return el;
     };
@@ -680,22 +697,34 @@ class App {
       if (this.mapc.mode === '3d') { const c = this.mapc.view3d.center, r = this.mapc.view3d.scale / 3000; this.setArea([c.x - r, c.y - r, c.x + r, c.y + r]); }
       else this.setArea([e.xmin, e.ymin, e.xmax, e.ymax]);
     };
-    $('moreBox').addEventListener('toggle', () => this.updateRainUI());
+    $('moreBox').addEventListener('toggle', () => this.updateRainUI(), { signal: this.abort.signal });
     const presets = $('presets');
+    presets.replaceChildren();
     for (const p of PRESETS) {
       const b = document.createElement('button');
-      b.innerHTML = `<b>${p.name}</b><span>${p.i} мм/ц · ${fmtDur(p.d)}</span>`;
-      b.title = `${p.name}: ${p.i} мм/ц, ${fmtDur(p.d)}`;
+      const inf = p.soil === 0 ? ' · шингээлтгүй' : '';
+      b.classList.toggle('wide', p.soil != null);          // хөрсөө заасан хувилбар бүтэн мөрөнд (flood.css)
+      b.innerHTML = `<b>${p.name}</b><span>${p.i} мм/ц · ${fmtDur(p.d)}${inf}</span>`;
+      b.title = `${p.name}: ${p.i} мм/ц, ${fmtDur(p.d)}${inf}`;
       b.onclick = () => {
         $('rainI').value = p.i; $('rainD').value = p.d;
         $('rainI').dispatchEvent(new Event('input')); $('rainD').dispatchEvent(new Event('input'));
-        this.scn.shape = p.shape; setSeg('rainShape', p.shape); this.updateRainUI();
+        this.scn.shape = p.shape; setSeg('rainShape', p.shape);
+        if (p.soil != null) { this.scn.soil = p.soil; setSeg('soil', p.soil); this.updateSummary(); }
+        this.updateRainUI();
         presets.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b));
       };
       presets.appendChild(b);
     }
     range('rainI', v => { this.scn.i = v; this.updateRainUI(); });
-    range('rainD', v => { this.scn.d = v; this.updateRainUI(); }, v => v >= 120 ? `${v} (${(v / 60).toFixed(1)} ц)` : v);
+    range('rainD', v => {
+      this.scn.d = v;
+      // the run must outlast the rain (+1 h of runoff): "Удаан" is 12 h of rain, the default run only 3 h,
+      // so it used to stop before the soils saturated and the mountains started to drain
+      const need = Math.min(24, Math.ceil((v / 60 + 1) * 2) / 2), dur = $('dur');
+      if (dur && this.scn.durH < need) { dur.value = need; dur.dispatchEvent(new Event('input')); }
+      this.updateRainUI();
+    }, v => v >= 120 ? `${v} (${(v / 60).toFixed(1)} ц)` : v);
     seg('rainShape', v => { this.scn.shape = v; this.updateRainUI(); });
     seg('rainArea', v => {
       this.scn.area = v;
@@ -708,7 +737,7 @@ class App {
       this.updateSummary();
     });
     range('rainR', v => { this.scn.radiusKm = v; this.mapc?.updateOverlays(); this.updateSummary(); });
-    seg('soil', v => { this.scn.soil = +v; this.updateSummary(); });
+    seg('soil', v => { this.scn.soil = +v; this.updateRainUI(); });
     range('man', v => { this.scn.manning = v; }, v => v.toFixed(1));
     range('drain', v => { this.scn.drain = v; this.updateSummary(); });
     $('tuulOn').onchange = e => { this.scn.tuulOn = e.target.checked; $('tuulField').hidden = !e.target.checked; this.updateSummary(); };
@@ -754,7 +783,7 @@ class App {
       }
       this.updateTimeUI(T);
       this.mapc?.requestRender();
-    });
+    }, { signal: this.abort.signal });
 
     const rr = () => this.mapc?.requestRender();
     seg('mode', v => { this.display.mode = +v; this.updateLegend(); rr(); });
@@ -764,10 +793,13 @@ class App {
     const onChange = (id, fn) => { const el = $(id); if (el) el.onchange = fn; };
     onChange('parts', e => { this.display.particles = e.target.checked; rr(); });
     onChange('showBld', e => { this.display.buildings = e.target.checked; rr(); });
-    $('arrowsBtn').onclick = () => {
-      this.display.arrows = !this.display.arrows;
-      $('arrowsBtn').classList.toggle('on', this.display.arrows);
-      rr();
+    // "Барилга" — үерт автсан барилгыг зэрэглэлийн өнгөөр зурагт гаргах/нуух (хэрэглэгч 2026-10-09; урсгалын
+    // сумын товчийг орлов — `display.arrows` кодод үлдсэн ч товчгүй тул үргэлж унтраалттай)
+    $('bldBtn').onclick = () => {
+      this.display.affected = !this.display.affected;
+      $('bldBtn').classList.toggle('on', this.display.affected);
+      this.affectedDirty = true;
+      if (!this.affectedBusy) void this.refreshAffected();
     };
     seg('waterStyle', v => { this.display.waterStyle = +v; this.updateLegend(); rr(); });
     onChange('bld3d', e => { this.display.buildings3d = e.target.checked; this.mapc?.setBuildings3d(e.target.checked); });
@@ -775,28 +807,26 @@ class App {
     seg('viewMode', async v => {
       $('view3d').hidden = v !== '3d';
       $('view2d').hidden = v === '3d';
-      document.body.classList.toggle('is3d', v === '3d');
+      this.root.classList.toggle('is3d', v === '3d');
       await this.mapc?.setMode(v, $('view3d'));
     });
     this.exportWhich = 'hmax';
     onChange('exportSel', e => { this.exportWhich = e.target.value; });
-    $('themeToggle').onclick = () => {
-      const t = document.documentElement.dataset.theme === 'light' ? 'dark' : 'light';
-      document.documentElement.dataset.theme = t;
-      try { localStorage.setItem('flood-theme', t); } catch (e) { /* storage blocked */ }
-      this.chartsDirty = true; this.drawCharts(); this.updateRainUI();
-      $('esriTheme').href = `https://js.arcgis.com/4.34/esri/themes/${t}/main.css`;
-      this.mapc?.applyTheme();
-    };
+    // сэдэв нь платформын толгойд — `applyTheme`-ийг React талын ажиглагч дуудна
     if ($('export')) $('export').onclick = () => this.exportTiff();
-    document.addEventListener('keydown', e => {
+    // ⚠ Хоосон зай нь ЗӨВХӨН апп дотор эсвэл хуудасны биеэс ирсэн үед — платформын бусад
+    // оролт, товчинд бичихэд симуляци асахгүй
+    const onKey = e => {
       if (e.key === 'Escape') this.setClickMode('probe');
-      if (e.key === ' ' && e.target.tagName !== 'INPUT') { e.preventDefault(); this.setRunning(!this.running); }
-    });
-    window.addEventListener('resize', () => { this.chartsDirty = true; this.drawCharts(); });
+      const t = e.target, typing = /^(INPUT|TEXTAREA|SELECT|BUTTON)$/.test(t.tagName) || t.isContentEditable;
+      if (e.key === ' ' && !typing && (t === document.body || this.root.contains(t))) { e.preventDefault(); this.setRunning(!this.running); }
+    };
+    const onResize = () => { this.chartsDirty = true; this.drawCharts(); };
+    this.listeners = [[document, 'keydown', onKey], [window, 'resize', onResize]];
+    for (const [target, type, fn] of this.listeners) target.addEventListener(type, fn);
     this.updateLegend();
     this.updateRainUI();
-    setInterval(() => this.drawCharts(), 250);
+    this.chartTimer = setInterval(() => this.drawCharts(), 250);
   }
 
   startAreaDraw() {
@@ -822,9 +852,9 @@ class App {
   }
 
   updateRainUI() {
-    const { i, d, shape } = this.scn;
+    const { i, d, shape, soil } = this.scn;
     this.updateSummary();
-    const match = PRESETS.findIndex(p => p.i === i && p.d === d && p.shape === shape);
+    const match = PRESETS.findIndex(p => p.i === i && p.d === d && p.shape === shape && (p.soil == null || p.soil === soil));
     $('presets').querySelectorAll('button').forEach((b, k) => b.classList.toggle('on', k === match));
     $('rainTotal').textContent = (i * d / 60).toFixed(0);
     $('rainPeak').textContent = (shape === 'uniform' ? i : 2 * i).toFixed(0);
@@ -838,10 +868,9 @@ class App {
   updateLegend() {
     const L = { ...LEGENDS[this.display.mode] };
     $('waterStyle').style.display = this.display.mode === 0 ? '' : 'none';     // the look only applies to depth
-    $('arrowsBtn').style.display = this.display.mode <= 2 ? '' : 'none';
     if (this.display.mode === 0 && this.display.waterStyle !== 0) {
-      L.title = this.display.waterStyle === 2 ? 'Ус — цагаан зураас урсгалын чиглэл, хурдыг харуулна' : 'Ус — бодит дүрслэл';
-      L.grad = this.display.waterStyle === 2 ? 'linear-gradient(90deg,#4db8db,#1c7ac7 45%,#0d408f)' : 'linear-gradient(90deg,#335c70,#0d1f3a)';
+      L.title = this.display.waterStyle === 2 ? 'Усны гүн' : 'Ус — бодит дүрслэл';
+      L.grad = this.display.waterStyle === 2 ? 'linear-gradient(90deg,rgba(87,128,128,.45),#1f546b 45%,#0a2645)' : 'linear-gradient(90deg,#335c70,#0d1f3a)';
       L.ticks = ['гүехэн', '', '', '', 'гүн'];
     }
     if (this.display.mode === 4) {           // arrival colours are stretched over the time simulated so far
@@ -916,11 +945,11 @@ class App {
     tip.hidden = false;
     tip.style.left = this.hoverPx.x + 'px';
     tip.style.top = this.hoverPx.y + 'px';
+    // Газрын өндөр хөвөгч тайлбарт ГАРАХГҮЙ (хэрэглэгч 2026-10-09); хуурай нүдэнд тайлбар огт гарахгүй.
+    if (!p.building && p.h <= 0.005) { tip.hidden = true; return; }
     tip.innerHTML = p.building
-      ? `Барилга (усыг нэвтрүүлэхгүй) · газрын өндөр ${p.z.toFixed(1)} м`
-      : p.h > 0.005
-        ? `<b>${p.h.toFixed(2)} м</b> гүн · ${p.v.toFixed(2)} м/с · газрын өндөр ${p.z.toFixed(1)} м`
-        : `Хуурай · газрын өндөр ${p.z.toFixed(1)} м`;
+      ? 'Барилга (усыг нэвтрүүлэхгүй)'
+      : `<b>${p.h.toFixed(2)} м</b> гүн · ${p.v.toFixed(2)} м/с`;
   }
 
   drawCharts() {
@@ -960,6 +989,3 @@ class App {
   }
 }
 
-const app = new App();
-window.floodApp = app;   // for debugging from the console
-app.start();

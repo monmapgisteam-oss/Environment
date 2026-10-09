@@ -1,8 +1,11 @@
-// ArcGIS Maps SDK for JavaScript (4.34) views: 2D MapView + 3D local SceneView (EPSG:3857).
+// ArcGIS Maps SDK for JavaScript views: 2D MapView + 3D local SceneView (EPSG:3857).
+// ⚠ SDK-г платформын ачаалагч (`lib/arcgis-sdk.ts`, CDN 4.33) өгнө — эх апп 4.34-ийг өөрөө
+// ачаалдаг байсан; нэг баримтад хоёр хувилбар байж болохгүй.
 // Water is drawn by WaterRenderer: in 2D through a custom BaseLayerViewGL2D, in 3D through a RenderNode.
 // The 3D ground is our own DEM (same surface the solver uses), so water never floats or sinks.
 import { WaterRenderer } from './renderer.js';
 import { CLASSES } from './impact.js';
+import { esriModules } from '@/lib/arcgis-sdk';
 
 const MODULES = [
   'esri/Map', 'esri/views/MapView', 'esri/views/SceneView', 'esri/layers/Layer',
@@ -62,7 +65,7 @@ function mul4(a, b) {       // column-major 4x4: a * b
 }
 
 export async function loadArcGIS() {
-  const mods = await new Promise((res, rej) => window.require(MODULES, (...m) => res(m), rej));
+  const mods = await esriModules(MODULES);
   return Object.fromEntries(MODULES.map((m, i) => [m.split('/').pop(), mods[i]]));
 }
 
@@ -75,7 +78,7 @@ export class MapController {
     this.sr = E.SpatialReference.WebMercator;
   }
 
-  init(meta, el2d, el3d) {
+  init(meta, el2d) {
     const E = this.E, app = this.app;
     this.meta = meta;
     const ext = this.domainExtent = new E.Extent({
@@ -83,6 +86,7 @@ export class MapController {
     });
 
     // ---- 2D
+    // eslint-disable-next-line @typescript-eslint/no-this-alias -- createSubclass-ийн аргуудад `this` нь давхаргын харагдац
     const ctl = this;
     const FloodLayerView2D = E.BaseLayerViewGL2D.createSubclass({
       attach() { this.r = new WaterRenderer(this.context); ctl.lv2d = this; },
@@ -126,6 +130,7 @@ export class MapController {
   }
 
   _init3d(el3d) {
+    // eslint-disable-next-line @typescript-eslint/no-this-alias -- createSubclass-ийн аргуудад `this` нь өндрийн давхарга
     const E = this.E, app = this.app, ctl = this;
     const DemElevation = E.BaseElevationLayer.createSubclass({
       properties: { grid: null },
@@ -322,13 +327,19 @@ export class MapController {
     const expand = new E.Expand({ view, content: gallery, expandTooltip: 'Суурь зураг', collapseTooltip: 'Хаах' });
     // ойртуулах товчны ДООР (хэрэглэгч 2026-10-08) — _placeUI-ийн when-ээс хойш бүртгэгддэг тул дараалал нь араас
     view.when(() => view.ui.add({ component: expand, position: 'top-left', index: 99 }));
-    // нээлттэй цуглуулгын ДЭЭГҮҮР 2D/3D сэлгэгч (HTML, z-index 2) суухгүйн тулд түр нуух
-    E.reactiveUtils.watch(() => expand.expanded, v => document.body.classList.toggle('bm-open', v));
     E.reactiveUtils.watch(() => gallery.activeBasemap, b => {
       const id = b && BASEMAPS.find(([k]) => k === b.id)?.[0];
       if (id && id !== this.basemap) this.setBasemap(id);
       if (b) expand.collapse();
     });
+  }
+
+  /** Хуудаснаас гарахад хоёр харагдацыг устгана (WebGL контекст чөлөөлөгдөнө) */
+  destroy() {
+    this.view3d?.destroy();
+    this.view2d?.destroy();
+    this.view3d = this.view2d = null;
+    this.lv2d = this.waterNode = null;
   }
 
   setBasemap(id) {

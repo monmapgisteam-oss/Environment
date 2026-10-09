@@ -19,6 +19,8 @@ uniform vec3 uSun;           // direction towards the sun
 uniform int uArrows;         // 1 = draw flow-direction arrows on the water
 uniform usampler2D uFB;      // fine (10 m) building raster
 uniform vec3 uFB3;           // window origin on the fine grid x, y; cells per solver cell
+uniform usampler2D uB;       // solver-cell building mask (walls — depth there is always 0)
+uniform vec2 uGrid;
 ivec3 raw(ivec2 p){ return ivec3(round(texelFetch(uEnc, clamp(p, ivec2(0), ivec2(uEncSize) - 1), 0).rgb * 255.0)); }
 float depthOf(ivec3 r){ return float((r.x << 4) | (r.y >> 4)) / 100.0; }
 vec2 velOf(ivec3 r){
@@ -33,6 +35,22 @@ float depthAt(vec2 g){                     // bilinear depth
              mix(depthOf(raw(i + ivec2(0, 1))), depthOf(raw(i + ivec2(1, 1))), t.x), t.y);
 }
 ivec3 rawAt(vec2 g){ return raw(ivec2(floor(encPos(g)))); }
+// Барилгыг тооцсон гүн (хэрэглэгч 2026-10-09: "байшингийн гадна тал хайрцаглагдаад бн"). Барилгын нүдэнд
+// (хана) гүн үргэлж 0 тул энгийн билинейр нь усыг бүтэн нэг нүдээр фасад руу аажим 0 болгож, ирмэг нь
+// нүд нүдээрээ шатлагдаж байв. Барилгын нүдэн дээрх булангуудыг холилтоос ХАСНА — ус гүнээ фасад хүртэл
+// хадгална; барилгын дотор (бүх булан хана) 0 — тэнд Esri-ийн барилгын олон өнцөгт усыг дардаг.
+float bldEnc(ivec2 i){
+  vec2 g = uWin.xy + (vec2(i) + 0.5) * (uWin.zw - uWin.xy) / uEncSize;
+  return texelFetch(uB, clamp(ivec2(floor(g)), ivec2(0), ivec2(uGrid) - 1), 0).r > 0u ? 1.0 : 0.0;
+}
+float depthAtW(vec2 g){
+  vec2 p = encPos(g) - 0.5; ivec2 i = ivec2(floor(p)); vec2 t = p - vec2(i);
+  vec4 w = vec4((1.0 - t.x) * (1.0 - t.y), t.x * (1.0 - t.y), (1.0 - t.x) * t.y, t.x * t.y);
+  w *= 1.0 - vec4(bldEnc(i), bldEnc(i + ivec2(1, 0)), bldEnc(i + ivec2(0, 1)), bldEnc(i + ivec2(1, 1)));
+  float sw = w.x + w.y + w.z + w.w;
+  if (sw <= 1e-4) return 0.0;
+  return (w.x * depthOf(raw(i)) + w.y * depthOf(raw(i + ivec2(1, 0))) + w.z * depthOf(raw(i + ivec2(0, 1))) + w.w * depthOf(raw(i + ivec2(1, 1)))) / sw;
+}
 vec2 velAt(vec2 g){                        // bilinear flow vector
   vec2 p = encPos(g) - 0.5; ivec2 i = ivec2(floor(p)); vec2 t = p - vec2(i);
   return mix(mix(velOf(raw(i)), velOf(raw(i + ivec2(1, 0))), t.x), mix(velOf(raw(i + ivec2(0, 1))), velOf(raw(i + ivec2(1, 1))), t.x), t.y);
@@ -126,63 +144,108 @@ vec2 flowAt(vec2 g){
   float w = clamp(ln * 1.5, 0.0, 1.0);        // full effect right at the facade, fading over ~20 m
   return mix(v, tang * sp, w);
 }
+// value noise with its analytic gradient (x: value, yz: d/dp) — one evaluation gives a surface normal
+vec3 vnoiseD(vec2 p){
+  vec2 i = floor(p), f = fract(p);
+  vec2 u = f * f * (3.0 - 2.0 * f), du = 6.0 * f * (1.0 - f);
+  float a = hash2(i), b = hash2(i + vec2(1, 0)), c = hash2(i + vec2(0, 1)), d = hash2(i + vec2(1, 1));
+  float k1 = b - a, k2 = c - a, k4 = a - b - c + d;
+  return vec3(a + k1 * u.x + k2 * u.y + k4 * u.x * u.y, du * vec2(k1 + k4 * u.y, k2 + k4 * u.x));
+}
+// Animated water that reads as WATER (2026-10-09, хэрэглэгч: "eniig us shig haragduulay"). The previous look
+// was an opaque turquoise sheet with big white paint-like streaks. Now:
+//  · transparent in shallow places (the ground shows through), darker and denser with depth;
+//  · the surface is a rippled height field advected along the flow (flow-map, three cross-faded layers,
+//    ripples stretched along the current), lit from a fixed sky: light/dark facets + sky reflection + sun glints;
+//  · foam only where the flow is really fast, thin and broken, plus a faint wet rim at the shore.
+// Өнгөт (гүн): Pro-гийн Flood Simulation шиг усны гадарга дээрх ЦАЛГИА (хэрэглэгч 2026-10-09, зургаар:
+// "gol ni iim tsulhentei ursah") — "Хөдөлгөөнт"-ын урсгалын дагуу зөөгдөх долгионы талбар (vnoiseD), гэхдээ
+// өнгө солихгүй, зөвхөн ГЭРЭЛТЭЛТ: гүн, хурдан усанд тод, гүехэн тогтоол усанд бараг алга.
+float rippleShade(vec2 g, float d, vec2 v){
+  vec2 m = vec2(g.x, -g.y) * uCell;
+  float px = pxSize(m);
+  float sp = length(v), flow = clamp(sp / 1.5, 0.0, 1.0);
+  float moving = smoothstep(0.02, 0.2, sp);
+  vec2 dir = sp > 0.03 ? normalize(vec2(v.x, -v.y)) : normalize(vec2(0.8, 0.6));
+  vec2 perp = vec2(-dir.y, dir.x);
+  vec2 ml = (g - uWin.xy) * vec2(1.0, -1.0) * uCell;
+  float S = max(3.0, px * 5.0);                           // Pro-гийн нарийн цалгиа: ~5 px
+  float stretch = 1.0 + 2.0 * moving;                     // долгионы НУРУУ урсгалд ХӨНДЛӨН сунана (Pro шиг)
+  float spd = mix(0.1, 0.6 + 1.2 * flow, moving) * S;
+  const float P = 2.4;
+  vec2 grad = vec2(0.0);
+  for (int layer = 0; layer < 3; layer++) {
+    float ph = fract(uTime / P + float(layer) / 3.0);
+    float wgt = sin(3.14159265 * ph); wgt *= wgt * (2.0 / 3.0);
+    vec2 q = ml - dir * spd * ph * P + float(layer) * vec2(37.1, 91.7);
+    vec2 qa = vec2(dot(q, dir), dot(q, perp) / stretch);
+    vec3 n1 = vnoiseD(qa / S);
+    vec3 n2 = vnoiseD(qa / (S * 0.45) + 7.3);
+    vec2 gq = n1.yz / S + n2.yz * 0.6 / (S * 0.45);
+    grad += wgt * (dir * gq.x + perp * gq.y / stretch);
+  }
+  float amp = S * (0.14 + 0.18 * flow);
+  vec3 N = normalize(vec3(-grad * amp, 1.0));
+  vec3 L = normalize(vec3(-0.5, 0.6, 0.62));
+  float k = smoothstep(0.15, 1.2, d) * (0.35 + 0.65 * flow);   // гүехэн, зогсонги усанд цалгиа бараг үгүй
+  // Цалгиа ЗӨВХӨН ЦАГААН гялбаа (хэрэглэгч 2026-10-09: "хар биш цагаан"): гэрэл рүү харсан нуруу л
+  // цайрна, сүүдэртэй тал нь усны өнгөө хэвээр үлдээнэ — бараан судал ОГТ гарахгүй.
+  return clamp(k * max(dot(N, L) - L.z, 0.0) * 3.0, 0.0, 0.55);
+}
 vec4 gameWater(vec2 g, float d, vec2 v, vec3 V){
   vec2 m = vec2(g.x, -g.y) * uCell;                       // mercator metres, north up
   float px = pxSize(m);                                   // metres per screen pixel
   float sp = length(v), flow = clamp(sp / 1.5, 0.0, 1.0);
-  float moving = smoothstep(0.01, 0.12, sp);              // 0 = standing pond, 1 = clearly flowing
-  vec2 dir = sp > 0.03 ? normalize(vec2(v.x, -v.y)) : vec2(1.0, 0.0);
-  float L = max(30.0, px * 38.0), Wd = L / 4.5;          // streak length / width: big, game-like strokes
-  vec3 shallow = vec3(0.30, 0.72, 0.86), mid = vec3(0.11, 0.48, 0.78), deep = vec3(0.05, 0.25, 0.56);
-  vec3 c = mix(shallow, mid, smoothstep(0.05, 0.6, d));
-  c = mix(c, deep, smoothstep(0.6, 2.5, d));
-  // Flow-map animation: two foam layers advected along the local flow, each restarting every P seconds,
-  // cross-faded half a period apart. Each foam sample is smeared along the flow -> streaks.
-  // Coordinates are local to the window (absolute mercator metres would turn small direction changes into noise).
-  vec2 ml = (g - uWin.xy) * vec2(1.0, -1.0) * uCell;
-  // Smooth flow-map animation: three foam layers, phase-shifted by a third of a period, each fading in and out
-  // with sin^2 weights (constant total), so nothing pops. Short displacement per period keeps curved channels
-  // from shearing the pattern into drawn-looking swirls.
-  float spd = 0.9 + 1.8 * flow;                           // streak lengths per second (~35-100 px/s on screen)
-  vec2 vis = dir * spd * L;
-  const float P = 2.0;
-  float streak = 0.0, band = 0.0;
+  float moving = smoothstep(0.02, 0.2, sp);               // 0 = standing pond, 1 = clearly flowing
+  vec2 dir = sp > 0.03 ? normalize(vec2(v.x, -v.y)) : normalize(vec2(0.8, 0.6));   // ponds: slow wind drift
+  vec2 perp = vec2(-dir.y, dir.x);
+  vec2 ml = (g - uWin.xy) * vec2(1.0, -1.0) * uCell;      // window-local metres (stable under small turns)
+  float S = max(4.0, px * 9.0);                           // ripple wavelength: ~9 px on screen, never sub-pixel noise
+  float stretch = 1.0 + 2.2 * moving;                     // current-drawn ripples are long along the flow
+  float spd = mix(0.12, 0.7 + 1.4 * flow, moving) * S;    // drift, metres per second
+  const float P = 2.4;
+  vec2 grad = vec2(0.0); float foamN = 0.0;
   for (int layer = 0; layer < 3; layer++) {
     float ph = fract(uTime / P + float(layer) / 3.0);
     float wgt = sin(3.14159265 * ph); wgt *= wgt * (2.0 / 3.0);        // three sin^2 bumps sum to 1
-    vec2 q = ml - vis * ph * P + float(layer) * vec2(37.1, 91.7);
-    // three taps smeared along the flow per scale (fragment cost matters: this runs for every water pixel)
-    float n1 = 0.0, n2 = 0.0;
-    for (int k = 0; k < 3; k++) {
-      n1 += vnoise((q - dir * float(k) * 0.36 * L) / (0.32 * L));
-      n2 += vnoise((q - dir * float(k) * 0.20 * L) / (0.16 * L) + 13.7);
-    }
-    streak += wgt * (0.9 * smoothstep(0.50, 0.66, n1 / 3.0) + 0.5 * smoothstep(0.54, 0.70, n2 / 3.0));
-    band += wgt * vnoise(q / (2.5 * L));
+    vec2 q = ml - dir * spd * ph * P + float(layer) * vec2(37.1, 91.7);
+    vec2 qa = vec2(dot(q, dir) / stretch, dot(q, perp));
+    vec3 n1 = vnoiseD(qa / S);
+    vec3 n2 = vnoiseD(qa / (S * 0.42) + 7.3);
+    vec2 gq = n1.yz / S + n2.yz * 0.55 / (S * 0.42);       // gradient in the stretched frame
+    grad += wgt * (dir * gq.x / stretch + perp * gq.y);
+    foamN += wgt * (0.6 * n2.x + 0.4 * n1.x);
   }
-  streak *= moving * mix(0.85, 1.0, flow);
-  c *= 1.0 + 0.4 * (band - 0.5) * moving;               // broad light/dark patches sliding downstream
-  // standing water: slowly drifting ripples
-  float rip = smoothstep(0.66, 0.88, vnoise(m / max(6.0, px * 5.0) + vec2(uTime * 0.45, uTime * 0.31))) * (1.0 - moving);
-  float rim = 1.0 - smoothstep(uThr, uThr + 0.08, d);   // thin water at the edge
-  float shore = rim * (0.2 + 0.25 * vnoise(m / max(3.0, px * 3.0) + uTime * 0.5));
-  c = mix(c, vec3(1.0), clamp(streak * 0.85 + rip * 0.25 + shore * 0.5, 0.0, 1.0));
-  c = mix(c, deep * 0.8, rim * 0.35);                    // darker rim keeps the outline readable on light maps
-  float F = 0.02 + 0.98 * pow(1.0 - clamp(V.z, 0.0, 1.0), 5.0);   // a little sky at grazing angles (3D)
-  c = mix(c, vec3(0.80, 0.92, 1.0), F * 0.35);
-  if (gPx > 0.0) {
-    // 3D: ripple normal advected with the flow -> moving sun glints and light/dark facets
-    vec2 rq = ml - vis * fract(uTime / P) * P;
-    float e = 0.18 * L;
-    float h0 = vnoise(rq / (0.9 * L)), hx = vnoise((rq + vec2(e, 0.0)) / (0.9 * L)), hy = vnoise((rq + vec2(0.0, e)) / (0.9 * L));
-    vec3 N = normalize(vec3(-(hx - h0), -(hy - h0), 0.6 + 0.4 * (1.0 - moving)));
-    vec3 Hh = normalize(normalize(uSun) + V);
-    float spec = pow(max(dot(N, Hh), 0.0), 24.0) * 0.35 * moving;
-    float shade = 0.88 + 0.24 * dot(N, normalize(vec3(0.3, -0.4, 0.85)));
-    c = c * shade + spec * vec3(1.0, 0.97, 0.9);
-  }
-  float al = smoothstep(uThr, uThr * 1.5 + 0.01, d) * mix(0.92, 0.98, clamp(d / 0.5, 0.0, 1.0)) * max(uOpacity, 0.9);
-  return vec4(min(c, 1.0) * al, al);
+  float amp = S * (0.10 + 0.14 * flow + 0.06 * (1.0 - moving));
+  vec3 N = normalize(vec3(-grad * amp, 1.0));
+  // body colour: absorption with depth (a little silt in shallow flood water)
+  vec3 shallow = vec3(0.34, 0.50, 0.50), mid = vec3(0.12, 0.33, 0.42), deep = vec3(0.04, 0.15, 0.27);
+  vec3 body = mix(shallow, mid, smoothstep(0.05, 0.7, d));
+  body = mix(body, deep, smoothstep(0.7, 2.5, d));
+  // sky: zenith blue-grey, brighter towards the horizon; the tilted ripples reflect different parts of it
+  vec3 R = reflect(-V, N);
+  vec3 sky = mix(vec3(0.80, 0.86, 0.90), vec3(0.46, 0.60, 0.74), clamp(R.z, 0.0, 1.0));
+  float F = 0.06 + 0.94 * pow(1.0 - clamp(dot(N, V), 0.0, 1.0), 5.0);
+  F = clamp(F * 2.2 + 0.08, 0.0, 0.75);                   // top-down views need more reflection to read as a surface
+  vec3 c = mix(body, sky, F);
+  float facet = dot(N, normalize(vec3(-0.45, 0.55, 0.70)));
+  c *= 0.86 + 0.28 * facet;                               // light / dark ripple facets
+  vec3 L = normalize(vec3(0.42, 0.30, 0.86));            // fixed sun: glints sparkle on ripple crests
+  vec3 H = normalize(L + V);
+  float spec = pow(max(dot(N, H), 0.0), 220.0) * (0.9 + 0.8 * flow);
+  // foam: only fast water, broken streaks along the current; a faint lighter line at the shore
+  float fast = smoothstep(0.9, 2.6, sp);
+  float foam = fast * smoothstep(0.60, 0.80, foamN);
+  float rim = 1.0 - smoothstep(uThr, uThr + 0.10, d);
+  float shore = rim * 0.35 * smoothstep(0.45, 0.75, vnoise(m / max(2.0, px * 2.5) + uTime * 0.3));
+  c = mix(c, vec3(0.93, 0.95, 0.95), clamp(foam * 0.7 + shore, 0.0, 1.0));
+  if (gPx > 0.0) c = mix(c, sky, F * 0.25);               // 3D: a little more sky at grazing angles
+  // transparency: thin water lets the ground through, deep water hides it
+  float al = smoothstep(uThr, uThr + 0.04, d) * mix(0.16, 0.92, smoothstep(0.03, 1.2, d));   // ТУРШИЛТ: нимгэн ус бараг тунгалаг
+  al = max(al, foam * 0.85 * step(uThr, d));
+  al *= max(uOpacity, 0.9);
+  vec3 glint = spec * vec3(1.0, 0.97, 0.90) * smoothstep(uThr, uThr + 0.04, d);
+  return vec4(min(c * al + glint, 1.0), min(al + spec * 0.5, 1.0));
 }
 // premultiplied water colour at grid position g (alpha 0 = dry); V = direction to the viewer
 vec4 waterBody(vec2 g, vec3 V);
@@ -200,7 +263,8 @@ vec4 arrowAt(vec2 g){
   if (sp < 0.05) return vec4(0.0);
   vec2 dir = vec2(v.x, -v.y) / sp, perp = vec2(-dir.y, dir.x);
   float k = clamp(sp / 2.0, 0.0, 1.0);
-  float len = T * mix(0.24, 0.40, k), head = T * 0.13, hw = T * 0.09, w = T * 0.025;
+  // жижиг сум (хэрэглэгч 2026-10-09: "chiglel zaaj bui sumiig jijighen bolgo") — зай нь хэвээр
+  float len = T * mix(0.14, 0.22, k), head = T * 0.075, hw = T * 0.05, w = T * 0.016;
   vec2 lp = ml - cm;                                        // steady: motion is shown by the water itself
   float a = dot(lp, dir), c = abs(dot(lp, perp));
   float tip = len * 0.5, base = tip - head;
@@ -220,23 +284,31 @@ vec4 withArrows(vec4 w, vec2 g){
   return a + w * (1.0 - a.a);
 }
 vec4 water(vec2 g, vec3 V){
-  vec4 w = withArrows(waterBody(g, V), g);
-  if (uFB3.z > 0.0) w *= 1.0 - smoothstep(0.35, 0.65, bldMask(g));
-  return w;
+  // 10 м-ийн растераар хайчлахаа больсон (хэрэглэгч 2026-10-09): растерын ирмэг барилгын бодит хил
+  // (Esri-ийн олон өнцөгт) -ээс 10 м хүртэл зөрж ус барилгын гадна шатлагдсан хайрцаг болдог байв.
+  // Барилгын олон өнцөгт усны ДЭЭР (2D: buildings2d давхарга, 3D: өргөсөн бие) зурагддаг тул дотор нь далдлагдана.
+  return withArrows(waterBody(g, V), g);
 }
 vec4 waterBody(vec2 g, vec3 V){
   if (!inWin(g)) return vec4(0.0);
-  float d = depthAt(g);
+  float d = depthAtW(g);
   if (d <= uThr) return vec4(0.0);
   ivec3 r = rawAt(g);
   if (uStyle == 1 && uMode == 0) return realWater(g, d, velOf(r), V);
   if (uStyle == 2 && uMode == 0) return gameWater(g, d, flowAt(g), V);
   vec3 c;
   if (uMode == 0 || uMode == 3) c = depthCol(d);
+  // цагаан цалгиа — хурд нь БИЛИНЕЙР (flowAt): нүд тутмын хурд (velOf) авахад цалгианы чиглэл,
+  // далайц нүд бүрд огцом солигдож ус дөрвөлжин дөрвөлжин харагдаж байв (хэрэглэгч 2026-10-09, 3D зургаар)
+  if (uStyle == 0 && uMode == 0) c = mix(c, vec3(1.0), rippleShade(g, d, flowAt(g)));
   else if (uMode == 1) c = speedCol(length(velOf(r)));
   else if (uMode == 2) c = hazardCol(d * (length(velOf(r)) + 0.5) + (d > 0.75 ? 1.0 : d > 0.25 ? 0.5 : 0.0));
   else { float a = arrOf(r); if (a >= 4095.0) return vec4(0.0); c = timeCol(a); }
-  float al = smoothstep(uThr, uThr * 2.0 + 0.02, d) * mix(0.62, 0.92, clamp(d / 1.5, 0.0, 1.0)) * uOpacity;
+  // Өнгөт (гүн): Pro-гийн Flood Simulation шиг ТУНГАЛАГ — доорх суурь зураг (гудамж, байшин) харагдана,
+  // нимгэн ус 25 см-д аажим бүдгэрнэ; гүн рүү тунгалаг бус болно. Бусад горим хуучин нягтаараа.
+  float al = (uStyle == 0 && uMode == 0)
+    ? smoothstep(uThr, uThr + 0.25, d) * mix(0.42, 0.82, clamp(d / 2.0, 0.0, 1.0)) * uOpacity
+    : smoothstep(uThr, uThr * 2.0 + 0.02, d) * mix(0.62, 0.92, clamp(d / 1.5, 0.0, 1.0)) * uOpacity;
   return vec4(c * al, al);
 }
 `;
@@ -256,11 +328,11 @@ void main(){
   gl_Position = vec4(local * uXf.xy + uXf.zw, 0.0, 1.0);
 }`;
 const FS_2D = HEAD + '#define FRAG' + String.fromCharCode(10) + DECODE + `
-uniform sampler2D uG; uniform usampler2D uB;
+uniform sampler2D uG;
 uniform float uHill, uBld, uDx;
-uniform vec2 uGrid;
 in vec2 vG; out vec4 o;
 float Gz(ivec2 c){ return texelFetch(uG, clamp(c, ivec2(0), ivec2(uGrid) - 1), 0).r; }
+float S(ivec2 c){ return Gz(c) + depthAtW(vec2(c) + 0.5); }   // усны гадаргын өндөр
 void over(inout vec4 dst, vec4 src){ dst = src + dst * (1.0 - src.a); }
 void main(){
   ivec2 c = ivec2(floor(vG));
@@ -272,7 +344,16 @@ void main(){
     over(col, vec4(vec3(l) * uHill, uHill));
   }
   if (uBld > 0.0 && texelFetch(uB, clamp(c, ivec2(0), ivec2(uGrid) - 1), 0).r > 0u) over(col, vec4(vec3(0.95, 0.55, 0.2) * 0.5, 0.5));
-  over(col, water(vG, vec3(0.0, 0.0, 1.0)));
+  vec4 w = water(vG, vec3(0.0, 0.0, 1.0));
+  // Өнгөт (гүн): усны ГАДАРГЫГ (газар + гүн) гэрэлтүүлнэ — Pro-гийн зураг шиг гүехэн газарт арал, эрэг
+  // сүүдэрлэж, тэгш гүн ус жигд үлдэнэ (хэрэглэгч 2026-10-09: "pro deer sain harwal 3dahi zurag shig").
+  if (uStyle == 0 && uMode == 0 && w.a > 0.001) {
+    float sl = S(c - ivec2(1, 0)) - S(c + ivec2(1, 0)), st = S(c + ivec2(0, 1)) - S(c - ivec2(0, 1));
+    vec3 n = normalize(vec3(sl * 1.5 / (2.0 * uDx), st * 1.5 / (2.0 * uDx), 1.0));
+    float k = clamp(dot(n, normalize(vec3(-0.6, 0.6, 0.55))), 0.0, 1.0) / 0.545;   // 1 = тэгш гадарга
+    w.rgb *= clamp(0.35 + 0.65 * k, 0.3, 1.12);
+  }
+  over(col, w);
   o = col;
 }`;
 
@@ -282,13 +363,13 @@ layout(location = 0) in vec2 aUV;   // indexed draws need a real attribute (gl_V
 uniform mat4 uMVP;
 uniform vec3 uEyeV;
 uniform vec3 uMesh;          // origin x, y (grid cells, aligned to the vertex spacing), span (cells)
-uniform sampler2D uG; uniform vec2 uGrid;
+uniform sampler2D uG;
 out vec2 vG; out vec3 vW;
 void main(){
   // vertices sit on fixed grid lines (power-of-two spacing), so they don't slide over the terrain as the view moves
   vG = uMesh.xy + aUV * uMesh.z;
   vec2 gz = texelFetch(uG, clamp(ivec2(vG), ivec2(0), ivec2(uGrid) - 1), 0).rg;   // burned, natural ground
-  float d = depthOf(rawAt(vG));
+  float d = depthAtW(vG);              // барилгыг тооцсон — хана руу уруудахгүй
   // water in a carved channel is drawn at bank level (the 3D terrain has no trench), and lifted slightly
   // with camera distance so coarse terrain tiles don't cover it
   vec3 w = vec3(vG.x * uCell, -vG.y * uCell, max(gz.x + d, gz.y));
@@ -312,24 +393,23 @@ uniform sampler2D uPs; uniform float uVisDt, uDx, uSeed;
 out vec4 o;
 float hash(vec2 p){ p = fract(p * vec2(443.897, 441.423)); p += dot(p, p.yx + 19.19); return fract((p.x + p.y) * p.x); }
 vec2 vel(vec2 g){ if (!inWin(g)) return vec2(1e9); ivec3 r = rawAt(g); if (depthOf(r) < uThr) return vec2(1e9); return velOf(r); }
+// Density is uniform over the screen, as in FlowRenderer: a tracer reborn at a random spot lives out its
+// lifetime even where that spot is dry (invisible, not moving). Respawning only on wet cells packed all
+// tracers into the few wet channels and painted them solid white.
 void main(){
   vec4 p = texelFetch(uPs, ivec2(gl_FragCoord.xy), 0);
-  vec2 v = vel(p.xy);
-  bool dead = v.x > 1e8 || p.z > p.w || length(v) < 0.05;
-  if (!dead) { p.xy += v / uDx * uVisDt; p.z += 1.0; }
-  else {
-    p.z = p.w + 1.0;
-    for (int k = 0; k < 6; k++) {
-      vec2 r = vec2(hash(gl_FragCoord.xy + uSeed + float(k) * 7.31), hash(gl_FragCoord.yx * 1.7 + uSeed * 1.3 + float(k)));
-      vec2 np = mix(uWin.xy, uWin.zw, r);
-      vec2 nv = vel(np);
-      if (nv.x < 1e8 && length(nv) > 0.05) { p.xy = np; p.z = 0.0; p.w = 40.0 + 80.0 * hash(r * 91.7); break; }
-    }
+  if (p.z > p.w) {
+    vec2 r = vec2(hash(gl_FragCoord.xy + uSeed), hash(gl_FragCoord.yx * 1.7 + uSeed * 1.3));
+    p = vec4(mix(uWin.xy, uWin.zw, r), 0.0, 24.0 + 36.0 * hash(r * 91.7));
+  } else {
+    vec2 v = vel(p.xy);
+    if (v.x < 1e8 && length(v) >= 0.05) p.xy += v / uDx * uVisDt;
+    p.z += 1.0;
   }
   o = p;
 }`;
 const VS_PART = HEAD + DECODE + `
-uniform sampler2D uPs, uG; uniform vec2 uGrid;
+uniform sampler2D uPs, uG;
 uniform int uPN, uIs3D; uniform float uDx, uTail;
 uniform vec4 uXf; uniform mat4 uMVP;
 out float vA;
@@ -341,8 +421,9 @@ void main(){
   vec2 v = velOf(r);
   bool alive = p.z <= p.w && d > uThr && inWin(p.xy);
   vec2 g = p.xy - (end == 1 ? v / uDx * uTail : vec2(0.0));
-  float fade = min(p.z / 8.0, 1.0) * min((p.w - p.z) / 8.0, 1.0);
-  vA = alive ? (end == 0 ? 0.6 : 0.0) * fade * clamp(length(v) * 1.5, 0.25, 1.0) : 0.0;
+  float fade = min(p.z / 6.0, 1.0) * min((p.w - p.z) / 6.0, 1.0);
+  // FlowRenderer-like streamline: bright head fading to nothing along the trail, faint where the water is slow
+  vA = alive ? (end == 0 ? 0.22 : 0.0) * fade * clamp(length(v) * 1.2, 0.15, 1.0) : 0.0;
   vec2 local = vec2(g.x, -g.y) * uCell;
   if (!alive) gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
   else if (uIs3D == 1) {
@@ -367,7 +448,7 @@ export class WaterRenderer {
     this.vao = gl.createVertexArray();
     this.slots = {};          // packed windows: 'main' (whole view), 'near' (3D, around the camera target)
     this.meshes = {};
-    this.PN = 128;
+    this.PN = 48;             // ТУРШИЛТ: 2,304 tracers (9,216 нь нарийн сувагт цагаан зурвас болж байв)
     this._cleanUnpack();
     this.parts = [0, 1].map(() => {
       const t = this._tex();
@@ -477,7 +558,7 @@ export class WaterRenderer {
     gl.bindVertexArray(this.vao);
     gl.disable(gl.BLEND); gl.disable(gl.DEPTH_TEST);
     gl.useProgram(pr.p);
-    this._common(pr, { ...d, thr: Math.max(d.thr, 0.08) }, slot);
+    this._common(pr, { ...d, thr: Math.max(d.thr, 0.04) }, slot);
     gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, this.parts[a].t); gl.uniform1i(pr.u.uPs, 1);
     gl.uniform1f(pr.u.uVisDt, visDt);
     gl.uniform1f(pr.u.uDx, this.grid.dx);
@@ -578,13 +659,13 @@ export class WaterRenderer {
   _drawParticles(d, is3D, xf, mvp) {
     const gl = this.gl, pr = this.pPart;
     gl.useProgram(pr.p);
-    this._common(pr, { ...d, thr: Math.max(d.thr, 0.08) }, this.partSlot || 'main');
+    this._common(pr, { ...d, thr: Math.max(d.thr, 0.04) }, this.partSlot || 'main');
     gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, this.parts[this.pi].t); gl.uniform1i(pr.u.uPs, 1);
     this._gridTex(pr, 2, 3);
     gl.uniform1i(pr.u.uPN, this.PN);
     gl.uniform1i(pr.u.uIs3D, is3D);
     gl.uniform1f(pr.u.uDx, this.grid.dx);
-    gl.uniform1f(pr.u.uTail, d.visDt * 5);
+    gl.uniform1f(pr.u.uTail, d.visDt * 6);    // trail = ~6 frames of motion (FlowRenderer trailLength)
     gl.uniform1f(pr.u.uCell, this.grid.cellMerc);
     gl.uniform4fv(pr.u.uXf, xf);
     gl.uniformMatrix4fv(pr.u.uMVP, false, mvp || new Float32Array(16));

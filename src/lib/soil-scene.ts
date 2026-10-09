@@ -101,6 +101,19 @@ export type SoilScene = {
   legend: () => { key: string; label: string; swatch: string }[];
   /** Хөрсний хэв шинжийн хуулга */
   soils: () => { key: string; name: string; wrb: string; color: string }[];
+  /**
+   * Блокийн геометр — дуудагчийн нэмэлт давхарга (`layers`) блок дээр яг
+   * суухад: `zAt` дээд гадаргын өндөр (м), `validAt` хөрстэй цэг эсэх,
+   * `exs` см → м-ийн өсгөлт (×8), `mLon`/`mLat` градус → метр.
+   */
+  geom: {
+    zAt: (lon: number, lat: number) => number;
+    validAt: (lon: number, lat: number) => boolean;
+    exs: () => number;
+    mLon: number;
+    mLat: number;
+    SR: object;
+  };
 };
 
 /* SDK нь энд төрөлгүй (CDN-ээс AMD-ээр ачаалагддаг) тул зөвхөн
@@ -155,8 +168,28 @@ export async function createSoilScene(opts: {
    * ИНДЕКС (`latrine-sim.bin`-ийн дараалал; давхаргын `oid` = индекс + 1)
    */
   onLatrine: (i: number) => void;
+  /**
+   * Зүсэлт дээрх жорлонгийн бохирдол ({@link createPlumes}) тооцогдох эсэх —
+   * анхдагч `true`. "Үер ба нэвчилт" харагдац `false` өгнө: тэнд зүсэлтийн
+   * нүүрэнд ҮЕРИЙН усаар зөөгдсөн бохирдол зурагдах тул 10 жилийн
+   * жорлонгийн тархалт давхарлавал хоёр өөр хугацааны зураг холилдоно.
+   */
+  plumes?: boolean;
+  /**
+   * Шулуун зүсэлт тогтох, хөдлөх, тал нь солигдох, арилах бүрд: `a`, `b`
+   * шугамын үзүүр, `rem` — хасагдсан (харагч) талын азимут. Зурсан талбайд `null`.
+   */
+  onCut?: (c: { a: [number, number]; b: [number, number]; rem: number } | null) => void;
+  /**
+   * Дуудагчийн нэмэлт давхаргууд — газрын зурагт орж, огтлолтоос
+   * ЧӨЛӨӨЛӨГДӨНӨ (таглаатай адил). Үерийн ус, бохирдлын хөшиг энд.
+   */
+  layers?: unknown[];
 }): Promise<SoilScene> {
   const { container, data, onPick, onNote, onSection, onPlumes, onLatrine, onScale } = opts;
+  const PLUMES = opts.plumes !== false;
+  const onCut = opts.onCut ?? (() => {});
+  const extraL = opts.layers ?? [];
   /* Фото хавтанцар (жишиг зургийн бүтэц) — байхгүй бол бүтэц бүхэлдээ датаас */
   const photos = await loadSoilTiles();
   const [EsriMap, SceneView, GraphicsLayer, Graphic, Mesh, MeshComponent, MeshMaterial, MeshTexture,
@@ -592,7 +625,7 @@ export async function createSoilScene(opts: {
   const plumeL = new GraphicsLayer({ title: "Бохирдол", elevationInfo: { mode: "absolute-height" } });
   /** Зурсан талбайн бохирдлыг харуулах үеийн блокийн тунгалаг (`onState`) */
   const GHOST = 0.42;
-  const map = new EsriMap({ basemap: "satellite", ground: "world-elevation", layers: [blockL, floorL, capL, plumeL, markL, lineL] }) as {
+  const map = new EsriMap({ basemap: "satellite", ground: "world-elevation", layers: [blockL, floorL, capL, plumeL, ...extraL, markL, lineL] }) as {
     ground: { opacity: number; navigationConstraint: { type: string } };
     add: (l: unknown) => void;
     remove: (l: unknown) => void;
@@ -1284,6 +1317,7 @@ export async function createSoilScene(opts: {
     cutLine = null;
     onSection(null);
     plumes.clear();
+    onCut(null);
     updateCap();
   }
   function setClip(P: Pt[] | null) {
@@ -1296,7 +1330,7 @@ export async function createSoilScene(opts: {
     applyClip();
     /* ⚠ Зурсан талбайн хана бүр зүсэлт шиг — ханын дагуух жорлонгийн
        бохирдол нүүрэнд, гүний ус хүртэл доор нь ({@link createPlumes}) */
-    if (P) plumes.setRing(P);
+    if (P && PLUMES) plumes.setRing(P);
     else plumes.clear();
     sync();
   }
@@ -1326,6 +1360,7 @@ export async function createSoilScene(opts: {
     n.heading = (sh.heading + 180) % 360;
     slice.shape = n as unknown as Obj;
     plumes.setSide((n.heading + 180) % 360);
+    if (cutLine) onCut({ a: cutLine.a, b: cutLine.b, rem: (n.heading + 180) % 360 });
   });
   clearBtn.addEventListener("click", () => {
     clearCut();
@@ -1872,7 +1907,7 @@ export async function createSoilScene(opts: {
     const a = analysisOf();
     if (!a || a === excluded) return a;
     excluded = a;
-    a.excludedLayers = [capL, markL, lineL, floorL, plumeL];
+    a.excludedLayers = [capL, markL, lineL, floorL, plumeL, ...extraL];
     return a;
   };
   keepCap();
@@ -2095,7 +2130,12 @@ export async function createSoilScene(opts: {
   });
   function plumeCut() {
     const heading = (slice.shape as { heading: number } | null)?.heading;
-    if (!cutLine || heading == null) return plumes.clear();
+    if (!cutLine || heading == null) {
+      onCut(null);
+      return plumes.clear();
+    }
+    onCut({ a: cutLine.a, b: cutLine.b, rem: (heading + 180) % 360 });
+    if (!PLUMES) return plumes.clear();
     plumes.setCut(cutLine.a, cutLine.b, (heading + 180) % 360);
   }
 
@@ -2826,6 +2866,7 @@ export async function createSoilScene(opts: {
       view.destroy();
     },
     pickAt: (lon, lat) => showProfile(lon, lat, null),
+    geom: { zAt, validAt, exs, mLon, mLat, SR },
     setPlumeTime: (i) => plumes.setTime(i),
     setPlumeSpecies: (s) => plumes.setSpecies(s),
     legend: () => keys.map((k) => ({ key: k, label: HCLS[k].label, swatch: TEXCV[k].toDataURL() })),

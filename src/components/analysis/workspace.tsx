@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import dynamic from "next/dynamic";
-import { Box, Grid3x3, Loader2, Waves } from "lucide-react";
+import { Box, Droplets, Loader2, Waves } from "lucide-react";
 import { useStoredTab } from "@/components/ui/source-tabs";
 import { cn } from "@/lib/utils";
 
@@ -10,14 +10,6 @@ const spinner = () => (
   <div className="flex h-full items-center justify-center rounded-xs border border-line bg-paper-2">
     <Loader2 size={16} className="animate-spin text-ink-3" />
   </div>
-);
-
-const LatrineAnalysis = dynamic(
-  () =>
-    import("@/components/analysis/latrine-dashboard").then(
-      (m) => m.LatrineAnalysis,
-    ),
-  { ssr: false, loading: spinner },
 );
 
 const FloodView = dynamic(
@@ -30,26 +22,33 @@ const SoilScene = dynamic(
   { ssr: false, loading: spinner },
 );
 
+const FloodSoilView = dynamic(
+  () => import("@/components/analysis/flood-soil").then((m) => m.FloodSoilView),
+  { ssr: false, loading: spinner },
+);
+
 /*
-  ⚠⚠ ХАРАГДАЦУУД НЭГ СУДАЛГААНЫ ӨӨР МАСШТАБУУД, тусдаа сэдэв БИШ.
+  ⚠⚠ "ХОТЫН ТАРХАЛТ" ЦЭС КОДТОЙГОО УСТГАГДСАН (хэрэглэгчийн шийдвэр,
+  2026-10-09: "ene dotorh medeelliig del mun codes bas tsewerle").
+  Тэр нь 145,462 нүхэн жорлонгийн азотын урсац/нэвчилтийг ~400 м-ийн
+  зургаан өнцөгт торонд нэгтгэсэн харагдац байв: `latrine-dashboard.tsx`,
+  `lib/latrine-analysis.ts`, `scripts/build-latrine-analysis.mjs`,
+  `public/data/latrine-analysis.json` устсан (git түүхэнд бий).
+  `analysis/ui` (Card, Field, Stat) ХЭВЭЭР — хөрсний зүсэлт, симуляци
+  хэрэглэнэ. Хадгалсан "analysis.view = city" нь анхдагч руу буцна.
 
-  "Хотын тархалт" нь БҮХ нүхэн жорлонг (145,462) ~400 метрийн торонд
-  нэгтгэж, азот хаашаа явахыг хэлнэ — хажуу тийш урсах уу, доошоо
-  угаагдах уу. "Хөрсний зүсэлт" нь ХӨРС ӨӨРИЙГ нь: хотын хөрсний
-  зураглалын нэгж бүрийн жишиг профайлыг рельеф дээр блок болгож
-  босгоод, дурын азимутаар зүсэж үе давхаргуудыг дотроос нь харуулна.
-  Нэвчилт хаана хэр хурдан болохыг тайлбарлах зүйл нь ЯГ тэр бүтэц:
-  шохойн хуримтлал, глей, мөнх цэвдэг, суурь чулуулгийн гүн.
-
-  ⚠ Эрэмбэ нь МАСШТАБААР: хот даяарх хуримтлал → хөрсний өөрийн
-  гурван хэмжээст бүтэц.
+  "Хөрсний зүсэлт" нь ХӨРС ӨӨРИЙГ нь: хотын хөрсний зураглалын нэгж
+  бүрийн жишиг профайлыг рельеф дээр блок болгож босгоод, дурын
+  азимутаар зүсэж үе давхаргуудыг дотроос нь харуулна. Нэвчилт хаана
+  хэр хурдан болохыг тайлбарлах зүйл нь ЯГ тэр бүтэц: шохойн хуримтлал,
+  глей, мөнх цэвдэг, суурь чулуулгийн гүн.
 
   ⚠⚠ "НЭВЧИЛТИЙН СИМУЛЯЦИ" ТУСДАА ЦЭС БИШ БОЛСОН (хэрэглэгч 2026-10-01:
   "newchiltiin simulationg … niiluuley"). Нэг жорлонгийн нүхний 3D нь
   "Хөрсний зүсэлт"-ийн дотор: блок дээр жорлон товшиход зураг
   симуляцаар солигдож, буцахад хөрсний зүсэлт байрандаа
   ({@link src/components/analysis/latrine-sim.tsx}). Хуучин
-  "analysis.view = sim" хадгалсан хэрэглэгч "Хотын тархалт" руу буцна.
+  "analysis.view = sim" хадгалсан хэрэглэгч анхдагч руу буцна.
 
   ⚠⚠ "НЭВЧИЛТИЙН ЗҮСЭЛТ" ЦЭС КОДТОЙГОО УСТГАГДСАН (хэрэглэгчийн
   шийдвэр, 2026-10-01). Чингэлтэйн 2.1 × 2.1 км voxel загварын хавтгай
@@ -69,23 +68,17 @@ const SoilScene = dynamic(
   medeelelee del hii uur hun hiij bgaa uur branch deer") — үерийг өөр хүн
   тусдаа салаа дээр хийж байна. git-д ороогүй байсан тул түүхэнд ч алга.
   ✅ 2026-10-08-нд тэр хүний апп ("Flood_envi", 2D гүехэн усны GPU загвар,
-  10–30 м тор) "Үерийн симуляци" товчоор iframe-ээр буцаж орсон
-  ({@link src/components/analysis/flood-view.tsx}).
+  10–30 м тор) "Үерийн симуляци" товчоор буцаж орсон — 2026-10-09-нөөс
+  iframe биш, платформын код (`lib/flood/`,
+  {@link src/components/analysis/flood-view.tsx}).
 
   ⚠ Сонгоогүй харагдац УНТАРНА (`dynamic` + нөхцөлт зурагдалт):
   нуусан контейнерт MapLibre хэмжээгээ алддаг бөгөөд хоёр дахь
   харагдацын 1.6 МБ багц дэмий татагдана.
 */
 const VIEWS = [
-  {
-    id: "city",
-    label: "Хотын тархалт",
-    note: "145,462 жорлон · хоёр зам",
-    icon: Grid3x3,
-  },
-  /* ⚠ Үер нь "Хотын тархалт"-ын ДАРАА (хэрэглэгч 2026-10-08: "eneni ard
-     shine button"). Апп нь `public/flood/`-д, iframe-ээр
-     ({@link src/components/analysis/flood-view.tsx}). */
+  /* ⚠ Үер эхэнд — "Хотын тархалт" устсан тул анхдагч харагдац (2026-10-09).
+     Апп нь `lib/flood/` ба {@link src/components/analysis/flood-view.tsx}. */
   {
     id: "flood",
     label: "Үерийн симуляци",
@@ -98,6 +91,16 @@ const VIEWS = [
     note: "Үе давхарга · дурын азимут",
     icon: Box,
   },
+  /* ⚠ Гурав дахь харагдац (хэрэглэгч 2026-10-09): дээрх хоёрыг ХОЛБОНО —
+     хөрсний блок дээр үерийн ус, зүсэлтийн нүүрэнд бохирдлын шингээлт
+     ({@link src/components/analysis/flood-soil.tsx}, `lib/soil-flood.ts`).
+     Эхний хоёр харагдац хөндөгдөөгүй. */
+  {
+    id: "floodsoil",
+    label: "Үер ба нэвчилт",
+    note: "Үерийн ус хөрсний блок дээр · шингээлт",
+    icon: Droplets,
+  },
 ] as const;
 
 type ViewId = (typeof VIEWS)[number]["id"];
@@ -105,7 +108,7 @@ type ViewId = (typeof VIEWS)[number]["id"];
 const IDS = VIEWS.map((v) => v.id);
 
 export function AnalysisWorkspace() {
-  const [view, pick] = useStoredTab<ViewId>("analysis.view", IDS, "city");
+  const [view, pick] = useStoredTab<ViewId>("analysis.view", IDS, "flood");
 
   return (
     <div
@@ -154,9 +157,9 @@ export function AnalysisWorkspace() {
       </div>
 
       <div className="min-h-0 flex-1">
-        {view === "city" ? <LatrineAnalysis /> : null}
         {view === "flood" ? <FloodView /> : null}
         {view === "soil" ? <SoilScene /> : null}
+        {view === "floodsoil" ? <FloodSoilView /> : null}
       </div>
     </div>
   );

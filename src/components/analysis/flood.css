@@ -1,0 +1,358 @@
+/* ---------------------------------------------------------------------------
+   ҮЕРИЙН СИМУЛЯЦИ — АППЫН ЗАГВАР (2026-10-09-нд iframe-ээс хөрвүүлсэн)
+
+   ⚠⚠ БҮХ дүрэм `.flood-app`-аар хязгаарлагдсан: апп платформын хуудсан дотор
+   шууд суудаг тул `.panel`, `.card`, `.btn`, `.legend` зэрэг ерөнхий нэр
+   платформын бусад хэсэгт ХАЛИХ ёсгүй. Шинэ дүрэм нэмэхдээ угтварыг мартахгүй.
+   ⚠ Анимацийн нэр `flood-spin`, `flood-pulse` — Tailwind-ийн `spin`, `pulse`-тэй
+   ижил нэртэй бол аль нэг нь нөгөөгөө дарна.
+   ⚠ Өнгөний хувьсагч `.flood-app` дээр (платформын `--line` тунгалаг бөгөөд
+   диаграм canvas-д хатуу hex хэрэгтэй) — `lib/flood/chart.js` canvas-аас уншина.
+   Гэрэл горим нь платформын `:root[data-theme="light"]`-ийг дагана.
+   ⚠ Платформын дизайн дүрэм (сүүдэр, булан, фонт) энд ХАМААРАХГҮЙ — өөр хүний
+   бүтээл, хэрэглэгчийн шийдвэрээр загвар нь хэвээр.
+   --------------------------------------------------------------------------- */
+
+.flood-app {
+  /* ⚠ Дэвсгэр, зураас нь ПЛАТФОРМЫН токен (src/app/globals.css, харанхуй):
+     paper #0c1719 · paper-2 #142427 · paper-3 #102023. Зураас нь
+     платформын line/line-2-ийг (#cbd5e1-ийн 13 / 24%) paper-2 дээр
+     хольсон ХАТУУ hex — диаграм (chart.js) canvas-д уншдаг тул
+     color-mix хэрэглэхгүй. (хэрэглэгч 2026-10-08) */
+  --bg: #0c1719;
+  --panel: #0c1719;
+  --card: #142427;
+  --field: #102023;
+  --line: #2c3b3f;
+  --line2: #404f54;
+  --text: #e2eaf2;
+  --muted: #8797a8;
+  --accent: #4fd1e6;
+  --accent-ink: #04232a;
+  --accent-soft: rgba(79, 209, 230, .14);
+  --rain: #93a9ff;
+  --warn: #ffb547;
+  --danger: #ff6b6b;
+  --speed: #c792ff;
+  --glass: rgba(20, 36, 39, .9);
+  --shadow: 0 6px 24px rgba(0, 0, 0, .35);
+  color-scheme: dark;
+}
+:root[data-theme="light"] .flood-app {
+  /* платформын гэрэл горим: paper #f6f7f2 · paper-2 #fff · paper-3 #eef0e7 */
+  --bg: #f6f7f2;
+  --panel: #f6f7f2;
+  --card: #ffffff;
+  --field: #eef0e7;
+  --line: #e0e1e4;
+  --line2: #c4c7cc;
+  --text: #15212d;
+  --muted: #5b6b7c;
+  --accent: #0a93ad;
+  --accent-ink: #ffffff;
+  --accent-soft: rgba(10, 147, 173, .1);
+  --rain: #4f6bdb;
+  --warn: #d9860b;
+  --danger: #d33c3c;
+  --speed: #8a4fd6;
+  --glass: rgba(255, 255, 255, .92);
+  --shadow: 0 6px 22px rgba(20, 40, 60, .14);
+  color-scheme: light;
+}
+
+.flood-app * { box-sizing: border-box; }
+.flood-app [hidden] { display: none !important; }
+.flood-app { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+  font: 13px/1.45 Inter, system-ui, -apple-system, "Segoe UI", sans-serif; -webkit-font-smoothing: antialiased; }
+.flood-app button, .flood-app input, .flood-app select { font: inherit; color: inherit; }
+.flood-app { display: grid; grid-template-columns: 340px minmax(0, 1fr) 340px; height: 100%; }
+
+/* ---------- side panels ---------- */
+.flood-app .panel { background: var(--panel); display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.flood-app .panel.left { border-right: 1px solid var(--line); }
+.flood-app .panel.right { border-left: 1px solid var(--line); }
+.flood-app .scroll { flex: 1; overflow-y: auto; overflow-x: hidden; padding: 12px; display: flex; flex-direction: column; gap: 10px;
+  scrollbar-width: thin; scrollbar-color: var(--line2) transparent; }
+.flood-app .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px; min-width: 0; }
+.flood-app h2 { font-size: 11px; text-transform: uppercase; letter-spacing: 1.1px; color: var(--muted); margin: 0 0 12px;
+  display: flex; align-items: center; gap: 8px; font-weight: 600; }
+.flood-app .num { display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 6px; flex: none;
+  background: var(--accent-soft); color: var(--accent); font-size: 11px; font-weight: 700; letter-spacing: 0; }
+
+/* ⚠ Платформд толгой нуугдсан (index.html `hidden`) — `display:flex` нь `hidden`-ийг дардаг тул энд ч заавал */
+
+.flood-app .hint { color: var(--muted); font-size: 11.5px; margin: 8px 0 0; }
+.flood-app .hint b { color: var(--text); font-weight: 600; }
+.flood-app .hint.center { text-align: center; margin-top: 6px; font-size: 11px; }
+.flood-app .mono { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 10.5px; line-height: 1.6; }
+
+/* ---------- form controls ---------- */
+.flood-app .field { margin-top: 12px; }
+.flood-app .field > label { display: flex; justify-content: space-between; gap: 8px; color: var(--muted); font-size: 12px; margin-bottom: 6px; }
+.flood-app .field > label b { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
+.flood-app input[type=range] { -webkit-appearance: none; appearance: none; width: 100%; height: 18px; margin: 0; background: transparent; cursor: pointer; }
+.flood-app input[type=range]::-webkit-slider-runnable-track { height: 4px; border-radius: 4px;
+  background: linear-gradient(var(--accent), var(--accent)) 0 / var(--p, 50%) 100% no-repeat, var(--line2); }
+.flood-app input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%; margin-top: -6px;
+  background: var(--card); border: 3px solid var(--accent); box-shadow: 0 1px 4px rgba(0, 0, 0, .25); }
+.flood-app input[type=range]::-moz-range-track { height: 4px; border-radius: 4px; background: var(--line2); }
+.flood-app input[type=range]::-moz-range-progress { height: 4px; border-radius: 4px; background: var(--accent); }
+.flood-app input[type=range]::-moz-range-thumb { width: 12px; height: 12px; border-radius: 50%; background: var(--card); border: 3px solid var(--accent); }
+.flood-app .check { display: flex; gap: 9px; align-items: flex-start; margin-top: 12px; cursor: pointer; line-height: 1.35; }
+.flood-app .check input { accent-color: var(--accent); margin: 2px 0 0; width: 15px; height: 15px; flex: none; }
+.flood-app .check small { display: block; color: var(--muted); font-size: 11px; }
+.flood-app .seg { display: flex; background: var(--field); border: 1px solid var(--line); border-radius: 9px; padding: 3px; gap: 2px; }
+.flood-app .seg button { flex: 1 1 0; min-width: 0; background: none; border: 0; color: var(--muted); padding: 6px 6px; border-radius: 6px;
+  font-size: 12px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.flood-app .seg button:hover { color: var(--text); }
+.flood-app .seg button.on { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
+.flood-app .seg.small button { font-size: 11.5px; padding: 5px 4px; white-space: normal; line-height: 1.25; overflow: visible; }
+.flood-app .seg.vertical { flex-direction: column; }
+.flood-app .seg.vertical button { flex: none; padding: 6px 12px; }
+.flood-app .select { width: 100%; background: var(--field); border: 1px solid var(--line); border-radius: 9px; padding: 8px 10px; cursor: pointer; }
+.flood-app .btn { background: var(--field); color: var(--text); border: 1px solid var(--line); border-radius: 9px; padding: 9px 12px;
+  font-weight: 600; cursor: pointer; }
+.flood-app .btn:hover { border-color: var(--accent); }
+.flood-app .btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-size: 14px; }
+.flood-app .btn.primary:hover { filter: brightness(1.07); }
+.flood-app .btn.primary.running { background: var(--warn); border-color: var(--warn); color: #231400; }
+.flood-app .btn.ghost { background: none; border-style: dashed; color: var(--muted); font-weight: 500; }
+.flood-app .btn.ghost:hover { color: var(--accent); }
+.flood-app .btn.wide { width: 100%; margin-top: 12px; }
+.flood-app .presets { display: flex; flex-wrap: wrap; gap: 6px; }
+.flood-app .presets button { background: var(--field); border: 1px solid var(--line); border-radius: 999px; padding: 4px 10px;
+  font-size: 11.5px; cursor: pointer; }
+.flood-app .presets button:hover { border-color: var(--accent); }
+.flood-app .presets button.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); font-weight: 600; }
+.flood-app .hyeto-box { margin-top: 12px; background: var(--field); border-radius: 9px; padding: 8px 8px 8px; }
+.flood-app .hyeto-box .hint { margin: 4px 4px 0; }
+.flood-app canvas.hyeto { width: 100%; height: 96px; display: block; }
+.flood-app canvas.chart { width: 100%; height: 130px; display: block; margin-top: 12px; }
+.flood-app .chartkey { display: flex; gap: 14px; font-size: 11px; color: var(--muted); margin-top: 4px; flex-wrap: wrap; }
+.flood-app .chartkey span::before { content: ""; display: inline-block; width: 10px; height: 3px; background: var(--c); margin-right: 5px; vertical-align: middle; border-radius: 2px; }
+.flood-app .inflows { list-style: none; margin: 8px 0 0; padding: 0; }
+.flood-app .inflows li { display: grid; grid-template-columns: 1fr 76px 24px; gap: 6px; align-items: center; padding: 6px 0; border-top: 1px solid var(--line); font-size: 12px; }
+.flood-app .inflows input { width: 100%; background: var(--field); border: 1px solid var(--line); border-radius: 6px; padding: 3px 6px; }
+.flood-app .inflows button { background: none; border: 0; color: var(--muted); cursor: pointer; font-size: 14px; }
+.flood-app .inflows button:hover { color: var(--danger); }
+
+/* run bar (always visible at the bottom of the left panel) */
+.flood-app .runbar { border-top: 1px solid var(--line); padding: 12px; background: var(--panel); }
+.flood-app .progress { height: 4px; background: var(--line); border-radius: 4px; overflow: hidden; margin-bottom: 10px; }
+.flood-app .progress div { height: 100%; width: 0; background: var(--accent); transition: width .2s linear; }
+.flood-app .runrow { display: grid; grid-template-columns: 1fr 48px; gap: 8px; }
+.flood-app .runrow .btn { padding: 11px 12px; }
+.flood-app #reset { font-size: 17px; padding: 0; }
+
+/* ---------- stat tiles ---------- */
+.flood-app .tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.flood-app .tiles.three { grid-template-columns: repeat(3, 1fr); }
+.flood-app .tile { background: var(--field); border-radius: 9px; padding: 8px 10px; min-width: 0; }
+.flood-app .tile span { display: block; font-size: 10.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.flood-app .tile b { font-size: 19px; font-weight: 650; font-variant-numeric: tabular-nums; letter-spacing: -.2px; }
+.flood-app .tiles.three .tile b { font-size: 16px; }
+.flood-app .tile i { font-style: normal; color: var(--muted); font-size: 11px; margin-left: 3px; }
+.flood-app .tile.accent { background: var(--accent-soft); }
+.flood-app .tile.accent b { color: var(--accent); }
+
+/* ---------- map ---------- */
+.flood-app .mapwrap { position: relative; min-width: 0; }
+.flood-app #mapStack, .flood-app .view { position: absolute; inset: 0; }
+.flood-app .view[hidden] { display: none; }
+.flood-app .esri-view { --esri-view-outline-color: transparent; }
+.flood-app .esri-view .esri-view-surface--inset-outline:focus::after { outline: none !important; }
+.flood-app .glass { background: var(--glass); border: 1px solid var(--line); box-shadow: var(--shadow); backdrop-filter: blur(8px); }
+.flood-app .loading { position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; gap: 12px;
+  background: color-mix(in srgb, var(--bg) 85%, transparent); z-index: 5; color: var(--muted); }
+.flood-app .loading.hide { display: none; }
+.flood-app .loading.error { color: var(--danger); }
+.flood-app .spin { width: 34px; height: 34px; border: 3px solid var(--line); border-top-color: var(--accent); border-radius: 50%; animation: flood-spin 1s linear infinite; }
+@keyframes flood-spin { to { transform: rotate(360deg); } }
+.flood-app .clock { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 18px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.flood-app .clock small { color: var(--muted); font-size: 12px; margin-left: 5px; }
+.flood-app .tag { font-size: 11px; padding: 3px 9px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); white-space: nowrap; font-weight: 600; }
+.flood-app .tag.hist { background: color-mix(in srgb, var(--warn) 16%, transparent); color: var(--warn); }
+.flood-app .maptools { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); z-index: 2; display: flex; flex-direction: column; gap: 8px; align-items: flex-end; }
+.flood-app .maptools .seg { border-radius: 10px; }
+.flood-app .viewmode button { flex: none; font-weight: 700; padding: 7px 16px; font-size: 13px; overflow: visible; text-overflow: clip; }
+.flood-app.is3d .only2d { opacity: .45; pointer-events: none; }
+.flood-app .modebar { position: absolute; left: 12px; bottom: 26px; z-index: 2; display: flex; flex-direction: column; gap: 8px; max-width: calc(100% - 150px); }
+.flood-app .modebar .seg { border-radius: 10px; overflow-x: auto; }
+.flood-app .modebar .seg button { flex: none; padding: 6px 10px; }
+.flood-app .legend { border-radius: 10px; padding: 8px 12px; font-size: 11px; color: var(--muted); align-self: flex-start; }
+.flood-app .legend .bar { height: 10px; width: 260px; max-width: 100%; border-radius: 3px; margin: 6px 0 3px; }
+.flood-app .legend .ticks { display: flex; justify-content: space-between; width: 260px; max-width: 100%; }
+.flood-app .legend .cls { display: flex; gap: 10px; flex-wrap: wrap; }
+.flood-app .legend .cls span::before { content: ""; display: inline-block; width: 11px; height: 11px; border-radius: 3px; background: var(--c); margin-right: 4px; vertical-align: -1px; }
+.flood-app .tooltip { position: absolute; z-index: 3; pointer-events: none; background: var(--glass); border: 1px solid var(--line); box-shadow: var(--shadow);
+  border-radius: 7px; padding: 5px 9px; font-size: 11.5px; white-space: nowrap; transform: translate(14px, 14px); }
+.flood-app .clickmode { position: absolute; top: 50px; left: 50%; transform: translateX(-50%); z-index: 3; background: var(--warn); color: #231400;
+  padding: 6px 14px; border-radius: 999px; font-weight: 600; font-size: 12px; box-shadow: var(--shadow); }
+
+/* ArcGIS widgets */
+.flood-app .esri-ui-corner .esri-component { box-shadow: var(--shadow) !important; }
+.flood-app .esri-attribution { font-size: 10px; }
+
+@media (max-width: 1200px) {
+  .flood-app { grid-template-columns: 300px minmax(0, 1fr); }
+  .flood-app .panel.right { grid-column: 1 / -1; border-left: 0; border-top: 1px solid var(--line); }
+  .flood-app { overflow-y: auto; grid-template-rows: 100% auto; }
+  .flood-app .panel.right .scroll { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); }
+}
+@media (max-width: 760px) {
+  .flood-app { grid-template-columns: 1fr; grid-template-rows: 65vh auto auto; }
+  .flood-app .mapwrap { order: -1; }
+  .flood-app .modebar { max-width: calc(100% - 24px); }
+}
+
+/* ---------- risk summary / alerts ---------- */
+.flood-app .risk-head { display: flex; gap: 12px; align-items: center; }
+.flood-app .risk-head .hint { margin: 0; }
+.flood-app .badge { flex: none; padding: 8px 12px; border-radius: 10px; font-weight: 700; font-size: 13px; text-align: center; min-width: 92px;
+  background: var(--field); color: var(--muted); border: 1px solid var(--line); }
+.flood-app .badge[data-level="1"] { background: rgba(64, 192, 87, .15); color: #40c057; border-color: rgba(64, 192, 87, .5); }
+.flood-app .badge[data-level="2"] { background: rgba(255, 169, 77, .15); color: #ffa94d; border-color: rgba(255, 169, 77, .5); }
+.flood-app .badge[data-level="3"] { background: rgba(240, 62, 62, .15); color: #ff6b6b; border-color: rgba(240, 62, 62, .5); }
+.flood-app .badge[data-level="4"] { background: rgba(166, 30, 106, .25); color: #f783ac; border-color: rgba(247, 131, 172, .6);
+  animation: flood-pulse 1.6s ease-in-out infinite; }
+@keyframes flood-pulse { 50% { box-shadow: 0 0 0 5px rgba(247, 131, 172, .15); } }
+.flood-app .bldstat { margin-top: 12px; background: var(--field); border-radius: 10px; padding: 10px 12px; }
+.flood-app .bldnum b { font-size: 24px; font-weight: 700; font-variant-numeric: tabular-nums; margin-right: 6px; }
+.flood-app .bldnum span { color: var(--muted); font-size: 12px; }
+.flood-app .bldbar { display: flex; height: 8px; border-radius: 4px; overflow: hidden; background: var(--line); margin: 8px 0; }
+.flood-app .bldbar div { height: 100%; transition: width .3s; }
+.flood-app .bldlegend { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 4px 10px; font-size: 11.5px; }
+.flood-app .bldlegend li { display: flex; align-items: center; gap: 6px; color: var(--muted); }
+.flood-app .bldlegend li::before { content: ""; width: 10px; height: 10px; border-radius: 3px; background: var(--c); flex: none; }
+.flood-app .bldlegend b { color: var(--text); margin-left: auto; font-variant-numeric: tabular-nums; }
+.flood-app .alerts { list-style: none; margin: 0; padding: 0; max-height: 220px; overflow-y: auto; }
+.flood-app .alerts li { display: grid; grid-template-columns: 10px 1fr auto; gap: 8px; align-items: start; padding: 7px 0; border-top: 1px solid var(--line); font-size: 12px; }
+.flood-app .alerts li:first-child { border-top: 0; }
+.flood-app .alerts li.empty { display: block; color: var(--muted); }
+.flood-app .alerts .dot { width: 8px; height: 8px; border-radius: 50%; margin-top: 4px; background: var(--accent); }
+.flood-app .alerts .lv-warn .dot { background: var(--warn); }
+.flood-app .alerts .lv-danger .dot { background: var(--danger); box-shadow: 0 0 0 3px color-mix(in srgb, var(--danger) 25%, transparent); }
+.flood-app .alerts time { color: var(--muted); font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 10.5px; }
+
+.flood-app .runbar .summary .stale { display: block; margin-top: 6px; color: var(--warn); }
+.flood-app #reset.attn { border-color: var(--warn); color: var(--warn); animation: flood-pulse 1.6s ease-in-out infinite; }
+
+.flood-app .btnrow { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+.flood-app .btnrow .btn { padding: 8px 6px; font-size: 12px; }
+.flood-app #areaInfo[hidden] { display: none; }
+.flood-app #areaInfo .note { display: block; margin-top: 4px; color: var(--warn); }
+.flood-app #areaInfo .tip2 { display: block; margin-top: 4px; }
+
+.flood-app .modebar .small-seg { align-self: flex-start; }
+.flood-app .modetools { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.flood-app .chip { border-radius: 10px; padding: 6px 12px; font-size: 12px; font-weight: 600; color: var(--muted); cursor: pointer; }
+.flood-app .chip.on { color: var(--accent); border-color: var(--accent); }
+.flood-app .modebar .small-seg button { font-size: 11.5px; padding: 5px 10px; }
+
+/* ---------- explanations ---------- */
+.flood-app .info { display: inline-grid; place-items: center; width: 15px; height: 15px; border-radius: 50%; margin-left: 6px; padding: 0;
+  border: 1px solid var(--line2); background: none; color: var(--muted); font: italic 600 10px/1 Georgia, serif; cursor: help;
+  vertical-align: 1px; flex: none; text-transform: none; letter-spacing: 0; }
+.flood-app .info:hover, .flood-app .info:focus-visible { color: var(--accent); border-color: var(--accent); outline: none; }
+.flood-app .info.static { cursor: default; }
+.flood-app .tipbox { position: fixed; z-index: 50; background: var(--card); color: var(--text); border: 1px solid var(--line2);
+  box-shadow: var(--shadow); border-radius: 9px; padding: 9px 11px; font-size: 12px; line-height: 1.5; pointer-events: none; }
+.flood-app .chart-head { display: flex; align-items: center; margin-top: 14px; font-size: 12.5px; }
+.flood-app .chart-head + canvas.chart { margin-top: 6px; }
+.flood-app details.adv { margin-top: 12px; border-top: 1px dashed var(--line); padding-top: 8px; }
+.flood-app details.adv summary { cursor: pointer; color: var(--muted); font-size: 12px; list-style: none; display: flex; align-items: center; }
+.flood-app details.adv summary::-webkit-details-marker { display: none; }
+.flood-app details.adv summary::before { content: "›"; display: inline-block; margin-right: 6px; transition: transform .15s; }
+.flood-app details.adv[open] summary::before { transform: rotate(90deg); }
+
+/* ---------- simplified scenario panel ---------- */
+.flood-app .card.step h2 { font-size: 12.5px; color: var(--text); letter-spacing: .6px; margin-bottom: 12px; }
+.flood-app .card.step .num { width: 22px; height: 22px; font-size: 12px; background: var(--accent); color: var(--accent-ink); border-radius: 7px; }
+.flood-app .presets { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.flood-app .presets button { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; border-radius: 10px;
+  padding: 8px 10px; background: var(--field); border: 1px solid var(--line); cursor: pointer; }
+.flood-app .presets button b { font-size: 12.5px; font-weight: 600; display: flex; align-items: center; gap: 6px; }
+.flood-app .presets button span { font-size: 11px; color: var(--muted); }
+.flood-app .presets button .drops { color: var(--rain); letter-spacing: -1px; font-size: 10px; }
+.flood-app .presets button:hover { border-color: var(--accent); }
+.flood-app .presets button.on { background: var(--accent-soft); border-color: var(--accent); }
+.flood-app .presets button.on b { color: var(--accent); }
+.flood-app .presets button:last-child:nth-child(odd) { grid-column: 1 / -1; }
+.flood-app .check.toggle { padding: 10px 12px; background: var(--field); border-radius: 9px; margin-top: 12px; align-items: center; }
+.flood-app .check.toggle input { margin: 0; }
+.flood-app details.adv-card > summary { list-style: none; cursor: pointer; display: flex; align-items: center; justify-content: space-between; }
+.flood-app details.adv-card > summary::-webkit-details-marker { display: none; }
+.flood-app details.adv-card > summary h2 { margin: 0; }
+.flood-app details.adv-card > summary::after { content: "›"; color: var(--muted); font-size: 16px; transform: rotate(90deg); transition: transform .15s; }
+.flood-app details.adv-card[open] > summary::after { transform: rotate(-90deg); }
+.flood-app details.adv-card[open] > summary { margin-bottom: 4px; }
+.flood-app .runbar .summary { margin: 0 0 8px; font-size: 12px; color: var(--muted); line-height: 1.45; }
+.flood-app .runbar .summary b { color: var(--text); font-weight: 600; }
+/* risk badge text needs darker tones on the light theme */
+:root[data-theme="light"] .flood-app .badge[data-level="1"] { color: #2b8a3e; }
+:root[data-theme="light"] .flood-app .badge[data-level="2"] { color: #c25e00; }
+:root[data-theme="light"] .flood-app .badge[data-level="3"] { color: #c92a2a; }
+:root[data-theme="light"] .flood-app .badge[data-level="4"] { color: #a61e6a; background: rgba(166, 30, 106, .12); }
+
+/* ---------- minimal scenario panel ---------- */
+.flood-app .card.simple { padding: 12px 14px; }
+.flood-app .card.bare { background: none; border: 0; padding: 0; }
+/* Борооны карт нягт (хэрэглэгч 2026-10-08): гарчиггүй, зай бага */
+.flood-app .card.rain { padding: 10px 12px; }
+.flood-app .card.rain .hint[hidden] { display: none; }
+.flood-app .card.rain .presets { gap: 4px; }
+.flood-app .card.rain .presets button { padding: 4px 5px; gap: 0; }
+.flood-app .card.rain .presets button span { font-size: 10px; white-space: nowrap; letter-spacing: -0.2px; }
+.flood-app .card.rain .field { margin-top: 8px; }
+.flood-app .card.rain .field > label { margin-bottom: 2px; }
+.flood-app .card.simple h2 { color: var(--text); font-size: 12px; margin-bottom: 10px; }
+.flood-app .card.simple .field { margin-top: 10px; }
+/* Жишээ хувилбар: 3 багана, багана агуулгаасаа ӨРГӨСӨХГҮЙ (minmax 0) — урьд нь "Жишиг"-ийн урт дэд
+   мөр (nowrap) эхний баганыг тэлж, гурав дахь багана самбараас хальж тасардаг байв (хэрэглэгч 2026-10-09).
+   `soil` өгсөн хувилбар (`wide`) бүтэн мөр эзэлнэ: нэр зүүнд, тохиргоо баруунд нэг эгнээнд. */
+.flood-app .presets { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 5px; }
+.flood-app .presets button { padding: 6px 7px; border-radius: 8px; gap: 1px; min-width: 0; }
+.flood-app .presets button b { font-size: 11.5px; }
+.flood-app .presets button span { font-size: 10.5px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.flood-app .presets button .drops { display: none; }
+.flood-app .presets button:last-child:nth-child(odd) { grid-column: auto; }
+.flood-app .presets button.wide { grid-column: 1 / -1; flex-direction: row; align-items: baseline; justify-content: space-between; gap: 8px; }
+.flood-app .card.rain .presets button.wide { padding: 5px 8px; }
+.flood-app h3.sub { font-size: 10.5px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); margin: 16px 0 2px; font-weight: 600; }
+.flood-app details.adv-card h3.sub:first-of-type { margin-top: 10px; }
+.flood-app .runbar .summary { font-size: 11.5px; margin-bottom: 8px; }
+.flood-app .speedrow { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 11.5px; color: var(--muted); }
+.flood-app .speedrow .seg { flex: 1; }
+.flood-app .speedrow .seg button { padding: 4px 2px; }
+.flood-app .speedrow .muted b { color: var(--text); }
+
+/* Газрын зургаас зүүн самбарт шилжсэн удирдлага (хэрэглэгч 2026-10-08) */
+.flood-app .progress[hidden] { display: none; }
+.flood-app .timebox { margin-bottom: 10px; }
+.flood-app .timehead { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 4px; }
+.flood-app .timebox .clock { font-size: 15px; }
+.flood-app .timebox input { width: 100%; }
+.flood-app .viewcard { display: flex; flex-direction: column; gap: 8px; }
+.flood-app .viewcard h2 { margin-bottom: 2px; }
+.flood-app .seg.wrap { flex-wrap: wrap; }
+.flood-app .seg.wrap button { flex: 1 1 30%; }
+.flood-app .viewcard .chip { align-self: flex-start; background: var(--field); border: 1px solid var(--line); }
+.flood-app .viewcard .chip.on { border-color: var(--accent); }
+/* 2D/3D зургийн ДЭЭД ГОЛД, нам (хэрэглэгч 2026-10-08); суурь зургийн цуглуулга Esri-ийн виджет, баруун дээд буланд.
+   Товшилтын горимын мэдэгдэл (.clickmode) түүний доор 50px-д. */
+.flood-app .viewmode { padding: 2px; }
+.flood-app .viewmode button { padding: 3px 14px; font-size: 12px; line-height: 1.3; }
+
+/* Баруун самбар (2026-10-09): ангиллын мөр нөлөөтэйгээ, үр дүн бүлэгтэй, үйл явдлын бүртгэл */
+.flood-app .panel.right .bldlegend { grid-template-columns: 1fr; gap: 0; }
+.flood-app .panel.right .bldlegend li { display: grid; grid-template-columns: 10px 74px 1fr auto; gap: 8px; align-items: center;
+  padding: 5px 0; border-top: 1px solid var(--line); }
+.flood-app .panel.right .bldlegend li:first-child { border-top: 0; }
+.flood-app .panel.right .bldlegend li::before { width: 10px; height: 10px; }
+.flood-app .panel.right .bldlegend .nm { color: var(--text); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.flood-app .panel.right .bldlegend .nt { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.flood-app .panel.right .bldlegend b { margin-left: 0; }
+.flood-app .group-label { margin: 10px 0 5px; font-size: 10.5px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.flood-app .panel.right h2 + .group-label { margin-top: 0; }
+.flood-app .panel.right canvas.chart { height: 150px; }
+.flood-app .panel.right .alerts { max-height: 260px; }

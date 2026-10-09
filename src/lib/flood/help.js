@@ -10,7 +10,7 @@ const TIPS = [
   ['areaDraw', 'Газрын зураг дээр хулганаар чирж тэгш өнцөгт зурна. Дахин дарж хэдэн ч удаа дахин зурж тохируулж болно.'],
   ['areaView', 'Газрын зургийг хүссэн газраа томруулж, байрлуулаад дарахад яг харагдаж буй хэсгийг тооцох талбай болгоно.'],
   // 2 rain
-  ['presets', 'Бэлэн жишээ хувилбар. Дарахад эрчим, хугацаа, хэлбэрийг автоматаар тохируулна. Албан ёсны давтагдах хугацаатай утга биш.'],
+  // 'presets' — тайлбаргүй (хэрэглэгч 2026-10-09: "ene haragdah shaardlagagui"); товчнууд өөрсдөө утгаа хэлнэ
   ['rainI', 'Нэг цагт орох борооны зузаан (мм). 1 мм = 1 м² талбайд 1 литр ус. ~10 мм/ц — дунд зэргийн бороо, 30+ мм/ц — аадар, 50+ мм/ц — маш хүчтэй аадар.'],
   ['rainD', 'Бороо хэр удаан орох вэ (дараа нь бороо зогсоно). Нийт хур = эрчим × хугацаа.'],
   ['rainShape', 'Борооны эрчим цаг хугацааны явцад хэрхэн өөрчлөгдөх вэ. Тэгш — эхнээс дуустал жигд. Оргилтой — сулаар эхэлж, оргилдоо хүрээд сулрах (аадрын ердийн хэлбэр). Эхэндээ хүчтэй — гэнэт хүчтэй эхлээд аажим сулрах.'],
@@ -51,32 +51,28 @@ const TIPS = [
   ['parts', 'Цагаан зураасууд усны урсах чиглэлийг хөдөлгөөнөөр харуулна.'],
   ['showBld', 'Тооцоонд саад болж буй барилгыг улбар шараар будна (2D).'],
   ['bld3d', '3D горимд барилгыг давхарын тоо × 3 м өндөртэйгээр босгож харуулна.'],
-  ['arrowsBtn', 'Усны дээр урсгалын чиглэлийг заасан сумнууд: сум доош урсах зүгийг заана, урт, тод сум — хурдан урсгал. 2D, 3D аль алинд харагдана.'],
-  ['waterStyle', 'Усны харагдах байдал (Гүн горимд). Хөдөлгөөнт — тод оюу ус, урсгалын дагуу хөдөлдөг цагаан хөөсөн зураастай: хаашаа, хэр хурдан урсаж байгааг шууд харуулна. Өнгөт — гүнийг өнгөөр (цайвар → бараан) ялгах шинжилгээний горим. Бодит — тэнгэрийн тусгал, нарны гялбаатай бараан ус.'],
+  // 'bldBtn' — тайлбаргүй (хэрэглэгч 2026-10-09: "ene tailbaraa aw"); өнгө нь баруун самбарын дүгнэлтээс уншигдана
+  ['waterStyle', 'Усны харагдах байдал (Гүн горимд). Хөдөлгөөнт — бодит ус шиг: гүехэн хэсэг тунгалаг, гүн хэсэг бараан, долгион урсгалын дагуу хөдөлж, хурдан урсгал дээр хөөс гарна. Өнгөт — гүнийг өнгөөр (цайвар → бараан) ялгах шинжилгээний горим. Бодит — тэнгэрийн тусгал, нарны гялбаатай бараан ус.'],
   ['riskBadge', 'Нийт эрсдэлийн түвшин — үерт өртсөн барилгын тоо, гүнээс хамаарна. Бага → Дунд (0.3 м+) → Өндөр (0.5 м+, 50+ барилга) → Онц өндөр (1 м+, 50+ барилга).'],
   ['bldTotal', 'Симуляцийн туршид хананыхаа дэргэд 10 см-ээс гүн ус хүрсэн барилгын тоо (ArcGIS-ийн «Analyze flood impact» аргачлалын дагуу). Газрын зураг дээр эдгээр барилга автоматаар гүнээрээ өнгөлөгдөнө (харагдаж буй хэсгийн 8,000 хүртэл, 3D-д 15,000). Сувгийн дэргэдэх барилгад зөвхөн газрын гадаргаас дээш гарсан усыг тооцно..'],
   ['alerts', 'Симуляцийн явцад гарсан чухал үйл явдлууд: борооны оргил, үерийн талбай тэлэх, барилга усанд орох, аюултай хурд. Баруун талын цаг — симуляцийн хугацаа.'],
   ['exportSel', 'Үр дүнг GeoTIFF растер болгон татаж ArcGIS Pro / QGIS-д шууд нээнэ (EPSG:3857).'],
 ];
 
-const MODE_TIPS = {
-  0: 'Одоогийн усны гүн.',
-  1: 'Урсгалын хурд — ус хаана хүчтэй урсаж байна.',
-  2: 'Гүн, хурдыг хослуулсан аюулын зэрэг (Их Британийн DEFRA FD2321 арга): хүн, машинд хэр аюултайг харуулна.',
-  3: 'Симуляцийн туршид цэг бүрт хүрсэн хамгийн их гүн — үерийн эрсдэлийн зураг.',
-  4: 'Бороо эхэлснээс хойш хэдэн минутын дараа ус (10 см+) хүрсэн. Улаан — эрт, цэнхэр — хожуу.',
-};
+// Харагдацын горимын товч (#mode) бүрийн хөвөгч тайлбар ХАСАГДСАН (хэрэглэгч 2026-10-09: "iimerhuu tailbariig … aw").
 
 export const CHART_INFO = {
   chartDomain: ['Бороо ба үерийн цар хүрээ', 'Цэнхэр талбай — борооны эрчим (зүүн тэнхлэг, мм/ц). Шугам — 10 см-ээс гүн устай талбай (баруун тэнхлэг, км²). Бороо оргилдоо хүрсний дараа үер хэсэг хоцорч оргилдоо хүрдэг — энэ хоцрол бол сэрэмжлүүлэх хугацаа. Хулганаа график дээр аваачиж утгыг уншина.'],
   chartProbe: ['Сонгосон цэгийн өөрчлөлт', 'Сонгосон цэг дээрх усны гүн (зүүн тэнхлэг) ба урсгалын хурд (баруун тэнхлэг) цаг хугацаагаар. Улаан тасархай 0.5 м — явган хүн гарахад аюултай гүн, шар 0.3 м — суудлын машинд аюултай гүн.'],
 };
 
-export function installHelp() {
+export function installHelp(root) {
+  // ⚠ Тайлбарын хайрцаг аппын ҮНДЭС дотор — өнгөний хувьсагч тэндээс удамшина.
+  // Сонсогч бүр буцаах цэвэрлэгээнд бүртгэгдэнэ: хуудаснаас гарахад үлдэхгүй.
   const tip = document.createElement('div');
   tip.className = 'tipbox';
   tip.hidden = true;
-  document.body.appendChild(tip);
+  root.appendChild(tip);
   const show = el => {
     tip.textContent = el.dataset.tip;
     tip.hidden = false;
@@ -87,19 +83,24 @@ export function installHelp() {
     tip.style.left = x + 'px';
     tip.style.top = (below ? r.bottom + 8 : r.top - tip.offsetHeight - 8) + 'px';
   };
-  document.addEventListener('mouseover', e => { const el = e.target.closest('[data-tip]'); if (el) show(el); });
-  document.addEventListener('mouseout', e => { if (e.target.closest('[data-tip]')) tip.hidden = true; });
-  document.addEventListener('focusin', e => { const el = e.target.closest('.info[data-tip]'); if (el) show(el); });
-  document.addEventListener('focusout', () => { tip.hidden = true; });
+  const on = [
+    ['mouseover', e => { const el = e.target.closest('[data-tip]'); if (el) show(el); }],
+    ['mouseout', e => { if (e.target.closest('[data-tip]')) tip.hidden = true; }],
+    ['focusin', e => { const el = e.target.closest('.info[data-tip]'); if (el) show(el); }],
+    ['focusout', () => { tip.hidden = true; }],
+  ];
+  for (const [type, fn] of on) root.addEventListener(type, fn);
 
+  const added = [];          // цэвэрлэгээнд устгах элементүүд (StrictMode-д давхардахгүй)
   const icon = text => {
     const b = document.createElement('button');
+    added.push(b);
     b.type = 'button'; b.className = 'info'; b.textContent = 'i';
     b.dataset.tip = text; b.setAttribute('aria-label', text);
     return b;
   };
   for (const [id, text] of TIPS) {
-    const el = document.getElementById(id);
+    const el = root.querySelector('#' + id);
     if (!el) continue;
     let host;
     if (el.closest('.tile')) host = el.closest('.tile').querySelector('span');
@@ -110,25 +111,22 @@ export function installHelp() {
     else host = el.closest('.card')?.querySelector('h2');
     if (host) {
       const small = host.querySelector(':scope > small');
-      small ? host.insertBefore(icon(text), small) : host.appendChild(icon(text));
+      if (small) host.insertBefore(icon(text), small); else host.appendChild(icon(text));
     }
     else el.dataset.tip = text;
   }
-  document.querySelectorAll('#mode button').forEach(b => { b.dataset.tip = MODE_TIPS[b.dataset.v]; });
 
   // chart headers
   for (const [id, [title, text]] of Object.entries(CHART_INFO)) {
-    const c = document.getElementById(id);
+    const c = root.querySelector('#' + id);
     if (!c) continue;
     const h = document.createElement('div');
     h.className = 'chart-head';
+    added.push(h);
     h.innerHTML = `<b>${title}</b>`;
     h.appendChild(icon(text));
     c.before(h);
   }
 
-  // how-to panel
-  const dlg = document.getElementById('helpDlg');
-  document.getElementById('helpBtn').onclick = () => dlg.showModal();
-  dlg.addEventListener('click', e => { if (e.target === dlg || e.target.closest('[data-close]')) dlg.close(); });
+  return () => { for (const [type, fn] of on) root.removeEventListener(type, fn); tip.remove(); added.forEach(n => n.remove()); };
 }

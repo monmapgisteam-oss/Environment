@@ -16,17 +16,18 @@
  ],
  "groundScale": 0.6684818354539511,
  "pitFill": {
-  "urbanMaxDepth": 3.0,
-  "otherMaxDepth": 0.5
+  "fillSmallArea": 6,
+  "fillShallow": 0.3,
+  "urbanMaxPond": 1.0
  },
  "tuulInflow": [
   4418,
   4493
  ],
  "sources": {
-  "dem": "Copernicus GLO-30 DSM (ESA/Airbus), building bias removed, shallow pits filled",
+  "dem": "Copernicus GLO-30 DSM (ESA/Airbus), building bias removed; noise pits filled, real depressions kept (urban ponds scaled to ≤ 1 m)",
   "landcover": "ESA WorldCover 2021 v200 (10 m)",
   "buildings": "merged_buildings_arkhai FeatureServer (322,855 footprints, floors x 3 m)",
-  "rivers": "OpenStreetMap waterways, burned as continuous downhill channels (breach \u2264 6 m)"
+  "rivers": "none burned (OpenStreetMap Tuul line locates the inflow only)"
  }
 }

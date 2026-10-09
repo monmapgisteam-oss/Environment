@@ -18,7 +18,7 @@ export function drawChart(canvas, opts) {
   const g = canvas.getContext('2d');
   g.setTransform(dpr, 0, 0, dpr, 0, 0);
   g.clearRect(0, 0, w, h);
-  const css = getComputedStyle(document.documentElement);
+  const css = getComputedStyle(canvas);   // аппын үндсэн дээрх өнгөний хувьсагч (платформын --line-ээс өөр)
   const grid = css.getPropertyValue('--line').trim() || '#2a3542';
   const muted = css.getPropertyValue('--muted').trim() || '#8a97a6';
   const text = css.getPropertyValue('--text').trim() || '#dde';

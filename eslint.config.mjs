@@ -12,9 +12,6 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
-    // Үерийн симуляци — өөр хүний бие даасан апп, хуулбараар орсон
-    // (src/components/analysis/flood-view.tsx). Эх нь Flood_envi репод.
-    "public/flood/**",
   ]),
   /*
     ⚠⚠ ЭНГИЙН `fetch` ХОРИОТОЙ (2026-09-17, хэрэглэгч: "дахиж ийм алдаа

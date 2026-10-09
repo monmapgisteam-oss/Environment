@@ -4,7 +4,6 @@ export function writeGeoTIFF({ width, height, rows, x0, y1, res, nodata = -9999 
   // rows: array of Float32Array chunks covering the image top-to-bottom
   const dataBytes = width * height * 4;
   const tags = [];
-  const extra = [];               // out-of-line tag values
   const add = (tag, type, count, value) => tags.push({ tag, type, count, value });
   const SHORT = 3, LONG = 4, DOUBLE = 12, ASCII = 2;
   const nodataStr = String(nodata) + '\0';

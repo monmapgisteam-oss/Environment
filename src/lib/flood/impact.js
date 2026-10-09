@@ -2,6 +2,7 @@
 // (ArcGIS "Analyze flood impact" approach). Runs on the GPU: one fragment per building scans the cells
 // around its footprint box in the max-depth envelope; only ~1.3 MB of results come back to the CPU.
 import { program, texture } from './solver.js';
+import { asset } from '@/lib/base-path';
 
 export const CLASSES = [
   { min: 0.1, max: 0.3, color: '#f2d27a', name: '0.1–0.3 м', note: 'Хашаа, зам норох' },
@@ -57,7 +58,7 @@ void main(){
 
 export class ImpactAnalyzer {
   async load() {
-    const buf = await (await fetch('data/bldpts.bin')).arrayBuffer();
+    const buf = await (await fetch(asset('/flood/data/bldpts.bin'))).arrayBuffer();
     const n = buf.byteLength / 20, v = new DataView(buf);
     this.n = n;
     this.oid = new Int32Array(n);
