@@ -5,10 +5,10 @@ import { program, texture } from './solver.js';
 import { asset } from '@/lib/base-path';
 
 export const CLASSES = [
-  { min: 0.1, max: 0.3, color: '#f2d27a', name: '0.1–0.3 м', note: 'Хашаа, зам норох' },
-  { min: 0.3, max: 0.5, color: '#ee9b53', name: '0.3–0.5 м', note: 'Орцоор ус орох' },
-  { min: 0.5, max: 1.0, color: '#d9534a', name: '0.5–1 м', note: '1-р давхар усанд' },
-  { min: 1.0, max: 1e9, color: '#8c2f5f', name: '1 м-ээс их', note: 'Ноцтой хохирол' },
+  { min: 0.1, max: 0.3, color: '#f2d27a', name: '0.1–0.3 м', note: 'Гудамж, хашаа усанд автах' },
+  { min: 0.3, max: 0.5, color: '#ee9b53', name: '0.3–0.5 м', note: 'Барилгын орцоор ус нэвтрэх' },
+  { min: 0.5, max: 1.0, color: '#d9534a', name: '0.5–1 м', note: 'Нэгдүгээр давхар усанд автах' },
+  { min: 1.0, max: 1e9, color: '#8c2f5f', name: '1 м-ээс дээш', note: 'Ноцтой хохирол учрах' },
 ];
 
 const TW = 1024;   // result texture width (buildings per row)
@@ -172,6 +172,14 @@ export class ImpactAnalyzer {
     return this.result;
   }
 
+  /** Барилгын хамгийн их гүн (м) — хөвөгч самбарт. Тооцоо хийгдээгүй, барилга олдоогүй бол null. */
+  depthOf(oid) {
+    if (!this.result) return null;
+    if (!this.byOid) { this.byOid = new Map(); for (let i = 0; i < this.n; i++) this.byOid.set(this.oid[i], i); }
+    const i = this.byOid.get(oid);
+    return i == null ? null : this.depth[i];
+  }
+
   /** Affected buildings [{oid, depth}] inside box = [x0, y0, x1, y1] (metres from the grid origin, optional).
    *  Over the limit, the ones nearest to `center` ([x, y], same frame) are kept — else the deepest. */
   affected(limit = 6000, box = null, center = null) {
@@ -187,13 +195,4 @@ export class ImpactAnalyzer {
     } else idx.sort((a, b) => this.depth[b] - this.depth[a]);
     return idx.slice(0, limit).map(i => ({ oid: this.oid[i], depth: this.depth[i] }));
   }
-}
-
-export function riskLevel(res) {
-  if (!res) return { level: 0, name: 'Тооцоогүй', text: 'Симуляци эхлэхэд барилгын нөлөөллийг тооцно.' };
-  const [c1, c2, c3, c4] = res.counts;
-  if (c4 >= 50) return { level: 4, name: 'Онц өндөр', text: `${c4.toLocaleString()} барилгын дэргэд 1 м-ээс гүн ус — ноцтой хохирол, яаралтай нүүлгэн шилжүүлэлт шаардлагатай.` };
-  if (c3 + c4 >= 50) return { level: 3, name: 'Өндөр', text: `${(c3 + c4).toLocaleString()} барилгын 1-р давхарт ус орох эрсдэлтэй (0.5 м+).` };
-  if (c2 + c3 + c4 >= 50 || c3 + c4 > 0) return { level: 2, name: 'Дунд', text: `${(c2 + c3 + c4).toLocaleString()} барилгын орцоор ус орох эрсдэлтэй (0.3 м+).` };
-  return { level: 1, name: 'Бага', text: c1 ? `${c1.toLocaleString()} барилгын орчимд гүехэн ус (0.3 м хүртэл).` : 'Барилгад нөлөөлөх үер илрээгүй.' };
 }

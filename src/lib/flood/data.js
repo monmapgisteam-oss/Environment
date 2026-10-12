@@ -25,7 +25,7 @@ export async function loadFloodData(onMsg = () => {}) {
   const lc = await bin('lc.u8.gz', 'Газрын бүрхэвч (WorldCover)');
   const bld = await bin('bld.u8.gz', 'Барилга');
   const riv = await bin('riv.u8.gz', 'Гол горхи');
-  onMsg('GPU бэлтгэж байна…');
+  onMsg('Тооцооны орчныг бэлтгэж байна…');
   return { meta, dem, lc, bld, riv };
 }
 

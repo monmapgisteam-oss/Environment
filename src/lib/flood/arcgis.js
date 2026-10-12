@@ -20,8 +20,8 @@ const MODULES = [
 ];
 
 export const BASEMAPS = [
-  ['satellite', 'Дагуул'], ['hybrid', 'Хосолсон'], ['topo-vector', 'Топо'],
-  ['streets-vector', 'Гудамж'], ['gray-vector', 'Саарал'], ['dark-gray-vector', 'Харанхуй'],
+  ['satellite', 'Хиймэл дагуулын зураг'], ['hybrid', 'Хиймэл дагуул, шошготой'], ['topo-vector', 'Байр зүйн зураг'],
+  ['streets-vector', 'Гудамжны зураг'], ['gray-vector', 'Саарал суурь зураг'], ['dark-gray-vector', 'Бараан суурь зураг'],
 ];
 
 const BUILDINGS_URL = 'https://services.arcgis.com/HJzgwvlNIXssnQar/arcgis/rest/services/merged_buildings_arkhai/FeatureServer/0';
@@ -291,8 +291,35 @@ export class MapController {
     view.on('pointer-move', e => {
       const p = view.toMap({ x: e.x, y: e.y });
       app.onHover(p ? [p.x, p.y] : null, { x: e.x, y: e.y });
+      this._hitBuilding(view, e.x, e.y);
     });
-    view.on('pointer-leave', () => app.onHover(null));
+    view.on('pointer-leave', () => { this._hitAt = null; app.onHover(null); app.onBuildingHover(null); });
+  }
+
+  /** Хулганы доорх барилгын дугаар → app.onBuildingHover. Нэг удаад НЭГ hitTest; явж байхад ирсэн
+   *  хөдөлгөөний зөвхөн СҮҮЛИЙНХ нь дараа нь асуугдана. Будсан (үерт өртсөн) давхаргын `bid` нь
+   *  эх барилгын дугаар; энгийн барилгын давхаргынх нь OBJECTID. Барилга зурагдаагүй масштабад
+   *  (2D 1:25 000-аас хол) hitTest юу ч олохгүй тул самбар гарахгүй. */
+  _hitBuilding(view, x, y) {
+    this._hitAt = { view, x, y };
+    if (this._hitBusy) return;
+    this._hitBusy = true;
+    const run = () => {
+      const a = this._hitAt;
+      this._hitAt = null;
+      if (!a) { this._hitBusy = false; return; }
+      const is3d = a.view === this.view3d;
+      const include = [is3d ? this.aff3d : this.aff2d, is3d ? this.buildings3d : this.buildings2d].filter(Boolean);
+      a.view.hitTest({ x: a.x, y: a.y }, { include })
+        .then(r => {
+          const g = r.results.find(h => h.graphic)?.graphic;
+          const at = g?.attributes;
+          this.app.onBuildingHover(at ? (at.bid ?? at.OBJECTID ?? null) : null);
+        })
+        .catch(() => {})
+        .finally(run);
+    };
+    run();
   }
 
   get activeView() { return this.mode === '3d' ? this.view3d : this.view2d; }

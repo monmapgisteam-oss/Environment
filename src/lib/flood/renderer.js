@@ -238,7 +238,8 @@ vec4 gameWater(vec2 g, float d, vec2 v, vec3 V){
   float foam = fast * smoothstep(0.60, 0.80, foamN);
   float rim = 1.0 - smoothstep(uThr, uThr + 0.10, d);
   float shore = rim * 0.35 * smoothstep(0.45, 0.75, vnoise(m / max(2.0, px * 2.5) + uTime * 0.3));
-  c = mix(c, vec3(0.93, 0.95, 0.95), clamp(foam * 0.7 + shore, 0.0, 1.0));
+  // цагаан хөөс, эргийн цайвар зураас, нарны гялбаа УНТАРСАН (хэрэглэгч 2026-10-12: цагаан бүхнийг хас)
+  foam = 0.0; shore = 0.0; spec = 0.0;
   if (gPx > 0.0) c = mix(c, sky, F * 0.25);               // 3D: a little more sky at grazing angles
   // transparency: thin water lets the ground through, deep water hides it
   float al = smoothstep(uThr, uThr + 0.04, d) * mix(0.16, 0.92, smoothstep(0.03, 1.2, d));   // ТУРШИЛТ: нимгэн ус бараг тунгалаг
@@ -300,7 +301,8 @@ vec4 waterBody(vec2 g, vec3 V){
   if (uMode == 0 || uMode == 3) c = depthCol(d);
   // цагаан цалгиа — хурд нь БИЛИНЕЙР (flowAt): нүд тутмын хурд (velOf) авахад цалгианы чиглэл,
   // далайц нүд бүрд огцом солигдож ус дөрвөлжин дөрвөлжин харагдаж байв (хэрэглэгч 2026-10-09, 3D зургаар)
-  if (uStyle == 0 && uMode == 0) c = mix(c, vec3(1.0), rippleShade(g, d, flowAt(g)));
+  // цагаан цалгиа (rippleShade) УНТАРСАН (хэрэглэгч 2026-10-12: цагаан бүхнийг хас)
+  if (uStyle == 0 && uMode == 0) {}
   else if (uMode == 1) c = speedCol(length(velOf(r)));
   else if (uMode == 2) c = hazardCol(d * (length(velOf(r)) + 0.5) + (d > 0.75 ? 1.0 : d > 0.25 ? 0.5 : 0.0));
   else { float a = arrOf(r); if (a >= 4095.0) return vec4(0.0); c = timeCol(a); }

@@ -27,9 +27,12 @@
   --line2: #404f54;
   --text: #e2eaf2;
   --muted: #8797a8;
-  --accent: #4fd1e6;
+  /* Оюу нь бүдгэрсэн (хэрэглэгч 2026-10-12: "jaahan budeg bolgoh uu her tod bn"):
+     #4fd1e6 (OKLCH 0.80 / 0.115) → 0.72 / 0.085, өнцөг 211 хэвээр.
+     accent-ink дээрх контраст 6.8:1. */
+  --accent: #5eb3c3;
   --accent-ink: #04232a;
-  --accent-soft: rgba(79, 209, 230, .14);
+  --accent-soft: rgba(94, 179, 195, .14);
   --rain: #93a9ff;
   --warn: #ffb547;
   --danger: #ff6b6b;
@@ -141,18 +144,26 @@
 .flood-app .progress { height: 4px; background: var(--line); border-radius: 4px; overflow: hidden; margin-bottom: 10px; }
 .flood-app .progress div { height: 100%; width: 0; background: var(--accent); transition: width .2s linear; }
 .flood-app .runrow { display: grid; grid-template-columns: 1fr 48px; gap: 8px; }
-.flood-app .runrow .btn { padding: 11px 12px; }
+.flood-app .runrow .btn { padding: 6px 12px; line-height: 1.3; }
+/* эхлүүлэх мөр нам (хэрэглэгч 2026-10-12: "eneni undriig bagasga") — ~44 → ~32px */
+.flood-app .runrow .btn.primary { font-size: 13px; }
 .flood-app #reset { font-size: 17px; padding: 0; }
 
 /* ---------- stat tiles ---------- */
 .flood-app .tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
 .flood-app .tiles.three { grid-template-columns: repeat(3, 1fr); }
 .flood-app .tile { background: var(--field); border-radius: 9px; padding: 8px 10px; min-width: 0; }
-.flood-app .tile span { display: block; font-size: 10.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.flood-app .tile b { font-size: 19px; font-weight: 650; font-variant-numeric: tabular-nums; letter-spacing: -.2px; }
+/* Шошго ТОМ ҮСГЭЭР, 10.5px (11.5 болгоод буцааж 1px багасгасан); тоо 19 → 16px (хэрэглэгч 2026-10-12).
+   ⚠ Том үсгээр "УСАНД АВТСАН ТАЛБАЙ", "УРСГАЛЫН ДЭЭД ХУРД" 120px-д багтахгүй тул
+   ТАСЛАХГҮЙ, мөрөө залгана; шошго ХОЁР МӨРИЙН өндөртэй тул бүх тоо нэг шугамд эгнэнэ. */
+.flood-app .tile span { display: block; font-size: 10.5px; line-height: 1.25; min-height: 2.5em; margin-bottom: 2px; text-transform: uppercase; color: var(--muted); }
+.flood-app .tile b { font-size: 16px; font-weight: 650; font-variant-numeric: tabular-nums; letter-spacing: -.2px; }
 .flood-app .tiles.three .tile b { font-size: 16px; }
 .flood-app .tile i { font-style: normal; color: var(--muted); font-size: 11px; margin-left: 3px; }
 .flood-app .tile.accent { background: var(--accent-soft); }
+/* Хавтан бүр ХҮРЭЭТЭЙ (хэрэглэгч 2026-10-12). Онцолсон (`accent`) хавтан ХЭРЭГЛЭХГҮЙ —
+   "Усанд автсан талбай" ганцаараа сонгогдсон мэт харагдаж байв. */
+.flood-app .tile { border: 1px solid var(--line2); }
 .flood-app .tile.accent b { color: var(--accent); }
 
 /* ---------- map ---------- */
@@ -179,16 +190,27 @@
 .flood-app .modebar { position: absolute; left: 12px; bottom: 26px; z-index: 2; display: flex; flex-direction: column; gap: 8px; max-width: calc(100% - 150px); }
 .flood-app .modebar .seg { border-radius: 10px; overflow-x: auto; }
 .flood-app .modebar .seg button { flex: none; padding: 6px 10px; }
-.flood-app .legend { border-radius: 10px; padding: 8px 12px; font-size: 11px; color: var(--muted); align-self: flex-start; }
+/* Таних тэмдэг ДЭВСГЭРГҮЙ (хэрэглэгч 2026-10-12) — зураг дээр шууд сууна тул бичвэр цагаан,
+   бараан сүүдэртэй: ямар ч суурь зураг, горимд уншигдана. */
+.flood-app .legend { padding: 4px 2px; font-size: 11px; color: #fff; align-self: flex-start;
+  text-shadow: 0 0 3px rgba(0,0,0,.9), 0 1px 2px rgba(0,0,0,.8); }
+.flood-app .legend .bar { box-shadow: 0 0 0 1px rgba(0,0,0,.35); }
 .flood-app .legend .bar { height: 10px; width: 260px; max-width: 100%; border-radius: 3px; margin: 6px 0 3px; }
 .flood-app .legend .ticks { display: flex; justify-content: space-between; width: 260px; max-width: 100%; }
 .flood-app .legend .cls { display: flex; gap: 10px; flex-wrap: wrap; }
 .flood-app .legend .cls span::before { content: ""; display: inline-block; width: 11px; height: 11px; border-radius: 3px; background: var(--c); margin-right: 4px; vertical-align: -1px; }
 .flood-app .tooltip { position: absolute; z-index: 3; pointer-events: none; background: var(--glass); border: 1px solid var(--line); box-shadow: var(--shadow);
   border-radius: 7px; padding: 5px 9px; font-size: 11.5px; white-space: nowrap; transform: translate(14px, 14px); }
-.flood-app .clickmode { position: absolute; top: 50px; left: 50%; transform: translateX(-50%); z-index: 3; background: var(--warn); color: #231400;
-  padding: 6px 14px; border-radius: 999px; font-weight: 600; font-size: 12px; box-shadow: var(--shadow); }
-
+/* Хөвөгч самбар (app.js updateTooltip) — барилга ба устай нүд НЭГ загвар (`rich`, хэрэглэгч 2026-10-12):
+   том үсэгт гарчиг, доор нь нэр · утга мөрүүд, утга баруун тийш эгнэнэ. */
+.flood-app .tooltip.rich { display: grid; gap: 5px; padding: 9px 11px; min-width: 190px; border-radius: 9px; }
+.flood-app .tooltip.rich[hidden] { display: none; }
+.flood-app .tooltip.rich .ttl { font-size: 10.5px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .06em;
+  padding-bottom: 5px; margin-bottom: 1px; border-bottom: 1px solid var(--line); }
+.flood-app .tooltip.rich .cls { display: flex; align-items: center; gap: 7px; font-weight: 600; font-size: 12.5px; }
+.flood-app .tooltip.rich i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; border: 1px solid var(--line2); flex: none; }
+.flood-app .tooltip.rich .kv { display: flex; justify-content: space-between; align-items: center; gap: 16px; color: var(--muted); }
+.flood-app .tooltip.rich .kv b { display: inline-flex; align-items: center; gap: 6px; color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
 /* ArcGIS widgets */
 .flood-app .esri-ui-corner .esri-component { box-shadow: var(--shadow) !important; }
 .flood-app .esri-attribution { font-size: 10px; }
@@ -205,26 +227,8 @@
   .flood-app .modebar { max-width: calc(100% - 24px); }
 }
 
-/* ---------- risk summary / alerts ---------- */
-.flood-app .risk-head { display: flex; gap: 12px; align-items: center; }
-.flood-app .risk-head .hint { margin: 0; }
-.flood-app .badge { flex: none; padding: 8px 12px; border-radius: 10px; font-weight: 700; font-size: 13px; text-align: center; min-width: 92px;
-  background: var(--field); color: var(--muted); border: 1px solid var(--line); }
-.flood-app .badge[data-level="1"] { background: rgba(64, 192, 87, .15); color: #40c057; border-color: rgba(64, 192, 87, .5); }
-.flood-app .badge[data-level="2"] { background: rgba(255, 169, 77, .15); color: #ffa94d; border-color: rgba(255, 169, 77, .5); }
-.flood-app .badge[data-level="3"] { background: rgba(240, 62, 62, .15); color: #ff6b6b; border-color: rgba(240, 62, 62, .5); }
-.flood-app .badge[data-level="4"] { background: rgba(166, 30, 106, .25); color: #f783ac; border-color: rgba(247, 131, 172, .6);
-  animation: flood-pulse 1.6s ease-in-out infinite; }
+/* ---------- alerts ---------- */
 @keyframes flood-pulse { 50% { box-shadow: 0 0 0 5px rgba(247, 131, 172, .15); } }
-.flood-app .bldstat { margin-top: 12px; background: var(--field); border-radius: 10px; padding: 10px 12px; }
-.flood-app .bldnum b { font-size: 24px; font-weight: 700; font-variant-numeric: tabular-nums; margin-right: 6px; }
-.flood-app .bldnum span { color: var(--muted); font-size: 12px; }
-.flood-app .bldbar { display: flex; height: 8px; border-radius: 4px; overflow: hidden; background: var(--line); margin: 8px 0; }
-.flood-app .bldbar div { height: 100%; transition: width .3s; }
-.flood-app .bldlegend { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 4px 10px; font-size: 11.5px; }
-.flood-app .bldlegend li { display: flex; align-items: center; gap: 6px; color: var(--muted); }
-.flood-app .bldlegend li::before { content: ""; width: 10px; height: 10px; border-radius: 3px; background: var(--c); flex: none; }
-.flood-app .bldlegend b { color: var(--text); margin-left: auto; font-variant-numeric: tabular-nums; }
 .flood-app .alerts { list-style: none; margin: 0; padding: 0; max-height: 220px; overflow-y: auto; }
 .flood-app .alerts li { display: grid; grid-template-columns: 10px 1fr auto; gap: 8px; align-items: start; padding: 7px 0; border-top: 1px solid var(--line); font-size: 12px; }
 .flood-app .alerts li:first-child { border-top: 0; }
@@ -250,14 +254,7 @@
 .flood-app .modebar .small-seg button { font-size: 11.5px; padding: 5px 10px; }
 
 /* ---------- explanations ---------- */
-.flood-app .info { display: inline-grid; place-items: center; width: 15px; height: 15px; border-radius: 50%; margin-left: 6px; padding: 0;
-  border: 1px solid var(--line2); background: none; color: var(--muted); font: italic 600 10px/1 Georgia, serif; cursor: help;
-  vertical-align: 1px; flex: none; text-transform: none; letter-spacing: 0; }
-.flood-app .info:hover, .flood-app .info:focus-visible { color: var(--accent); border-color: var(--accent); outline: none; }
-.flood-app .info.static { cursor: default; }
-.flood-app .tipbox { position: fixed; z-index: 50; background: var(--card); color: var(--text); border: 1px solid var(--line2);
-  box-shadow: var(--shadow); border-radius: 9px; padding: 9px 11px; font-size: 12px; line-height: 1.5; pointer-events: none; }
-.flood-app .chart-head { display: flex; align-items: center; margin-top: 14px; font-size: 12.5px; }
+.flood-app .chart-head { display: flex; align-items: center; margin-top: 14px; font-size: 12.5px; text-transform: uppercase; }   /* том үсгээр — хэрэглэгч 2026-10-12 */
 .flood-app .chart-head + canvas.chart { margin-top: 6px; }
 .flood-app details.adv { margin-top: 12px; border-top: 1px dashed var(--line); padding-top: 8px; }
 .flood-app details.adv summary { cursor: pointer; color: var(--muted); font-size: 12px; list-style: none; display: flex; align-items: center; }
@@ -288,11 +285,6 @@
 .flood-app details.adv-card[open] > summary { margin-bottom: 4px; }
 .flood-app .runbar .summary { margin: 0 0 8px; font-size: 12px; color: var(--muted); line-height: 1.45; }
 .flood-app .runbar .summary b { color: var(--text); font-weight: 600; }
-/* risk badge text needs darker tones on the light theme */
-:root[data-theme="light"] .flood-app .badge[data-level="1"] { color: #2b8a3e; }
-:root[data-theme="light"] .flood-app .badge[data-level="2"] { color: #c25e00; }
-:root[data-theme="light"] .flood-app .badge[data-level="3"] { color: #c92a2a; }
-:root[data-theme="light"] .flood-app .badge[data-level="4"] { color: #a61e6a; background: rgba(166, 30, 106, .12); }
 
 /* ---------- minimal scenario panel ---------- */
 .flood-app .card.simple { padding: 12px 14px; }
@@ -304,7 +296,16 @@
 .flood-app .card.rain .presets button { padding: 4px 5px; gap: 0; }
 .flood-app .card.rain .presets button span { font-size: 10px; white-space: nowrap; letter-spacing: -0.2px; }
 .flood-app .card.rain .field { margin-top: 8px; }
-.flood-app .card.rain .field > label { margin-bottom: 2px; }
+.flood-app .card.rain .field + .field { margin-top: 0; }
+.flood-app .card.rain .field > label { margin-bottom: 0; }
+.flood-app .card.rain .field > label > span:first-child { text-transform: uppercase; font-size: 11px; }   /* "БОРООНЫ ЭРЧИМ", "ҮРГЭЛЖЛЭХ ХУГАЦАА" — хэрэглэгч 2026-10-12 */
+/* гараас бичих утга (app.js editable) */
+.flood-app .val-edit { cursor: text; padding: 0 3px; border-radius: 4px; border-bottom: 1px dashed var(--line2); }
+.flood-app .val-edit:hover { background: var(--accent-soft); }
+.flood-app .val-edit:has(input) { padding: 0; border-bottom: 0; background: none; }
+.flood-app .val-input { width: 52px; padding: 1px 4px; font: inherit; font-weight: 600; text-align: right; font-variant-numeric: tabular-nums;
+  color: var(--text); background: var(--field); border: 1px solid var(--accent); border-radius: 4px; outline: none; }
+.flood-app .val-input::-webkit-inner-spin-button { margin-left: 2px; }
 .flood-app .card.simple h2 { color: var(--text); font-size: 12px; margin-bottom: 10px; }
 .flood-app .card.simple .field { margin-top: 10px; }
 /* Жишээ хувилбар: 3 багана, багана агуулгаасаа ӨРГӨСӨХГҮЙ (minmax 0) — урьд нь "Жишиг"-ийн урт дэд
@@ -316,7 +317,7 @@
 .flood-app .presets button span { font-size: 10.5px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
 .flood-app .presets button .drops { display: none; }
 .flood-app .presets button:last-child:nth-child(odd) { grid-column: auto; }
-.flood-app .presets button.wide { grid-column: 1 / -1; flex-direction: row; align-items: baseline; justify-content: space-between; gap: 8px; }
+.flood-app .presets button.wide, .flood-app .presets button.wide:last-child:nth-child(odd) { grid-column: 1 / -1; flex-direction: row; align-items: baseline; justify-content: space-between; gap: 8px; }
 .flood-app .card.rain .presets button.wide { padding: 5px 8px; }
 .flood-app h3.sub { font-size: 10.5px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); margin: 16px 0 2px; font-weight: 600; }
 .flood-app details.adv-card h3.sub:first-of-type { margin-top: 10px; }
@@ -325,6 +326,7 @@
 .flood-app .speedrow .seg { flex: 1; }
 .flood-app .speedrow .seg button { padding: 4px 2px; }
 .flood-app .speedrow .muted b { color: var(--text); }
+.flood-app .speedrow[hidden] { display: none; }
 
 /* Газрын зургаас зүүн самбарт шилжсэн удирдлага (хэрэглэгч 2026-10-08) */
 .flood-app .progress[hidden] { display: none; }
@@ -336,23 +338,34 @@
 .flood-app .viewcard h2 { margin-bottom: 2px; }
 .flood-app .seg.wrap { flex-wrap: wrap; }
 .flood-app .seg.wrap button { flex: 1 1 30%; }
-.flood-app .viewcard .chip { align-self: flex-start; background: var(--field); border: 1px solid var(--line); }
-.flood-app .viewcard .chip.on { border-color: var(--accent); }
+/* албан нэршил урт тул товчны бичвэр тасрахгүй */
+.flood-app #speedSeg button, .flood-app #mode button { white-space: nowrap; }
+/* Товч бүр ХҮРЭЭТЭЙ (хэрэглэгч 2026-10-12: "buttonii hureeg haruul") — хөрсний чийг,
+   дүрслэлийн горим, усны хэлбэр, борооны хуваарилалт зэрэг .seg.small бүгд. Гадна
+   хайрцгийн хүрээ, дэвсгэр ХАСАГДСАН — зөвхөн товчнууд хүрээтэй. */
+.flood-app .seg.small, .flood-app #domain { gap: 4px; border: 0; background: none; padding: 0; }
+.flood-app .seg.small button, .flood-app #domain button { border: 1px solid var(--line2); }
+/* Сонгогдсон нь "Жишиг" хувилбарын товч шиг (хэрэглэгч 2026-10-12): цул дүүргэлт биш
+   бүдэг туяа + accent хүрээ, бичвэр accent. */
+.flood-app .seg.small button:hover, .flood-app #domain button:hover { border-color: var(--accent); }
+.flood-app .seg.small button.on, .flood-app #domain button.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); font-weight: 600; }
+/* Дүрслэлийн горим 2 · 2 · 1 (хэрэглэгч 2026-10-12): гүн | хурд, аюул | дээд гүн, үер хүрэх хугацаа ганцаараа. */
+.flood-app #mode { display: grid; grid-template-columns: 1fr 1fr; }
+.flood-app #mode button:last-child { grid-column: 1 / -1; }
+/* "Үерт өртсөн барилга" товч — баруун самбарын үр дүнгийн картад, хур тунадасны дээр */
+.flood-app .panel.right #bldBtn { display: block; width: 100%; margin: 0; background: var(--field); border: 1px solid var(--line); text-align: left; }
+.flood-app .panel.right #bldBtn.on { border-color: var(--accent); }
+.flood-app .panel.right #bldBtn { text-transform: uppercase; }   /* хэрэглэгч 2026-10-12 */
 /* 2D/3D зургийн ДЭЭД ГОЛД, нам (хэрэглэгч 2026-10-08); суурь зургийн цуглуулга Esri-ийн виджет, баруун дээд буланд.
-   Товшилтын горимын мэдэгдэл (.clickmode) түүний доор 50px-д. */
+   (Товшилтын горимын мэдэгдэл .clickmode 2026-10-12-нд устсан.) */
 .flood-app .viewmode { padding: 2px; }
 .flood-app .viewmode button { padding: 3px 14px; font-size: 12px; line-height: 1.3; }
 
 /* Баруун самбар (2026-10-09): ангиллын мөр нөлөөтэйгээ, үр дүн бүлэгтэй, үйл явдлын бүртгэл */
-.flood-app .panel.right .bldlegend { grid-template-columns: 1fr; gap: 0; }
-.flood-app .panel.right .bldlegend li { display: grid; grid-template-columns: 10px 74px 1fr auto; gap: 8px; align-items: center;
-  padding: 5px 0; border-top: 1px solid var(--line); }
-.flood-app .panel.right .bldlegend li:first-child { border-top: 0; }
-.flood-app .panel.right .bldlegend li::before { width: 10px; height: 10px; }
-.flood-app .panel.right .bldlegend .nm { color: var(--text); font-variant-numeric: tabular-nums; white-space: nowrap; }
-.flood-app .panel.right .bldlegend .nt { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.flood-app .panel.right .bldlegend b { margin-left: 0; }
 .flood-app .group-label { margin: 10px 0 5px; font-size: 10.5px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
 .flood-app .panel.right h2 + .group-label { margin-top: 0; }
 .flood-app .panel.right canvas.chart { height: 150px; }
+.flood-app .chartcard > .chart-head:first-child { margin-top: 0; }
+/* "Хур тунадас", "Үер" гарчиг тод (харанхуйд цагаан; гэрэлд --text бараан — цагаан бол уусна). */
+.flood-app .statcard h2 { color: var(--text); }   /* тусдаа картын гарчиг */
 .flood-app .panel.right .alerts { max-height: 260px; }

@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import dynamic from "next/dynamic";
-import { Box, Droplets, Loader2, Waves } from "lucide-react";
+import { Box, Check, Droplets, Loader2, Waves } from "lucide-react";
 import { useStoredTab } from "@/components/ui/source-tabs";
 import { cn } from "@/lib/utils";
 
@@ -82,13 +82,11 @@ const VIEWS = [
   {
     id: "flood",
     label: "Үерийн симуляци",
-    note: "Бороо · гадаргын урсац",
     icon: Waves,
   },
   {
     id: "soil",
     label: "Хөрсний зүсэлт",
-    note: "Үе давхарга · дурын азимут",
     icon: Box,
   },
   /* ⚠ Гурав дахь харагдац (хэрэглэгч 2026-10-09): дээрх хоёрыг ХОЛБОНО —
@@ -98,7 +96,6 @@ const VIEWS = [
   {
     id: "floodsoil",
     label: "Үер ба нэвчилт",
-    note: "Үерийн ус хөрсний блок дээр · шингээлт",
     icon: Droplets,
   },
 ] as const;
@@ -129,29 +126,42 @@ export function AnalysisWorkspace() {
             type="button"
             aria-pressed={view === v.id}
             onClick={() => pick(v.id)}
+            /* Сонгогдсон нь "Өгөгдлийн багц"-ын мөр шиг ({@link SourceTabs},
+               `.dataset-panel-item.is-selected`; хэрэглэгч 2026-10-12): бүдэг
+               --moss дэвсгэр, хүрээ, тэмдэг ба нэр --moss, баруун талд чагт. */
             className={cn(
-              "flex items-center gap-2 rounded-xs border px-2.5 py-1.5 text-left transition-colors",
-              view === v.id
-                ? "border-(--tone) bg-(--tone)/10"
-                : "border-line bg-paper-2 hover:bg-paper-hi",
+              "flex items-center gap-2 rounded-[10px] border px-2.5 py-1.5 text-left transition-colors",
+              view === v.id ? "" : "border-line bg-paper-2 hover:bg-paper-3",
             )}
+            /* ⚠ Inline: Tailwind-ийн дурын `color-mix` хүрээний анги үүсэхгүй байв */
+            style={
+              view === v.id
+                ? {
+                    borderColor:
+                      "color-mix(in oklab, var(--moss) 28%, transparent)",
+                    background:
+                      "color-mix(in oklab, var(--moss) 8%, var(--paper-2))",
+                  }
+                : undefined
+            }
           >
             <v.icon
               size={15}
               strokeWidth={1.6}
-              className={view === v.id ? "text-(--tone)" : "text-ink-3"}
+              className={view === v.id ? "text-moss" : "text-ink-3"}
             />
-            <span className="min-w-0">
-              <span
-                className={cn(
-                  "block text-[12px] font-medium",
-                  view === v.id ? "text-ink" : "text-ink-2",
-                )}
-              >
-                {v.label}
-              </span>
-              <span className="block text-[10.5px] text-ink-3">{v.note}</span>
+            {/* Дэд тайлбар ("Бороо · гадаргын урсац" …) ХАСАГДСАН (хэрэглэгч 2026-10-12) */}
+            <span
+              className={cn(
+                "text-[12px]",
+                view === v.id ? "font-semibold text-moss" : "font-medium text-ink-2",
+              )}
+            >
+              {v.label}
             </span>
+            {view === v.id && (
+              <Check size={14} className="text-moss" aria-hidden="true" />
+            )}
           </button>
         ))}
       </div>

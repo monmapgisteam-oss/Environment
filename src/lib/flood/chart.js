@@ -124,5 +124,5 @@ function niceStep(x) {
 }
 function niceCeil(x) { const s = niceStep(x / 4); return Math.max(s * 4, Math.ceil(x / s) * s); }
 function fmtY(v) { return v === 0 ? '0' : v >= 10 ? v.toFixed(0) : v >= 1 ? v.toFixed(1) : v >= 0.1 ? v.toFixed(2) : v.toFixed(3); }
-function fmtX(m) { return m >= 120 ? (m / 60).toFixed(m % 60 ? 1 : 0) + 'ц' : m.toFixed(0) + (m === 0 ? '' : 'м'); }
+function fmtX(m) { return m >= 120 ? (m / 60).toFixed(m % 60 ? 1 : 0) + ' ц' : m.toFixed(0) + (m === 0 ? '' : ' мин'); }
 function fmtClock(m) { const h = Math.floor(m / 60), mm = Math.round(m % 60); return `${h}:${String(mm).padStart(2, '0')} (${Math.round(m)} мин)`; }

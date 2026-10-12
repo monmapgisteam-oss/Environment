@@ -3,7 +3,7 @@ import { loadArcGIS, MapController } from './arcgis.js';
 import { drawChart } from './chart.js';
 import { writeGeoTIFF } from './geotiff.js';
 import { installHelp } from './help.js';
-import { ImpactAnalyzer, CLASSES, riskLevel } from './impact.js';
+import { ImpactAnalyzer, CLASSES } from './impact.js';
 import { createSolverGL, loadFloodData } from './data.js';
 
 // ⚠ Элементийг АППЫН ҮНДЭС дотроос хайна (платформын хуудсанд өөр id байж болно).
@@ -20,23 +20,21 @@ const toLonLat = (x, y) => [x / R * 180 / Math.PI, (2 * Math.atan(Math.exp(y / R
 // "Жишиг" нь ArcGIS Pro-гийн Flood Simulation хэрэгслийн анхдагч тохиргоотой ижил (40 мм/ц, 1 цаг, тэгш,
 // шингээлтгүй) — хэрэглэгч 2026-10-09-нд Pro-гийн бичлэгтэй харьцуулахаар анхдагч болгосон. `soil` өгсөн
 // хувилбар дарагдахад хөрсний сонголт мөн солигдоно; бусад нь хөрсийг хөндөхгүй.
+// ⚠ "Хөлдсөн" (нэвчилтгүй, soil 0) төлөв УСТСАН (хэрэглэгч 2026-10-12: "huldsun tuluwiig del") — анхдагч ба
+// "Жишиг" нь "Ханасан" (0.25, нэвчилт 25%) болов; Pro-гийн нэвчилтгүй жишгээс бага зэрэг зөрнө.
+// ⚠ Зөвхөн "Жишиг" үлдсэн (хэрэглэгч 2026-10-12: "ene 6 hereggui tul del") — Шиврээ,
+// Бага, Аадар, Хүчтэй, Онц хүчтэй, Удаан устсан. Бусад бороог эрчим, хугацааны гулсуураар.
 const PRESETS = [
-  { name: 'Жишиг', i: 40, d: 60, shape: 'uniform', lvl: 2, soil: 0 },
-  { name: 'Шиврээ', i: 3, d: 360, shape: 'uniform', lvl: 1 },
-  { name: 'Бага', i: 8, d: 60, shape: 'uniform', lvl: 1 },
-  { name: 'Аадар', i: 30, d: 60, shape: 'tri', lvl: 2 },
-  { name: 'Хүчтэй', i: 50, d: 45, shape: 'tri', lvl: 3 },
-  { name: 'Онц хүчтэй', i: 80, d: 60, shape: 'front', lvl: 4 },
-  { name: 'Удаан', i: 6, d: 720, shape: 'uniform', lvl: 1 },
+  { name: 'Жишиг', i: 40, d: 60, shape: 'uniform', lvl: 2, soil: 0.25 },
 ];
 const fmtDur = m => m < 60 ? `${m} мин` : m % 60 ? `${(m / 60).toFixed(1)} цаг` : `${m / 60} цаг`;
-const SOIL = { 1: 'хуурай хөрс', 0.6: 'дунд хөрс', 0.25: 'нойтон хөрс', 0: 'хөлдүү хөрс' };
+const SOIL = { 1: 'хуурай хөрс', 0.6: 'чийглэг хөрс', 0.25: 'чийгээр ханасан хөрс' };
 const LEGENDS = {
   0: { title: 'Усны гүн, м', grad: 'linear-gradient(90deg,#9eebff,#40adff 7.5%,#1466e6 25%,#0d2ea6 50%,#380d73)', ticks: ['0', '0.3', '1', '2', '4+'] },
   1: { title: 'Урсгалын хурд, м/с', grad: 'linear-gradient(90deg,#4099ff,#33d98c 10%,#ffdb33 30%,#ff5926 60%,#b30059)', ticks: ['0', '0.5', '1.5', '3', '5+'] },
-  2: { title: 'Үерийн аюулын зэрэг (DEFRA FD2320: гүн × (хурд + 0.5) + хог хаягдлын коэф.)', cls: [['#ffeb59', 'Бага < 0.75'], ['#ff9926', 'Дунд 0.75–1.25'], ['#ed3326', 'Их 1.25–2'], ['#8c0a47', 'Онц их > 2']] },
-  3: { title: 'Симуляцийн хамгийн их гүн, м', grad: 'linear-gradient(90deg,#9eebff,#40adff 7.5%,#1466e6 25%,#0d2ea6 50%,#380d73)', ticks: ['0', '0.3', '1', '2', '4+'] },
-  4: { title: 'Ус хүрэх хугацаа — бороо эхэлснээс хойш (гүн > 10 см)', grad: 'linear-gradient(90deg,#d90d40,#ff731a 15%,#ffe64d 35%,#4dccE6 60%,#334de6)', ticks: [] },
+  2: { title: 'Үерийн аюулын зэрэг (DEFRA FD2320)', cls: [['#ffeb59', 'Бага < 0.75'], ['#ff9926', 'Дунд 0.75–1.25'], ['#ed3326', 'Өндөр 1.25–2'], ['#8c0a47', 'Онц өндөр > 2']] },
+  3: { title: 'Усны дээд гүн, м', grad: 'linear-gradient(90deg,#9eebff,#40adff 7.5%,#1466e6 25%,#0d2ea6 50%,#380d73)', ticks: ['0', '0.3', '1', '2', '4+'] },
+  4: { title: 'Үер хүрэх хугацаа (гүн > 0.1 м)', grad: 'linear-gradient(90deg,#d90d40,#ff731a 15%,#ffe64d 35%,#4dccE6 60%,#334de6)', ticks: [] },
 };
 
 export class App {
@@ -51,7 +49,7 @@ export class App {
     this.grid = null;
     this.running = false;
     this.factor = 2;
-    this.scn = { i: 40, d: 60, shape: 'uniform', area: 'all', center: null, radiusKm: 6, soil: 0, manning: 1,
+    this.scn = { i: 40, d: 60, shape: 'uniform', area: 'all', center: null, radiusKm: 6, soil: 0.25, manning: 1,
       tuulOn: false, tuulQ: 40, inflows: [], durH: 3, speed: 120, hortonK: 2 / 3600, drain: 10 };
     this.display = { mode: 0, thr: 0.02, opacity: 0.85, hill: 0, particles: true, buildings: false, buildings3d: true, waterStyle: 0, arrows: false, affected: false };   // Өнгөт (гүн) анхдагч — Pro-гийн тунгалаг цайвар→бараан хөх шатлалтай адил (хэрэглэгч 2026-10-09)
     this.viewSnapshot = null;
@@ -128,7 +126,10 @@ export class App {
     // the realistic water draws no streaks of its own: the tracers (FlowRenderer-style streamlines) show the motion
     // урсгалын цагаан зураас (FlowRenderer маяг) "Хөдөлгөөнт" БА "Өнгөт (гүн)" усанд (хэрэглэгч 2026-10-09:
     // "хөдөлгөөнт дээр байгаа сумыг өнгөт гүн дээр бас оруул"); "Бодит" (1) усанд хэвээр үгүй
-    const particles = this.display.particles && !this.display.arrows && this.display.waterStyle !== 1;
+    // ⚠⚠ ЦАГААН ЗУРААС БҮХ УСАНД УНТАРСАН (хэрэглэгч 2026-10-12, зургаар: "gunii shatlal, hudulguunt
+    // deer bgaa tsagaaniig del") — урсгалын цагаан зураас (FlowRenderer маяг) усыг цагаан эргүүлгээр
+    // бүрхэж байв. Кодод үлдсэн; дахин асаах бол энд.
+    const particles = false;
     return { ...this.display, particles, history: !!this.viewSnapshot, tmax: Math.max(this.solver ? this.solver.t : 60, 60) / 60 };
   }
 
@@ -173,7 +174,7 @@ export class App {
     this.solver = null;
     this.solver = new FloodSolver(this.gl, this.data, { factor: this.factor, buildings: $('bldObs').checked, window: this.areaWindow() });
     const s = this.solver;
-    $('gridInfo').textContent = `${s.W.toLocaleString()} × ${s.H.toLocaleString()} = ${(s.W * s.H / 1e6).toFixed(1)} сая нүд · нүд ≈ ${s.dx.toFixed(1)} м · ${(s.W * s.H * s.dx * s.dx / 1e6).toFixed(0)} км²`;
+    $('gridInfo').textContent = `${s.W.toLocaleString()} × ${s.H.toLocaleString()} = ${(s.W * s.H / 1e6).toFixed(1)} сая нүд · нүдний хэмжээ ≈ ${s.dx.toFixed(1)} м · талбай ${(s.W * s.H * s.dx * s.dx / 1e6).toFixed(0)} км²`;
     this.refreshGrid();
     this.resetSim();
     this.updateAreaInfo();
@@ -200,7 +201,7 @@ export class App {
     this.area = area && [Math.max(area[0], m.x0), Math.max(area[1], m.y1 - m.H * m.res), Math.min(area[2], m.x0 + m.W * m.res), Math.min(area[3], m.y1)];
     if (this.area && (this.area[2] <= this.area[0] || this.area[3] <= this.area[1])) this.area = null;
     this.areaDraft = null;
-    $('loading').classList.remove('hide'); $('loadMsg').textContent = 'Тооцох талбайг шинэчилж байна…';
+    $('loading').classList.remove('hide'); $('loadMsg').textContent = 'Тооцооны талбайг шинэчилж байна…';
     setTimeout(() => {
       try {
         this.createSolver();
@@ -437,7 +438,7 @@ export class App {
       if (s.t >= tEnd - 1e-3) {
         s.reduce();
         this.recordHistory(true); this.setRunning(false); this.impact.cancel(); this.onImpact(this.impact.compute(s));
-        this.alert('end', 'info', `Симуляци дууслаа: ${this.impact.result.total.toLocaleString()} барилга үерт өртсөн, хамгийн их гүн ${s.stats.hmax.toFixed(1)} м.`);
+        this.alert('end', 'info', `Симуляци дууслаа. Үерт өртсөн барилга: ${this.impact.result.total.toLocaleString()}, усны дээд гүн: ${s.stats.hmax.toFixed(1)} м.`);
       }
       this.updateStatsUI();
     }
@@ -465,25 +466,24 @@ export class App {
     if (this.probeCell) {
       const p = s.probe(...this.probeCell);
       this.probeHist.push([tm, p.h, p.v]);
-      if (p.h > 0.3) this.alert('probe03', 'warn', `Сонгосон цэгт усны гүн 0.3 м давлаа — машинд аюултай.`);
-      if (p.h > 0.5) this.alert('probe05', 'danger', `Сонгосон цэгт усны гүн 0.5 м давлаа — явган хүнд аюултай.`);
+      if (p.h > 0.3) this.alert('probe03', 'warn', `Сонгосон цэгт усны гүн 0.3 м-ээс давлаа — автомашины хөдөлгөөнд аюултай.`);
+      if (p.h > 0.5) this.alert('probe05', 'danger', `Сонгосон цэгт усны гүн 0.5 м-ээс давлаа — явган зорчигчид аюултай.`);
     }
     // events
-    if (this.scn.shape === 'tri' && prev && rain > 0 && rain < prev[1] - 1e-6) this.alert('rainpeak', 'info', `Бороо оргил эрчимдээ хүрлээ: ${prev[1].toFixed(0)} мм/ц.`);
-    if (prev && prev[1] > 0 && rain === 0) this.alert('rainend', 'info', `Бороо зогслоо. Нийт ${this.cumRain(s.t).toFixed(0)} мм хур орсон.`);
+    if (this.scn.shape === 'tri' && prev && rain > 0 && rain < prev[1] - 1e-6) this.alert('rainpeak', 'info', `Борооны эрчим дээд утгандаа хүрлээ: ${prev[1].toFixed(0)} мм/ц.`);
+    if (prev && prev[1] > 0 && rain === 0) this.alert('rainend', 'info', `Бороо зогслоо. Нийт ${this.cumRain(s.t).toFixed(0)} мм хур тунадас орсон.`);
     for (const [a, lvl] of [[5, 'info'], [25, 'warn'], [50, 'warn'], [100, 'danger']])
       if (wet >= a) this.alert('wet' + a, lvl, `Усанд автсан талбай ${a} км²-ээс давлаа.`);
-    if (s.stats.vmax > 3) this.alert('v3', 'warn', `Урсгалын хурд ${s.stats.vmax.toFixed(1)} м/с хүрлээ — хүн, машин урсгах аюултай.`);
+    if (s.stats.vmax > 3) this.alert('v3', 'warn', `Урсгалын хурд ${s.stats.vmax.toFixed(1)} м/с хүрлээ — хүн, тээврийн хэрэгсэл урсгагдах аюултай.`);
     this.chartsDirty = true;
   }
 
   // ------------------------------------------------------------------ impact, risk, alerts
   onImpact(r) {
     const deep = r.counts[2] + r.counts[3];
-    if (r.total) this.alert('b1', 'warn', `Анхны барилга үерт өртлөө.`);
-    if (deep) this.alert('b05', 'danger', `Барилгын дэргэд 0.5 м-ээс гүн ус — 1-р давхарт ус орох эрсдэл.`);
+    if (r.total) this.alert('b1', 'warn', `Барилга үерт өртөж эхэллээ.`);
+    if (deep) this.alert('b05', 'danger', `Барилгын орчимд усны гүн 0.5 м-ээс давлаа — нэгдүгээр давхарт ус орох эрсдэлтэй.`);
     for (const n of [100, 1000, 10000]) if (r.total >= n) this.alert('bn' + n, n >= 1000 ? 'danger' : 'warn', `${n.toLocaleString()}-аас олон барилга үерт өртлөө.`);
-    this.renderRisk();
     this.affectedDirty = true;
   }
 
@@ -505,18 +505,6 @@ export class App {
       const limit = v.type === '3d' ? 4000 : 8000;      // 3D extrusions (and the base-layer filter) are costly               // footprints are cached, only new ones are fetched
       await this.mapc.syncAffected(this.impact.result && this.display.affected ? this.impact.affected(limit, box, center) : []);
     } finally { this.affectedBusy = false; }
-  }
-
-  renderRisk() {
-    const r = this.impact?.result, k = riskLevel(r);
-    const b = $('riskBadge');
-    b.dataset.level = k.level; b.textContent = k.name;
-    $('riskText').textContent = k.text;
-    $('bldTotal').textContent = (r ? r.total : 0).toLocaleString();
-    const tot = Math.max(1, r ? r.total : 0);
-    $('bldBar').innerHTML = CLASSES.map((c, i) => `<div style="width:${r ? 100 * r.counts[i] / tot : 0}%;background:${c.color}" title="${c.name}"></div>`).join('');
-    // ангилал бүр нэг мөр: өнгө · гүн · нөлөө · тоо (нөлөөг title-д нуухгүй, 2026-10-09)
-    $('bldLegend').innerHTML = CLASSES.map((c, i) => `<li style="--c:${c.color}"><span class="nm">${c.name}</span><span class="nt">${c.note}</span><b>${r ? r.counts[i].toLocaleString() : 0}</b></li>`).join('');
   }
 
   alert(key, level, text) {
@@ -560,7 +548,6 @@ export class App {
     this.mapc?.clearAffected();
     this.runSig = null;
     this.updateSummary();
-    this.renderRisk();
     this.renderAlerts();
     this.updateStatsUI();
     this.updateTimeUI();
@@ -618,8 +605,16 @@ export class App {
     this.mapc.requestRender();
   }
 
+  /** Хулганы доорх барилга (arcgis.js hitTest) — `null` бол барилга биш */
+  onBuildingHover(oid) {
+    if (oid === this.hoverBld) return;
+    this.hoverBld = oid;
+    this.lastHover = 0;                              // дараагийн хүрээнд самбарыг шинэчилнэ
+  }
+
   onHover(xy, px) {
     this.hoverCell = xy ? this.cellOf(...xy) : null;
+    if (!xy) this.hoverBld = null;
     this.hoverPx = px;
     if (this.clickMode === 'probe' && !this.resizing && px) {
       const ed = this.areaEdgeAt(this.mapc.activeView, px.x, px.y);
@@ -632,10 +627,7 @@ export class App {
 
   setClickMode(m) {
     this.clickMode = m;
-    const el = $('clickMode');
-    el.hidden = m === 'probe';
-    el.textContent = { rain: 'Аадрын төвийг зураг дээр дарж сонгоно уу (Esc — болих)', inflow: 'Урсац орох цэгийг дарж сонгоно уу (Esc — болих)',
-      area: 'Тооцох талбайг газрын зураг дээр чирж тэгш өнцөгтөөр зурна уу (Esc — болих)' }[m] || '';
+    // Зааврын мэдэгдэл (.clickmode) УСТСАН (хэрэглэгч 2026-10-12) — горимыг загалмай заагч хэлнэ.
     $('mapStack').style.cursor = m === 'probe' ? '' : 'crosshair';
     if (m !== 'area' && this.areaDraft && !this.dragStart) { this.areaDraft = null; this.mapc?.updateOverlays(); }
   }
@@ -681,7 +673,7 @@ export class App {
       return el;
     };
 
-    seg('res', v => { this.factor = +v; if (this.solver) { $('loading').classList.remove('hide'); $('loadMsg').textContent = 'Тор шинэчилж байна…'; setTimeout(() => { try { this.createSolver(); } catch (e) { this.fail(e); } }, 30); } });
+    seg('res', v => { this.factor = +v; if (this.solver) { $('loading').classList.remove('hide'); $('loadMsg').textContent = 'Тооцооны торыг шинэчилж байна…'; setTimeout(() => { try { this.createSolver(); } catch (e) { this.fail(e); } }, 30); } });
     $('bldObs').onchange = () => { if (this.solver) { this.solver.buildGrid($('bldObs').checked); this.refreshGrid(); this.resetSim(); } };
 
     seg('domain', v => {
@@ -702,10 +694,9 @@ export class App {
     presets.replaceChildren();
     for (const p of PRESETS) {
       const b = document.createElement('button');
-      const inf = p.soil === 0 ? ' · шингээлтгүй' : '';
+      const inf = p.soil === 0 ? ' · нэвчилтгүй' : '';
       b.classList.toggle('wide', p.soil != null);          // хөрсөө заасан хувилбар бүтэн мөрөнд (flood.css)
       b.innerHTML = `<b>${p.name}</b><span>${p.i} мм/ц · ${fmtDur(p.d)}${inf}</span>`;
-      b.title = `${p.name}: ${p.i} мм/ц, ${fmtDur(p.d)}${inf}`;
       b.onclick = () => {
         $('rainI').value = p.i; $('rainD').value = p.d;
         $('rainI').dispatchEvent(new Event('input')); $('rainD').dispatchEvent(new Event('input'));
@@ -724,7 +715,35 @@ export class App {
       const need = Math.min(24, Math.ceil((v / 60 + 1) * 2) / 2), dur = $('dur');
       if (dur && this.scn.durH < need) { dur.value = need; dur.dispatchEvent(new Event('input')); }
       this.updateRainUI();
-    }, v => v >= 120 ? `${v} (${(v / 60).toFixed(1)} ц)` : v);
+    }, v => v >= 120 ? `${v} (${(v / 60).toFixed(1)} цаг)` : v);
+    // Эрчим, хугацааны тоо дээр дарж утгыг гараас бичнэ (хэрэглэгч 2026-10-12: "mm bolon hour deer
+    // daraad garaas bichij bas boldog bolgo"). Enter / гадагш дарахад батлагдана, Esc цуцална; утга
+    // гулсуурын муж руу хавчигдаж, гулсуур чирсэнтэй ИЖИЛ 'input' үйл явдлаар дамжина.
+    const editable = id => {
+      const el = $(id), t = $(id + 'v');
+      if (!el || !t) return;
+      t.classList.add('val-edit');
+      t.addEventListener('click', () => {
+        if (t.querySelector('input')) return;
+        const inp = document.createElement('input');
+        Object.assign(inp, { type: 'number', min: el.min, max: el.max, step: '1', value: el.value, className: 'val-input' });
+        t.textContent = ''; t.append(inp); inp.focus(); inp.select();
+        let done = false;
+        const commit = ok => {
+          if (done) return; done = true;
+          const v = Math.round(+inp.value);
+          inp.remove();
+          if (ok && inp.value !== '' && Number.isFinite(v)) el.value = String(Math.min(+el.max, Math.max(+el.min, v)));
+          el.dispatchEvent(new Event('input'));     // бичвэрийг сэргээнэ
+        };
+        inp.addEventListener('keydown', e => {
+          if (e.key === 'Enter') commit(true);
+          else if (e.key === 'Escape') commit(false);
+        });
+        inp.addEventListener('blur', () => commit(true));
+      }, { signal: this.abort.signal });
+    };
+    editable('rainI'); editable('rainD');
     seg('rainShape', v => { this.scn.shape = v; this.updateRainUI(); });
     seg('rainArea', v => {
       this.scn.area = v;
@@ -840,14 +859,14 @@ export class App {
     if (!el) return;
     const p = PRESETS.find(p => p.i === sc.i && p.d === sc.d && p.shape === sc.shape);
     const rain = `<b>${p ? p.name + ' · ' : ''}${sc.i} мм/ц · ${fmtDur(sc.d)}</b>`;
-    const tuul = sc.tuulOn ? (this.solver && !this.tuulInside() ? 'Туул: орох цэг талбайгаас гадуур' : `Туул ${sc.tuulQ} м³/с`) : null;
-    const where = this.area && this.solver ? `${Math.round(this.solver.W * this.solver.H * this.solver.dx ** 2 / 1e6).toLocaleString()} км²` : 'бүх хот';
+    const tuul = sc.tuulOn ? (this.solver && !this.tuulInside() ? 'Туул голын орох цэг тооцооны талбайгаас гадна' : `Туул голын зарцуулга ${sc.tuulQ} м³/с`) : null;
+    const where = this.area && this.solver ? `${Math.round(this.solver.W * this.solver.H * this.solver.dx ** 2 / 1e6).toLocaleString()} км²` : 'хотын хэмжээнд';
     const extra = [where, SOIL[sc.soil], tuul].filter(Boolean).join(' · ');
     // rain settings are baked into what has already been simulated: say so if they change mid-run
     const sig = [sc.i, sc.d, sc.shape, sc.area, sc.center, sc.radiusKm].join('|');
     const stale = this.solver && this.solver.t > 0 && this.runSig && sig !== this.runSig;
     el.innerHTML = `${rain} · ${extra} · ${sc.durH} цаг` +
-      (stale ? `<span class="stale">⚠ Бороо өөрчлөгдсөн — ↺ дарж шинээр эхлүүлнэ үү.</span>` : '');
+      (stale ? `<span class="stale">⚠ Хур тунадасны тохиргоо өөрчлөгдсөн — ↺ товчоор дахин эхлүүлнэ үү.</span>` : '');
     $('reset').classList.toggle('attn', !!stale);
   }
 
@@ -862,20 +881,20 @@ export class App {
     const data = [];
     for (let k = 0; k <= 60; k++) { const t = k / 60 * d * 60; data.push([t / 60, this.rainRate(t) * 3.6e6]); }
     const col = themeColors();
-    drawChart(c, { xmax: d, left: 'мм/ц', series: [{ data, fill: col.rain, color: col.rain }, { data, color: col.rain, label: 'Бороо', unit: 'мм/ц', digits: 0 }] });
+    drawChart(c, { xmax: d, left: 'мм/ц', series: [{ data, fill: col.rain, color: col.rain }, { data, color: col.rain, label: 'Борооны эрчим', unit: 'мм/ц', digits: 0 }] });
   }
 
   updateLegend() {
     const L = { ...LEGENDS[this.display.mode] };
-    $('waterStyle').style.display = this.display.mode === 0 ? '' : 'none';     // the look only applies to depth
+    ($('waterCard') || $('waterStyle')).style.display = this.display.mode === 0 ? '' : 'none';     // the look only applies to depth — тусдаа карт бүхэлдээ нуугдана
     if (this.display.mode === 0 && this.display.waterStyle !== 0) {
-      L.title = this.display.waterStyle === 2 ? 'Усны гүн' : 'Ус — бодит дүрслэл';
+      L.title = this.display.waterStyle === 2 ? 'Усны гүн' : 'Усны гадарга';
       L.grad = this.display.waterStyle === 2 ? 'linear-gradient(90deg,rgba(87,128,128,.45),#1f546b 45%,#0a2645)' : 'linear-gradient(90deg,#335c70,#0d1f3a)';
       L.ticks = ['гүехэн', '', '', '', 'гүн'];
     }
     if (this.display.mode === 4) {           // arrival colours are stretched over the time simulated so far
       const T = Math.max(this.solver ? this.solver.t : 0, 60) / 60;
-      L.ticks = [0, 0.25, 0.5, 0.75, 1].map(f => (f * T >= 120 ? `${(f * T / 60).toFixed(1)}ц` : `${Math.round(f * T)}м`));
+      L.ticks = [0, 0.25, 0.5, 0.75, 1].map(f => (f * T >= 120 ? `${(f * T / 60).toFixed(1)} ц` : `${Math.round(f * T)} мин`));
     }
     this.legendT = this.solver?.t;
     let h = `<div>${L.title}</div>`;
@@ -900,7 +919,7 @@ export class App {
     const tl = $('timeline');
     tl.style.setProperty('--p', `${tl.value / 10}%`);
     const tag = $('viewTag');
-    tag.textContent = this.viewSnapshot ? 'Түүх' : (this.running ? 'Шууд' : s.t > 0 ? 'Зогссон' : 'Бэлэн');
+    tag.textContent = this.viewSnapshot ? 'Өмнөх агшин' : (this.running ? 'Тооцоолж байна' : s.t > 0 ? 'Түр зогссон' : 'Бэлэн');
     tag.classList.toggle('hist', !!this.viewSnapshot);
   }
 
@@ -915,8 +934,8 @@ export class App {
     $('sVmax').textContent = st.vmax.toFixed(2);
     if (this.display.mode === 4 && Math.abs((this.legendT || 0) - s.t) > 30) this.updateLegend();
     const bal = s.rainVol + s.inflowVol;
-    $('perf').textContent = `dt ${s.lastDt.toFixed(2)} с · ${this.stepsPerFrame || 0} алхам/кадр · бодит хурд ${Math.round(this.achieved)}× · нийт ${s.steps.toLocaleString()} алхам` +
-      (bal > 0 ? ` · орсон ус ${(bal / 1e6).toFixed(2)} сая м³, гадаргад ${(100 * st.vol / bal).toFixed(0)}%` : '');
+    $('perf').textContent = `Хугацааны алхам ${s.lastDt.toFixed(2)} с · кадрт ${this.stepsPerFrame || 0} алхам · хурдасгал ${Math.round(this.achieved)}× · нийт ${s.steps.toLocaleString()} алхам` +
+      (bal > 0 ? ` · орсон усны эзэлхүүн ${(bal / 1e6).toFixed(2)} сая м³, үүнээс гадаргад ${(100 * st.vol / bal).toFixed(0)}%` : '');
     this.updateTimeUI();
   }
 
@@ -935,7 +954,7 @@ export class App {
     $('pHm').textContent = p.hmax.toFixed(2);
     $('pArr').textContent = p.arrival >= 0 ? p.arrival.toFixed(0) : '—';
     const hr = p.hazard;
-    $('pHz').textContent = hr <= 0 ? '—' : hr < 0.75 ? 'Бага' : hr < 1.25 ? 'Дунд' : hr < 2 ? 'Их' : 'Онц их';
+    $('pHz').textContent = hr <= 0 ? '—' : hr < 0.75 ? 'Бага' : hr < 1.25 ? 'Дунд' : hr < 2 ? 'Өндөр' : 'Онц өндөр';
     this.chartsDirty = true;
   }
 
@@ -945,27 +964,49 @@ export class App {
     tip.hidden = false;
     tip.style.left = this.hoverPx.x + 'px';
     tip.style.top = this.hoverPx.y + 'px';
-    // Газрын өндөр хөвөгч тайлбарт ГАРАХГҮЙ (хэрэглэгч 2026-10-09); хуурай нүдэнд тайлбар огт гарахгүй.
-    if (!p.building && p.h <= 0.005) { tip.hidden = true; return; }
-    tip.innerHTML = p.building
-      ? 'Барилга (усыг нэвтрүүлэхгүй)'
-      : `<b>${p.h.toFixed(2)} м</b> гүн · ${p.v.toFixed(2)} м/с`;
+    // ⚠⚠ БАРИЛГА ДЭЭР — тухайн барилгын хөвөгч самбар (хэрэглэгч 2026-10-12: "ene hereggui harin
+    // tuhain barilga deer cursor ochihod hover panelaar haragdana" — баруун самбарын "Үерийн
+    // эрсдэлийн дүгнэлт" картын оронд). Гүн нь `impact`-ийн хамгийн их гүн (хананы дэргэд),
+    // ангилал нь зураг дээрх будгийн өнгөтэй ижил `CLASSES`. Тооцоо хийгдээгүй бол самбар гарахгүй.
+    if (this.hoverBld != null) {
+      const d = this.impact?.depthOf(this.hoverBld);
+      if (d == null) { tip.hidden = true; return; }
+      const cls = [...CLASSES].reverse().find(k => d >= k.min);
+      tip.classList.add('rich');
+      tip.innerHTML = `<b class="ttl">Барилга</b>` +
+        `<span class="cls"><i style="background:${cls ? cls.color : 'transparent'}"></i>${cls ? cls.note : 'Үерт өртөөгүй'}</span>` +
+        `<span class="kv"><span>Усны дээд гүн</span><b>${d.toFixed(2)} м</b></span>` +
+        (cls ? `<span class="kv"><span>Гүний ангилал</span><b>${cls.name}</b></span>` : '');
+      return;
+    }
+    // Газрын өндөр хөвөгч тайлбарт ГАРАХГҮЙ (хэрэглэгч 2026-10-09); хуурай нүд, барилгын нүдэнд гарахгүй.
+    if (p.building || p.h <= 0.005) { tip.hidden = true; return; }
+    // ⚠ Устай нүд — барилгын самбартай НЭГ загвар (хэрэглэгч 2026-10-12: "hover paneliin design
+    // saijruul"; урьд нь "Гүн 0.08 м · хурд 0.57 м/с" гэсэн нэг мөр). Аюулын зэрэг нь баруун
+    // самбарын `#pHz`, "Аюулын зэрэг" горимын таних тэмдэгтэй ИЖИЛ хил, өнгө (LEGENDS[2]).
+    const hr = p.hazard, hz = LEGENDS[2].cls;
+    const k = hr < 0.75 ? 0 : hr < 1.25 ? 1 : hr < 2 ? 2 : 3;
+    tip.classList.add('rich');
+    tip.innerHTML = `<b class="ttl">Үерийн ус</b>` +
+      `<span class="kv"><span>Усны гүн</span><b>${p.h.toFixed(2)} м</b></span>` +
+      `<span class="kv"><span>Урсгалын хурд</span><b>${p.v.toFixed(2)} м/с</b></span>` +
+      (hr > 0 ? `<span class="kv"><span>Аюулын зэрэг</span><b><i style="background:${hz[k][0]}"></i>${['Бага', 'Дунд', 'Өндөр', 'Онц өндөр'][k]}</b></span>` : '');
   }
 
   drawCharts() {
     if (!this.chartsDirty || !this.solver) return;
     this.chartsDirty = false;
     const xmax = this.scn.durH * 60, c = themeColors(), now = this.solver.t / 60;
-    drawChart($('chartDomain'), { xmax, cursor: now, left: 'Бороо, мм/ц', right: 'Усанд автсан, км²',
-      empty: '▶ Эхлүүлэхэд энд бороо ба үерийн явц гарна', series: [
-        { data: this.hist.map(h => [h[0], h[1]]), color: c.rain, fill: c.rain, axis: 'left', label: 'Бороо', unit: 'мм/ц', digits: 1 },
-        { data: this.hist.map(h => [h[0], h[2]]), color: c.accent, axis: 'right', label: 'Автсан талбай', unit: 'км²', digits: 2, min: 1 },
+    drawChart($('chartDomain'), { xmax, cursor: now, left: 'Эрчим, мм/ц', right: 'Автсан талбай, км²',
+      empty: 'Тооцоо эхлээгүй байна', series: [
+        { data: this.hist.map(h => [h[0], h[1]]), color: c.rain, fill: c.rain, axis: 'left', label: 'Борооны эрчим', unit: 'мм/ц', digits: 1 },
+        { data: this.hist.map(h => [h[0], h[2]]), color: c.accent, axis: 'right', label: 'Усанд автсан талбай', unit: 'км²', digits: 2, min: 1 },
       ] });
-    if (this.probeCell) drawChart($('chartProbe'), { xmax, cursor: now, left: 'Гүн, м', right: 'Хурд, м/с',
-      refs: [{ y: 0.5, label: '0.5 м — явган хүнд аюултай', color: c.danger }, { y: 0.3, label: '0.3 м — машинд аюултай', color: c.warn }],
-      empty: 'Симуляци явахад энэ цэгийн гүн, хурд энд гарна', series: [
-        { data: this.probeHist.map(h => [h[0], h[1]]), color: c.accent, axis: 'left', label: 'Гүн', unit: 'м', digits: 2, min: 0.6 },
-        { data: this.probeHist.map(h => [h[0], h[2]]), color: c.speed, axis: 'right', label: 'Хурд', unit: 'м/с', digits: 2, min: 1 },
+    if (this.probeCell) drawChart($('chartProbe'), { xmax, cursor: now, left: 'Усны гүн, м', right: 'Урсгалын хурд, м/с',
+      refs: [{ y: 0.5, label: '0.5 м — явган зорчигчид аюултай', color: c.danger }, { y: 0.3, label: '0.3 м — автомашины хөдөлгөөнд аюултай', color: c.warn }],
+      empty: 'Тооцоо эхлээгүй байна', series: [
+        { data: this.probeHist.map(h => [h[0], h[1]]), color: c.accent, axis: 'left', label: 'Усны гүн', unit: 'м', digits: 2, min: 0.6 },
+        { data: this.probeHist.map(h => [h[0], h[2]]), color: c.speed, axis: 'right', label: 'Урсгалын хурд', unit: 'м/с', digits: 2, min: 1 },
       ] });
   }
 
