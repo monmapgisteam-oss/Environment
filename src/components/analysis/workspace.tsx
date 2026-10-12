@@ -90,8 +90,8 @@ const VIEWS = [
     icon: Box,
   },
   /* ⚠ Гурав дахь харагдац (хэрэглэгч 2026-10-09): дээрх хоёрыг ХОЛБОНО —
-     хөрсний блок дээр үерийн ус, зүсэлтийн нүүрэнд бохирдлын шингээлт
-     ({@link src/components/analysis/flood-soil.tsx}, `lib/soil-flood.ts`).
+     хөрсний блок дээр "Үерийн симуляци"-ийн ус шууд урсана
+     ({@link src/components/analysis/flood-soil.tsx}, `lib/flood/soil-live.js`).
      Эхний хоёр харагдац хөндөгдөөгүй. */
   {
     id: "floodsoil",

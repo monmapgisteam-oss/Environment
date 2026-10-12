@@ -97,6 +97,20 @@ function inRing(x: number, y: number, ring: Ring): boolean {
   return inside;
 }
 
+/**
+ * Хэсэг бүрийн ГАДНА цагираг — хаалтын давхар цэггүй. Хөрсний блокийг
+ * хилээр огтлоход ({@link src/lib/soil-scene.ts}) хэрэглэгдэнэ.
+ */
+export function ulaanbaatarRings(): [number, number][][] {
+  return UB.map((poly) => {
+    const r = poly[0].map(([x, y]) => [x, y] as [number, number]);
+    const a = r[0];
+    const b = r[r.length - 1];
+    if (r.length > 1 && a[0] === b[0] && a[1] === b[1]) r.pop();
+    return r;
+  });
+}
+
 /** Цэг Улаанбаатарын хилийн дотор эсэх */
 export function inUlaanbaatar(lon: number, lat: number): boolean {
   if (lon < BOX.w || lon > BOX.e || lat < BOX.s || lat > BOX.n) return false;

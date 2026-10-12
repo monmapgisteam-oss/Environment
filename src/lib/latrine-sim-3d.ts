@@ -121,24 +121,29 @@ export function createPit3D(
   opts: {
     container: HTMLDivElement;
     tiles: Record<string, HTMLImageElement>;
-    micro: HTMLCanvasElement;
+    /** Нүх сүвний томруулсан харагдац. ⚠ СОНГОЛТТОЙ — платформ одоо
+     *  дамжуулдаггүй (хэрэглэгч 2026-10-12 цонхыг устгуулсан); байхгүй бол
+     *  томруулсан зураг, хана дээрх тэмдэг, товшилтоор гүн сонгох нь унтарна */
+    micro?: HTMLCanvasElement;
     /** Томруулсан харагдацын мэдээлэл (зурагдалт бүрд биш, өөрчлөгдөхөд) */
-    onMicro: (text: string) => void;
+    onMicro?: (text: string) => void;
     /** Сонгосон гүн өөрчлөгдсөн (хана дээр товшсон) */
-    onDepth: (m: number) => void;
+    onDepth?: (m: number) => void;
     /** Дуслын хурдасгалын тайлбар */
     onSpeed: (text: string) => void;
   },
 ): Pit3D {
   const { container: el, tiles: TIMG, micro: mcv } = opts;
-  const mctx = mcv.getContext("2d")!;
-  const st = { species: "N" as Species, drops: true, speed: 1, dirty: false };
+  const mctx = mcv?.getContext("2d") ?? null;
+  const st = { species: "N" as Species, drops: false, speed: 1, dirty: false };
   let R_: SimResult | null = null;
   let P: SimParams | null = null;
   let PROFILES: SimProfile[] = [];
   let world: any = null;
   let snap: Snap | null = null;
   let winter = false;
+  /** Өвлийн цас, хөлдсөн бүсийг зурах эсэх — унтраалттай (`update`-ийг үз). */
+  const SHOW_WINTER = false;
   let raf = 0;
   let lastT = 0;
   let alive = true;
@@ -242,7 +247,7 @@ export function createPit3D(
   let down: [number, number] | null = null;
   const onDown = (e: PointerEvent) => (down = [e.clientX, e.clientY]);
   const onUp = (e: PointerEvent) => {
-    if (down && Math.hypot(e.clientX - down[0], e.clientY - down[1]) < 5) pick(e);
+    if (mcv && down && Math.hypot(e.clientX - down[0], e.clientY - down[1]) < 5) pick(e);
     down = null;
   };
   renderer.domElement.addEventListener("pointerdown", onDown);
@@ -384,6 +389,28 @@ export function createPit3D(
     m = mk(R, Db, tex(crop(0.5, R)));
     m.position.set(-R / 2, -Db / 2, R);
     g.add(m);
+    /* ⚠ ЁРООЛ (хэрэглэгч 2026-10-12, доороос харсан зургаар: "доод суурь нь
+       байхгүй юм шиг байна"). Блок дээд гадарга + хана гэсэн НЭЭЛТТЭЙ бүрхүүл
+       байсан тул доороос харахад хана нь нимгэн зурвас болж, бие нь хоосон
+       харагдаж байв. L хэлбэрийн ёроол (зүссэн дөрөвний нэг нь гүний усны
+       эзэлхүүний хайрцгаар аль хэдийн хаагддаг) — хамгийн доод давхаргын
+       бүтэцтэй, ДООШОО харна (rotation.x = +π/2). */
+    {
+      const fh = Math.max(4, Math.round(PPM * 0.4));
+      const fc = document.createElement("canvas");
+      fc.width = W;
+      fc.height = W;
+      fc.getContext("2d")!.drawImage(bg, 0, H - fh, W, fh, 0, 0, W, W);
+      const ft = tex(fc);
+      m = mk(2 * R, R, ft);
+      m.rotation.x = Math.PI / 2;
+      m.position.set(0, -Db, -R / 2);
+      g.add(m);
+      m = mk(R, R, ft);
+      m.rotation.x = Math.PI / 2;
+      m.position.set(-R / 2, -Db, R / 2);
+      g.add(m);
+    }
     /* зүсэлтийн хана (бохирдолтой) */
     world.cutA = document.createElement("canvas");
     world.cutA.width = Math.ceil(R * PPM);
@@ -478,6 +505,7 @@ export function createPit3D(
       new THREE.MeshBasicMaterial({ color: 0xffffff, depthTest: false, side: THREE.DoubleSide }),
     );
     mm.renderOrder = 12;
+    mm.visible = !!mcv;
     g.add(mm);
     world.marker = mm;
     if (F) drops(g);
@@ -485,7 +513,7 @@ export function createPit3D(
     micro.depth = Math.min(Db - 0.1, (pit + gw) / 2);
     micro.r = Math.min(a * 0.5, R);
     placeMarker();
-    opts.onDepth(micro.depth);
+    opts.onDepth?.(micro.depth);
     frame();
     st.dirty = false;
   }
@@ -567,6 +595,16 @@ export function createPit3D(
 
   /* ── зүсэлтийн хананд бохирдол зурах ── */
   const ovc = document.createElement("canvas");
+  /* ⚠ E.coli ӨВӨЛ АЛГА БОЛОХГҮЙ, ХАРАГДСААР БАЙНА (хэрэглэгч 2026-10-12:
+     "нитрат тоглуулахад хэвийн, E.coli дээр анивчаад байна" → эхлээд "аажим
+     бүдгэрнэ" хийгдсэн, дараа нь "алхам алхмаар бүдгэрэхээ болиод зүгээр
+     харагдъя"). Загварт E.coli өвөл (хөлдсөн хөрс) бүрэн устаж, зун дахин гардаг
+     тул 30 хоногийн алхмаар тоглуулахад жил бүр асаж унтарч байв. Одоо харагдах
+     утга нь нүд бүрийн хамгийн их утгыг БАРИНА (max(одоогийн, өмнөх)) — бүдгэрэлт
+     байхгүй. ЗӨВХӨН ДҮРСЛЭЛ: тооцоо (`simulate`) хөндөгдөөгүй.
+     Дараалсан бус агшин (ухрах, 60 хоногоос их үсрэх) ба зүйл солиход тэглэнэ. */
+  let dispE: Float32Array | null = null;
+  let dispD = -1;
   function paintCuts(s: Snap) {
     if (!world || !P) return;
     const { R, gw, pit, a, F } = world;
@@ -577,14 +615,31 @@ export function createPit3D(
       ovc.height = F.nz;
       const g = ovc.getContext("2d")!;
       const im = g.createImageData(F.nr, F.nz);
-      const q = st.species === "N" ? s.qN : s.qE!;
-      const RR = st.species === "N" ? RN3 : RE3;
-      for (let k = 0; k < q.length; k++) {
-        const v = q[k];
-        if (!v || F.typ[k]) continue;
-        const t = (v - 1) / 254;
-        const c = rampC(RR, t);
-        im.data.set([c[0], c[1], c[2], Math.round(255 * (0.35 + 0.6 * t))], k * 4);
+      if (st.species === "N") {
+        const q = s.qN;
+        for (let k = 0; k < q.length; k++) {
+          const v = q[k];
+          if (!v || F.typ[k]) continue;
+          const t = (v - 1) / 254;
+          const c = rampC(RN3, t);
+          im.data.set([c[0], c[1], c[2], Math.round(255 * (0.35 + 0.6 * t))], k * 4);
+        }
+      } else {
+        const q = s.qE!;
+        const fresh = !dispE || dispE.length !== q.length || s.d < dispD || s.d - dispD > 60;
+        if (fresh) dispE = new Float32Array(q.length);
+        const dE = dispE!;
+        for (let k = 0; k < q.length; k++) {
+          if (F.typ[k]) continue;
+          const v = q[k];
+          const cur = v ? (v - 1) / 254 + 1e-3 : 0;
+          const t = fresh ? cur : Math.max(cur, dE[k]);
+          dE[k] = t;
+          if (!dE[k]) continue;
+          const c = rampC(RE3, Math.min(1, t));
+          im.data.set([c[0], c[1], c[2], Math.round(255 * 0.95 * Math.sqrt(Math.min(1, t)))], k * 4);
+        }
+        dispD = s.d;
       }
       g.putImageData(im, 0, 0);
     }
@@ -616,8 +671,8 @@ export function createPit3D(
       g.fillRect(0, pp - hw, ap, hw);
       g.fillStyle = "rgba(120,100,50,.6)";
       g.fillRect(0, pp - hw, ap, 3);
-      /* өвөл хөлдсөн бүс */
-      if (winter) {
+      /* өвөл хөлдсөн бүс — ⚠ ЗУРАГДАХГҮЙ (доорх `update`-ийн тайлбарыг үз) */
+      if (SHOW_WINTER && winter) {
         const fz = Math.min(2.5, world.Db) * PPM;
         const fg = g.createLinearGradient(0, 0, 0, fz);
         fg.addColorStop(0, "rgba(225,238,252,.55)");
@@ -809,8 +864,8 @@ export function createPit3D(
   function grainsFor(tk: string): Grid {
     if (micro.grains[tk]) return micro.grains[tk];
     const [r0, r1, cov] = GR[tk];
-    const W = mcv.width;
-    const H = mcv.height;
+    const W = mcv!.width;
+    const H = mcv!.height;
     const rnd = rng(11 + tk.length);
     const out: Grain[] = [];
     let area = 0;
@@ -897,6 +952,7 @@ export function createPit3D(
     };
   }
   function drawMicro(dt: number) {
+    if (!mcv || !mctx) return;
     const s = microState();
     if (!s) return;
     const g = mctx;
@@ -1052,7 +1108,7 @@ export function createPit3D(
       `Нитрат ${mg < 10 ? mg.toFixed(1) : Math.round(mg).toLocaleString()} мг/л · E.coli ${s.eLog < 0 ? "байхгүй" : `10^${s.eLog.toFixed(1)}`}`;
     if (info !== micro.info) {
       micro.info = info;
-      opts.onMicro(info);
+      opts.onMicro?.(info);
     }
   }
   function placeMarker() {
@@ -1080,7 +1136,7 @@ export function createPit3D(
       m.position.set(0.02, p.y, p.z);
       m.rotation.set(0, Math.PI / 2, 0);
     }
-    opts.onDepth(micro.depth);
+    opts.onDepth?.(micro.depth);
   }
 
   /* ── гол давталт ── */
@@ -1103,9 +1159,13 @@ export function createPit3D(
     if (!R_) return;
     if (st.dirty || !world) build();
     if (!world) return;
-    const w = isWinter(s.d);
-    if (w !== winter) {
-      winter = w;
+    /* ⚠ ӨВЛИЙН ЦАС, ХӨЛДСӨН БҮС ЗУРАГДАХГҮЙ (хэрэглэгч 2026-10-12, зургаар:
+       "энэ цагаан анивчаад байна"). 30 хоногийн алхмаар тоглуулахад жил бүр
+       газрын дээд тал цагаан цас болж, зүсэлтийн нүүрийн дээд 2.5 м цайвар бүсээр
+       бүрхэгдээд буцдаг тул анивчиж харагдаж байв. `winter` туг өөрөө үлдсэн —
+       дуслууд өвөл зогсдог (`stepDrops`). */
+    winter = isWinter(s.d);
+    if (SHOW_WINTER) {
       world.groundTex.image = winter ? world.groundW : world.groundS;
       world.groundTex.needsUpdate = true;
     }
@@ -1127,6 +1187,7 @@ export function createPit3D(
     update,
     setSpecies(s) {
       st.species = s;
+      dispE = null;
       if (snap) paintCuts(snap);
     },
     setDrops(on) {

@@ -89,6 +89,7 @@ export class App {
     this.abort.abort();
     cancelAnimationFrame(this.raf);
     clearInterval(this.chartTimer);
+    this.chartRO?.disconnect();
     for (const [target, type, fn] of this.listeners ?? []) target.removeEventListener(type, fn);
     this.helpOff?.();
     try { this.mapc?.destroy(); } catch (e) { console.error(e); }
@@ -846,6 +847,11 @@ export class App {
     this.updateLegend();
     this.updateRainUI();
     this.chartTimer = setInterval(() => this.drawCharts(), 250);
+    // Диаграм баруун самбарын үлдсэн өндрийг эзэлдэг (flood.css .chartcard) тул самбарын
+    // хэмжээ өөрчлөгдөхөд (цонх биш — платформын зурвас чирэх) ч дахин зурна.
+    this.chartRO = new ResizeObserver(onResize);
+    const cv = $('chartDomain');
+    if (cv) this.chartRO.observe(cv);
   }
 
   startAreaDraw() {

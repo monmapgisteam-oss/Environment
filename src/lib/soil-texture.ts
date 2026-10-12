@@ -63,6 +63,10 @@ export async function loadSoilTiles(): Promise<PhotoTiles | null> {
   return out;
 }
 
+/** `loadSoilTiles`-ийг нэг л удаа — React талын олон бүрэлдэхүүн хуваалцана */
+let tilesOnce: Promise<PhotoTiles | null> | null = null;
+export const soilTilesOnce = () => (tilesOnce ??= loadSoilTiles());
+
 /**
  * Ангилал (+ хайрганы түвшин) → фото давхарга. Өнгө ЭНДЭЭС авагдахгүй
  * (хөтөч дээр ангиллын өнгөөр дахин будна) — зөвхөн БҮТЭЦ: ялзмагт

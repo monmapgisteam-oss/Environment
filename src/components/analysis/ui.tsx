@@ -13,6 +13,7 @@ export function Card({
   title,
   action,
   grow,
+  fill,
   children,
 }: {
   title: string;
@@ -25,6 +26,13 @@ export function Card({
    * талбай үүрнэ. Баганын илүү зайг ДООД карт авбал багана дүүрнэ.
    */
   grow?: boolean;
+  /**
+   * Баганын ИЛҮҮ өндрөөс энэ жингээр хувь авна (`flex-grow`), бие нь flex
+   * багана болж агуулгаа сунгана. Агуулгаасаа намсахгүй (`flex-shrink: 0`).
+   * Нэвчилтийн симуляцийн гулсуурын картууд гулсуурынхаа тоогоор авдаг —
+   * мөр хоорондын зай хоёр картад ижил.
+   */
+  fill?: number;
   children: React.ReactNode;
 }) {
   return (
@@ -33,12 +41,13 @@ export function Card({
         "analytics-chart-card flex flex-col rounded-xs border border-line bg-paper-2",
         grow ? "min-h-0 flex-1" : "shrink-0",
       )}
+      style={fill ? { flex: `${fill} 0 auto` } : undefined}
     >
       <div className="analytics-chart-head">
         <h2>{title}</h2>
         {action}
       </div>
-      <div className="analytics-chart-body">{children}</div>
+      <div className={cn("analytics-chart-body", fill && "flex flex-1 flex-col")}>{children}</div>
     </div>
   );
 }

@@ -364,7 +364,9 @@
 /* Баруун самбар (2026-10-09): ангиллын мөр нөлөөтэйгээ, үр дүн бүлэгтэй, үйл явдлын бүртгэл */
 .flood-app .group-label { margin: 10px 0 5px; font-size: 10.5px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
 .flood-app .panel.right h2 + .group-label { margin-top: 0; }
-.flood-app .panel.right canvas.chart { height: 150px; }
+/* Тархалтын явцын диаграм 190px (хэрэглэгч 2026-10-12: эхлээд "dooshoo sunga" → самбарын ёроол
+   хүртэл 274px болсныг "undriig bagasga"). Карт агуулгынхаа өндөртэй. */
+.flood-app .panel.right canvas.chart { height: 190px; }
 .flood-app .chartcard > .chart-head:first-child { margin-top: 0; }
 /* "Хур тунадас", "Үер" гарчиг тод (харанхуйд цагаан; гэрэлд --text бараан — цагаан бол уусна). */
 .flood-app .statcard h2 { color: var(--text); }   /* тусдаа картын гарчиг */

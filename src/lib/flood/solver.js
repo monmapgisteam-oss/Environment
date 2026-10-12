@@ -67,7 +67,7 @@ float dem(ivec2 p){ ivec2 s = textureSize(uDem, 0); return texelFetch(uDem, clam
 void main(){
   ivec2 c = ivec2(gl_FragCoord.xy);
   float cnt = 0.0, ns = 0.0, a0 = 0.0, ac = 0.0, st = 0.0, nb = 0.0, hb = 0.0, burn = 0.0, nu = 0.0;
-  // F <= 8 (8 is the coarse city grid of lib/soil-flood.ts; the view itself uses 1..3)
+  // F <= 8 (the view itself uses 1..3)
   for (int j = 0; j < 8; j++) for (int i = 0; i < 8; i++) {
     if (i >= uF || j >= uF) continue;
     ivec2 p = uOff + c * uF + ivec2(i, j);
@@ -832,7 +832,7 @@ export class FloodSolver {
 
   /**
    * Нэг текстурыг БҮТНЭЭР нь (RGBA float, мөр 0 = хойд) уншина — "Үер ба
-   * нэвчилт" харагдацын CPU талын бохирдлын зөөвөрлөлтөд ({@link src/lib/soil-flood.ts}):
+   * нэвчилт"-ийн урьдын CPU бохирдлын зөөвөрлөлтөд байсан (2026-10-12-нд устсан, одоо дуудагчгүй):
    * 'h' гүн · 'q' зүүн/урд нүүрний урсац (RG) · 'p' n, f0, fc, барилгын хувь ·
    * 'gr' газар (z, нийт давхаргын хуримтлал … w = хөрсний хадгалалт) · 'wf' нүүрний нээлттэй өргөн.
    * ⚠ Синхрон (GPU түгжинэ) — толгойгүй тооцоонд л; амьд зурагт `readLayer` хэвээр.
