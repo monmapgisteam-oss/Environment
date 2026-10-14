@@ -1402,6 +1402,28 @@
   font-weight: 600;
 }
 /*
+  НЯГТ БАГАНА — өдөр тутмын цуваа (баавгайн бүртгэл, 2026-10-14).
+  Анхдагч 8px зайтай үед 60 гаруй багана 300px картад багтахгүй, багана
+  бүрийн өргөн тэг болж диаграм хоосон харагдаж байв. Шошго сийрэг
+  (сарын 1, 15) тул нүднээсээ халин бичигдэнэ.
+*/
+.bar-chart-dense .bar-chart-columns,
+.bar-chart-dense .bar-chart-ticks {
+  gap: 1px;
+}
+.bar-chart-dense .bar-chart-column {
+  border-radius: 1px;
+}
+.bar-chart-dense .bar-chart-ticks span {
+  overflow: visible;
+  text-overflow: clip;
+}
+/* Шошго хөрш баганын зай руу хальж болно — тэр хөрш нь хоосон шошготой */
+.bar-chart-open-ticks .bar-chart-ticks span {
+  overflow: visible;
+  text-overflow: clip;
+}
+/*
   ОНООР ДАВХАРЛАСАН ЗУРВАС (`StackedBarChart`, ойн төлбөр, 2026-10-06).
   Нэр · зурвас · нийт НЭГ эгнээнд: нэрийн багана ТОГТМОЛ (зурвасууд нэг
   цэгээс эхэлж урт нь харьцуулагдана), утгын багана ТОГТМОЛ.

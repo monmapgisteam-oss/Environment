@@ -4,6 +4,7 @@ import * as React from "react";
 import dynamic from "next/dynamic";
 import {
   ClipboardList,
+  Footprints,
   Leaf,
   LeafyGreen,
   Loader2,
@@ -124,6 +125,13 @@ const FloraDashboard = dynamic(
   { ssr: false, loading: spinner },
 );
 
+/* Баавгай тохиолдлын бүртгэл — ТОГТМОЛ бүтэцтэй энгийн самбар */
+const BearDashboard = dynamic(
+  () =>
+    import("@/components/wildlife/bear-dashboard").then((m) => m.BearDashboard),
+  { ssr: false, loading: spinner },
+);
+
 /*
   МОНИТОРИНГ СУДАЛГААНЫ САН — хоёр судалгааг өөр өөрийн самбараар
   нээнэ ([monitoring.tsx](src/components/wildlife/monitoring.tsx)).
@@ -158,7 +166,7 @@ const MonitoringWorkspace = dynamic(
   `A02` бүлгийн гурав л (хаг, хөвд, мөөг) орно.
 */
 const GROUPS = [
-  { id: "amitan", label: "Амьтан", note: "7 сэдэв", icon: PawPrint },
+  { id: "amitan", label: "Амьтан", note: "8 сэдэв", icon: PawPrint },
   { id: "urgamal", label: "Ургамал", note: "3 сэдэв", icon: Leaf },
 ] as const;
 
@@ -173,6 +181,20 @@ type GroupId = (typeof GROUPS)[number]["id"];
   давхарга шинэчлэгдвэл энд ч дагаж засна.
 */
 const TABS = [
+  /*
+    Баавгай тохиолдлын бүртгэл (хэрэглэгчийн шийдвэр, 2026-10-14:
+    "амьтан цэсний хамгийн дээр"). `A09_baawgai_burtgel`, өөрийн
+    энгийн самбартай ([bear-dashboard.tsx](src/components/wildlife/bear-dashboard.tsx)).
+    ⚠ Тайлбарт ТОО БИЧЭЭГҮЙ: бүртгэл нэмэгдсээр байгаа тул хуучирна.
+  */
+  {
+    id: "bear",
+    group: "amitan",
+    label: "Баавгай тохиолдлын бүртгэл",
+    note: "Дуудлага · баталгаажилт",
+    full: "Хүрэн баавгайн тохиолдлын бүртгэл",
+    icon: Footprints,
+  },
   {
     id: "rescues",
     group: "amitan",
@@ -324,7 +346,9 @@ export function WildlifeWorkspace() {
         Бүрдлийн түлхүүрийг өгснөөр таб бүр цэвэр төлөвтэй нээгдэнэ.
       */}
       <div className="department-workspace-content">
-        {tab === "rescues" ? (
+        {tab === "bear" ? (
+          <BearDashboard />
+        ) : tab === "rescues" ? (
           <RescuesDashboard />
         ) : tab === "eco" ? (
           <EcoDashboard />
