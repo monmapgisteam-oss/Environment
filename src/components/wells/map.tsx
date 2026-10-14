@@ -82,7 +82,19 @@ export type MapOverlay = {
     /** `gridcode` 1..N-ийн дагуух тунгалагийн шатлал */
     byGrid?: number[];
   };
-  line: { color: string; opacity: number; width: number };
+  /** `style` — зураасны хэв (анхдагч бүтэн) */
+  line: { color: string; opacity: number; width: number; style?: "solid" | "dash" | "short-dash" | "dot" };
+  /**
+   * Давхарга бүхэлдээ энэ түвшнөөс ОЙРТСОН үед л харагдана (`zoomForScale`).
+   * Өгөөгүй бол бүх масштабад. ЗӨВХӨН давхарга үүсэх мөчид уншигдана.
+   */
+  minzoom?: number;
+  /**
+   * Дүрс бүрийн НЭР шошго (`properties[field]`) — сонголттой. Өгөөгүй
+   * бол шошгогүй (бусад бүх дуудагч хуучнаараа). ЗӨВХӨН давхарга
+   * үүсэх мөчид уншигдана.
+   */
+  label?: { field: string; size?: number; color?: string; minzoom?: number };
   /**
    * ДАТА ДАВХАРГЫН ДЭЭР зурагдах эсэх.
    *
@@ -803,6 +815,9 @@ type Mode = {
   labeled: boolean;
   labelZoom: number;
   labelOffset: number;
+  labelSize: number;
+  labelColors: Record<string, string> | null;
+  labelHalo: number;
   valued: boolean;
   valueZoom: number;
   scale: number | undefined;
@@ -957,6 +972,7 @@ export function WellsMap({
   dots,
   highlight = null,
   overlays,
+  adminLines = true,
   shapes,
   grades,
   weights,
@@ -1028,6 +1044,12 @@ export function WellsMap({
   /** Нэмэлт хил, бүсийн давхаргууд — дата давхаргын ДООР */
   overlays?: MapOverlay[];
   /**
+   * Засаг захиргааны (улс · аймаг · сум) суурь хил — анхдагч асаалттай.
+   * Дуудагч тал өөрийн хилийг `overlays`-ээр зурдаг бол унтраана: хоёр
+   * хил давхцаж зураг замбараагүй болно.
+   */
+  adminLines?: boolean;
+  /**
    * ДАТА олон өнцөгт — харилцдаг: `properties.oid`-оор товшилт, hover,
    * `properties.c`-д өнгө, `properties.t`-д шошго.
    */
@@ -1070,6 +1092,15 @@ export function WellsMap({
     minzoom?: number;
     /** Цэгээс доош шилжих зай (em, анхдагч 0.7) */
     offset?: number;
+    /** Бичвэрийн хэмжээ (pt, анхдагч 8). ЗӨВХӨН анхны зурагдалтад */
+    size?: number;
+    /**
+     * Шошгын БИЧВЭР → өнгө (hex). Жагсаалтад байхгүй бичвэр анхдагч
+     * цагаанаар. ЗӨВХӨН анхны зурагдалтад.
+     */
+    colors?: Record<string, string>;
+    /** Хүрээний зузаан (pt, анхдагч 0.9). ЗӨВХӨН анхны зурагдалтад */
+    halo?: number;
   };
   /**
    * Цэг бүрийн ХЭМЖИГДЭХҮҮН — ЗЭРЭГЛЭСЭН тэмдэг: өнгө ба хэмжээ хоёулаа
@@ -1151,6 +1182,9 @@ export function WellsMap({
     labeled: Boolean(labels),
     labelZoom: labels?.minzoom ?? 12,
     labelOffset: labels?.offset ?? 0.7,
+    labelSize: labels?.size ?? 8,
+    labelColors: labels?.colors ?? null,
+    labelHalo: labels?.halo ?? 0.9,
     valued: Boolean(values),
     valueZoom: values?.maxzoom ?? 13,
     scale,
@@ -1327,24 +1361,32 @@ export function WellsMap({
             : {}),
           ...(mode.labeled
             ? {
-                labelingInfo: [
-                  {
+                labelingInfo: (() => {
+                  /* Бичвэр тус бүрийн өнгө — анги тутамд НЭГ шошгын класс */
+                  const q = (t: string) => `'${t.replace(/'/g, "''")}'`;
+                  const cls = (where: string, color: string) => ({
                     labelExpressionInfo: { expression: "$feature.t" },
-                    where: "t IS NOT NULL",
+                    where,
                     labelPlacement: "below-center",
                     deconflictionStrategy: "static",
                     minScale: scaleAt(mode.labelZoom) * 1.01,
                     symbol: {
                       type: "text",
-                      color: "#eef4f8",
+                      color,
                       haloColor: HALO,
-                      haloSize: 0.9,
+                      haloSize: mode.labelHalo,
                       lineWidth: 80,
                       yoffset: -mode.labelOffset * 6,
-                      font: { ...FONT, size: 8 },
+                      font: { ...FONT, size: mode.labelSize },
                     },
-                  },
-                ],
+                  });
+                  const pairs = Object.entries(mode.labelColors ?? {});
+                  if (!pairs.length) return [cls("t IS NOT NULL", "#eef4f8")];
+                  return [
+                    ...pairs.map(([t, c]) => cls(`t = ${q(t)}`, c)),
+                    cls(`t IS NOT NULL AND t NOT IN (${pairs.map(([t]) => q(t)).join(", ")})`, "#eef4f8"),
+                  ];
+                })(),
               }
             : {}),
         });
@@ -1518,6 +1560,10 @@ export function WellsMap({
     if (!ready || !live) return;
     let alive = true;
     const { E, layers } = live;
+    if (!adminLines) {
+      for (const level of ["country", "aimag", "soum"] as const) layers.bnd[level]?.removeAll();
+      return;
+    }
     // eslint-disable-next-line no-restricted-globals -- өөрийн статик /api/boundaries — портал биш, токен хэрэггүй
     fetch(asset("/api/boundaries"))
       .then((r) => (r.ok ? r.json() : null))
@@ -1549,7 +1595,7 @@ export function WellsMap({
     return () => {
       alive = false;
     };
-  }, [ready]);
+  }, [ready, adminLines]);
 
   /* ---------------- Суурь зураг солих ---------------- */
   React.useEffect(() => {
@@ -1798,7 +1844,7 @@ export function WellsMap({
       const group = o.above ? layers.above : layers.under;
       const fam = familyOf(o.data.features.find((f) => f.geometry)?.geometry) ?? "polygon";
       let layer = group.layers.find((l: any) => l.__ovId === o.id);
-      const line = { type: "simple-line", color: col(o.line.color, o.line.opacity), width: o.line.width * 0.75, join: "round" };
+      const line = { type: "simple-line", color: col(o.line.color, o.line.opacity), width: o.line.width * 0.75, join: "round", style: o.line.style ?? "solid" };
       const fillOpacity = o.fill?.opacity ?? 0.08;
       const renderer =
         fam === "polygon"
@@ -1824,14 +1870,55 @@ export function WellsMap({
           const geometry = cleanGeom(f.geometry);
           if (!geometry || familyOf(geometry) !== fam) return [];
           const gc = Number(f.properties?.gridcode);
-          return [{ type: "Feature" as const, geometry, properties: { gridcode: Number.isFinite(gc) ? gc : null } }];
+          const t = o.label ? f.properties?.[o.label.field] : null;
+          return [
+            {
+              type: "Feature" as const,
+              geometry,
+              properties: {
+                gridcode: Number.isFinite(gc) ? gc : null,
+                t: typeof t === "string" && t.trim() ? t.trim() : null,
+              },
+            },
+          ];
         });
       if (!layer || layer.geometryType !== fam) {
         if (layer) {
           group.remove(layer);
           layer.destroy();
         }
-        layer = geoLayer(E, fam, [{ name: "gridcode", type: "integer" }], { renderer }, feats());
+        const labelingInfo = o.label
+          ? [
+              {
+                labelExpressionInfo: { expression: "$feature.t" },
+                where: "t IS NOT NULL",
+                labelPlacement: fam === "polygon" ? "always-horizontal" : "center-along",
+                deconflictionStrategy: "static",
+                minScale: o.label.minzoom != null ? scaleAt(o.label.minzoom) * 1.01 : 0,
+                symbol: {
+                  type: "text",
+                  color: o.label.color ?? "#eef4f8",
+                  haloColor: HALO,
+                  haloSize: 0.8,
+                  font: { ...FONT, size: o.label.size ?? 8 },
+                },
+              },
+            ]
+          : null;
+        layer = geoLayer(
+          E,
+          fam,
+          [
+            { name: "gridcode", type: "integer" },
+            { name: "t", type: "string" },
+          ],
+          {
+            renderer,
+            ...(labelingInfo ? { labelingInfo, labelsVisible: true } : {}),
+            ...(o.minzoom != null ? { minScale: scaleAt(o.minzoom) * 1.01 } : {}),
+          },
+          feats(),
+        );
         layer.__ovId = o.id;
         layer.__above = Boolean(o.above);
         layer.__data = o.data;
