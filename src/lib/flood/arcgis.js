@@ -6,6 +6,7 @@
 import { WaterRenderer } from './renderer.js';
 import { CLASSES } from './impact.js';
 import { esriModules } from '@/lib/arcgis-sdk';
+import { addSceneTools } from '@/lib/scene-tools';
 
 const MODULES = [
   'esri/Map', 'esri/views/MapView', 'esri/views/SceneView', 'esri/layers/Layer',
@@ -208,7 +209,7 @@ export class MapController {
       },
     });
 
-    this.overlay3d = new E.GraphicsLayer({ elevationInfo: { mode: 'relative-to-ground', offset: 2 } });
+    this.overlay3d = new E.GraphicsLayer({ elevationInfo: { mode: 'relative-to-ground', offset: 2 }, listMode: 'hide' });   // талбайн хүрээ — давхаргын жагсаалтад үгүй
     this.buildings3d = new E.FeatureLayer({
       url: BUILDINGS_URL, outFields: [FLOORS], visible: app.display.buildings3d, title: 'Барилга',
       elevationInfo: { mode: 'on-the-ground' }, popupEnabled: false,
@@ -231,7 +232,9 @@ export class MapController {
       qualityProfile: 'medium', ui: { components: ['attribution'] }, popupEnabled: false,
     });
     this._placeUI(this.view3d, ['zoom', 'navigation-toggle', 'compass']);
-    this._basemapGallery(this.view3d);
+    // 3D: баруун дээд буланд ДЭЭРЭЭС ДООШ суурь зураг · давхарга · хэмжилт (хэрэглэгч 2026-10-15,
+    // платформын бүх 3D зурагт нэг дараалал — scene-tools.ts). Цуглуулга нь 2D-тэй сонголтоо хуваалцсаар.
+    addSceneTools(this.view3d, { group: 'flood-3d', basemap: this._basemapGallery(this.view3d, false) });
     this._wire(this.view3d);
     this.waterNode = new WaterNode({ view: this.view3d });
     this._syncOverlays(this.overlay3d);
@@ -337,9 +340,10 @@ export class MapController {
     this.requestRender();
   }
 
-  /** Esri-ийн суурь зургийн цуглуулга (Expand + BasemapGallery), баруун дээд буланд.
+  /** Esri-ийн суурь зургийн цуглуулга (Expand + BasemapGallery). 2D-д зүүн дээд буланд ойртуулах товчны
+      доор; 3D-д (`place` false) дуудагч нь scene-tools-оор баруун дээд буланд байрлуулна.
       2D, 3D тус бүр өөрийн цуглуулгатай; сонголт нөгөө зурагт setBasemap-аар дамжина. */
-  _basemapGallery(view) {
+  _basemapGallery(view, place = true) {
     const E = this.E;
     const source = new E.LocalBasemapsSource({
       // ⚠ портал зүйл ачаалагдмагц гарчгаа англиар дарж бичдэг тул монгол нэрийг ДАРАА нь тавина
@@ -353,12 +357,13 @@ export class MapController {
     const gallery = new E.BasemapGallery({ view, source });
     const expand = new E.Expand({ view, content: gallery, expandTooltip: 'Суурь зураг', collapseTooltip: 'Хаах' });
     // ойртуулах товчны ДООР (хэрэглэгч 2026-10-08) — _placeUI-ийн when-ээс хойш бүртгэгддэг тул дараалал нь араас
-    view.when(() => view.ui.add({ component: expand, position: 'top-left', index: 99 }));
+    if (place) view.when(() => view.ui.add({ component: expand, position: 'top-left', index: 99 }));
     E.reactiveUtils.watch(() => gallery.activeBasemap, b => {
       const id = b && BASEMAPS.find(([k]) => k === b.id)?.[0];
       if (id && id !== this.basemap) this.setBasemap(id);
       if (b) expand.collapse();
     });
+    return expand;
   }
 
   /** Хуудаснаас гарахад хоёр харагдацыг устгана (WebGL контекст чөлөөлөгдөнө) */
