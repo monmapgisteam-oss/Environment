@@ -5126,6 +5126,7 @@ export function PortalLayersDashboard({
                 points={points.at.oid.length ? points.at : NO_POINTS}
                 colors={points.colors ?? undefined}
                 dots={dots}
+                pointScale={set.pointScale}
                 visible={points.at.oid.length ? visible : NO_INDEX}
                 shapes={{
                   data: shapes,
@@ -5191,9 +5192,30 @@ export function PortalLayersDashboard({
                 ⚠ Төлөвийн мэдэгдэл нь ҮЛДЭНЭ: давхцал тооцогдож
                 дуустал, хязгаарт хүрсэн эсэхийг хэлэх ёстой.
               */}
-              {/* Суурь зургийн тэмдгийн ЯГ ДООР (top-2.5 + 28px + 8px) */}
+              {/* Суурь зургийн тэмдгийн ЯГ ДООР (top-2.5 + 28px + 8px):
+                  шошгын унтраалга, түүний доор давхаргын сонголт (хэрэглэгч
+                  2026-10-16: "basemap iconii door bairluul") */}
+              <div className="absolute top-[46px] right-2.5 z-[15] flex flex-col items-end gap-1.5">
+                <button
+                  type="button"
+                  aria-pressed={showLabels}
+                  onClick={() => setShowLabels((v) => !v)}
+                  title={
+                    showLabels
+                      ? "Шошгыг унтраах"
+                      : `Шошгыг асаах (1:${num(LABEL_SCALE)}-аас ойртоход)`
+                  }
+                  className={cn(
+                    "elevated flex size-8 items-center justify-center rounded-xs border backdrop-blur-md transition-colors",
+                    showLabels
+                      ? "border-data/50 bg-data/15 text-ink"
+                      : "border-line bg-paper/85 text-ink-3 hover:text-ink",
+                  )}
+                >
+                  <Tag size={14} strokeWidth={1.75} />
+                </button>
               {mapIds.length ? (
-                <div className="absolute top-[46px] right-2.5 z-[15]">
+                <div>
                   <MapLayerPicker
                     items={mapIds.map((id) => {
                       const info = infos[id];
@@ -5214,6 +5236,7 @@ export function PortalLayersDashboard({
                   />
                 </div>
               ) : null}
+              </div>
               {/* ⚠ НЭГЖ ТАЛБАРЫН ТОВЧ үнэлгээний хэлтэст ГАРАХГҮЙ (хэрэглэгч,
                   2026-10-06: "тэр нэгж талбарыг del, хэлтсийн бүх
                   самбарын зураг дээр байхгүй") — бусад хэлтэст хэвээр */}
@@ -5369,23 +5392,6 @@ export function PortalLayersDashboard({
                 />
               ) : null}
 
-              {/* Шошгын унтраалга — суурь зургийн товчны хажууд */}
-              <button
-                onClick={() => setShowLabels((v) => !v)}
-                title={
-                  showLabels
-                    ? "Шошгыг унтраах"
-                    : `Шошгыг асаах (1:${num(LABEL_SCALE)}-аас ойртоход)`
-                }
-                className={cn(
-                  "elevated absolute top-2 right-11 z-10 rounded-xs border p-1.5 backdrop-blur-md transition-colors",
-                  showLabels
-                    ? "border-data/50 bg-data/15 text-ink"
-                    : "border-line bg-paper/85 text-ink-3 hover:text-ink",
-                )}
-              >
-                <Tag size={13} strokeWidth={1.75} />
-              </button>
 
               <MapTip state={tip} width={248}>
                 {hovered ? (

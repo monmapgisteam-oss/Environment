@@ -303,6 +303,15 @@ export const WASTE: LayerSet = {
   mapOnly: ["B12_hogiin_tseg_polygon"],
   mapPicker: true,
   fieldMenus: false,
+  /* "Хороо" диаграм ХАСАГДСАН (хэрэглэгч 2026-10-16: "del") — зургаан цэгт
+     таван хороо, бараг бүгд 1; бичлэгийн цонхонд хороо хэвээр гарна. */
+  chartSkip: { B12_hogiin_tseg_point: /^horoo$/i },
+  /* Албан нэр (хэрэглэгч 2026-10-16: "Дүүрсэн, % · дундаж, Нэр" →
+     "albani ug hellegeer soli"). Эх сурвалжийн alias-аар түлхүүрлэсэн. */
+  fields: {
+    "Дүүрсэн, %": "Дүүргэлтийн түвшин, %",
+    Нэр: "Хог хаягдлын цэг",
+  },
   icons: {
     B12_hogiin_tseg_point: "trash",
     B12_hogiin_tseg_polygon: "trash",
@@ -331,6 +340,11 @@ export const GAS: LayerSet = {
   overview: false,
   /* "Байршлын байдал" карт ГАРАХГҮЙ (хэрэглэгч, 2026-10-06: "del") */
   dropCharts: /^байршлын байдал$/i,
+  /* Цэг жижиг (хэрэглэгч, 2026-10-16: "pointiig jijighen bolgo" →
+     0.55-ыг "dahiad bagasga") */
+  pointScale: 0.38,
+  /* Анхны харагдац 1:400 000 (хэрэглэгч, 2026-10-16) */
+  scale: 400_000,
 };
 
 /**

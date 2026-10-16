@@ -826,6 +826,8 @@ type Mode = {
   fire: Fire;
   tinted: boolean;
   dots: { rank?: Record<string, number> } | null;
+  /** Цэгийн хэмжээний үржүүлэгч (зэрэглэлгүй цэгт), анхдагч 1 */
+  pointScale: number;
   shapeLabelZoom: number;
   shapeFlow: boolean;
   shapeLabelOnLine: boolean;
@@ -946,18 +948,19 @@ function pointRenderer(m: Mode, colors: string[]) {
     return gradeRenderer(stops, gradedSymbol, sizeByValue(lo, hi, 2.4));
   }
   const sym = pointSymbolFor(m);
-  const size = m.dots
-    ? sizeByZoom([
+  const base: [number, number][] = m.dots
+    ? [
         [9, 3.4],
         [12, 5.6],
         [14, 7.5],
         [17, 12],
-      ])
-    : sizeByZoom([
+      ]
+    : [
         [8, 7],
         [12, 11],
         [16, 18],
-      ]);
+      ];
+  const size = sizeByZoom(base.map(([z, s]) => [z, s * m.pointScale]));
   return {
     type: "unique-value",
     field: "c",
@@ -993,6 +996,7 @@ export function WellsMap({
   firefly,
   colors,
   dots,
+  pointScale,
   highlight = null,
   overlays,
   adminLines = true,
@@ -1062,6 +1066,8 @@ export function WellsMap({
    * зурах дараалал; их нь ДЭЭР.
    */
   dots?: { rank?: Record<string, number> };
+  /** Цэгийн хэмжээний үржүүлэгч (зэрэглэлгүй цэгт), анхдагч 1 */
+  pointScale?: number;
   /** Тодруулах цэгийн байрлал `[lon, lat]` — гэрэлтэх цагираг */
   highlight?: [number, number] | null;
   /** Нэмэлт хил, бүсийн давхаргууд — дата давхаргын ДООР */
@@ -1196,6 +1202,7 @@ export function WellsMap({
     fire: firefly ?? FIREFLY,
     tinted: Boolean(colors),
     dots: dots ?? null,
+    pointScale: pointScale ?? 1,
     shapeLabelZoom: shapes?.labelZoom ?? 0,
     shapeFlow: Boolean(shapes?.flow),
     shapeLabelOnLine: shapes?.labelPlacement === "line-center",
@@ -1304,11 +1311,13 @@ export function WellsMap({
           radius: 9,
           maxDensity: 3,
           minDensity: 0,
+          /* Өнгө нь цэгийн палитраас (`firefly`) — самбар өөрийн
+             диаграмтай нэг өнгөний гэр бүл өгч болно. Анхдагч нь cyan. */
           colorStops: [
-            { ratio: 0, color: [0, 200, 255, 0] },
-            { ratio: 0.25, color: [0, 200, 255, 0.32] },
-            { ratio: 0.6, color: [92, 225, 255, 0.62] },
-            { ratio: 1, color: [230, 251, 255, 0.92] },
+            { ratio: 0, color: col(mode.fire.glow, 0) },
+            { ratio: 0.25, color: col(mode.fire.glow, 0.32) },
+            { ratio: 0.6, color: col(mode.fire.mid, 0.62) },
+            { ratio: 1, color: col(mode.fire.core, 0.92) },
           ],
         };
         const dotRenderer = {
