@@ -4,6 +4,7 @@ import * as React from "react";
 import dynamic from "next/dynamic";
 import {
   BadgeCheck,
+  ChevronDown,
   CalendarDays,
   CircleSlash,
   Crosshair,
@@ -467,6 +468,8 @@ export function BearDashboard() {
     types: true,
     parcel: true,
   });
+  /* Тайлбар хураагдана (хэрэглэгч 2026-10-20) */
+  const [legendOpen, setLegendOpen] = React.useState(true);
   const [forestPick, setForestPick] = React.useState<{
     key: string;
     group: string;
@@ -1157,7 +1160,23 @@ export function BearDashboard() {
                 cluster={false}
               />
               {/* Тайлбар: суурь давхаргын унтраалга + баталгаажилтын өнгө */}
-              <div className="absolute bottom-8 left-2.5 z-10 max-h-[calc(100%-5rem)] w-60 space-y-1 overflow-y-auto rounded-xs border border-line bg-paper/95 px-2 py-1.5 text-[11px] text-ink-2 backdrop-blur-md">
+              <div className="absolute bottom-8 left-2.5 z-10 max-h-[calc(100%-5rem)] w-60 overflow-y-auto rounded-xs border border-line bg-paper/95 px-2 py-1.5 text-[11px] text-ink-2 backdrop-blur-md">
+                <button
+                  type="button"
+                  onClick={() => setLegendOpen((o) => !o)}
+                  aria-expanded={legendOpen}
+                  className="flex w-full items-center justify-between gap-2 text-left"
+                >
+                  <span className="eyebrow">Таних тэмдэг</span>
+                  <ChevronDown
+                    size={13}
+                    className={cn(
+                      "shrink-0 text-ink-3 transition-transform",
+                      !legendOpen && "-rotate-90",
+                    )}
+                  />
+                </button>
+                <div className={cn("mt-1 space-y-1", !legendOpen && "hidden")}>
                 <BaseToggle
                   on={baseOn.types}
                   onChange={(v) => setBaseOn((b) => ({ ...b, types: v }))}
@@ -1230,6 +1249,7 @@ export function BearDashboard() {
                     ))}
                   </div>
                 ) : null}
+                </div>
               </div>
               <BasemapGallery value={basemap} onChange={setBasemap} />
               {!form ? (
