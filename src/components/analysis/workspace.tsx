@@ -4,6 +4,7 @@ import * as React from "react";
 import dynamic from "next/dynamic";
 import { Box, Check, Droplets, Loader2, Waves } from "lucide-react";
 import { useStoredTab } from "@/components/ui/source-tabs";
+import { useAccess } from "@/components/auth/access";
 import { cn } from "@/lib/utils";
 
 const spinner = () => (
@@ -76,7 +77,7 @@ const FloodSoilView = dynamic(
   нуусан контейнерт MapLibre хэмжээгээ алддаг бөгөөд хоёр дахь
   харагдацын 1.6 МБ багц дэмий татагдана.
 */
-const VIEWS = [
+export const VIEWS = [
   /* ⚠ Үер эхэнд — "Хотын тархалт" устсан тул анхдагч харагдац (2026-10-09).
      Апп нь `lib/flood/` ба {@link src/components/analysis/flood-view.tsx}. */
   {
@@ -105,7 +106,9 @@ type ViewId = (typeof VIEWS)[number]["id"];
 const IDS = VIEWS.map((v) => v.id);
 
 export function AnalysisWorkspace() {
-  const [view, pick] = useStoredTab<ViewId>("analysis.view", IDS, "flood");
+  const [view, pick] = useStoredTab<ViewId>("analysis.view", IDS, "flood", "analysis");
+  /* Эрхийн тохиргоо (`lib/access.ts`) — эрхгүй харагдац товчгүй */
+  const { allowsTab } = useAccess();
 
   return (
     <div
@@ -120,7 +123,7 @@ export function AnalysisWorkspace() {
         aria-label="Судалгааны харагдац"
         className="flex shrink-0 flex-wrap gap-1 self-start"
       >
-        {VIEWS.map((v) => (
+        {VIEWS.filter((v) => allowsTab("analysis", v.id)).map((v) => (
           <button
             key={v.id}
             type="button"

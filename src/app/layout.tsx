@@ -5,6 +5,7 @@ import "./workspace.css";
 import { Header } from "@/components/shell/header";
 import { Sidebar } from "@/components/shell/sidebar";
 import { AuthProvider } from "@/components/auth/provider";
+import { AccountGate } from "@/components/auth/access";
 
 const inter = Inter({ variable: "--font-inter", subsets: ["latin", "cyrillic"], display: "swap" });
 const manrope = Manrope({ variable: "--font-manrope", subsets: ["latin", "cyrillic"], display: "swap" });
@@ -26,7 +27,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
           <Sidebar />
           <div className="workspace-frame">
             <Header />
-            <main className="workspace-main min-h-[calc(100dvh-var(--head-h))] px-4 py-5 lg:px-6 lg:py-6">{children}</main>
+            <main className="workspace-main min-h-[calc(100dvh-var(--head-h))] px-4 py-5 lg:px-6 lg:py-6"><AccountGate>{children}</AccountGate></main>
           </div>
         </AuthProvider>
       </body>

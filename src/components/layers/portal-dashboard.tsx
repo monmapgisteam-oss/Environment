@@ -107,6 +107,8 @@ import {
   type LayerInfo,
 } from "@/lib/portal-layers";
 import { cn, num } from "@/lib/utils";
+import { NoAccess, useAccess } from "@/components/auth/access";
+import type { TabRule } from "@/lib/access";
 import {
   Composition,
   Matrix,
@@ -519,12 +521,72 @@ function labelFor(hit: Loaded, oid: number): string {
  * мегабайт дэмий явна. Нэг удаа татсаныг санах ойд үлдээнэ — дахин
  * асаахад шууд гарна.
  */
+/*
+  ЦЭСИЙН НАРИЙВЧИЛСАН ЭРХ ({@link src/lib/access.ts} `tabRule`, хэрэглэгч
+  2026-10-20). Давхарга, үзүүлэлт, диаграмыг бүрдлээс нь (`LayerSet`)
+  хасна — самбарын дотоод логик хөндөгдөхгүй; газрын зураг ба дэлгэрэнгүй
+  цонхыг туг дамжуулж нууна.
+  ⚠ Давхаргын ӨНГӨ ХЭВЭЭР: өнцөг нь жагсаалтын байрлалаас гардаг тул
+  үлдсэн давхарга бүр ӨӨРИЙН анхны өнцгөө авч явна.
+  ⚠ Дүрэм солигдоход самбар `key`-ээр дахин үүснэ (асаалттай давхарга,
+  шүүлт хуучин бүрдлээрээ үлдэхгүй).
+*/
+function restrict(set: LayerSet, rule: TabRule): LayerSet | null {
+  const layers = rule.layers ? set.layers.filter((id) => rule.layers!.includes(id)) : [...set.layers];
+  if (!layers.length) return null;
+  const views = rule.views;
+  const out: LayerSet = {
+    ...set,
+    layers,
+    hues: layers.map((id) => set.hues[set.layers.indexOf(id) % set.hues.length]),
+    open: set.open?.filter((id) => layers.includes(id)),
+    stats: set.stats?.filter((st) => layers.includes(st.layer)),
+  };
+  if (views && !views.includes("overview")) out.overview = false;
+  if (views && !views.includes("charts")) out.noCharts = true;
+  return out;
+}
+
 export function PortalLayersDashboard({
   set,
   presentation,
+  access,
 }: {
   set: LayerSet;
   presentation?: "environment";
+  /** Эрхийн хязгаарыг унших хэсэг ба цэс (өгөөгүй бол хязгааргүй) */
+  access?: { scope: string; tab: string };
+}) {
+  const { tabRule } = useAccess();
+  const scope = access?.scope;
+  const tab = access?.tab;
+  const { rule, shown } = React.useMemo(() => {
+    const r = scope && tab ? tabRule(scope, tab) : null;
+    return { rule: r, shown: r ? restrict(set, r) : set };
+  }, [set, tabRule, scope, tab]);
+  if (!shown) return <NoAccess text="Энэ цэсийн давхаргыг харах эрх байхгүй байна" />;
+  const views = rule?.views;
+  return (
+    <LayersBoard
+      key={rule ? JSON.stringify(rule) : ""}
+      set={shown}
+      presentation={presentation}
+      noMap={!!views && !views.includes("map")}
+      noRecord={!!views && !views.includes("record")}
+    />
+  );
+}
+
+function LayersBoard({
+  set,
+  presentation,
+  noMap = false,
+  noRecord = false,
+}: {
+  set: LayerSet;
+  presentation?: "environment";
+  noMap?: boolean;
+  noRecord?: boolean;
 }) {
   const environment = presentation === "environment";
   const [showCharts, setShowCharts] = React.useState(true);
@@ -1376,7 +1438,7 @@ export function PortalLayersDashboard({
     /* ⚠ `tidy` бүрдэлд давхаргын БҮХ задаргаа НЭГ картад нийлдэг
        ({@link AxisCard}) тул хуваах зүйл байхгүй. Хуваавал тэр карт
        хоёр багананд тасарч, хэрэглэгчийн хүссэн нэгтгэл алдагдана. */
-    if (picker || !showCharts || set.tidy) return null;
+    if (picker || !showCharts || set.tidy || set.noCharts) return null;
 
     const keys = new Set<string>();
 
@@ -1453,7 +1515,7 @@ export function PortalLayersDashboard({
       }
     }
     return keys;
-  }, [picker, showCharts, views, set.lead, set.tidy]);
+  }, [picker, showCharts, views, set.lead, set.tidy, set.noCharts]);
 
   /* Сонгосон УТГА бүрийг тоолно, талбарыг биш: "3 идэвхтэй" гэдэг нь
      гурван утга сонгосныг хэлэх ёстой */
@@ -4947,7 +5009,7 @@ export function PortalLayersDashboard({
            газрын зургийг 300px руу шахна — 440 нь нэгдсэн хүснэгтийн
            гарчгийг хоёр мөрөнд багтааж, зурагт зай үлдээнэ. */
         right={
-          chartsShown
+          chartsShown && !noMap
             ? set.tidy
               ? picker
                 ? 440
@@ -5108,7 +5170,9 @@ export function PortalLayersDashboard({
           </div>
         ) : null}
 
-        {/* ---- БАРУУН: зураг, доор нь диаграмын зурвас ---- */}
+        {/* ---- БАРУУН: зураг, доор нь диаграмын зурвас ----
+             Зураг хаалттай эрхэд диаграм төв баганыг эзэлнэ */}
+        {noMap ? (chartsBlock ?? <NoAccess text="Энэ цэсэд харах хэсэг сонгогдоогүй байна" />) : (
         <div className="flex min-h-0 flex-col gap-2">
           <Card className="relative min-h-[300px] flex-1 overflow-hidden">
             <div className="relative h-full w-full">
@@ -5435,7 +5499,7 @@ export function PortalLayersDashboard({
               байв. Платформын бусад ес самбартай ижил шийдэл: чирж
               зөөгддөг, хэмжээ нь солигддог хөвөгч самбар.
             */}
-              {active ? (
+              {active && !noRecord ? (
                 <RecordPanel
                   hit={active.hit}
                   row={active.row}
@@ -5508,9 +5572,10 @@ export function PortalLayersDashboard({
             ерөнхийлсөн
           </p>
         </div>
+        )}
 
         {/* ---- БАРУУН: ангиллын задаргаа ---- */}
-        {chartsBlock}
+        {noMap ? null : chartsBlock}
       </Columns>
     </div>
   );
