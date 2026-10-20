@@ -46,7 +46,7 @@ const LayersDashboard = dynamic(
   УНШСАН утгуудыг нэрлэнэ (2026-10-06-нд токеноор шалгасан) —
   таамаглаж тайлбарлахгүй.
 */
-const TABS = [
+export const TABS = [
   {
     id: "O01_THGN_polygon",
     label: "Тусгай хамгаалалттай газар",
@@ -107,7 +107,7 @@ const IDS = TABS.map((t) => t.id);
 
 export function OiWorkspace() {
   /* Сонголт хадгалагдана — буцаж ирэхэд сүүлд харсан давхарга нээгдэнэ */
-  const [tab, pick] = useStoredTab<TabId>("oi.tab", IDS, "O01_THGN_polygon");
+  const [tab, pick] = useStoredTab<TabId>("oi.tab", IDS, "O01_THGN_polygon", "oi");
 
   const set = FOREST_TABS[tab];
 
@@ -117,7 +117,8 @@ export function OiWorkspace() {
         ⚠ ТОЛГОЙ БАЙХГҮЙ (хэрэглэгчийн шийдвэр, 2026-09-17): платформын
         толгой ба хажуугийн зурвас хэлтсийн нэрийг аль хэдийн харуулдаг.
       */}
-      <SourceTabs tabs={TABS} value={tab} onChange={pick} label="Сэдэв" />
+      <SourceTabs
+        scope="oi" tabs={TABS} value={tab} onChange={pick} label="Сэдэв" />
 
       {/*
         ⚠ `key` ЗААВАЛ: бүх таб НЭГ бүрэлдэхүүнээр зурагддаг тул React
@@ -125,7 +126,7 @@ export function OiWorkspace() {
         өмнөх табынхаараа үлдэнэ.
       */}
       <div className="department-workspace-content">
-        <LayersDashboard key={set.key} set={set} />
+        <LayersDashboard key={set.key} set={set} access={{ scope: "oi", tab }} />
       </div>
     </div>
   );

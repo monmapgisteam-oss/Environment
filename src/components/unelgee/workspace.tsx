@@ -65,7 +65,7 @@ const WeatherDashboard = dynamic(
  * шинэ давхарга ирэхэд `lib/layers.ts`-ийн жагсаалтад нэмэхэд л
  * хангалттай.
  */
-function group(set: LayerSet) {
+function group(set: LayerSet, tab: string) {
   const D = dynamic(
     () =>
       import("@/components/layers/portal-dashboard").then(
@@ -73,18 +73,18 @@ function group(set: LayerSet) {
       ),
     { ssr: false, loading: spinner },
   );
-  const G = () => <D set={set} presentation="environment" />;
+  const G = () => <D set={set} presentation="environment" access={{ scope: "unelgee-uur-amisgal", tab }} />;
   G.displayName = `LayerGroup(${set.key})`;
   return G;
 }
 
-const FloodDashboard = group(FLOOD);
-const GasDashboard = group(GAS);
-const GreenDashboard = group(GREEN);
-const WasteDashboard = group(WASTE);
-const EcoDashboard = group(ECO);
+const FloodDashboard = group(FLOOD, "flood");
+const GasDashboard = group(GAS, "gas");
+const GreenDashboard = group(GREEN, "green");
+const WasteDashboard = group(WASTE, "waste");
+const EcoDashboard = group(ECO, "eco");
 
-const TABS = [
+export const TABS = [
   {
     id: "unelgee",
     label: "Байгаль орчны нөлөөллийн ерөнхий үнэлгээ",
@@ -144,11 +144,12 @@ const IDS = TABS.map((t) => t.id);
 export function UnelgeeWorkspace() {
   /* Сонголт хадгалагдана — хэрэглэгч ажлаа тасалдуулаад буцаж ирэхэд
      хамгийн сүүлд харж байсан самбар нээгдэнэ */
-  const [tab, pick] = useStoredTab<TabId>("unelgee.tab", IDS, "unelgee");
+  const [tab, pick] = useStoredTab<TabId>("unelgee.tab", IDS, "unelgee", "unelgee-uur-amisgal");
 
   return (
     <div className="department-workspace ue-workspace">
-      <SourceTabs tabs={TABS} value={tab} onChange={pick} label="Сэдэв" />
+      <SourceTabs
+        scope="unelgee-uur-amisgal" tabs={TABS} value={tab} onChange={pick} label="Сэдэв" />
 
       <div id="ue-topic-panel" className="department-workspace-content" role="region" aria-label={TABS.find((topic) => topic.id === tab)?.label}>
         {tab === "unelgee" ? <UnelgeeDashboard /> : null}

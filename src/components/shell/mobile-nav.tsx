@@ -3,12 +3,14 @@
 import type * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ChartNoAxesCombined, Database, LayoutGrid } from "lucide-react";
-import { DEPARTMENTS } from "@/lib/departments";
+import { ChartNoAxesCombined, Database, LayoutGrid, ShieldCheck } from "lucide-react";
+import { useAccess } from "@/components/auth/access";
 import { cn, isActivePath } from "@/lib/utils";
 
 export function MobileNav() {
   const pathname = usePathname();
+  const { departments, admin, analysis, blocked } = useAccess();
+  if (blocked) return null;
 
   return (
     <div className="flex gap-1 overflow-x-auto border-b border-line bg-paper-3 px-3 py-2 lg:hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
@@ -16,7 +18,7 @@ export function MobileNav() {
         <LayoutGrid size={13} strokeWidth={1.75} />
         Ерөнхий
       </Chip>
-      {DEPARTMENTS.map((d) => (
+      {departments.map((d) => (
         <Chip
           key={d.slug}
           href={`/departments/${d.slug}`}
@@ -29,12 +31,21 @@ export function MobileNav() {
       ))}
       {/* Хажуугийн зурвастай ИЖИЛ дараалал — хоёр цэс зөрвөл ямар
           хуудас байгаа нь төхөөрөмжөөс хамаарна */}
-      <Chip href="/analysis" active={isActivePath(pathname, "/analysis", true)}>
-        <ChartNoAxesCombined size={13} strokeWidth={1.75} /> Дүн шинжилгээ
-      </Chip>
-      <Chip href="/sources" active={isActivePath(pathname, "/sources", true)}>
-        <Database size={13} strokeWidth={1.75} /> Дата эх сурвалж
-      </Chip>
+      {analysis && (
+        <Chip href="/analysis" active={isActivePath(pathname, "/analysis", true)}>
+          <ChartNoAxesCombined size={13} strokeWidth={1.75} /> Дүн шинжилгээ
+        </Chip>
+      )}
+      {admin && (
+        <Chip href="/sources" active={isActivePath(pathname, "/sources", true)}>
+          <Database size={13} strokeWidth={1.75} /> Дата эх сурвалж
+        </Chip>
+      )}
+      {admin && (
+        <Chip href="/access" active={isActivePath(pathname, "/access", true)}>
+          <ShieldCheck size={13} strokeWidth={1.75} /> Эрхийн зохицуулалт
+        </Chip>
+      )}
     </div>
   );
 }

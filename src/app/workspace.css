@@ -1215,9 +1215,12 @@
 }
 .dataset-panel-heading h2 {
   margin-top: 3px;
-  font-size: 14px;
+  font-size: 12px;
   font-weight: 600;
   line-height: 1.5;
+  /* ТОМ ҮСГЭЭР (хэрэглэгч 2026-10-16) — бүлгийн нэртэй нэг хэв */
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
 }
 .dataset-eyebrow {
   display: block;
@@ -1335,6 +1338,49 @@
   background: var(--paper-3);
   font-size: 9px;
   color: var(--ink-3);
+}
+/* Жагсаалт доторх задардаг бүлэг (`SourceTabs sections`) — мөр нь
+   сэдвийн мөртэй нэг хэмжээтэй, хүүхдүүд нь доор нь догол мөрөөр. */
+.dataset-panel-group {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  width: 100%;
+  padding: 8px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  text-align: left;
+  transition: background 150ms;
+}
+.dataset-panel-group:hover {
+  background: var(--paper-3);
+}
+/* Бүлгийн нэр ТОМ ҮСГЭЭР (хэрэглэгч 2026-10-16) — сэдвийн мөрөөс ялгарна.
+   Үгийн дундуур таслахгүй (`anywhere` нь урт том үсгийн үгийг хуваана). */
+.dataset-panel-group strong {
+  color: var(--ink);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  overflow-wrap: normal;
+}
+.dataset-panel-group.is-holding .dataset-panel-item-icon,
+.dataset-panel-group.is-holding strong {
+  color: var(--moss);
+}
+.dataset-panel-chevron {
+  flex-shrink: 0;
+  margin-top: 3px;
+  color: var(--ink-3);
+  transition: transform 150ms;
+}
+.dataset-panel-children {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 2px 0 4px 16px;
+  padding-left: 6px;
+  border-left: 1px solid var(--line);
 }
 .dataset-panel-check {
   flex-shrink: 0;

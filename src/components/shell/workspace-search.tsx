@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { ArrowUpRight, Search, X } from "lucide-react";
-import { DEPARTMENTS } from "@/lib/departments";
+import { useAccess } from "@/components/auth/access";
 import { SOURCES } from "@/lib/sources";
 
 export function WorkspaceSearch() {
@@ -21,9 +21,10 @@ export function WorkspaceSearch() {
     window.addEventListener("keydown", shortcut);
     return () => window.removeEventListener("keydown", shortcut);
   }, []);
+  const { departments: DEPARTMENTS, allows } = useAccess();
   const normalized = query.trim().toLocaleLowerCase("mn");
   const departments = DEPARTMENTS.filter((d) => d.name.toLocaleLowerCase("mn").includes(normalized));
-  const sources = normalized ? SOURCES.filter((s) => s.name.toLocaleLowerCase("mn").includes(normalized)).slice(0, 12) : [];
+  const sources = normalized ? SOURCES.filter((s) => allows(s.slug) && s.name.toLocaleLowerCase("mn").includes(normalized)).slice(0, 12) : [];
   /*
     ⚠⚠ ТОЛГОЙН ХАЙХ ТОВЧ ХАСАГДСАН (хэрэглэгчийн шийдвэр, 2026-09-21).
     Хайлт нь ӨӨРӨӨ үлдсэн — Ctrl K товчлуураар нээгдэнэ. Товчны оронд

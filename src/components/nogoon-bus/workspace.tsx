@@ -76,7 +76,7 @@ const PortalLayers = dynamic(
   ("Бичгээр · цахим", "Цэвэр ус · хаягдал ус") — тэдгээр нь
   бүртгэлийн БҮТЭЦ тул тогтвортой.
 */
-const TABS = [
+export const TABS = [
   {
     id: "hamgaalagch",
     label: "Байгаль хамгаалагчийн бүс",
@@ -237,13 +237,14 @@ const SETS: Record<TabId, (typeof NOGOON_TABS)[keyof typeof NOGOON_TABS]> = {
 export function NogoonBusWorkspace() {
   /* Сонголт хадгалагдана — ажлаа тасалдуулаад буцаж ирэхэд хамгийн
      сүүлд харж байсан самбар нээгдэнэ */
-  const [tab, pick] = useStoredTab<TabId>("nogoon-bus.tab", IDS, "hamgaalagch");
+  const [tab, pick] = useStoredTab<TabId>("nogoon-bus.tab", IDS, "hamgaalagch", "nogoon-bus");
 
   const set = SETS[tab];
 
   return (
     <div className="department-workspace">
-      <SourceTabs tabs={TABS} value={tab} onChange={pick} label="Сэдэв" />
+      <SourceTabs
+        scope="nogoon-bus" tabs={TABS} value={tab} onChange={pick} label="Сэдэв" />
 
       {/*
         ⚠ `key` нь ЗААВАЛ: бүх таб НЭГ бүрэлдэхүүнээр зурагддаг тул
@@ -251,7 +252,7 @@ export function NogoonBusWorkspace() {
         давхарга, шүүлтүүр, татагдсан бичлэг өмнөх табынхаараа үлдэнэ.
       */}
       <div className="department-workspace-content">
-        <PortalLayers key={set.key} set={set} />
+        <PortalLayers key={set.key} set={set} access={{ scope: "nogoon-bus", tab }} />
       </div>
     </div>
   );
