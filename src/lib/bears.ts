@@ -16,8 +16,14 @@ export const BEAR_LAYER = `${layerService("A09_baawgai_burtgel")}/0`;
 
 export type BearCase = {
   oid: number;
-  lon: number;
-  lat: number;
+  /**
+   * Байршил — координат бүртгэгдээгүй тохиолдолд `null` (хэрэглэгч
+   * 2026-10-20: "координатын мэдээлэл байхгүй тохиолдолд яаж оруулж
+   * харах уу"). Ийм тохиолдол тоо, диаграм, жагсаалтад БАЙНА, газрын
+   * зурагт ГАРАХГҮЙ — төв рүү "нөхөж" тавихгүй (зохиомол байршил болно).
+   */
+  lon: number | null;
+  lat: number | null;
   district: string;
   status: string;
   /** Дуудлагын огноо (epoch мс) эсвэл `null` */
@@ -28,8 +34,13 @@ export type BearCase = {
 
 export type BearData = {
   rows: BearCase[];
+  /** ЗӨВХӨН байршилтай тохиолдол — индекс нь `rows.filter(located)`-тэй ижил */
   points: { oid: number[]; lon: number[]; lat: number[] };
 };
+
+/** Байршилтай эсэх — газрын зургийн индекс түүгээр угсрагдана */
+export const located = (r: BearCase): r is BearCase & { lon: number; lat: number } =>
+  r.lon != null && r.lat != null;
 
 const tidy = (v: unknown) =>
   typeof v === "string" ? v.replace(/\s+/g, " ").trim() : "";
@@ -60,18 +71,18 @@ export async function fetchBears(signal?: AbortSignal): Promise<BearData> {
   for (const f of json.features ?? []) {
     const a = f.attributes;
     const at = pointOf(f.geometry, a["уртраг__x__wgs84_"], a["өргөрөг__y__wgs84_"]);
-    if (!at) continue;
     const oid = Number(a.objectid);
     const d = a["дуудлагын_огноо"];
     rows.push({
       oid,
-      lon: at.lon,
-      lat: at.lat,
+      lon: at?.lon ?? null,
+      lat: at?.lat ?? null,
       district: tidy(a["дүүрэг"]) || "Бүртгэгдээгүй",
       status: tidy(a["баталгаажилт"]) || "Бүртгэгдээгүй",
       date: typeof d === "number" && d > 0 ? d : null,
       attrs: a,
     });
+    if (!at) continue;
     points.oid.push(oid);
     points.lon.push(at.lon);
     points.lat.push(at.lat);
@@ -104,8 +115,9 @@ export function dateText(ms: number) {
 
 /** Маягтын утгууд — хоосон мөр нь `null` болж хадгалагдана */
 export type BearInput = {
-  lat: number;
-  lon: number;
+  /** Хоёулаа `null` бол байршилгүй тохиолдол — геометргүй хадгалагдана */
+  lat: number | null;
+  lon: number | null;
   /** Дуудлагын огноо — UTC шөнө дунд (epoch мс), эсвэл `null` */
   date: number | null;
   district: string;
@@ -176,7 +188,7 @@ function attributesOf(v: BearInput) {
     тэмдэглэл__эх_: orNull(v.note),
     өргөрөг__y__wgs84_: v.lat,
     уртраг__x__wgs84_: v.lon,
-    координатын_эх_бичилт: `${v.lat} ${v.lon}`,
+    координатын_эх_бичилт: v.lat != null && v.lon != null ? `${v.lat} ${v.lon}` : null,
   };
 }
 
@@ -198,10 +210,11 @@ async function applyEdits(body: Record<string, string>, label: string) {
   return r.objectId;
 }
 
-const geometryOf = (v: BearInput) => ({
-  ...toUtm48(v.lat, v.lon),
-  spatialReference: { wkid: 32648 },
-});
+/** Байршилгүй бол `null` — давхарга геометргүй бүртгэлийг хүлээн авна */
+const geometryOf = (v: BearInput) =>
+  v.lat != null && v.lon != null
+    ? { ...toUtm48(v.lat, v.lon), spatialReference: { wkid: 32648 } }
+    : null;
 
 /**
  * Шинэ тохиолдол нэмнэ. Зүйл нь давхаргын бүх бүртгэлд ижил тул

@@ -958,6 +958,8 @@ export function WellsMap({
   onExtent,
   onZoom,
   onView,
+  onMapClick,
+  onBlankClick,
   focus = null,
   cluster = true,
   clusterMaxZoom = 15,
@@ -999,6 +1001,18 @@ export function WellsMap({
    * (нэгж талбар) тул хулгана хөдлөх бүрд дуугарвал хүсэлтийн үер болно.
    */
   onView?: (box: Extent, zoom: number) => void;
+  /**
+   * БАЙРШИЛ СОНГОХ горим — өгвөл ЗУРАГ ДЭЭРХ ДУРЫН товшилт энэ рүү
+   * `lon, lat`-аа дамжуулна (цэгийг сонгохгүй), заагч загалмай болно.
+   * Өгөөгүй үед зан төлөв хөндөгдөхгүй.
+   */
+  onMapClick?: (lon: number, lat: number) => void;
+  /**
+   * Цэг, дүрс ТААРААГҮЙ товшилт — суурь давхаргын (`overlays`) цонх
+   * гаргахад (баавгайн самбарын ойн төрөл). Нэмэлт давхарга нь
+   * харилцдаггүй тул аль дүрсэнд орсныг дуудагч тал өөрөө тогтооно.
+   */
+  onBlankClick?: (lon: number, lat: number) => void;
   /** Сонголтын хүрээ — өөрчлөгдөх бүрд зураг тийш нь ойртоно (zoom action) */
   focus?: Extent | null;
   /** Бөөгнөрүүлэх эсэх. ЗӨВХӨН анхны зурагдалтад уншигдана */
@@ -1146,6 +1160,8 @@ export function WellsMap({
   const extentCb = React.useRef(onExtent);
   const zoomCb = React.useRef(onZoom);
   const viewCb = React.useRef(onView);
+  const pickCb = React.useRef(onMapClick);
+  const blankCb = React.useRef(onBlankClick);
   const pulseColorRef = React.useRef(pulseColor);
   React.useEffect(() => {
     selectCb.current = onSelect;
@@ -1153,6 +1169,8 @@ export function WellsMap({
     extentCb.current = onExtent;
     zoomCb.current = onZoom;
     viewCb.current = onView;
+    pickCb.current = onMapClick;
+    blankCb.current = onBlankClick;
     pulseColorRef.current = pulseColor;
   });
   const basemapRef = React.useRef(basemap);
@@ -1519,7 +1537,7 @@ export function WellsMap({
           );
 
           const self: Live = { E, view, map, layers, mode };
-          bindPointer(view, layers, selectCb, hoverCb, (id) => {
+          bindPointer(view, layers, selectCb, hoverCb, pickCb, blankCb, (id) => {
             if (!layers.lit) return;
             layers.lit.__hot = id;
             redrawLit(self, shapeGeoms.current);
@@ -1943,6 +1961,17 @@ export function WellsMap({
         );
       }
     }
+    /* Давхарын дараалал = жагсаалтын дараалал. `group.add` нь шинийг ДЭЭР
+       нэмдэг тул хожуу ирсэн (эсвэл унтрааж асаасан) суурь давхарга хил
+       дээгүүр гарч байв (баавгайн самбарын ойн төрөл, 2026-10-20) */
+    for (const group of [layers.under, layers.above]) {
+      let at = 0;
+      for (const o of list) {
+        if (Boolean(o.above) !== (group === layers.above)) continue;
+        for (const l of group.layers.filter((x: any) => x.__ovId === o.id).toArray())
+          group.reorder(l, at++);
+      }
+    }
   }, [ready, overlays]);
 
   /* ---------------- Тодруулгын цагираг ---------------- */
@@ -2226,6 +2255,8 @@ function bindPointer(
   layers: Layers,
   selectCb: React.RefObject<(oid: number) => void>,
   hoverCb: React.RefObject<((oid: number | null, at?: { x: number; y: number }) => void) | undefined>,
+  pickCb: React.RefObject<((lon: number, lat: number) => void) | undefined>,
+  blankCb: React.RefObject<((lon: number, lat: number) => void) | undefined>,
   /** Хулганы доорх дүрс (олон өнцөгт) — тод хувилбараар зурагдана */
   onHot: (id: number | null) => void,
 ) {
@@ -2246,6 +2277,14 @@ function bindPointer(
   const isCluster = (g: any) => g?.isAggregate || g?.attributes?.cluster_count > 1;
 
   view.on("click", async (e: any) => {
+    /* Байршил сонгох горимд цэг, дүрс сонгохгүй — товшсон газар л */
+    const pick = pickCb.current;
+    if (pick) {
+      const m = e.mapPoint;
+      if (m && Number.isFinite(m.longitude) && Number.isFinite(m.latitude))
+        pick(m.longitude, m.latitude);
+      return;
+    }
     const { point, shape } = await test({ x: e.x, y: e.y });
     if (point && isCluster(point)) {
       view.goTo({ target: point.geometry, zoom: Math.min(view.zoom + 2, 18) }, { duration: 500 }).catch(() => {});
@@ -2254,6 +2293,11 @@ function bindPointer(
     const g = point ?? shape;
     const oid = Number(g?.attributes?.oid);
     if (g && Number.isFinite(oid)) selectCb.current?.(oid);
+    else if (!g) {
+      const m = e.mapPoint;
+      if (m && Number.isFinite(m.longitude) && Number.isFinite(m.latitude))
+        blankCb.current?.(m.longitude, m.latitude);
+    }
   });
 
   let busy = false;
@@ -2278,7 +2322,7 @@ function bindPointer(
         continue;
       }
       const g = hit.point ?? hit.shape;
-      view.container.style.cursor = g ? "pointer" : "";
+      view.container.style.cursor = pickCb.current ? "crosshair" : g ? "pointer" : "";
       const oid = Number(g?.attributes?.oid);
       if (g && !isCluster(g) && Number.isFinite(oid)) {
         over = true;

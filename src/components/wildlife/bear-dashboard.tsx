@@ -6,6 +6,7 @@ import {
   BadgeCheck,
   CalendarDays,
   CircleSlash,
+  Crosshair,
   Footprints,
   Loader2,
   MapPin,
@@ -27,6 +28,19 @@ import {
   type MapOverlay,
 } from "@/components/wells/map";
 import { fetchUbDistricts, fetchUbKhoroos } from "@/lib/ub-districts";
+import { FOREST, FOREST_TABS } from "@/lib/forest-layers";
+import {
+  categoryKey,
+  fetchLayerFeatures,
+  fetchLayerInfo,
+} from "@/lib/portal-layers";
+import {
+  fetchParcelsIn,
+  NO_PARCELS,
+  PARCEL_SCALE,
+  type ParcelTile,
+} from "@/lib/parcels";
+import { oklchHex } from "@/components/wells/colors";
 import { Columns } from "@/components/ui/resizable-columns";
 import { Bounds } from "@/lib/extent";
 import {
@@ -34,13 +48,141 @@ import {
   dateText,
   deleteBear,
   fetchBears,
+  located,
   updateBear,
   type BearCase,
   type BearData,
   type BearInput,
 } from "@/lib/bears";
-import { FIREFLY } from "@/components/wells/colors";
 import { cn, num } from "@/lib/utils";
+
+/*
+  ОЙН ТӨРӨЛ — ойн самбарын "Ойн ялгарал"-ын бүлэг, өнгөтэй ЯГ ИЖИЛ
+  (`FOREST.valueGroups` / `valueTones`): ой, ойжилт ногоон · эвдрэл
+  улбар → улаан · ойгүй талбай шар → хүрэн. Нэг эх сурвалж тул хоёр
+  самбар нэг төрлийг өөр өнгөөр харуулахгүй.
+*/
+const TYPE_LAYER = "O03_oi_yalgaral";
+const FOREST_TYPES = (FOREST.valueGroups?.[TYPE_LAYER] ?? []).flatMap((g) =>
+  g.keys.map((key) => {
+    const t = FOREST.valueTones?.[TYPE_LAYER]?.[key] ?? [0.62, 0.075, 150];
+    return { key, group: g.label, hex: oklchHex(t[0], t[1], t[2]) };
+  }),
+);
+const OTHER_TYPE_HEX = oklchHex(0.7, 0.02, 250);
+
+/*
+  ОЙН ТӨРЛИЙН ЦОНХ (хэрэглэгч 2026-10-20: "map дээр ойн төрөл дээр
+  дарахад pop up-тай болгоё"). Нэмэлт давхарга харилцдаггүй тул товшсон
+  цэг аль дүрсэнд орсныг энд тогтооно — хүрээгээр шүүгээд цацраг татна.
+*/
+type Ring = number[][];
+function polysOf(g: GeoJSON.Geometry | null): Ring[][] {
+  if (!g) return [];
+  if (g.type === "Polygon") return [g.coordinates as Ring[]];
+  if (g.type === "MultiPolygon") return g.coordinates as Ring[][];
+  return [];
+}
+function inRing(x: number, y: number, r: Ring) {
+  let ins = false;
+  for (let i = 0, j = r.length - 1; i < r.length; j = i++) {
+    const [xi, yi] = r[i];
+    const [xj, yj] = r[j];
+    if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi)
+      ins = !ins;
+  }
+  return ins;
+}
+/** Цэг дүрсийн дотор эсэх — гадна цагирагт, нүхэнд биш */
+function contains(f: GeoJSON.Feature, x: number, y: number) {
+  const bb = f.bbox;
+  if (bb && (x < bb[0] || x > bb[2] || y < bb[1] || y > bb[3])) return false;
+  return polysOf(f.geometry).some(
+    (poly) =>
+      poly.length > 0 &&
+      inRing(x, y, poly[0]) &&
+      !poly.slice(1).some((h) => inRing(x, y, h)),
+  );
+}
+/** Хайлт хурдан байх гэж дүрс бүрд хүрээ тавина */
+function withBox(
+  f: GeoJSON.Feature,
+  properties: GeoJSON.GeoJsonProperties,
+): GeoJSON.Feature {
+  const b: [number, number, number, number] = [
+    Infinity,
+    Infinity,
+    -Infinity,
+    -Infinity,
+  ];
+  for (const poly of polysOf(f.geometry))
+    for (const [x, y] of poly[0] ?? []) {
+      if (x < b[0]) b[0] = x;
+      if (y < b[1]) b[1] = y;
+      if (x > b[2]) b[2] = x;
+      if (y > b[3]) b[3] = y;
+    }
+  return { ...f, properties, bbox: b };
+}
+/** Талбарыг үсгийн том, жижгээс үл хамааран уншина */
+const attrOf = (row: Record<string, unknown> | undefined, name: string) => {
+  if (!row) return undefined;
+  const k = Object.keys(row).find((x) => x.toLowerCase() === name);
+  return k ? row[k] : undefined;
+};
+
+/** Суурь давхаргын унтраалга — зургийн тайлбарын дээд хэсэг */
+function BaseToggle({
+  on,
+  onChange,
+  swatch,
+  label,
+  note,
+  error,
+}: {
+  on: boolean;
+  onChange: (v: boolean) => void;
+  swatch: string[];
+  label: string;
+  note: string | null;
+  error?: boolean;
+}) {
+  return (
+    <div>
+      <label className="flex cursor-pointer items-center gap-1.5">
+        <input
+          type="checkbox"
+          checked={on}
+          onChange={(e) => onChange(e.target.checked)}
+          className="size-3 accent-(--tone)"
+        />
+        <span className="flex items-center">
+          {/* Хил л давхаргад (ойн хэсэглэл) тэмдэг ОГТ БАЙХГҮЙ — хоосон
+              дөрвөлжин нь хоёр дахь чагт мэт, зураас нь илүүц уншигдаж байв
+              (хэрэглэгч 2026-10-20) */}
+          {swatch.map((c) => (
+            <span
+              key={c}
+              className="size-2.5 border border-black/30"
+              style={{ background: c, opacity: on ? 0.85 : 0.35 }}
+            />
+          ))}
+        </span>
+        <span className={on ? "text-ink" : "text-ink-3"}>{label}</span>
+      </label>
+      {note ? (
+        <p
+          className={cn(
+            "mt-0.5 pl-[18px] text-[10px] leading-tight",
+            error ? "text-clay" : "text-ink-3",
+          )}
+        >
+          {note}
+        </p>
+      ) : null}
+    </div>
+  );
+}
 
 const PointMap = dynamic(
   () => import("@/components/wells/map").then((m) => m.WellsMap),
@@ -122,7 +264,10 @@ const DIMS: Dim[] = [
       return k === NONE ? NONE : `${r.district} · ${k}`;
     },
   },
-  { id: "status", title: "Баталгаажилт", keyOf: (r) => r.status },
+  /* Газрын зургийн ангилалтай НЭГ (`mapStatus`) — хохиролтой тохиолдол
+     "Гэмтсэн, хөнөөсөн" мөрөнд (хэрэглэгч 2026-10-20: тайлбар, диаграм "яг
+     ижил"). Цонх нь эх баталгаажилтаа харуулсаар. */
+  { id: "status", title: "Баталгаажилт", keyOf: (r) => mapStatus(r) },
   {
     id: "age",
     title: "Нас / төлөв",
@@ -154,18 +299,6 @@ const DIMS: Dim[] = [
      шаардлагагүй, pop up дээр харагдахад болно") — чөлөөт бичвэр. */
 ];
 
-/**
- * НЭГ ХОРООНД ДАВТАГДСАН ТОХИОЛДОЛ — 2 ба түүнээс дээш бол өөр өнгөөр
- * (хэрэглэгч 2026-10-14). Хороо нь ДҮҮРГЭЭРЭЭ: "24-р хороо" олон
- * дүүрэгт бий. Хороо бүртгэгдээгүй тохиолдол бүлэгт ОРОХГҮЙ.
- * ⚠ Урьдын "нэг координатад 2+" дүрмийг орлосон — 47 тохиолдлын
- * координат бүгд өөр байсан тул тэр дүрэм юу ч тодруулдаггүй байв.
- */
-const khorooKey = (r: BearCase) => {
-  const k = str(r.attrs["хороо"]);
-  return k === NONE ? null : `${r.district} · ${k}`;
-};
-
 /** Нийслэлийн есөн дүүрэг — маягтын сонголт */
 const DISTRICTS = [
   "Багануур",
@@ -179,28 +312,81 @@ const DISTRICTS = [
   "Чингэлтэй",
 ];
 
-/** Зургийн тогтмол hex — газрын зураг горимоос үл хамаарна */
-const ONE_HEX = FIREFLY.mid;
-const MANY_HEX = "#e5b75a";
-
 /*
-  Баталгаажилтын шошгын өнгө — утгаас (хэрэглэгч 2026-10-14: "label
-  өнгөнүүд сайжруулаарай"). Хиймэл дагуулын бараан дэвсгэр дээр
-  уншигдахаар цайвар; дохиоллын гэр бүл: батлагдсан ноцтой (clay),
-  мөр олдсон анхааруулга (ochre), олоогүй мэдээлэл (water), хуурамч
-  (баавгай биш) ногоон, тодорхойгүй цагаан. ⚠ Цайвар саарал хувилбар
-  хиймэл дагуул дээр уусч буцаагдсан — өнгө бүр ТОД, ханасан. Жагсаалтад байхгүй шинэ бичвэр цагаан.
-  Баталгаажилтын диаграм ЯГ эдгээр өнгөтэй (шошгын тайлбар).
+  Баталгаажилтын өнгө — утгаас. Зургийн цэг, шошго, тайлбар,
+  баталгаажилтын диаграм БҮГД эндээс.
+  ⚠ Эх сурвалжийн бичвэр яг таарахгүй байж болох тул ("Хуурамч (баавгай
+  биш)") түлхүүр үгээр таана. Дүрэмд ороогүй утга цагаан.
+  ⚠ "олоогүй" нь "олдсон"-той давхцахгүй.
 */
-const STATUS_HEX: Record<string, string> = {
-  Батлагдсан: "#ff5a4e",
-  "Мөр олдсон": "#ffcc3d",
-  Олоогүй: "#5cb8ff",
-  "Хуурамч (баавгай биш)": "#9ff07a",
-  Тодорхойгүй: "#ffffff",
+/*
+  ⚠⚠ ӨНГӨ = ХЭЛТСИЙН EXCEL-ИЙН МӨРИЙН ӨНГӨ (хэрэглэгч 2026-10-20: "өнгө нь ч
+  гэсэн Excel дээрх шиг"). "GPS tseg" хуудасны нүдний дүүргэлтийг уншиж
+  тогтоосон: олоогүй ба буцааж хөөж гарсан — accent4 (#FFC000) шар; буцааж
+  тавьсан — accent6 (#70AD47) ногоон; хуурамч, нохой/адуу/морь/хүн байсан
+  БА №44 (Батлагдсан) — "Bad" ягаан-улаан; №22 мөр олдсон — accent1 (#4472C4)
+  цэнхэр; №28 (хүн гэмтсэн, хөнөөсөн) — accent3 (#A5A5A5) саарал.
+  Хиймэл дагуулын бараан дэвсгэр дээр харагдахаар ӨНЦӨГ нь Excel-ийнх,
+  ногоон, цэнхэр нь бага зэрэг цайвар. Урьдын (мөн өдрийн) гараар сонгосон
+  өнгөнүүдийг ОРЛОСОН.
+  ⚠ "хөөж" нь "буцааж"-аас ӨМНӨ — эс тэгвээс хөөж гарсан ногоон болно.
+*/
+const STATUS_RULES: [RegExp, string][] = [
+  [/олоогүй/, "#ffc000"],
+  /* Excel-д олоогүйтэй ижил шар — газрын зурагт ялгахын тулд ногоон-цэнхэр (2026-10-20) */
+  [/хөөж/, "#3dd6c6"],
+  [/буцааж/, "#7cc255"],
+  [/хуурамч/, "#ff5a4e"],
+  /* Excel-д хуурамчтай ижил ягаан — газрын зурагт нил ягаан (2026-10-20) */
+  [/батлагдсан/, "#d46bff"],
+  [/мөр олдсон/, "#6f96de"],
+  [/тодорхойгүй/, "#ffffff"],
+  [/гэмтс|хөнөөс/, "#a5a5a5"],
+];
+const OTHER_HEX = "#ffffff";
+
+const statusHex = (v: string) => {
+  const t = v.toLowerCase();
+  return STATUS_RULES.find(([re]) => re.test(t))?.[1] ?? OTHER_HEX;
 };
 
+const HARMED = "Гэмтсэн, хөнөөсөн";
+
+/**
+ * ЗУРАГ ДЭЭРХ АНГИЛАЛ — хохиролтой тохиолдол (хүн гэмтсэн, хөнөөсөн, эд
+ * хөрөнгө сүйтгэсэн) баталгаажилтаасаа үл хамааран "Гэмтсэн, хөнөөсөн"
+ * (хэрэглэгч 2026-10-20, № 28 БЗД 35-р хороо: "хар саарал шүү"). Тэр мөрийн
+ * баталгаажилт нь өөр утгатай байж болох тул ХОХИРОЛ талбараар таана.
+ * Диаграм, цонх нь эх баталгаажилтаа харуулсаар.
+ */
+const mapStatus = (r: BearCase) =>
+  str(r.attrs["хохирол"]) !== NONE ? HARMED : r.status;
+
 type Filters = Partial<Record<string, string>>;
+
+/** Хуурамч (баавгай биш) дуудлага — тэмдэглэл нь "юу байсан" */
+const isFake = (status: string) => /хуурамч/.test(status.toLowerCase());
+
+/** Маягтын координат — бичсэн мөр, хаанаас ирсэн (зураг дээр товшсон бол зураг ойртохгүй) */
+type Coords = { lat: string; lon: string; src: "text" | "map" };
+
+/**
+ * Координат уншина: хоёулаа хоосон бол байршилгүй (`at: null`), хоёулаа
+ * Монголын нутгийн хүрээнд бол `[lon, lat]`, бусад тохиолдолд алдаа —
+ * өргөрөг, уртрагийг сольж бичих, нэгийг нь орхихоос сэргийлнэ.
+ */
+function readCoords(c: Coords): { ok: boolean; at: [number, number] | null } {
+  const a = c.lat.trim();
+  const o = c.lon.trim();
+  if (!a && !o) return { ok: true, at: null };
+  const lat = Number(a);
+  const lon = Number(o);
+  const ok =
+    a !== "" && o !== "" && lat >= 41 && lat <= 52.5 && lon >= 87 && lon <= 120;
+  return { ok, at: ok ? [lon, lat] : null };
+}
+
+const EMPTY_COORDS: Coords = { lat: "", lon: "", src: "text" };
 
 const passes = (r: BearCase, f: Filters, skip?: string) =>
   DIMS.every((d) => d.id === skip || !f[d.id] || d.keyOf(r) === f[d.id]);
@@ -231,8 +417,14 @@ export function BearDashboard() {
   const [basemap, setBasemap] = React.useState<Basemap>(defaultBasemap);
   /** Нээлттэй маягт: шинэ тохиолдол (`oid: null`) эсвэл засаж буйх */
   const [form, setForm] = React.useState<{ oid: number | null } | null>(null);
-  /** Маягтад бичсэн координат — зураг дээр урьдчилан тодруулна */
-  const [preview, setPreview] = React.useState<[number, number] | null>(null);
+  /*
+    Маягтын координат — самбарт сууна: зураг дээр товшиж бөглөх
+    (хэрэглэгч 2026-10-20: "координатын мэдээлэл байхгүй тохиолдолд яаж
+    оруулж харах уу") ба урьдчилан тодруулах хоёр хоёулаа эндээс.
+  */
+  const [coords, setCoords] = React.useState<Coords>(EMPTY_COORDS);
+  /** Зураг дээрээс байршил сонгох горим — дараагийн товшилт координат болно */
+  const [picking, setPicking] = React.useState(false);
   /** Засварын дараа дахин татах дохио */
   const [version, setVersion] = React.useState(0);
   /** Нийслэлийн дүүргийн хил — зургийн ард бүдэг */
@@ -241,6 +433,162 @@ export function BearDashboard() {
   /** Хорооны хил — 1:150 000-аас ойртоход */
   const [khorooBnd, setKhorooBnd] =
     React.useState<GeoJSON.FeatureCollection | null>(null);
+
+  /*
+    СУУРЬ ДАВХАРГА — ОЙН ТӨРӨЛ, ОЙН ХЭСЭГЛЭЛ, НЭГЖ ТАЛБАР (хэрэглэгч
+    2026-10-20: "ойн хэлтсээс ойн хэсэглэлийг map суурин дээр нь
+    харуулаад, нэгж талбарыг бас харуулъя" → "ойн хэсэглэлийн өнгөөр нь
+    бас ямар ямар төрөл байна гэдгийг нь харъя"). Баавгай ойгоос буудаг
+    тул тохиолдол ойн ямар хэсэгт, хэний газар дээр болсныг хамт уншина.
+    · ОЙН ТӨРӨЛ — `O03_oi_heseglel`-д төрлийн талбар БАЙХГҮЙ (зөвхөн
+      хэсгийн дугаар, ДЦГ). Төрөл нь ойн хэлтсийн "Ойн ялгарал"
+      (`O03_oi_yalgaral`, `ylgaral`, 6,264 дүрс) — тэр нь дүүргэлт болно.
+    · ОЙН ХЭСЭГЛЭЛ (7,699 дүрс) — дүүргэлтгүй, нимгэн цайвар хил.
+    · Хоёулаа ойн хэлтсийн бүртгэлээс (`FOREST_TABS`) тул кэш нь ойн
+      самбартай НЭГ.
+    · НЭГЖ ТАЛБАР — харагдах хүрээнд, 1:90 000-аас ойртоход
+      ({@link PARCEL_SCALE}); порталын самбартай ижил цайвар саарал тор.
+    ⚠ Бүгд ЦЭГИЙН ДООР суурь, тус бүр унтраалттай (зургийн тайлбарт).
+    ⚠ Татагдахгүй бол самбар хэвээр ажиллана — тайлбарт л алдаа гарна.
+  */
+  const [types, setTypes] = React.useState<
+    | {
+        key: string;
+        hex: string;
+        group: string;
+        data: GeoJSON.FeatureCollection;
+      }[]
+    | null
+  >(null);
+  const [typesErr, setTypesErr] = React.useState<string | null>(null);
+  const [sections, setSections] =
+    React.useState<GeoJSON.FeatureCollection | null>(null);
+  const [baseOn, setBaseOn] = React.useState({
+    types: true,
+    parcel: true,
+  });
+  const [forestPick, setForestPick] = React.useState<{
+    key: string;
+    group: string;
+    hex: string;
+    ha: number | null;
+    hes: number | null;
+    spa: string | null;
+  } | null>(null);
+  const pickForest = (lon: number, lat: number) => {
+    let hit: GeoJSON.Feature | undefined;
+    const t =
+      baseOn.types && types
+        ? types.find((x) => {
+            hit = x.data.features.find((f) => contains(f, lon, lat));
+            return hit != null;
+          })
+        : undefined;
+    if (!t || !hit) return setForestPick(null);
+    const sec = sections?.features.find((f) => contains(f, lon, lat));
+    setForestPick({
+      key: t.key,
+      group: t.group,
+      hex: t.hex,
+      ha: (hit.properties?.ha as number | null) ?? null,
+      hes: (sec?.properties?.hes as number | null) ?? null,
+      spa: (sec?.properties?.spa as string | null) ?? null,
+    });
+  };
+  const [view, setView] = React.useState<{
+    box: [number, number, number, number];
+    zoom: number;
+  } | null>(null);
+  const [parcels, setParcels] = React.useState<ParcelTile>(NO_PARCELS);
+  const [parcelErr, setParcelErr] = React.useState<string | null>(null);
+  const parcelZoom = React.useMemo(() => zoomForScale(PARCEL_SCALE), []);
+  const close = view != null && view.zoom >= parcelZoom;
+
+  React.useEffect(() => {
+    const ac = new AbortController();
+    const set = FOREST_TABS[TYPE_LAYER];
+    fetchLayerInfo(set, TYPE_LAYER, ac.signal)
+      .then(async (info) => ({
+        info,
+        d: await fetchLayerFeatures(info, ac.signal),
+      }))
+      .then(({ info, d }) => {
+        /* Төрөл бүр тусдаа давхарга — нэмэлт давхарга нь ганц өнгөтэй */
+        const by = new Map<string, GeoJSON.Feature[]>();
+        for (const f of d.shapes.features) {
+          const row = d.rows[Number(f.id)];
+          const k = categoryKey(row?.["ylgaral"]);
+          /* Талбай ЗӨВХӨН гектарын баганаас — `SHAPE__Area` 2.2 дахин хөөрөгдсөн */
+          const ha =
+            info.areaField && info.areaInHa
+              ? Number(row?.[info.areaField])
+              : NaN;
+          const g = withBox(f, { ha: Number.isFinite(ha) ? ha : null });
+          const list = by.get(k);
+          if (list) list.push(g);
+          else by.set(k, [g]);
+        }
+        const known = FOREST_TYPES.filter((t) => by.has(t.key));
+        const extra = [...by.keys()]
+          .filter((k) => !FOREST_TYPES.some((t) => t.key === k))
+          .map((key) => ({ key, group: "Бусад", hex: OTHER_TYPE_HEX }));
+        setTypes(
+          [...known, ...extra].map((t) => ({
+            ...t,
+            data: { type: "FeatureCollection", features: by.get(t.key)! },
+          })),
+        );
+      })
+      .catch((e: Error) => {
+        if (e.name !== "AbortError") setTypesErr(e.message);
+      });
+    const sec = FOREST_TABS.O03_oi_heseglel;
+    fetchLayerInfo(sec, "O03_oi_heseglel", ac.signal)
+      .then((info) => fetchLayerFeatures(info, ac.signal))
+      .then((d) =>
+        setSections({
+          type: "FeatureCollection",
+          features: d.shapes.features.map((f) => {
+            const row = d.rows[Number(f.id)];
+            const hes = Number(attrOf(row, "hes_num"));
+            const spa = attrOf(row, "spa_name");
+            return withBox(f, {
+              hes: Number.isFinite(hes) && hes > 0 ? hes : null,
+              spa: typeof spa === "string" && spa.trim() ? spa.trim() : null,
+            });
+          }),
+        }),
+      )
+      .catch(() => {
+        /* Хэсэглэлийн хил нь тайлбаргүй суурь — унавал зүгээр л гарахгүй */
+      });
+    return () => ac.abort();
+  }, []);
+
+  React.useEffect(() => {
+    if (!baseOn.parcel || !view || !close) return;
+    const ac = new AbortController();
+    fetchParcelsIn(view.box, ac.signal, view.zoom)
+      .then((t) => {
+        if (ac.signal.aborted) return;
+        setParcels(t);
+        setParcelErr(null);
+      })
+      .catch((e: Error) => {
+        if (ac.signal.aborted || e.name === "AbortError") return;
+        setParcels(NO_PARCELS);
+        setParcelErr(e.message);
+      });
+    return () => ac.abort();
+  }, [baseOn.parcel, view, close]);
+
+  /* Унтраасан, эсвэл хол байхад ДАМ хоосон (эффектээс `set*` биш) */
+  const shownParcels = baseOn.parcel && close ? parcels : NO_PARCELS;
+  const onView = React.useCallback(
+    (box: [number, number, number, number], zoom: number) =>
+      setView({ box, zoom }),
+    [],
+  );
 
   React.useEffect(() => {
     let alive = true;
@@ -270,6 +618,24 @@ export function BearDashboard() {
   */
   const overlays = React.useMemo<MapOverlay[] | undefined>(() => {
     const list: MapOverlay[] = [];
+    /* Ойн төрөл — хамгийн доор, ойн самбарын ялгарлын өнгөөр */
+    if (types && baseOn.types)
+      types.forEach((t, i) =>
+        list.push({
+          id: `forest-type-${i}`,
+          data: t.data,
+          fill: { color: t.hex, opacity: 0.2 },
+          line: { color: t.hex, opacity: 0.3, width: 0.3 },
+        }),
+      );
+    /* Нэгж талбар — ойн дүүргэлтийн ДЭЭР, хилийн ДООР */
+    if (shownParcels.data.features.length)
+      list.push({
+        id: "parcel",
+        data: shownParcels.data,
+        fill: { color: "#c3cad3", opacity: 0.06 },
+        line: { color: "#c3cad3", opacity: 0.85, width: 1.0 },
+      });
     if (khorooBnd)
       list.push({
         id: "ub-khoroos",
@@ -293,7 +659,7 @@ export function BearDashboard() {
         label: { field: "soum_name", size: 7.5, color: "#ffffff" },
       });
     return list.length ? list : undefined;
-  }, [districtBnd, khorooBnd]);
+  }, [districtBnd, khorooBnd, types, baseOn, shownParcels]);
 
   React.useEffect(() => {
     const ac = new AbortController();
@@ -306,6 +672,25 @@ export function BearDashboard() {
   }, [version]);
 
   const rows = React.useMemo(() => data?.rows ?? [], [data]);
+  /** Газрын зургийн индекс — `data.points`-тэй ИЖИЛ дараалал */
+  const placed = React.useMemo(() => rows.filter(located), [rows]);
+
+  const preview = form ? readCoords(coords).at : null;
+
+  const openForm = (oid: number | null) => {
+    const r = oid != null ? rows.find((x) => x.oid === oid) : undefined;
+    setCoords(
+      r && located(r)
+        ? { lat: String(r.lat), lon: String(r.lon), src: "text" }
+        : EMPTY_COORDS,
+    );
+    setPicking(false);
+    setForm({ oid });
+  };
+  const closeForm = () => {
+    setForm(null);
+    setPicking(false);
+  };
 
   const setFilter = React.useCallback((id: string, v: string | null) => {
     setFilters((f) => ({ ...f, [id]: v ?? undefined }));
@@ -372,28 +757,24 @@ export function BearDashboard() {
     return out;
   }, [rows, filters]);
 
-  /** Хороо бүрийн тохиолдлын тоо — шүүлтээс үл хамаарна */
-  const perKhoroo = React.useMemo(() => {
-    const m = new Map<string, number>();
-    for (const r of rows) {
-      const k = khorooKey(r);
-      if (k) m.set(k, (m.get(k) ?? 0) + 1);
-    }
-    return m;
-  }, [rows]);
-
+  /*
+    ЦЭГИЙН ӨНГӨ = БАТАЛГААЖИЛТ (хэрэглэгч 2026-10-20: шошгын өнгийг
+    сольсны дараа "өөрчлөгдөөгүй байна" — шошго 1:150 000-аас ойртоход л
+    гардаг тул хотын харагдацад цэг л харагдана). Шошго, диаграмтай НЭГ
+    `statusHex`. ⚠ Урьдын (2026-10-14) "нэг хороонд 2+ тохиолдол шаргал"
+    өнгө ОРЛОГДСОН — давталт нь хорооны диаграмд уншигдана.
+  */
   const colors = React.useMemo(
-    () =>
-      rows.map((r) => {
-        const k = khorooKey(r);
-        return k && (perKhoroo.get(k) ?? 0) > 1 ? MANY_HEX : ONE_HEX;
-      }),
-    [rows, perKhoroo],
+    () => placed.map((r) => statusHex(mapStatus(r))),
+    [placed],
   );
-  const repeated = React.useMemo(
-    () => [...perKhoroo.values()].filter((n) => n > 1).length,
-    [perKhoroo],
-  );
+  /** Зургийн тайлбар — баталгаажилтын диаграмтай ИЖИЛ дараалал, зурагт байгаа нь л */
+  const legend = React.useMemo(() => {
+    const on = new Set(placed.map(mapStatus));
+    return charts.status
+      .map((x) => x.key)
+      .filter((k) => on.has(k) && k !== NONE);
+  }, [placed, charts]);
 
   /*
     ЗУРГИЙН ШОШГО — баталгаажилт (хэрэглэгч 2026-10-14: "map-ийн label
@@ -407,15 +788,18 @@ export function BearDashboard() {
   */
   const labels = React.useMemo(
     () => ({
-      text: rows.map((r) => (r.status === NONE ? "" : r.status)),
+      text: placed.map((r) => (mapStatus(r) === NONE ? "" : mapStatus(r))),
       minzoom: zoomForScale(150_000),
       /* Хиймэл дагуул дээр уншигдахаар том, зузаан бараан хүрээтэй
          (хэрэглэгч 2026-10-14: "хаана юу байгаа нь мэдэгдэхгүй") */
       size: 7,
       halo: 1.4,
-      colors: STATUS_HEX,
+      /* Бичвэр → hex — датанд байгаа баталгаажилт бүрээр */
+      colors: Object.fromEntries(
+        [...new Set(placed.map(mapStatus))].map((t) => [t, statusHex(t)]),
+      ),
     }),
-    [rows],
+    [placed],
   );
 
   const visible = React.useMemo(() => {
@@ -437,21 +821,33 @@ export function BearDashboard() {
 
   const active = Object.values(filters).filter(Boolean).length;
 
-  /* Шүүлт тавьвал үлдсэн бүхнийг, тохиолдол сонговол түүнийг багтаана */
+  /** Шүүлтэд тохирох байршилгүй тохиолдол — зурагт гарахгүй тул тусдаа жагсаалтад */
+  const unplaced = React.useMemo(
+    () => shown.filter((r) => !located(r)),
+    [shown],
+  );
+
+  /*
+    Шүүлт тавьвал үлдсэн бүхнийг, тохиолдол сонговол түүнийг багтаана.
+    ⚠ Зураг дээр товшиж сонгосон координат руу ОЙРТОХГҮЙ (`src: "map"`) —
+    хэрэглэгч аль хэдийн тэр газрыг харж байгаа.
+  */
+  const typed = coords.src === "text" ? preview : null;
   const focus = React.useMemo<Extent | null>(() => {
-    if (preview) {
+    if (typed) {
       const b = new Bounds();
-      b.add(preview[0], preview[1]);
+      b.add(typed[0], typed[1]);
       return b.get(0.01);
     }
     if (!chosen && !active) return null;
     const b = new Bounds();
-    for (const r of chosen ? [chosen] : shown) b.add(r.lon, r.lat);
+    for (const r of chosen ? [chosen] : shown)
+      if (located(r)) b.add(r.lon, r.lat);
     return b.get(chosen ? 0.01 : 0.02);
-  }, [shown, chosen, active, preview]);
+  }, [shown, chosen, active, typed]);
 
   const stats = React.useMemo(() => {
-    const c = (s: string) => shown.filter((r) => r.status === s).length;
+    const c = (s: string) => shown.filter((r) => mapStatus(r) === s).length;
     return {
       n: shown.length,
       confirmed: c("Батлагдсан"),
@@ -522,9 +918,11 @@ export function BearDashboard() {
               colorOf={
                 id === "status"
                   ? (x) =>
-                      x.key === "Тодорхойгүй"
-                        ? "var(--ink)"
-                        : (STATUS_HEX[x.key] ?? "var(--ink-3)")
+                      x.key === NONE
+                        ? "var(--ink-3)"
+                        : statusHex(x.key) === OTHER_HEX
+                          ? "var(--ink)"
+                          : statusHex(x.key)
                   : undefined
               }
               selected={filters[id] ?? null}
@@ -576,7 +974,11 @@ export function BearDashboard() {
               onSelect={pickWeek}
               formatTick={(x, i) =>
                 /* Хоёр долоо хоног тутамд — баганын өргөнд "09.08" багтахгүй */
-                x.key === NONE ? "—" : charts.week.length <= 8 || i % 2 === 0 ? x.key.slice(5) : ""
+                x.key === NONE
+                  ? "—"
+                  : charts.week.length <= 8 || i % 2 === 0
+                    ? x.key.slice(5)
+                    : ""
               }
             />
           </div>
@@ -609,7 +1011,11 @@ export function BearDashboard() {
         key={id}
         label={d.title}
         icon={icon}
-        value={charts[id].find((x) => x.key === filters[id])?.label ?? filters[id] ?? null}
+        value={
+          charts[id].find((x) => x.key === filters[id])?.label ??
+          filters[id] ??
+          null
+        }
         active={Boolean(filters[id])}
         onClear={() => setFilter(id, null)}
         width={240}
@@ -676,6 +1082,38 @@ export function BearDashboard() {
         <div className="flex min-h-0 flex-col gap-2.5 overflow-y-auto xl:w-(--col-l) xl:shrink-0">
           {chart("district")}
           {chart("khoroo")}
+          {unplaced.length ? (
+            <Card className="shrink-0">
+              <Head title="Байршилгүй тохиолдол">
+                <span className="num text-[11px] text-ink-3">
+                  {num(unplaced.length)}
+                </span>
+              </Head>
+              <ul className="divide-y divide-line">
+                {unplaced.map((r) => (
+                  <li key={r.oid}>
+                    <button
+                      onClick={() => setPicked(picked === r.oid ? null : r.oid)}
+                      className={cn(
+                        "flex w-full items-baseline gap-2 px-3 py-1.5 text-left transition-colors hover:bg-paper-hi",
+                        picked === r.oid &&
+                          "bg-paper-hi shadow-[inset_2px_0_0_var(--data)]",
+                      )}
+                    >
+                      <span className="num w-[68px] shrink-0 text-[11px] text-ink-3">
+                        {r.date != null ? dateText(r.date) : "—"}
+                      </span>
+                      <span className="min-w-0 flex-1 truncate text-[11.5px] text-ink-2">
+                        {[r.status, r.district]
+                          .filter((x) => x !== NONE)
+                          .join(" · ") || NONE}
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          ) : null}
         </div>
 
         {/* ---- ГОЛ: газрын зураг ---- */}
@@ -686,42 +1124,119 @@ export function BearDashboard() {
                 points={data.points}
                 visible={visible}
                 basemap={basemap}
-                onSelect={(oid) => setPicked(picked === oid ? null : oid)}
+                onSelect={(oid) => {
+                  setForestPick(null);
+                  setPicked(picked === oid ? null : oid);
+                }}
+                onBlankClick={(lon, lat) => {
+                  setPicked(null);
+                  pickForest(lon, lat);
+                }}
                 focus={focus}
                 highlight={
-                  preview ?? (chosen ? [chosen.lon, chosen.lat] : null)
+                  preview ??
+                  (chosen && located(chosen) ? [chosen.lon, chosen.lat] : null)
+                }
+                onMapClick={
+                  form && picking
+                    ? (lon, lat) => {
+                        setCoords({
+                          lat: String(+lat.toFixed(6)),
+                          lon: String(+lon.toFixed(6)),
+                          src: "map",
+                        });
+                        setPicking(false);
+                      }
+                    : undefined
                 }
                 colors={colors}
                 labels={labels}
                 overlays={overlays}
+                onView={onView}
                 adminLines={false}
                 cluster={false}
               />
-              {/* Өнгөний тайлбар — давталттай хороо байгаа үед л */}
-              {repeated > 0 ? (
-                <div className="absolute bottom-8 left-2.5 z-10 space-y-1 rounded-xs border border-line bg-paper/95 px-2 py-1.5 text-[11px] text-ink-2 backdrop-blur-md">
-                  <div className="flex items-center gap-1.5">
-                    <span
-                      className="size-2 rounded-full"
-                      style={{ background: ONE_HEX }}
-                    />
-                    Нэг тохиолдол
+              {/* Тайлбар: суурь давхаргын унтраалга + баталгаажилтын өнгө */}
+              <div className="absolute bottom-8 left-2.5 z-10 max-h-[calc(100%-5rem)] w-60 space-y-1 overflow-y-auto rounded-xs border border-line bg-paper/95 px-2 py-1.5 text-[11px] text-ink-2 backdrop-blur-md">
+                <BaseToggle
+                  on={baseOn.types}
+                  onChange={(v) => setBaseOn((b) => ({ ...b, types: v }))}
+                  swatch={FOREST_TYPES.slice(0, 1)
+                    .concat(FOREST_TYPES.slice(4, 5), FOREST_TYPES.slice(8, 9))
+                    .map((t) => t.hex)}
+                  label="Ойн төрөл"
+                  note={
+                    typesErr ??
+                    (baseOn.types && !types ? "Ачаалж байна…" : null)
+                  }
+                  error={Boolean(typesErr)}
+                />
+                {baseOn.types && types?.length ? (
+                  <div className="space-y-0.5 pl-[18px]">
+                    {[...new Set(types.map((t) => t.group))].map((g) => (
+                      <div key={g}>
+                        <div className="text-[9.5px] uppercase tracking-wide text-ink-3">
+                          {g}
+                        </div>
+                        <div className="grid grid-cols-2 gap-x-2">
+                          {types
+                            .filter((t) => t.group === g)
+                            .map((t) => (
+                              <div
+                                key={t.key}
+                                className="flex min-w-0 items-center gap-1 text-[10px]"
+                                title={t.key}
+                              >
+                                <span
+                                  className="size-2 shrink-0 border border-black/30"
+                                  style={{ background: t.hex }}
+                                />
+                                <span className="truncate">{t.key}</span>
+                              </div>
+                            ))}
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                  <div className="flex items-center gap-1.5">
-                    <span
-                      className="size-2 rounded-full"
-                      style={{ background: MANY_HEX }}
-                    />
-                    Нэг хороонд 2 ба түүнээс дээш
+                ) : null}
+                <BaseToggle
+                  on={baseOn.parcel}
+                  onChange={(v) => setBaseOn((b) => ({ ...b, parcel: v }))}
+                  swatch={["#c3cad3"]}
+                  label="Нэгж талбар"
+                  note={
+                    !baseOn.parcel
+                      ? null
+                      : parcelErr
+                        ? parcelErr
+                        : !close
+                          ? `1:${num(PARCEL_SCALE)}-аас ойртоход харагдана`
+                          : parcels.capped
+                            ? `${num(parcels.total ?? 0)} нэгж талбар — ойртуулна уу`
+                            : null
+                  }
+                  error={Boolean(parcelErr)}
+                />
+                {legend.length ? (
+                  <div className="space-y-1 border-t border-line pt-1">
+                    {legend.map((t) => (
+                      <div key={t} className="flex items-center gap-1.5">
+                        <span
+                          className="size-2 rounded-full ring-1 ring-black/40"
+                          style={{ background: statusHex(t) }}
+                        />
+                        {t}
+                      </div>
+                    ))}
                   </div>
-                </div>
-              ) : null}
+                ) : null}
+              </div>
               <BasemapGallery value={basemap} onChange={setBasemap} />
               {!form ? (
                 <button
                   onClick={() => {
                     setPicked(null);
-                    setForm({ oid: null });
+                    openForm(null);
                   }}
                   className="elevated absolute top-2.5 left-2.5 z-10 flex h-8 items-center gap-1.5 rounded-xs border border-line-2 bg-paper/95 px-2.5 text-[12px] font-medium text-ink backdrop-blur-md transition-colors hover:bg-paper-hi"
                 >
@@ -737,11 +1252,11 @@ export function BearDashboard() {
                       : undefined
                   }
                   rows={rows}
-                  onPreview={setPreview}
-                  onCancel={() => {
-                    setForm(null);
-                    setPreview(null);
-                  }}
+                  coords={coords}
+                  onCoords={(c) => setCoords({ ...c, src: "text" })}
+                  picking={picking}
+                  onPicking={setPicking}
+                  onCancel={closeForm}
                   onSubmit={async (v) => {
                     let oid = form.oid;
                     if (oid != null) await updateBear(oid, v);
@@ -754,8 +1269,7 @@ export function BearDashboard() {
                             0,
                           ) + 1,
                         )) ?? null;
-                    setForm(null);
-                    setPreview(null);
+                    closeForm();
                     /* Шинэ, засагдсан тохиолдол шүүлтэд унахгүй байхаар шүүлтийг цэвэрлэнэ */
                     setFilters({});
                     setPicked(oid);
@@ -776,13 +1290,73 @@ export function BearDashboard() {
                   </div>
                   <CaseCard
                     r={chosen}
-                    onEdit={() => setForm({ oid: chosen.oid })}
+                    onEdit={() => openForm(chosen.oid)}
                     onDelete={async () => {
                       await deleteBear(chosen.oid);
                       setPicked(null);
                       setVersion((n) => n + 1);
                     }}
                   />
+                </div>
+              ) : forestPick ? (
+                <div className="elevated absolute right-2.5 bottom-2.5 z-10 w-[260px] rounded-xs border border-line-2 bg-paper/92 backdrop-blur-md">
+                  <div className="flex items-center justify-between gap-2 border-b border-line px-2.5 py-1.5">
+                    <span className="eyebrow">Ойн төрөл</span>
+                    <button
+                      onClick={() => setForestPick(null)}
+                      aria-label="Хаах"
+                      className="text-ink-3 transition-colors hover:text-ink"
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                  <div className="space-y-1.5 px-2.5 py-2">
+                    <div className="flex items-start gap-2">
+                      <span
+                        className="mt-0.5 size-3 shrink-0 border border-black/30"
+                        style={{ background: forestPick.hex }}
+                      />
+                      <div className="min-w-0">
+                        <div className="text-[13px] font-semibold text-ink">
+                          {forestPick.key}
+                        </div>
+                        <div className="text-[11px] text-ink-3">
+                          {forestPick.group}
+                        </div>
+                      </div>
+                    </div>
+                    {forestPick.ha != null ||
+                    forestPick.hes != null ||
+                    forestPick.spa ? (
+                      <dl className="divide-y divide-line border-t border-line text-[11.5px]">
+                        {forestPick.ha != null ? (
+                          <div className="flex justify-between gap-3 py-1">
+                            <dt className="text-ink-3">Талбай</dt>
+                            <dd className="num text-ink">
+                              {num(forestPick.ha, forestPick.ha < 100 ? 1 : 0)}{" "}
+                              га
+                            </dd>
+                          </div>
+                        ) : null}
+                        {forestPick.hes != null ? (
+                          <div className="flex justify-between gap-3 py-1">
+                            <dt className="text-ink-3">Ойн хэсэг</dt>
+                            <dd className="num text-ink">№ {forestPick.hes}</dd>
+                          </div>
+                        ) : null}
+                        {forestPick.spa ? (
+                          <div className="flex justify-between gap-3 py-1">
+                            <dt className="text-ink-3">
+                              Тусгай хамгаалалттай газар
+                            </dt>
+                            <dd className="text-right text-ink">
+                              {forestPick.spa}
+                            </dd>
+                          </div>
+                        ) : null}
+                      </dl>
+                    ) : null}
+                  </div>
                 </div>
               ) : null}
             </div>
@@ -837,12 +1411,20 @@ function CaseCard({
   const a = r.attrs;
   const khoroo = val(a["хороо"]);
   const harm = val(a["хохирол"]);
+  /*
+    ХУУРАМЧ тохиолдолд тэмдэглэл нь "юу байсан" гэдгийг хэлнэ (хэрэглэгч
+    2026-10-20: "хуурамч гэхдээ pop up дээр юу байсныг харагдана" — нохой,
+    адуу, хүн …) тул ЭХЭНД, тэр нэрээр гарна. Талбар нь ижил (`тэмдэглэл__эх_`).
+  */
+  const fake = isFake(r.status);
+  const note = val(a["тэмдэглэл__эх_"]);
   const rows: [string, string][] = [
+    ...(fake ? ([["Юу байсан", note]] as [string, string][]) : []),
     ["Байршил", [r.district, khoroo].filter(Boolean).join(" · ")],
     ["Газрын нэр", val(a["газрын_нэр"])],
     ["Нас / төлөв", val(a["нас___төлөв"])],
     ["Эх бичилт", val(a["зүйлийн_эх_бичилт"])],
-    ["Тэмдэглэл", val(a["тэмдэглэл__эх_"])],
+    ...(fake ? [] : ([["Тэмдэглэл", note]] as [string, string][])),
   ];
   return (
     <div className="min-h-0 flex-1 overflow-y-auto px-2.5 py-2">
@@ -876,7 +1458,9 @@ function CaseCard({
           ))}
       </dl>
       <p className="num mt-2 border-t border-line pt-1.5 text-[10.5px] text-ink-3">
-        {r.lat.toFixed(5)}, {r.lon.toFixed(5)}
+        {located(r)
+          ? `${r.lat.toFixed(5)}, ${r.lon.toFixed(5)}`
+          : "Координат бүртгэгдээгүй"}
       </p>
       {err ? (
         <p className="mt-1.5 text-[11px] leading-snug text-clay">{err}</p>
@@ -937,24 +1521,34 @@ function CaseCard({
  * Он, сар, өдөр, координатын эх бичилт, зүйлийн нэр нь ДАМ бөглөгдөнө
  * ({@link addBear}). Бичсэн координат зураг дээр шууд тодорч, зураг
  * түүн рүү ойртоно — буруу бичсэнийг хадгалахаас өмнө харна.
+ *
+ * ⚠ КООРДИНАТ ЗААВАЛ БИШ (хэрэглэгч 2026-10-20): мэдэгдэхгүй бол хоосон
+ * үлдээж хадгална — тохиолдол тоо, диаграмд орж "Байршилгүй тохиолдол"
+ * жагсаалтад гарна; дараа нь засахдаа нэмнэ. Төв рүү "нөхөж" тавихгүй.
+ * Координат нь самбарт сууна (`coords`): зураг дээр товшиж бөглөх
+ * горим (`picking`) түүнийг шууд бичнэ.
  */
 function BearForm({
   initial,
   rows,
-  onPreview,
+  coords,
+  onCoords,
+  picking,
+  onPicking,
   onCancel,
   onSubmit,
 }: {
   initial?: BearCase;
   rows: BearCase[];
-  onPreview: (p: [number, number] | null) => void;
+  coords: Coords;
+  onCoords: (c: { lat: string; lon: string }) => void;
+  picking: boolean;
+  onPicking: (on: boolean) => void;
   onCancel: () => void;
   onSubmit: (v: BearInput) => Promise<void>;
 }) {
   const a = initial?.attrs ?? {};
   const [v, setV] = React.useState({
-    lat: initial ? String(initial.lat) : "",
-    lon: initial ? String(initial.lon) : "",
     date:
       initial?.date != null ? dateText(initial.date).replaceAll(".", "-") : "",
     district: initial && initial.district !== NONE ? initial.district : "",
@@ -972,30 +1566,19 @@ function BearForm({
 
   const set = (k: keyof typeof v) => (e: { target: { value: string } }) =>
     setV((x) => ({ ...x, [k]: e.target.value }));
+  const put = (k: keyof typeof v) => (value: string) =>
+    setV((x) => ({ ...x, [k]: value }));
 
   /* "47.9, 106.9" гэж нэг талбарт буулгавал хоёр хуваана */
   const onLat = (e: { target: { value: string } }) => {
     const m = e.target.value.match(
       /^\s*(-?\d+(?:\.\d+)?)[\s,;]+(-?\d+(?:\.\d+)?)\s*$/,
     );
-    if (m) setV((x) => ({ ...x, lat: m[1], lon: m[2] }));
-    else set("lat")(e);
+    if (m) onCoords({ lat: m[1], lon: m[2] });
+    else onCoords({ lat: e.target.value, lon: coords.lon });
   };
 
-  const lat = Number(v.lat);
-  const lon = Number(v.lon);
-  /* Монголын нутгийн хүрээ — өргөрөг, уртрагийг сольж бичихээс сэргийлнэ */
-  const coordOk =
-    v.lat.trim() !== "" &&
-    v.lon.trim() !== "" &&
-    lat >= 41 &&
-    lat <= 52.5 &&
-    lon >= 87 &&
-    lon <= 120;
-
-  React.useEffect(() => {
-    onPreview(coordOk ? [lon, lat] : null);
-  }, [coordOk, lat, lon, onPreview]);
+  const read = readCoords(coords);
 
   const uniq = (key: string) =>
     [...new Set(rows.map((r) => val(r.attrs[key])).filter(Boolean))].sort(
@@ -1008,6 +1591,9 @@ function BearForm({
       "Олоогүй",
       "Хуурамч (баавгай биш)",
       "Тодорхойгүй",
+      "Буцааж тавьсан",
+      "Буцааж хөөж гарсан",
+      "Гэмтсэн, хөнөөсөн",
       ...uniq("баталгаажилт"),
     ]),
   ];
@@ -1022,9 +1608,9 @@ function BearForm({
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!coordOk) {
+    if (!read.ok) {
       setErr(
-        "Координатыг Монголын нутгийн хүрээнд бичнэ үү (өргөрөг 41–52.5, уртраг 87–120).",
+        "Өргөрөг, уртрагийг хоёуланг нь Монголын нутгийн хүрээнд бичнэ үү (өргөрөг 41–52.5, уртраг 87–120), эсвэл хоёуланг нь хоосон үлдээнэ үү.",
       );
       return;
     }
@@ -1032,8 +1618,8 @@ function BearForm({
     setErr(null);
     try {
       await onSubmit({
-        lat,
-        lon,
+        lat: read.at ? read.at[1] : null,
+        lon: read.at ? read.at[0] : null,
         date: v.date
           ? Date.UTC(
               +v.date.slice(0, 4),
@@ -1080,26 +1666,50 @@ function BearForm({
       </div>
       <div className="min-h-0 flex-1 space-y-2 overflow-y-auto px-2.5 py-2">
         <div className="grid grid-cols-2 gap-1.5">
-          <FormRow label="Өргөрөг *">
+          <FormRow label="Өргөрөг">
             <input
               className={cn(input, "num")}
-              value={v.lat}
+              value={coords.lat}
               onChange={onLat}
               placeholder="47.9185"
               inputMode="decimal"
-              required
             />
           </FormRow>
-          <FormRow label="Уртраг *">
+          <FormRow label="Уртраг">
             <input
               className={cn(input, "num")}
-              value={v.lon}
-              onChange={set("lon")}
+              value={coords.lon}
+              onChange={(e) =>
+                onCoords({ lat: coords.lat, lon: e.target.value })
+              }
               placeholder="106.9177"
               inputMode="decimal"
-              required
             />
           </FormRow>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => onPicking(!picking)}
+            aria-pressed={picking}
+            className={cn(
+              "flex h-7 flex-1 items-center justify-center gap-1.5 rounded-xs border px-2 text-[11.5px] transition-colors",
+              picking
+                ? "border-(--data) bg-(--data)/12 text-(--data)"
+                : "border-line-2 text-ink-2 hover:bg-paper-hi",
+            )}
+          >
+            <Crosshair size={13} /> Зураг дээрээс сонгох
+          </button>
+          {coords.lat || coords.lon ? (
+            <button
+              type="button"
+              onClick={() => onCoords({ lat: "", lon: "" })}
+              className="flex h-7 items-center gap-1 rounded-xs border border-line-2 px-2 text-[11.5px] text-ink-2 hover:bg-paper-hi"
+            >
+              <X size={12} /> Цэвэрлэх
+            </button>
+          ) : null}
         </div>
         <FormRow label="Дуудлагын огноо">
           <input
@@ -1111,30 +1721,20 @@ function BearForm({
         </FormRow>
         <div className="grid grid-cols-2 gap-1.5">
           <FormRow label="Дүүрэг">
-            <select
+            <ChoiceField
               className={input}
               value={v.district}
-              onChange={set("district")}
-            >
-              <option value="">—</option>
-              {DISTRICTS.map((d) => (
-                <option key={d}>{d}</option>
-              ))}
-            </select>
+              options={DISTRICTS}
+              onChange={put("district")}
+            />
           </FormRow>
           <FormRow label="Хороо">
-            <input
+            <ChoiceField
               className={input}
               value={v.khoroo}
-              onChange={set("khoroo")}
-              list="bear-khoroo"
-              placeholder="24-р хороо"
+              options={khoroos}
+              onChange={put("khoroo")}
             />
-            <datalist id="bear-khoroo">
-              {khoroos.map((k) => (
-                <option key={k} value={k} />
-              ))}
-            </datalist>
           </FormRow>
         </div>
         <FormRow label="Газрын нэр">
@@ -1148,39 +1748,29 @@ function BearForm({
           />
         </FormRow>
         <FormRow label="Баталгаажилт">
-          {/* Жагсаалтаас сонгох ЭСВЭЛ шинээр бичих (хэрэглэгч 2026-10-14) */}
-          <input
+          {/* Жагсаалтаас сонгох ЭСВЭЛ "Бусад"-аар шинээр бичих (хэрэглэгч 2026-10-14, 10-20) */}
+          <ChoiceField
             className={input}
             value={v.status}
-            onChange={set("status")}
-            list="bear-status"
+            options={statuses}
+            onChange={put("status")}
           />
-          <datalist id="bear-status">
-            {statuses.map((x) => (
-              <option key={x} value={x} />
-            ))}
-          </datalist>
         </FormRow>
         <div className="grid grid-cols-2 gap-1.5">
           <FormRow label="Нас / төлөв">
-            <input
+            <ChoiceField
               className={input}
               value={v.age}
-              onChange={set("age")}
-              list="bear-age"
-            />
-            <datalist id="bear-age">
-              {[
+              options={[
                 ...new Set([
                   "Бамбарууш",
                   "Шүдлэн",
                   "Нас бие гүйцсэн",
                   ...uniq("нас___төлөв"),
                 ]),
-              ].map((k) => (
-                <option key={k} value={k} />
-              ))}
-            </datalist>
+              ]}
+              onChange={put("age")}
+            />
           </FormRow>
           <FormRow label="Эх бичилт">
             <input
@@ -1194,7 +1784,7 @@ function BearForm({
         <FormRow label="Хохирол">
           <input className={input} value={v.harm} onChange={set("harm")} />
         </FormRow>
-        <FormRow label="Тэмдэглэл">
+        <FormRow label={isFake(v.status) ? "Юу байсан" : "Тэмдэглэл"}>
           <textarea
             className={cn(input, "h-16 resize-none py-1.5 leading-snug")}
             value={v.note}
@@ -1223,6 +1813,63 @@ function BearForm({
         </button>
       </div>
     </form>
+  );
+}
+
+/**
+ * Жагсаалтаас сонгох талбар + "Бусад…" (хэрэглэгч 2026-10-20: "бусад гэж
+ * гараар нэмдэг хэсэг нэмээрэй, бусад сонгодог дээр нь бас"). "Бусад"-ыг
+ * сонгоход доор нь бичих нүд гарна; жагсаалтад байхгүй утгатай засварын
+ * бүртгэл шууд энэ горимоор нээгдэнэ.
+ */
+const OTHER = "__other";
+function ChoiceField({
+  value,
+  options,
+  onChange,
+  className,
+}: {
+  value: string;
+  options: string[];
+  onChange: (v: string) => void;
+  className: string;
+}) {
+  const [custom, setCustom] = React.useState(
+    () => value !== "" && !options.includes(value),
+  );
+  return (
+    <div className="space-y-1">
+      <select
+        className={className}
+        value={custom ? OTHER : value}
+        onChange={(e) => {
+          const next = e.target.value;
+          if (next === OTHER) {
+            setCustom(true);
+            onChange("");
+          } else {
+            setCustom(false);
+            onChange(next);
+          }
+        }}
+      >
+        <option value="">—</option>
+        {options.map((o) => (
+          <option key={o} value={o}>
+            {o}
+          </option>
+        ))}
+        <option value={OTHER}>Бусад…</option>
+      </select>
+      {custom ? (
+        <input
+          className={className}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          autoFocus
+        />
+      ) : null}
+    </div>
   );
 }
 
