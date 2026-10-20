@@ -48,6 +48,7 @@ import { createPlumes, type PlumeState } from "@/lib/soil-plumes";
 import { fetchLayerFeatures, fetchLayerInfo } from "@/lib/portal-layers";
 import { NOGOON_TABS } from "@/lib/nogoon-layers";
 import { ulaanbaatarRings } from "@/lib/ub-boundary";
+import { addSceneTools } from "@/lib/scene-tools";
 
 const TILE_ASPECT = TILE_W / TILE_H;
 const RAD = Math.PI / 180;
@@ -2274,7 +2275,9 @@ export async function createSoilScene(opts: {
     mode: "floating",
     group: "soil-tools",
   }) as unknown as Widget;
-  view.ui.add(layersExpand, "top-right");
+  /* Баруун дээд буланд ДЭЭРЭЭС ДООШ: суурь зураг · ЭНЭ давхаргын цонх ·
+     хэмжилт, тэдний доор харагдац, зүсэлт ({@link addSceneTools}) */
+  void addSceneTools(view, { group: "soil-tools", layers: layersExpand });
   const analysisOf = (): Analysis | null => slice;
   const shapeOf = <T,>(): T | null => (analysisOf()?.shape ?? null) as T | null;
   let excluded: Analysis | null = null;

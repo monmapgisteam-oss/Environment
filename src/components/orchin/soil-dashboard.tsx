@@ -569,7 +569,10 @@ export function SoilDashboard() {
                       ) : null}
                     </span>
                   </Head>
-                  <div className="min-h-0 flex-1 overflow-y-auto p-3">
+                  <div
+                    className="flex min-h-0 flex-1 flex-col overflow-y-auto px-3 py-2 [&>.row-chart]:flex-1 [&>.row-chart]:justify-around"
+                    style={{ "--row-name": "44px", "--row-value": "44px" } as React.CSSProperties}
+                  >
                     {/* Цэгийн нэр, түвшин нь эхний картад нэг л удаа */}
                     {selected && mi === 0 ? (
                       <>
@@ -599,10 +602,16 @@ export function SoilDashboard() {
                       будвал "энэ хэвийн, энэ аюултай" гэсэн худал
                       дүгнэлт өгнө.
                     */}
+                    {/* Нэг эгнээний мөр (хэрэглэгч 2026-10-15: "2 cardiig
+                        scrollgui bolgo") — элементийн тэмдэг богино тул нэрийн
+                        багана 44px; арван элемент картдаа гүйлгүүргүй багтана.
+                        Мөрүүд картын өндрөөр ЖИГД тарна — доор хоосон зай
+                        үлдэхгүй (мөн өдөр: "2 cardiin door hoosn zai bhgui") */}
                     <RowChart
                       data={rows}
                       format={fmt}
                       guide={m.limit}
+                      inline
                       /*
                         Өнгө нь ОЛОН УЛСЫН ангиллаас: PI дээр Håkanson
                         (1980), Igeo дээр Müller (1969). Хоёр индекс өөр
@@ -617,19 +626,8 @@ export function SoilDashboard() {
                             : undefined
                       }
                     />
-                    {m.limit != null ? (
-                      <p className="mt-3 flex items-start gap-1.5 border-t border-line pt-2 text-[10px] leading-tight text-ink-3">
-                        <span
-                          aria-hidden
-                          className="mt-[2px] inline-block h-[9px] w-px shrink-0 bg-ink-3"
-                        />
-                        <span>
-                          {m.id === "igeo"
-                            ? "Дунд зэргийн бохирдлын хил (Igeo = 1, Müller 1969). Хэтэрсэн хэсэг анивчина."
-                            : "Дэвсгэр түвшин (PI = 1). Өнгө нь Håkanson (1980)-ийн ангиллаар. Хэтэрсэн хэсэг анивчина."}
-                        </span>
-                      </p>
-                    ) : null}
+                    {/* Дэвсгэр түвшин, ангиллын эх сурвалжийн тайлбар ХАСАГДСАН
+                        (хэрэглэгч 2026-10-15: "del") — заагч зураас хэвээр */}
                   </div>
                 </Card>
               );

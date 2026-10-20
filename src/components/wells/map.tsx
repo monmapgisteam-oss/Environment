@@ -7,6 +7,7 @@ import * as React from "react";
 import { SceneOverlay } from "@/components/map/scene-overlay";
 import { FIREFLY } from "@/components/wells/colors";
 import { esriModules } from "@/lib/arcgis-sdk";
+import { FIREFLY_CORE, FIREFLY_GLOW } from "@/lib/firefly";
 import { asset } from "@/lib/base-path";
 import type { BoundarySet } from "@/lib/boundaries";
 import { labelPoints } from "@/lib/extent";
@@ -469,13 +470,32 @@ function gradedFireSymbol(f: Fire) {
   return cimPoint([disc(0.95, cim(f.core, 0.95)), disc(2.2, cim(f.mid, 0.6)), ...glow(4.2, f.glow, 0.38)]);
 }
 
-/** Зэрэглэсэн гэрэлтэх цэг — олон өнгөт, биеийн доор бараан цагираг */
+/** Esri Firefly-ийн `CIMPictureMarker` давхарга (style-ийн тохиргоо хэвээр) */
+function picture(url: string, size: number, tint: number[], locked: boolean) {
+  return {
+    type: "CIMPictureMarker",
+    enable: true,
+    anchorPoint: { x: 0, y: 0 },
+    anchorPointUnits: "Relative",
+    size,
+    scaleX: 1,
+    textureFilter: "Picture",
+    tintColor: tint,
+    colorLocked: locked,
+    url,
+  };
+}
+
+/**
+ * Зэрэглэсэн гэрэлтэх цэг — ESRI-ИЙН FIREFLY тэмдэг (хэрэглэгч 2026-10-15,
+ * хөрсний мониторинг: "esri firefly"). Style-ийн `Firefly_N`-тэй ЯГ ижил:
+ * цагаан цөм (10pt, түгжээтэй) + шатлалын өнгөөр будсан гэрэл (20pt).
+ * Гараар зурсан дугуйн хувилбар БУЦААГДСАН. Хэмжээг `sizeByValue` масштаблана.
+ */
 function gradedMultiSymbol(color: string) {
   return cimPoint([
-    disc(0.7, cim(color, 0.95)),
-    disc(1.6, cim(color, 0.85)),
-    disc(1.6, null, [cim("rgba(8,14,20,.7)"), 1.1]),
-    ...glow(3.0, color, 0.38),
+    picture(FIREFLY_CORE, 10, [255, 255, 255, 255], true),
+    picture(FIREFLY_GLOW, 20, cim(color, 1), false),
   ]);
 }
 
@@ -806,10 +826,13 @@ type Mode = {
   fire: Fire;
   tinted: boolean;
   dots: { rank?: Record<string, number> } | null;
+  /** Цэгийн хэмжээний үржүүлэгч (зэрэглэлгүй цэгт), анхдагч 1 */
+  pointScale: number;
   shapeLabelZoom: number;
   shapeFlow: boolean;
   shapeLabelOnLine: boolean;
   shapeThin: boolean;
+  shapeHair: boolean;
   shapeOutline: boolean;
   shapeLabelUnique: boolean;
   labeled: boolean;
@@ -845,6 +868,8 @@ function strokes(m: Mode, lit: boolean) {
   if (m.shapeCrisp) return { line: lit ? 2.5 : 1.35, cas: 0, fill: lit ? 0.26 : 0.12 };
   const fill = lit ? 0.68 : 0.42;
   if (m.shapeThin) return { line: lit ? 1.5 : 0.5, cas: lit ? 2.9 : 1.6, fill };
+  /* 0.5px хүрээ, касинггүй (хэрэглэгч 2026-10-15, эвдэрсэн газар: "outline 0.5px bolgo") */
+  if (m.shapeHair) return { line: lit ? 1.5 : 0.5, cas: 0, fill };
   return { line: lit ? 2.2 : 0.85, cas: lit ? 5.5 : 3.5, fill };
 }
 
@@ -919,22 +944,23 @@ function pointRenderer(m: Mode, colors: string[]) {
     const hi = stops[stops.length - 1][0];
     if (m.gradedFire && !m.gradedFireColor)
       return { type: "simple", symbol: gradedFireSymbol(m.fire), visualVariables: [sizeByValue(lo, hi, 4.2)] };
-    if (m.gradedFireColor) return gradeRenderer(stops, gradedMultiSymbol, sizeByValue(lo, hi, 3.0));
+    if (m.gradedFireColor) return gradeRenderer(stops, gradedMultiSymbol, sizeByValue(lo, hi, 3.6));
     return gradeRenderer(stops, gradedSymbol, sizeByValue(lo, hi, 2.4));
   }
   const sym = pointSymbolFor(m);
-  const size = m.dots
-    ? sizeByZoom([
+  const base: [number, number][] = m.dots
+    ? [
         [9, 3.4],
         [12, 5.6],
         [14, 7.5],
         [17, 12],
-      ])
-    : sizeByZoom([
+      ]
+    : [
         [8, 7],
         [12, 11],
         [16, 18],
-      ]);
+      ];
+  const size = sizeByZoom(base.map(([z, s]) => [z, s * m.pointScale]));
   return {
     type: "unique-value",
     field: "c",
@@ -972,6 +998,7 @@ export function WellsMap({
   firefly,
   colors,
   dots,
+  pointScale,
   highlight = null,
   overlays,
   adminLines = true,
@@ -1053,6 +1080,8 @@ export function WellsMap({
    * зурах дараалал; их нь ДЭЭР.
    */
   dots?: { rank?: Record<string, number> };
+  /** Цэгийн хэмжээний үржүүлэгч (зэрэглэлгүй цэгт), анхдагч 1 */
+  pointScale?: number;
   /** Тодруулах цэгийн байрлал `[lon, lat]` — гэрэлтэх цагираг */
   highlight?: [number, number] | null;
   /** Нэмэлт хил, бүсийн давхаргууд — дата давхаргын ДООР */
@@ -1082,8 +1111,8 @@ export function WellsMap({
     flow?: boolean;
     /** `point` — дүрс бүрд нэг шошго; `line-center` — шугамын дундад */
     labelPlacement?: "point" | "line-center";
-    /** НИМГЭН ХҮРЭЭ (голын татам) */
-    edge?: "thin";
+    /** НИМГЭН ХҮРЭЭ (голын татам); `hair` — 0.5px, бараан касинггүй (эвдэрсэн газар) */
+    edge?: "thin" | "hair";
     /** ОЛОН ӨНЦӨГТИЙН ХҮРЭЭ (анхдагчаар гарна); сонгосон дүрс үргэлж хүрээтэй */
     outline?: boolean;
     /** НЭГ БИЧВЭРТ ЯГ НЭГ ШОШГО — хамгийн том дүрс дээр */
@@ -1191,10 +1220,12 @@ export function WellsMap({
     fire: firefly ?? FIREFLY,
     tinted: Boolean(colors),
     dots: dots ?? null,
+    pointScale: pointScale ?? 1,
     shapeLabelZoom: shapes?.labelZoom ?? 0,
     shapeFlow: Boolean(shapes?.flow),
     shapeLabelOnLine: shapes?.labelPlacement === "line-center",
     shapeThin: shapes?.edge === "thin",
+    shapeHair: shapes?.edge === "hair",
     shapeOutline: shapes?.outline !== false,
     shapeLabelUnique: Boolean(shapes?.labelUnique),
     labeled: Boolean(labels),
@@ -1298,11 +1329,13 @@ export function WellsMap({
           radius: 9,
           maxDensity: 3,
           minDensity: 0,
+          /* Өнгө нь цэгийн палитраас (`firefly`) — самбар өөрийн
+             диаграмтай нэг өнгөний гэр бүл өгч болно. Анхдагч нь cyan. */
           colorStops: [
-            { ratio: 0, color: [0, 200, 255, 0] },
-            { ratio: 0.25, color: [0, 200, 255, 0.32] },
-            { ratio: 0.6, color: [92, 225, 255, 0.62] },
-            { ratio: 1, color: [230, 251, 255, 0.92] },
+            { ratio: 0, color: col(mode.fire.glow, 0) },
+            { ratio: 0.25, color: col(mode.fire.glow, 0.32) },
+            { ratio: 0.6, color: col(mode.fire.mid, 0.62) },
+            { ratio: 1, color: col(mode.fire.core, 0.92) },
           ],
         };
         const dotRenderer = {
@@ -2114,9 +2147,30 @@ export function WellsMap({
     Esri-ийн `SceneView` — 2D зураг доор нь амьд үлдэнэ.
   */
   const [dim, setDim] = React.useState<"2d" | "3d">("2d");
+  const root = React.useRef<HTMLDivElement>(null);
+  /*
+    3D-д самбарын 2D зурагт зориулсан ХӨВӨГЧ удирдлагууд (нэмэлт давхаргын
+    товч, шатлалын тайлбар, бичлэгийн цонх …) НУУГДАНА — тэд 3D-ийн
+    баруун дээд буланд суух хэрэгслүүдтэй давхцаж, 3D-д хамааралгүй
+    зүйлийг зааж байв (хэрэглэгч 2026-10-15). Самбар бүр өөрөөр
+    байрлуулдаг тул ЗӨВХӨН зургийн эх элементийн `absolute` хүүхдүүд.
+  */
+  React.useLayoutEffect(() => {
+    const host = root.current?.parentElement;
+    if (!host || dim !== "3d") return;
+    const hidden: HTMLElement[] = [];
+    for (const el of Array.from(host.children) as HTMLElement[]) {
+      if (el === root.current || el.style.visibility === "hidden") continue;
+      const pos = getComputedStyle(el).position;
+      if (pos !== "absolute" && pos !== "fixed") continue;
+      el.style.visibility = "hidden";
+      hidden.push(el);
+    }
+    return () => hidden.forEach((el) => (el.style.visibility = ""));
+  }, [dim]);
 
   return (
-    <div className="wells-esri relative h-full w-full">
+    <div ref={root} className="wells-esri relative h-full w-full">
       <div ref={holder} className="h-full w-full" />
       <div ref={markLayer} className="pointer-events-none absolute inset-0 z-[1] overflow-hidden" />
       {/* Хайрцаггүй, шууд зураг дээр суух тул уншигдац нь сүүдрээс хамаарна */}

@@ -18,6 +18,7 @@ import { MapTip, MapTipRow, useMapTip } from "@/components/map/hover-tip";
 import { OverlayControl } from "@/components/map/overlay-control";
 import { FilterBar, FilterMenu, PickList } from "@/components/wells/filter-bar";
 import { Columns } from "@/components/ui/resizable-columns";
+import { ResizableHeight } from "@/components/ui/resizable-height";
 import {
   defaultBasemap,
   type Basemap,
@@ -379,7 +380,7 @@ export function MineralsDashboard() {
               <PointMap
                 points={NO_POINTS}
                 visible={NO_INDEX}
-                shapes={{ data: shapes, selected: picked, glow: true }}
+                shapes={{ data: shapes, selected: picked }}
                 basemap={basemap}
                 onSelect={setPicked}
                 onHover={tip.onHover}
@@ -464,24 +465,28 @@ export function MineralsDashboard() {
         </div>
       </Columns>
 
-      {/* Доод мөр: хугацааны хуваарь бүтэн өргөнөөр */}
-      <Card className="shrink-0">
-        <Head title="Зөвшөөрлийн хугацаа">
-          <span className="num text-[10.5px] text-ink-3">
-            {span ? `${span.lo}–${span.hi}` : "—"}
-          </span>
-        </Head>
-        {span ? (
-          <Timeline
-            sites={shown}
-            span={span}
-            now={now}
-            picked={picked}
-            onPick={(id) => setPicked(picked === id ? null : id)}
-            onHover={setHover}
-          />
-        ) : null}
-      </Card>
+      {/* Доод мөр: хугацааны хуваарь бүтэн өргөнөөр. Дээд ирмэгээс нь
+          чирж өндрийг өөрчилнө (хэрэглэгч 2026-10-15); мөрүүд картын
+          өндрийг тэнцүү хувааж хамт агшина/тэлнэ — гүйлгүүргүй */}
+      <ResizableHeight id="minerals-timeline" min={120}>
+        <Card className="min-h-0 flex-1">
+          <Head title="Зөвшөөрлийн хугацаа">
+            <span className="num text-[10.5px] text-ink-3">
+              {span ? `${span.lo}–${span.hi}` : "—"}
+            </span>
+          </Head>
+          {span ? (
+            <Timeline
+              sites={shown}
+              span={span}
+              now={now}
+              picked={picked}
+              onPick={(id) => setPicked(picked === id ? null : id)}
+              onHover={setHover}
+            />
+          ) : null}
+        </Card>
+      </ResizableHeight>
 
       <p className="shrink-0 px-0.5 text-[10.5px] leading-none text-ink-3">
         Суурь зураг: Esri · Дата: ArcGIS · {num(data.sites.length)} зөвшөөрөл ·{" "}
@@ -535,8 +540,8 @@ function Timeline({
   for (let y = Math.ceil(span.lo / 10) * 10; y <= span.hi; y += 10) ticks.push(y);
 
   return (
-    <div className="px-3 py-2.5">
-      <div className="divide-y divide-line">
+    <div className="flex min-h-0 flex-1 flex-col px-3 py-2.5">
+      <div className="flex min-h-0 flex-1 flex-col divide-y divide-line">
         {sites.map((s) => {
           const dead = isExpired(s, now);
           const tone = rampColor(s.id - 1);
@@ -549,7 +554,7 @@ function Timeline({
               onMouseEnter={() => onHover(s.id)}
               onMouseLeave={() => onHover(null)}
               className={cn(
-                "flex w-full items-center gap-2.5 py-1.5 text-left transition-colors hover:bg-paper-hi",
+                "flex min-h-0 w-full flex-1 items-center gap-2.5 overflow-hidden py-1 text-left transition-colors hover:bg-paper-hi",
                 picked === s.id && "bg-paper-hi",
               )}
             >

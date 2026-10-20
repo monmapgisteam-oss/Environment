@@ -404,7 +404,7 @@ function Profile({
         onClick={onPick}
         className="block border-b border-line px-2.5 py-2.5 text-left transition-colors hover:bg-paper-hi"
       >
-        <span className="block truncate text-[12.5px] leading-none font-medium text-ink">
+        <span className="block truncate text-[11px] leading-none font-semibold tracking-[0.02em] text-ink uppercase">
           {point.district} дүүрэг, {point.khoroo}-р хорооны үзүүлэлт
         </span>
       </button>

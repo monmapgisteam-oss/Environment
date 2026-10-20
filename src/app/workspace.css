@@ -246,12 +246,6 @@
 .intro-copy h1 > span {
   color: var(--moss);
 }
-.intro-description {
-  margin-top: 22px;
-  color: var(--ink-3);
-  font-size: 14px;
-  line-height: 1.9;
-}
 .intro-actions {
   display: flex;
   align-items: center;
@@ -383,6 +377,133 @@
 .landscape-feature:hover .landscape-arrow {
   background: var(--workspace-accent);
   color: var(--workspace-accent-ink);
+}
+/* Хуанли — нүүр хуудасны баруун карт (2026-10-13). Зураг нь дэвсгэр болж
+   бараан хөшигний цаана үлдэнэ; карт горимоос үл хамааран бараан. */
+.calendar-card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 22px 26px 22px;
+}
+.calendar-card::after {
+  background: linear-gradient(180deg, #071c1cd9, #071c1cf2 60%);
+}
+.calendar-card:hover > img {
+  transform: none;
+}
+.calendar-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.calendar-kicker {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #d1ddcc;
+  font-size: 9px;
+  letter-spacing: 0.16em;
+}
+.calendar-head h2 {
+  margin-top: 8px;
+  min-height: 1.2em;
+  font-family: var(--font-manrope), sans-serif;
+  font-weight: 500;
+  /* Хэрэглэгч 2026-10-13: том үсгээр, налуу, 1px жижиг (28 → 27). */
+  font-size: clamp(19px, calc(2vw - 1px), 27px);
+  font-style: italic;
+  line-height: 1.2;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+.calendar-head h2 .num {
+  color: #d7f08b;
+}
+.calendar-nav {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.calendar-nav button {
+  display: grid;
+  place-items: center;
+  min-width: 32px;
+  height: 32px;
+  border: 1px solid #ffffff33;
+  border-radius: 50%;
+  transition:
+    background 160ms,
+    color 160ms;
+}
+.calendar-nav button:hover {
+  background: var(--workspace-accent);
+  color: var(--workspace-accent-ink);
+  border-color: transparent;
+}
+.calendar-nav .calendar-today {
+  padding-inline: 12px;
+  border-radius: 16px;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+}
+.calendar-grid {
+  flex: 1;
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  grid-template-rows: auto repeat(6, minmax(0, 1fr));
+  gap: 2px;
+}
+.calendar-wd {
+  padding-bottom: 6px;
+  border-bottom: 1px solid #ffffff1f;
+  text-align: center;
+  color: #d1ddcc;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+}
+.calendar-day {
+  display: grid;
+  place-items: center;
+  min-height: 30px;
+  font-size: 13px;
+  color: #f2f6f1;
+}
+.calendar-wd.is-weekend,
+.calendar-day.is-weekend {
+  color: #ffffff8c;
+}
+.calendar-day.is-today {
+  position: relative;
+  color: #10261a;
+  font-weight: 600;
+}
+.calendar-day.is-today::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #d7f08b;
+}
+.calendar-day.is-today {
+  isolation: isolate;
+}
+.calendar-foot {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-height: 18px;
+  padding-top: 10px;
+  border-top: 1px solid #ffffff1f;
+  color: #d1ddcc;
+  font-size: 11px;
+}
+.calendar-foot strong {
+  color: #fff;
+  font-weight: 600;
 }
 .system-summary {
   display: grid;
@@ -807,10 +928,6 @@
   .intro-copy h1 {
     font-size: clamp(35px, 9.3vw, 49px);
     margin-top: 21px;
-  }
-  .intro-description {
-    font-size: 13px;
-    margin-top: 17px;
   }
   .intro-index {
     margin-top: 22px;
@@ -1808,6 +1925,13 @@
 }
 .row-chart.is-inline .row-chart-track {
   grid-column: 2;
+  /* Утга (3-р багана) зурвасаас ӨМНӨ DOM-д байдаг тул автомат байрлал
+     зурвасыг ДАРААГИЙН мөр рүү түлхэж байв — мөрийг тогтооно */
+  grid-row: 1;
+}
+.row-chart.is-inline .row-chart-label i {
+  margin-right: 6px;
+  vertical-align: 1px;
 }
 .row-chart.is-inline .row-chart-track-inner {
   height: 3px;
@@ -2705,4 +2829,49 @@
 .soil-scene-view .is-drawing .esri-view-surface,
 .soil-scene-view .is-drawing canvas {
   cursor: crosshair;
+}
+
+/*
+  3D ХЭМЖИЛТИЙН ЦОНХ ({@link src/lib/scene-tools.ts}) — хэрэгсэл сонгох мөр,
+  доор нь Esri-ийн идэвхтэй хэрэгслийн самбар. Бүх 3D зурагт нэг загвар.
+*/
+.scene-measure {
+  width: 260px;
+  background: var(--paper-2);
+  color: var(--ink);
+}
+.scene-measure-bar {
+  display: flex;
+  gap: 4px;
+  padding: 8px;
+  border-bottom: 1px solid var(--line);
+}
+.scene-measure-bar button {
+  flex: 1 1 0;
+  padding: 5px 6px;
+  border: 1px solid var(--line-2);
+  border-radius: 2px;
+  font-size: 11.5px;
+  color: var(--ink-2);
+  white-space: nowrap;
+  transition: color 120ms, border-color 120ms, background 120ms;
+}
+.scene-measure-bar button:hover {
+  color: var(--ink);
+}
+.scene-measure-bar button.is-on {
+  color: var(--moss);
+  border-color: color-mix(in oklab, var(--moss) 60%, transparent);
+  background: color-mix(in oklab, var(--moss) 10%, transparent);
+}
+.scene-measure-bar button.is-clear {
+  flex: 0 0 auto;
+}
+.scene-measure .esri-measurement,
+.scene-measure .esri-widget {
+  background: transparent;
+}
+/* Esri-ийн англи заавар ("Start to measure by clicking …") — дэлгэцэд заавар бичихгүй дүрэм */
+.scene-measure [class*="hint"] {
+  display: none;
 }

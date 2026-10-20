@@ -469,6 +469,8 @@ type SideData = {
    * Нэг байршилд хэд хэдэн талбай байвал оноор нь ялгана.
    */
   bySite: Datum[];
+  /** ААН: талбай тус бүрийн төсөвт өртөг (өртөггүй нь орохгүй) */
+  byCost: Datum[];
 };
 
 /** Нэг эх үүсвэрийн задаргаа — хоёр багана ижил тооцоог хуваалцана */
@@ -518,6 +520,14 @@ function sideOf(
       value: s.ha,
     }))
     .sort((a, b) => b.value - a.value);
+  const byCost: Datum[] = shown
+    .filter((s) => s.cost != null && s.cost > 0)
+    .map((s) => ({
+      key: String(s.oid),
+      label: s.contractor ?? s.place,
+      value: Math.round(s.cost ?? 0),
+    }))
+    .sort((a, b) => b.value - a.value);
 
   return {
     id,
@@ -528,6 +538,7 @@ function sideOf(
     yearSeries,
     byDistrict,
     bySite,
+    byCost,
   };
 }
 
@@ -558,6 +569,7 @@ function Side({
   district: string | null;
   onDistrict: (d: string | null) => void;
 }) {
+  const haOf = new Map(side.shown.map((s) => [String(s.oid), s.ha]));
   return (
     <>
       <Card className="min-h-[120px] flex-1">
@@ -600,18 +612,27 @@ function Side({
       </Card>
 
       {/*
-        ААН талд оны диаграмын оронд ЦЭГЭН диаграм (хэрэглэгчийн санал,
-        2026-09-17): хэвтээ — нөхөн сэргээсэн талбай (га), босоо — төсөвт
-        өртөг. Талбай цөөн тул цэг бүр нэг талбай; товшилт нь тэр
-        талбайг сонгоно.
+        ААН талд оны диаграмын оронд талбай тус бүрийн ТӨСӨВТ ӨРТӨГ —
+        ЭНГИЙН мөрөн диаграм, талбай нь нэрийн ард (хэрэглэгч 2026-10-15:
+        "Талбай ба төсөвт өртөг chartiig engiin bolgoy"). Урьдын цэгэн
+        диаграм (x — га, y — өртөг) git түүхэнд. Товшилт тэр талбайг сонгоно.
       */}
       {side.id === "aan" ? (
         <Card className="shrink-0">
           <Head title="Талбай ба төсөвт өртөг">
-            <span className="text-[10.5px] text-ink-3">га · {COST_UNIT}</span>
+            <span className="text-[10.5px] text-ink-3">{COST_UNIT}</span>
           </Head>
-          <div className="p-3">
-            <CostScatter sites={side.shown} picked={picked} onPick={onPick} />
+          <div className="max-h-[220px] overflow-y-auto p-3">
+            {side.byCost.length ? (
+              <RowChart
+                data={side.byCost}
+                selected={picked == null ? null : String(picked)}
+                onSelect={(k) => onPick(Number(k ?? picked))}
+                note={(d) => `${haOf.get(d.key) ?? 0} га`}
+              />
+            ) : (
+              <div className="chart-empty">Үзүүлэлт байхгүй</div>
+            )}
           </div>
         </Card>
       ) : (
@@ -707,135 +728,6 @@ function AanRow({ s }: { s: ReclamationSite }) {
 }
 
 /* -------------------------------------------------------------------------- */
-
-/** "Гоё" тэнхлэгийн алхам: 1 / 2 / 5 × 10ⁿ */
-function niceStep(max: number, n: number): number {
-  const raw = max / Math.max(n, 1);
-  const p = 10 ** Math.floor(Math.log10(raw || 1));
-  const f = raw / p;
-  return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 5 ? 5 : 10) * p;
-}
-
-/**
- * Цэгэн диаграм: x — талбай (га), y — төсөвт өртөг. SVG-ээр гараар
- * (платформын дүрэм: гуравдагч сан нэмэхгүй).
- *
- * ⚠ ПИКСЕЛЭЭР зурна, `viewBox`-оор масштаблахгүй: эхний хувилбар
- * 320×170 хайрцгийг баганын өргөнд сунгадаг байсан тул үсэг, цэг
- * хамт томорч, бусад диаграмаас өөр "сонин" харагдаж байв (хэрэглэгч
- * 2026-09-17). Одоо өргөнөө `ResizeObserver`-оор хэмжиж, фонт 10px,
- * цэг 5px гэсэн бодит хэмжээгээр зурна — платформын бусад бичвэртэй
- * нэг хэмжээс.
- *
- * Цэг бүр НЭРТЭЙ: гуравхан цэг хоосон торонд нэргүй бол аль нь аль
- * талбай болох нь мэдэгдэхгүй. Баруун талд нь бичнэ, зургийн баруун
- * захад ойрхон бол зүүн талд; ижил өндөрт ойрхон хоёр цэг бол доод
- * нэрийг нэг мөрөөр доош шилжүүлнэ.
- */
-function CostScatter({
-  sites,
-  picked,
-  onPick,
-}: {
-  sites: ReclamationSite[];
-  picked: number | null;
-  onPick: (oid: number) => void;
-}) {
-  const box = React.useRef<HTMLDivElement>(null);
-  const [W, setW] = React.useState(0);
-  React.useLayoutEffect(() => {
-    const el = box.current;
-    if (!el) return;
-    const ro = new ResizeObserver(([e]) => setW(Math.round(e.contentRect.width)));
-    ro.observe(el);
-    setW(Math.round(el.clientWidth));
-    return () => ro.disconnect();
-  }, []);
-
-  const pts = sites.filter((s) => s.cost != null && s.ha > 0);
-
-  const H = 190;
-  /* Зүүн зай: босоо тэнхлэгийн нэр (эргүүлсэн) + хуваарийн тоо */
-  const L = 56;
-  const R = 12;
-  const T = 14;
-  const B = 28;
-
-  const maxX = Math.max(...pts.map((s) => s.ha), 0);
-  const maxY = Math.max(...pts.map((s) => s.cost ?? 0), 0);
-  const sx = niceStep(maxX, 4);
-  const sy = niceStep(maxY, 3);
-  const topX = Math.ceil(maxX / sx) * sx || sx;
-  const topY = Math.ceil(maxY / sy) * sy || sy;
-  const xs: number[] = [];
-  for (let v = 0; v <= topX + 1e-9; v += sx) xs.push(Number(v.toFixed(6)));
-  const ys: number[] = [];
-  for (let v = 0; v <= topY + 1e-9; v += sy) ys.push(Number(v.toFixed(6)));
-
-  const X = (v: number) => L + (v / topX) * Math.max(W - L - R, 1);
-  const Y = (v: number) => T + (1 - v / topY) * (H - T - B);
-
-  /* Цэг дээр НЭР БИЧИХГҮЙ (хэрэглэгч 2026-09-17: "нэрээ ав") — нэр,
-     хэмжээ, өртөг нь хулганы тайлбарт; аль талбай болох нь товшиход
-     жагсаалт, зураг дээр тодорно. */
-  const labels = pts.map((s) => ({ s, x: X(s.ha), y: Y(s.cost ?? 0) }));
-
-  return (
-    <div ref={box} className="w-full">
-      {W > 0 && pts.length ? (
-        <svg width={W} height={H} className="num block" role="img" aria-label="Талбай ба төсөвт өртөг">
-          {ys.map((v) => (
-            <g key={`y${v}`}>
-              <line x1={L} x2={W - R} y1={Y(v)} y2={Y(v)} stroke="var(--line)" strokeWidth={1} />
-              <text x={L - 6} y={Y(v)} textAnchor="end" dominantBaseline="middle" fontSize={10} fill="var(--ink-3)">
-                {num(v)}
-              </text>
-            </g>
-          ))}
-          {xs.map((v) => (
-            <g key={`x${v}`}>
-              <line x1={X(v)} x2={X(v)} y1={T} y2={H - B} stroke="var(--line)" strokeWidth={1} />
-              <text x={X(v)} y={H - B + 13} textAnchor="middle" fontSize={10} fill="var(--ink-3)">
-                {v}
-              </text>
-            </g>
-          ))}
-          {/* Тэнхлэгийн нэр: хэвтээ нь тэнхлэгийнхээ голд, босоо нь
-              тэнхлэгийн дагуу эргүүлж голлуулсан (хэрэглэгчийн хүсэлт) */}
-          <text x={(L + W - R) / 2} y={H - 3} textAnchor="middle" fontSize={10} fill="var(--ink-3)">
-            га
-          </text>
-          <text
-            x={10}
-            y={(T + H - B) / 2}
-            textAnchor="middle"
-            fontSize={10}
-            fill="var(--ink-3)"
-            transform={`rotate(-90 10 ${(T + H - B) / 2})`}
-          >
-            {COST_UNIT}
-          </text>
-
-          {[...labels]
-            .sort((a, b) => (a.s.oid === picked ? 1 : 0) - (b.s.oid === picked ? 1 : 0))
-            .map(({ s, x, y }) => {
-              const on = picked === s.oid;
-              const dim = picked != null && !on;
-              return (
-                <g key={s.oid} className="cursor-pointer" opacity={dim ? 0.35 : 1} onClick={() => onPick(s.oid)}>
-                  <title>{`${s.contractor ?? s.place} · ${s.ha} га · ${num(Math.round(s.cost ?? 0))} ${COST_UNIT}`}</title>
-                  {on ? <circle cx={x} cy={y} r={9} fill="none" stroke={TONE} strokeWidth={1.2} /> : null}
-                  <circle cx={x} cy={y} r={5} fill={TONE} fillOpacity={0.9} stroke="var(--paper-2)" strokeWidth={1} />
-                </g>
-              );
-            })}
-        </svg>
-      ) : pts.length ? null : (
-        <div className="chart-empty">Үзүүлэлт байхгүй</div>
-      )}
-    </div>
-  );
-}
 
 /* -------------------------------------------------------------------------- */
 

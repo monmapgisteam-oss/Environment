@@ -326,7 +326,7 @@ export function DamagedDashboard() {
                     visible={NO_INDEX}
                     /* Талбай маш жижиг (дунджаар 37м) тул шошго нь хамгийн
                        ойрын түвшинд л гарна */
-                    shapes={{ data: shapes, selected: picked, labelZoom: 14 }}
+                    shapes={{ data: shapes, selected: picked, labelZoom: 14, edge: "hair" }}
                     basemap={basemap}
                     onSelect={setPicked}
                     onHover={tip.onHover}
@@ -388,7 +388,8 @@ export function DamagedDashboard() {
           </p>
         </div>
 
-        <div className="flex min-h-0 flex-col gap-2.5">
+        {/* Карт бүр агуулгынхаа өндөртэй; нам дэлгэцэд л БАГАНА гүйнэ */}
+        <div className="flex min-h-0 flex-col gap-2.5 overflow-y-auto">
           {/*
             БАЙРШЛЫН ЗАДАРГАА БАРУУН БАГАНАД (хэрэглэгчийн шийдвэр,
             2026-09-17: "зүүн панелийн 2 chart-ийг баруун панел руу").
@@ -419,24 +420,36 @@ export function DamagedDashboard() {
             </Card>
           ) : null}
 
-          <Card className="shrink-0">
+          {/* ⚠ `grow` (басис = агуулга), `flex-1` БИШ: "Дүүргээр" хэтэрхий
+              өндөрсөж байв (хэрэглэгч 2026-10-15). Хоёр карт агуулгынхаа
+              өндрөөс эхэлж, үлдсэн зайг ТЭНЦҮҮ хуваана */}
+          <Card className="grow">
             <Head title="Дүүргээр">
               <span className="text-[10.5px] text-ink-3">га</span>
             </Head>
-            <div className="max-h-[260px] overflow-y-auto p-3">
+            {/* Гүйлгүүргүй (хэрэглэгч 2026-10-15): нэг эгнээний мөр — нэр ·
+                зурвас · утга, урьдын 260px-ийн таглаа хасагдсан. Карт
+                өндөр нь өсөхөд мөрүүд ЖИГД тарна (мөн өдөр: "Дүүргээр
+                chartiin undriig nemeed") */}
+            <div
+              className="flex flex-1 flex-col px-3 py-2 [&>.row-chart]:flex-1 [&>.row-chart]:justify-around"
+              style={{ "--row-name": "108px", "--row-value": "52px" } as React.CSSProperties}
+            >
               <RowChart
                 data={byPlace.districts}
                 selected={place}
                 onSelect={setPlace}
                 format={(v) => (v >= 10 ? num(Math.round(v)) : v.toFixed(2))}
+                inline
               />
             </div>
           </Card>
 
           {/* Баганын СҮҮЛД нь уян карт — үлдсэн зайг энэ эзэлнэ */}
-          <Card className="min-h-[120px] flex-1">
+          <Card className="grow">
             <Head title="Эвдрэлд хамгийн их өртсөн 8 газар" />
-            <div className="min-h-0 flex-1 divide-y divide-line overflow-y-auto">
+            {/* Гүйлгүүргүй; үлдсэн зайн хагасыг авч мөрүүд тэнцүү өндөрсөнө */}
+            <div className="flex flex-1 flex-col divide-y divide-line">
               {shown
                 .slice(0, 8)
                 .map((i) => sites![i])
@@ -447,7 +460,7 @@ export function DamagedDashboard() {
                     onMouseEnter={() => setHover(s.oid)}
                     onMouseLeave={() => setHover(null)}
                     className={cn(
-                      "flex w-full items-baseline justify-between gap-2 px-3 py-1.5 text-left transition-colors hover:bg-paper-hi",
+                      "flex w-full flex-1 items-center justify-between gap-2 px-3 py-1 text-left transition-colors hover:bg-paper-hi",
                       picked === s.oid && "bg-paper-hi",
                     )}
                   >

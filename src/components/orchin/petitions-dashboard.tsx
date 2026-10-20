@@ -365,7 +365,7 @@ export function PetitionsDashboard() {
                 <PointMap
                   points={NO_POINTS}
                   visible={NO_INDEX}
-                  shapes={{ data: shapes, selected: picked, labelZoom: 12 }}
+                  shapes={{ data: shapes, selected: picked, labelZoom: 12, edge: "hair" }}
                   basemap={basemap}
                   onSelect={setPicked}
                   onHover={tip.onHover}
