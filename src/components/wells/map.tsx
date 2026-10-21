@@ -859,6 +859,8 @@ type Layers = {
   points: any;
   values: any | null;
   hl: any;
+  /** ШАР тодруулга (`hotMark`) — цэг, олон өнцөгт, шугам */
+  hot: any;
 };
 
 type Live = { E: Esri; view: any; map: any; layers: Layers; mode: Mode };
@@ -993,6 +995,7 @@ export function WellsMap({
   marks,
   pulse = false,
   pickedMark = null,
+  hotMark = null,
   pulseColor,
   onHover,
   firefly,
@@ -1061,6 +1064,13 @@ export function WellsMap({
    * тэмдэг өөрөө (`is-picked`) үүрнэ.
    */
   pickedMark?: number | null;
+  /**
+   * ШАРААР ТОДРОХ бүртгэл (засварын цонхны хүснэгтийн мөр дээр хулгана
+   * очиход, хэрэглэгч 2026-10-21). `marks`, `pulse` горимд тэмдэглэгээний
+   * ангийг сэлгэнэ; бусад цэг ба олон өнцөгт, шугамыг `hot` давхаргад шараар
+   * давхарлана (ArcGIS Online-ийн вэб зургийн тодруулга шиг).
+   */
+  hotMark?: number | null;
   /** Дохиоллын тэмдэглэгээний өнгө — `oid` бүрд */
   pulseColor?: (oid: number) => string | undefined;
   /**
@@ -1192,6 +1202,8 @@ export function WellsMap({
   const pickCb = React.useRef(onMapClick);
   const blankCb = React.useRef(onBlankClick);
   const pulseColorRef = React.useRef(pulseColor);
+  const hotRef = React.useRef(hotMark);
+  const markEls = React.useRef<Map<number, HTMLElement> | null>(null);
   React.useEffect(() => {
     selectCb.current = onSelect;
     hoverCb.current = onHover;
@@ -1456,6 +1468,7 @@ export function WellsMap({
           : null;
 
         const hl = new E.GraphicsLayer({ title: "hl" });
+        const hot = new E.GraphicsLayer({ title: "hot" });
 
         const layers: Layers = {
           under,
@@ -1469,6 +1482,7 @@ export function WellsMap({
           points,
           values: valuesLayer,
           hl,
+          hot,
         };
 
         const map = new E.Map({
@@ -1483,6 +1497,7 @@ export function WellsMap({
             points,
             ...[valuesLayer].filter(Boolean),
             hl,
+            hot,
           ],
         });
 
@@ -2032,6 +2047,7 @@ export function WellsMap({
     if (!ready || !live || !host) return;
     const { E, view, layers, mode } = live;
     const els = new Map<number, HTMLElement>();
+    markEls.current = els;
     if (!marks && !pulse) {
       host.replaceChildren();
       return;
@@ -2065,7 +2081,10 @@ export function WellsMap({
         host.appendChild(wrap);
         els.set(id, wrap);
       }
-      for (const [id, wrap] of els) wrap.firstElementChild?.classList.toggle("is-picked", id === pickedMark);
+      for (const [id, wrap] of els) {
+        wrap.firstElementChild?.classList.toggle("is-picked", id === pickedMark);
+        wrap.firstElementChild?.classList.toggle("is-hot", id === hotRef.current);
+      }
       placeMarks(view, host);
     };
 
@@ -2141,6 +2160,39 @@ export function WellsMap({
       host.replaceChildren();
     };
   }, [ready, marks, pulse, points, visible, pickedMark]);
+
+  React.useEffect(() => {
+    hotRef.current = hotMark;
+    for (const [id, wrap] of markEls.current ?? []) wrap.firstElementChild?.classList.toggle("is-hot", id === hotMark);
+  }, [hotMark]);
+
+  React.useEffect(() => {
+    const live = engine.current;
+    if (!ready || !live) return;
+    const { E, layers } = live;
+    layers.hot.removeAll();
+    if (hotMark == null) return;
+    const g = shapeGeoms.current.get(hotMark);
+    if (g) {
+      g.esri ??= esriGeom(g.geojson);
+      if (!g.esri) return;
+      const symbol =
+        g.esri.type === "polygon"
+          ? { type: "simple-fill", color: [255, 230, 0, 0.22], outline: { color: [255, 230, 0, 1], width: 2.6 } }
+          : { type: "simple-line", color: [255, 230, 0, 1], width: 4, cap: "round", join: "round" };
+      layers.hot.add(new E.Graphic({ geometry: g.esri, symbol }));
+      return;
+    }
+    if (marks || pulse) return;
+    const i = points.oid.indexOf(hotMark);
+    if (i < 0) return;
+    layers.hot.add(
+      new E.Graphic({
+        geometry: mercPoint(points.lon[i], points.lat[i]),
+        symbol: { type: "simple-marker", size: 15, color: [255, 230, 0, 0.95], outline: { color: [8, 14, 20, 0.85], width: 1.6 } },
+      }),
+    );
+  }, [ready, hotMark, points, shapeData, marks, pulse]);
 
   /*
     2D / 3D (хэрэглэгчийн хүсэлт, 2026-09-17). 3D нь 2D-ийн ДЭЭГҮҮР

@@ -187,19 +187,44 @@ export function SoilDashboard() {
     return out.slice(0, k);
   }, [points, keep]);
 
+  /*
+    Зураг дээр сонгосон цэг нь диаграм, үзүүлэлтийн ШҮҮЛТ болно (хөндлөн
+    шүүлт хоёр тийш). Бусад шүүлтэд тохирохгүй бол сонголт ДАМ цуцлагдана.
+    Газрын зураг өөрөө сонголтоор хумигдахгүй — өөр цэг товших боломж үлдэнэ.
+  */
+  const sel = React.useMemo(() => {
+    if (picked == null || !points) return null;
+    const i = points.findIndex((p) => p.oid === picked);
+    return i >= 0 && keep(i) ? picked : null;
+  }, [points, picked, keep]);
+
+  /** Диаграм, үзүүлэлтийн шүүлт — сонгосон цэгтэй хамт */
+  const keepSel = React.useCallback(
+    (i: number, skip?: "district" | "khoroo" | "grade") =>
+      keep(i, skip) && (sel == null || points![i].oid === sel),
+    [points, keep, sel],
+  );
+
   /* ---------------- Задаргаа ---------------- */
   const gradeData = React.useMemo<Datum[]>(() => {
+    if (!points) return [];
+    const c = [0, 0, 0, 0];
+    for (let i = 0; i < points.length; i++) if (keepSel(i, "grade")) c[pliClass(points[i].pli)]++;
+    return PLI_CLASSES.map((k, i) => ({ key: k.id, label: k.label, value: c[i] }));
+  }, [points, keepSel]);
+
+  /*
+    Шүүлтүүрийн цэс сонголтоор ХУМИГДАХГҮЙ: "Цэсний утгууд нь
+    ШҮҮГДЭЭГҮЙ жагсаалтаас гарна" — зөвхөн бусад шүүлтийг дагана.
+  */
+  const gradeMenu = React.useMemo<Datum[]>(() => {
     if (!points) return [];
     const c = [0, 0, 0, 0];
     for (let i = 0; i < points.length; i++) if (keep(i, "grade")) c[pliClass(points[i].pli)]++;
     return PLI_CLASSES.map((k, i) => ({ key: k.id, label: k.label, value: c[i] }));
   }, [points, keep]);
 
-  /*
-    Дүүргийн мөрөнд ХОЁР тоо хэрэгтэй: диаграмд дундаж PLI, шүүлтүүрийн
-    жагсаалтад цэгийн тоо. Нэг удаа тоолж, хоёр хэлбэрт нь буулгана.
-  */
-  const districtRows = React.useMemo(() => {
+  const districtMenu = React.useMemo<Datum[]>(() => {
     if (!points) return [];
     const sum = new Map<string, { n: number; pli: number }>();
     for (let i = 0; i < points.length; i++) {
@@ -211,9 +236,29 @@ export function SoilDashboard() {
       sum.set(p.district, hit);
     }
     return [...sum]
+      .sort((a, b) => b[1].pli / b[1].n - a[1].pli / a[1].n)
+      .map(([k, v]) => ({ key: k, label: k, value: v.n }));
+  }, [points, keep]);
+
+  /*
+    Дүүргийн мөрөнд ХОЁР тоо хэрэгтэй: диаграмд дундаж PLI, шүүлтүүрийн
+    жагсаалтад цэгийн тоо. Нэг удаа тоолж, хоёр хэлбэрт нь буулгана.
+  */
+  const districtRows = React.useMemo(() => {
+    if (!points) return [];
+    const sum = new Map<string, { n: number; pli: number }>();
+    for (let i = 0; i < points.length; i++) {
+      if (!keepSel(i, "district")) continue;
+      const p = points[i];
+      const hit = sum.get(p.district) ?? { n: 0, pli: 0 };
+      hit.n++;
+      hit.pli += p.pli;
+      sum.set(p.district, hit);
+    }
+    return [...sum]
       .map(([k, v]) => ({ key: k, label: k, mean: v.pli / v.n, n: v.n }))
       .sort((a, b) => b.mean - a.mean);
-  }, [points, keep]);
+  }, [points, keepSel]);
 
   /*
     Дүүрэг → хороо — ариун цэврийн самбарын "Байршлын мэдээлэл"-тэй НЭГ
@@ -229,7 +274,7 @@ export function SoilDashboard() {
     type Acc = { n: number; pli: number };
     const byDistrict = new Map<string, Map<string, Acc>>();
     for (let i = 0; i < points.length; i++) {
-      if (!keep(i, "khoroo")) continue;
+      if (!keepSel(i, "khoroo")) continue;
       const p = points[i];
       if (isSoum(p.district)) continue;
       const rows = byDistrict.get(p.district) ?? new Map<string, Acc>();
@@ -260,7 +305,7 @@ export function SoilDashboard() {
         };
       })
       .sort((a, b) => b.total - a.total);
-  }, [points, keep]);
+  }, [points, keepSel]);
 
   /*
     Сум — гурав л байдаг тул бөгжөөр. Зүсмийн ХЭМЖЭЭ нь цэгийн тоо
@@ -299,7 +344,7 @@ export function SoilDashboard() {
     if (!data || !points) return [];
     const sums = data.metrics.map((m) => m.elements.map(() => ({ n: 0, v: 0 })));
     for (let i = 0; i < points.length; i++) {
-      if (!keep(i)) continue;
+      if (!keepSel(i)) continue;
       const vals = points[i].values;
       for (let m = 0; m < sums.length; m++) {
         for (let e = 0; e < sums[m].length; e++) {
@@ -319,7 +364,7 @@ export function SoilDashboard() {
         }))
         .sort((a, b) => b.value - a.value),
     );
-  }, [data, points, keep]);
+  }, [data, points, keepSel]);
 
   const stats = React.useMemo(() => {
     if (!points) return null;
@@ -329,14 +374,16 @@ export function SoilDashboard() {
     /* Дүүрэг, сум нь ӨӨР засаг захиргааны нэгж — тусад нь тоолно */
     const districts = new Set<string>();
     const soums = new Set<string>();
+    let n = 0;
     for (let k = 0; k < visible.length; k++) {
       const p = points[visible[k]];
+      if (sel != null && p.oid !== sel) continue;
+      n++;
       pli += p.pli;
       if (p.pli >= 1) over++;
       if (!worst || p.pli > worst.pli) worst = { code: p.code, pli: p.pli };
       (isSoum(p.district) ? soums : districts).add(p.district);
     }
-    const n = visible.length;
     return {
       n,
       districts: districts.size,
@@ -345,7 +392,7 @@ export function SoilDashboard() {
       overPct: n ? (over / n) * 100 : 0,
       worst,
     };
-  }, [points, visible]);
+  }, [points, visible, sel]);
 
   /* ---------------- Сонголт руу ойртох (zoom action) ---------------- */
   /* ---------------- Сонголтын хүрээ (zoom action) ----------------
@@ -356,10 +403,10 @@ export function SoilDashboard() {
      зураг үсрэх нь шинэ дата ирснийг далдална. */
   const focus = React.useMemo<Extent | null>(() => {
     if (!points) return null;
-    if (picked == null && !district && !grade) return null;
+    if (sel == null && !district && !khoroo && !grade) return null;
     const b = new Bounds();
-    if (picked != null) {
-      const p = points.find((x) => x.oid === picked);
+    if (sel != null) {
+      const p = points.find((x) => x.oid === sel);
       if (p) b.add(p.lon, p.lat);
     } else {
       for (let k = 0; k < visible.length; k++) {
@@ -369,11 +416,11 @@ export function SoilDashboard() {
     }
     /* Ганц цэг сонгогдвол хүрээ нь цэг болно — багахан талбай нэмнэ */
     return b.get(0.004);
-  }, [points, visible, picked, district, grade]);
+  }, [points, visible, sel, district, khoroo, grade]);
 
   const selected = React.useMemo(
-    () => (picked == null ? null : (points?.find((p) => p.oid === picked) ?? null)),
-    [points, picked],
+    () => (sel == null ? null : (points?.find((p) => p.oid === sel) ?? null)),
+    [points, sel],
   );
 
   const hovered = React.useMemo(
@@ -423,7 +470,8 @@ export function SoilDashboard() {
     );
   }
 
-  const activeCount = (district ? 1 : 0) + (khoroo ? 1 : 0) + (grade ? 1 : 0);
+  const activeCount =
+    (district ? 1 : 0) + (khoroo ? 1 : 0) + (grade ? 1 : 0) + (sel != null ? 1 : 0);
 
   /** "Бохирдлын индекс (PI)" · "Агууламж, мг/кг" */
   const metricTitle = (m: SoilMetric) => (m.unit ? `${m.label}, ${m.unit}` : m.label);
@@ -468,7 +516,7 @@ export function SoilDashboard() {
         >
           {/* Жагсаалтад дундаж биш ЦЭГИЙН ТОО — сонголтын хэмжээг хэлнэ */}
           <PickList
-            items={districtRows.map((d) => ({ key: d.key, label: d.label, value: d.n }))}
+            items={districtMenu}
             selected={district}
             onPick={pickDistrict}
           />
@@ -482,7 +530,7 @@ export function SoilDashboard() {
           onClear={() => setGrade(null)}
           width={200}
         >
-          <PickList items={gradeData} selected={grade} onPick={setGrade} />
+          <PickList items={gradeMenu} selected={grade} onPick={setGrade} />
         </FilterMenu>
       </FilterBar>
 
@@ -674,7 +722,7 @@ export function SoilDashboard() {
                   labels={labels}
                   grades={{ values: geo.pli, stops: PLI_RAMP, firefly: "graded" }}
                   basemap={basemap}
-                  onSelect={setPicked}
+                  onSelect={(oid) => setPicked(sel === oid ? null : oid)}
                   onHover={tip.onHover}
                   highlight={highlight}
                   focus={focus}
@@ -772,7 +820,7 @@ export function SoilDashboard() {
                     data={soumData}
                     size={84}
                     selected={district}
-                    onSelect={setDistrict}
+                    onSelect={pickDistrict}
                     colorOf={(d) => pliColor(soumMean.get(d.key) ?? 0)}
                     note={(d) => (soumMean.get(d.key) ?? 0).toFixed(2)}
                   />

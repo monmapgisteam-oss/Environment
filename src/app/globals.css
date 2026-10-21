@@ -629,6 +629,23 @@ body {
 .pulse-pin:hover {
   background: var(--ink);
 }
+/* ШАР ТОДРУУЛГА — засварын цонхны хүснэгтийн мөр дээр хулгана очиход
+   (ArcGIS Online-ийн вэб зургийн тодруулга шиг; горимоос үл хамаарна) */
+.species-pin.is-hot {
+  z-index: 3;
+  outline: 3px solid #ffe600;
+  outline-offset: 1px;
+  box-shadow: 0 0 16px 5px rgb(255 230 0 / 0.7);
+}
+.pulse-pin.is-hot {
+  --pin: #ffe600;
+  width: 13px;
+  height: 13px;
+  z-index: 3;
+  box-shadow:
+    0 0 0 2px rgb(8 14 20 / 0.7),
+    0 0 16px 5px rgb(255 230 0 / 0.75);
+}
 
 /*
   ДОХИОЛЛЫН өнгөт тэмдэглэгээ.

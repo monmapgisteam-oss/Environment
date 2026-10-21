@@ -21,8 +21,9 @@ import { BasemapGallery } from "@/components/map/basemap-gallery";
 import { MapPanel, useMapPanel } from "@/components/map/panel";
 import { DATA_COLOR } from "@/components/wells/colors";
 import { FilterBar, FilterMenu, PickList } from "@/components/wells/filter-bar";
-import { defaultBasemap, type Basemap } from "@/components/wells/map";
+import { defaultBasemap, type Basemap, type Extent } from "@/components/wells/map";
 import { Columns } from "@/components/ui/resizable-columns";
+import { Bounds } from "@/lib/extent";
 import { fetchFlora, FLORA, type FloraData, type FloraKind } from "@/lib/flora";
 import { cn, num } from "@/lib/utils";
 
@@ -139,13 +140,27 @@ export function FloraDashboard({ kind }: { kind: FloraKind }) {
       if (zone && s.zone !== zone) return;
       if (species && !s.species.includes(species)) return;
       if (genus && !s.species.some((n) => genusOf.get(n) === genus)) return;
-      if (spot && s.code !== spot) return;
       out.push(i);
     });
     return out;
-  }, [data, district, khoroo, zone, species, genus, spot, genusOf]);
+  }, [data, district, khoroo, zone, species, genus, genusOf]);
 
   const visible = React.useMemo(() => Uint32Array.from(shown), [shown]);
+
+  /*
+    ⚠ Зураг дээр сонгосон цэг нь ЗУРГИЙГ хумихгүй (өөр цэг сонгох зам
+    үлдэнэ, зөвхөн тодорно) — харин диаграм, үзүүлэлт, төрөл-зүйлийн
+    тоог түүгээр хумина. Шүүлтэд үлдээгүй сонголт хүчингүй (дам гарна).
+  */
+  const sel = React.useMemo(() => {
+    if (!data || !spot) return null;
+    return shown.some((i) => data.spots[i].code === spot) ? spot : null;
+  }, [data, shown, spot]);
+
+  const kept = React.useMemo(
+    () => (sel == null || !data ? shown : shown.filter((i) => data.spots[i].code === sel)),
+    [data, shown, sel],
+  );
 
   /*
     Цэгийн ХЭМЖЭЭ нь тэнд бүртгэгдсэн зүйлийн тоог хэлнэ.
@@ -187,6 +202,8 @@ export function FloraDashboard({ kind }: { kind: FloraKind }) {
     (
       of: (i: number) => string | null,
       skip: "district" | "khoroo" | "zone",
+      /* Цэс сонголтоор хумигдахгүй — өөр утга руу шилжих зам */
+      withSel = true,
     ): Datum[] => {
       if (!data) return [];
       const counts = new Map<string, number>();
@@ -196,6 +213,7 @@ export function FloraDashboard({ kind }: { kind: FloraKind }) {
         if (skip !== "zone" && zone && s.zone !== zone) return;
         if (species && !s.species.includes(species)) return;
         if (genus && !s.species.some((n) => genusOf.get(n) === genus)) return;
+        if (withSel && sel && s.code !== sel) return;
         const key = of(i);
         if (!key) return;
         counts.set(key, (counts.get(key) ?? 0) + 1);
@@ -204,7 +222,7 @@ export function FloraDashboard({ kind }: { kind: FloraKind }) {
         .sort((a, b) => b[1] - a[1])
         .map(([key, value]) => ({ key, label: key, value }));
     },
-    [data, district, khoroo, zone, species, genus, genusOf],
+    [data, district, khoroo, zone, species, genus, genusOf, sel],
   );
 
   const byDistrict = React.useMemo(
@@ -216,7 +234,15 @@ export function FloraDashboard({ kind }: { kind: FloraKind }) {
     [tally, data],
   );
   const byZone = React.useMemo(
-    () => tally((i) => data?.spots[i].zone || null, "zone"),
+    () => tally((i) => data?.spots[i].zone || null, "zone", false),
+    [tally, data],
+  );
+  const menuDistrict = React.useMemo(
+    () => tally((i) => data?.spots[i].district ?? null, "district", false),
+    [tally, data],
+  );
+  const menuKhoroo = React.useMemo(
+    () => tally((i) => data?.spots[i].khoroo || null, "khoroo", false),
     [tally, data],
   );
 
@@ -230,7 +256,7 @@ export function FloraDashboard({ kind }: { kind: FloraKind }) {
   const byElev = React.useMemo<Datum[]>(() => {
     if (!data) return [];
     const counts = new Map<number, number>();
-    for (const i of shown) {
+    for (const i of kept) {
       const e = data.spots[i].elev;
       if (e == null) continue;
       const band = Math.floor(e / 200) * 200;
@@ -243,7 +269,7 @@ export function FloraDashboard({ kind }: { kind: FloraKind }) {
         label: `${num(band)}–${num(band + 200)} м`,
         value,
       }));
-  }, [data, shown]);
+  }, [data, kept]);
 
   /*
     ЗҮҮН БАГАНЫН ЖАГСААЛТ — төрөл → зүйл.
@@ -288,15 +314,23 @@ export function FloraDashboard({ kind }: { kind: FloraKind }) {
     if (!data) return null;
     const kinds = new Set<string>();
     const genera = new Set<string>();
-    for (const i of shown) {
-      for (const n of data.spots[i].species) {
+    const districts = new Set<string>();
+    for (const i of kept) {
+      const sp = data.spots[i];
+      if (sp.district) districts.add(sp.district);
+      for (const n of sp.species) {
         kinds.add(n);
         const g = genusOf.get(n);
         if (g) genera.add(g);
       }
     }
-    return { spots: shown.length, species: kinds.size, genera: genera.size };
-  }, [data, shown, genusOf]);
+    return {
+      spots: kept.length,
+      species: kinds.size,
+      genera: genera.size,
+      districts: districts.size,
+    };
+  }, [data, kept, genusOf]);
 
   /*
     СОНГОСОН ЗҮЙЛИЙН ХУРААНГУЙ.
@@ -336,9 +370,26 @@ export function FloraDashboard({ kind }: { kind: FloraKind }) {
 
   /** Товшсон цэгийн дэлгэрэнгүй */
   const detail = React.useMemo(() => {
-    if (!data || !spot) return null;
-    return data.spots.find((s) => s.code === spot) ?? null;
-  }, [data, spot]);
+    if (!data || !sel) return null;
+    return data.spots.find((s) => s.code === sel) ?? null;
+  }, [data, sel]);
+
+  /*
+    ОЙРТОХ ҮЙЛДЭЛ: цэг сонговол түүн рүү, шүүлт тавьвал үлдсэн бүхнийг
+    багтаана. Шүүлтгүй үед `null` — анхны харагдац хэвээр.
+  */
+  const focus = React.useMemo<Extent | null>(() => {
+    if (!data) return null;
+    const b = new Bounds();
+    if (detail) {
+      b.add(detail.lon, detail.lat);
+      return b.get();
+    }
+    if (!(genus || species || district || khoroo || zone) || shown.length === 0)
+      return null;
+    for (const i of shown) b.add(data.spots[i].lon, data.spots[i].lat);
+    return b.get();
+  }, [data, detail, genus, species, district, khoroo, zone, shown]);
 
   const activeCount =
     (genus ? 1 : 0) +
@@ -346,7 +397,7 @@ export function FloraDashboard({ kind }: { kind: FloraKind }) {
     (district ? 1 : 0) +
     (khoroo ? 1 : 0) +
     (zone ? 1 : 0) +
-    (spot ? 1 : 0);
+    (sel ? 1 : 0);
 
   function reset() {
     setGenus(null);
@@ -407,7 +458,7 @@ export function FloraDashboard({ kind }: { kind: FloraKind }) {
           width={230}
         >
           <PickList
-            items={byDistrict}
+            items={menuDistrict}
             selected={district}
             onPick={setDistrict}
           />
@@ -421,7 +472,7 @@ export function FloraDashboard({ kind }: { kind: FloraKind }) {
           onClear={() => setKhoroo(null)}
           width={200}
         >
-          <PickList items={byKhoroo} selected={khoroo} onPick={setKhoroo} />
+          <PickList items={menuKhoroo} selected={khoroo} onPick={setKhoroo} />
         </FilterMenu>
 
         {/* Бүс нь ЗӨВХӨН мөөг дээр — хөвдний давхаргад тэр багана байхгүй */}
@@ -509,10 +560,13 @@ export function FloraDashboard({ kind }: { kind: FloraKind }) {
                    дээр жижиг цэг төдийлөн ялгарахгүй байв */
                 pulse
                 cluster={false}
+                pickedMark={detail?.oid ?? null}
+                highlight={detail ? [detail.lon, detail.lat] : null}
+                focus={focus}
                 basemap={basemap}
                 onSelect={(oid) => {
                   const code = codeOfOid.get(oid) ?? null;
-                  setSpot(spot === code ? null : code);
+                  setSpot(sel === code ? null : code);
                 }}
               />
               <BasemapGallery value={basemap} onChange={setBasemap} />
@@ -637,12 +691,12 @@ export function FloraDashboard({ kind }: { kind: FloraKind }) {
                           <button
                             key={sp.code}
                             onClick={() =>
-                              setSpot(spot === sp.code ? null : sp.code)
+                              setSpot(sel === sp.code ? null : sp.code)
                             }
                             title={sp.name}
                             className={cn(
                               "rounded-xs border px-1.5 py-[2px] text-[10.5px] transition-colors",
-                              spot === sp.code
+                              sel === sp.code
                                 ? "border-data/45 bg-data/12 text-data"
                                 : "border-line text-ink-2 hover:bg-paper-hi hover:text-ink",
                             )}
@@ -681,7 +735,7 @@ export function FloraDashboard({ kind }: { kind: FloraKind }) {
               <Stat
                 icon={Building2}
                 label="Хамрагдсан дүүрэг"
-                value={num(byDistrict.length)}
+                value={num(stats.districts)}
               />
             </div>
           </Card>

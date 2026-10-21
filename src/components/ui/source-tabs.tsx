@@ -1,9 +1,10 @@
 "use client";
 
 import * as React from "react";
-import { Check, ChevronDown, Database, Search, X, type LucideIcon } from "lucide-react";
+import { Check, ChevronDown, Database, ExternalLink, Search, X, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAccess } from "@/components/auth/access";
+import { EditCard } from "@/components/edit/edit-card";
 
 export function useStored(key: string): string | null {
   return React.useSyncExternalStore(
@@ -42,6 +43,11 @@ export type SourceTab = {
   checkable?: boolean;
   /** `sections` өгсөн үед аль бүлгийн дотор жагсагдах вэ */
   group?: string;
+  /**
+   * ГАДААД СИСТЕМ — өгвөл мөр нь сонгогдохгүй, тэр хаяг руу шинэ цонхоор
+   * шилжинэ (хэрэглэгч 2026-10-21: уулын ажлын төлөвлөгөө → eic.mn).
+   */
+  href?: string;
 };
 
 /** Жагсаалт доторх задардаг бүлгийн мөр */
@@ -83,6 +89,16 @@ export function SourceTabs<T extends string>({
   }
 
   const item = (tab: SourceTab & { id: T }) => {
+    if (tab.href)
+      return (
+        <div key={tab.id} className="dataset-panel-item">
+          <a className="dataset-panel-choice" href={tab.href} target="_blank" rel="noopener noreferrer" title={tab.full ?? tab.label}>
+            <tab.icon size={18} strokeWidth={1.5} className="dataset-panel-item-icon" />
+            <span className="dataset-panel-copy"><strong>{tab.label}</strong><span>{tab.note}</span></span>
+            <ExternalLink size={13} className="dataset-panel-check" aria-hidden="true" />
+          </a>
+        </div>
+      );
     const selected = value === tab.id && (!tab.checkable || enabled?.has(tab.id));
     return (
       <div key={tab.id} className={cn("dataset-panel-item", selected && "is-selected")}>
@@ -96,7 +112,13 @@ export function SourceTabs<T extends string>({
     );
   };
 
+  const current = tabs.find((t) => t.id === value);
+
+  /* "Өгөгдөл засах" карт нь багцын жагсаалтын ДЭЭР (хэрэглэгч 2026-10-20);
+     хоёулаа нэг наалдсан баганад (`.dataset-column`) */
   return (
+    <div className="dataset-column">
+    {scope && current && <EditCard scope={scope} tab={current.id} label={current.label} full={current.full} icon={current.icon} />}
     <aside className="dataset-panel" aria-label={label}>
       <header className="dataset-panel-heading">
         <span className="dataset-panel-symbol"><Database size={18} strokeWidth={1.6} /></span>
@@ -137,6 +159,7 @@ export function SourceTabs<T extends string>({
       </nav>
       <footer className="dataset-panel-footer" role="status">{matches.length} / {tabs.length} багц</footer>
     </aside>
+    </div>
   );
 }
 

@@ -223,8 +223,16 @@ export function LichensDashboard() {
         indicator: string;
         district: string;
         siteCode: string;
+        sci: string;
       },
-      skip?: "family" | "iucn" | "ecogroup" | "indicator" | "district" | "site",
+      skip?:
+        | "family"
+        | "iucn"
+        | "ecogroup"
+        | "indicator"
+        | "district"
+        | "site"
+        | "species",
     ) => {
       if (skip !== "family" && family && r.family !== family) return false;
       if (skip !== "iucn" && iucn && r.iucn !== iucn) return false;
@@ -237,13 +245,22 @@ export function LichensDashboard() {
       /* Цэг сонгосон бол ЗҮЙЛИЙН ЖАГСААЛТ тэр цэгийнхээр хумигдана —
          "энэ уулан дээр юу ургадаг вэ" гэсэн асуултын хариу */
       if (skip !== "site" && site && r.siteCode !== site) return false;
+      /* Сонгосон зүйл нь зургийн адил диаграм, үзүүлэлтийг ч хумина;
+         зүйлийн жагсаалт өөрөө үүнийг алгасна (өөр зүйл сонгох зам) */
+      if (skip !== "species" && species && r.sci !== species) return false;
       return true;
     },
-    [family, iucn, ecogroup, indicator, district, site],
+    [family, iucn, ecogroup, indicator, district, site, species],
   );
 
   const shown = React.useMemo(
     () => (rows ?? []).filter((r) => keep(r)),
+    [rows, keep],
+  );
+
+  /** Зүйлийн сонголтыг алгассан мөрүүд — зүйлийн жагсаалтын эх */
+  const pool = React.useMemo(
+    () => (rows ?? []).filter((r) => keep(r, "species")),
     [rows, keep],
   );
 
@@ -258,7 +275,7 @@ export function LichensDashboard() {
       string,
       { sci: string; mn: string; family: string; iucn: string; sites: number }
     >();
-    for (const r of shown) {
+    for (const r of pool) {
       const hit = m.get(r.sci) ?? {
         sci: r.sci,
         mn: r.mn,
@@ -272,7 +289,7 @@ export function LichensDashboard() {
     return [...m.values()].sort(
       (a, b) => b.sites - a.sites || a.sci.localeCompare(b.sci),
     );
-  }, [shown]);
+  }, [pool]);
 
   const listed = React.useMemo(() => {
     const q = query.trim().toLocaleLowerCase("mn-MN");
@@ -492,12 +509,12 @@ export function LichensDashboard() {
     const sites = new Set(shown.map((r) => r.siteCode));
     const rare = shown.filter((r) => ["VU", "EN", "CR"].includes(r.iucn));
     return {
-      species: speciesList.length,
+      species: new Set(shown.map((r) => r.sci)).size,
       sites: sites.size,
       families: new Set(shown.map((r) => r.family)).size,
       rare: new Set(rare.map((r) => r.sci)).size,
     };
-  }, [shown, speciesList]);
+  }, [shown]);
 
   /* ---------------- Сонголтын хүрээ (zoom action) ---------------- */
   const focus = React.useMemo<Extent | null>(() => {

@@ -178,14 +178,18 @@ export const TABS = [
     id: "mining-plan",
     group: "land",
     label: "Уулын ажлын төлөвлөгөө, тайлан",
-    note: "Эх сурвалж хүлээгдэж байна",
+    note: "Байгаль орчны мэдээллийн сан",
     icon: ClipboardList,
+    /* Гадаад систем — мөр дарахад eic.mn-ийн нэвтрэх хуудас шинэ цонхоор
+       нээгдэнэ (хэрэглэгч 2026-10-21); самбарт сонгогдохгүй */
+    href: "https://eic.mn/envmng/login.php",
   },
 ] as const;
 
 type TabId = (typeof TABS)[number]["id"];
 
-const IDS = TABS.map((t) => t.id);
+/* Гадаад холбоостой мөр сонгогдохгүй — хадгалсан утга нь анхдагч руу буцна */
+const IDS = TABS.filter((t) => !("href" in t)).map((t) => t.id);
 
 export function OrchinWorkspace() {
   /* Сонголт хадгалагдана — ажлаа тасалдуулаад буцаж ирэхэд хамгийн

@@ -88,6 +88,16 @@ export function BiotechDashboard() {
     return out;
   }, [rows, district, officer]);
 
+  /*
+    Хүснэгт, зургаас сонгосон байршил нь ШҮҮЛТ — үзүүлэлт, цэсийн тоо
+    түүгээр хумигдана; хүснэгт, зураг өөрөө хумигдахгүй (сонголтыг
+    тодруулна). Шүүлтэд үлдээгүй сонголт хүчингүй — дам гарна.
+  */
+  const sel = React.useMemo(() => {
+    if (picked == null || !rows) return null;
+    return shown.some((k) => rows[k].oid === picked) ? picked : null;
+  }, [rows, shown, picked]);
+
   /* Эрэмбэ нь ХАРАГДАЦЫНХ — шүүлт биш тул `shown`-г л дараална */
   const ordered = React.useMemo(() => {
     if (!rows) return [];
@@ -125,8 +135,11 @@ export function BiotechDashboard() {
     let autumn = 0;
     let km = 0;
     const districts = new Set<string>();
+    let sites = 0;
     for (const i of shown) {
       const r = rows[i];
+      if (sel != null && r.oid !== sel) continue;
+      sites++;
       salt += r.salt ?? 0;
       spring += r.haySpring ?? 0;
       autumn += r.hayAutumn ?? 0;
@@ -134,13 +147,13 @@ export function BiotechDashboard() {
       districts.add(r.district);
     }
     return {
-      sites: shown.length,
+      sites,
       salt,
       hay: spring + autumn,
       km,
       districts: districts.size,
     };
-  }, [rows, shown]);
+  }, [rows, shown, sel]);
 
   const byDistrict = React.useMemo(() => {
     const m = new Map<string, number>();
@@ -192,10 +205,9 @@ export function BiotechDashboard() {
     үүсгэдэг (`react-hooks/set-state-in-effect`).
   */
   const chosen = React.useMemo(() => {
-    if (picked == null || !rows) return null;
-    const i = shown.find((k) => rows[k].oid === picked);
-    return i == null ? null : rows[i];
-  }, [rows, shown, picked]);
+    if (sel == null || !rows) return null;
+    return rows.find((r) => r.oid === sel) ?? null;
+  }, [rows, sel]);
 
   /*
     ОЙРТОХ ҮЙЛДЭЛ (хэрэглэгчийн хүсэлт, 2026-09-21: "map дээр
@@ -242,7 +254,7 @@ export function BiotechDashboard() {
     );
   }
 
-  const activeCount = (district ? 1 : 0) + (officer ? 1 : 0);
+  const activeCount = (district ? 1 : 0) + (officer ? 1 : 0) + (sel != null ? 1 : 0);
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-2.5">
@@ -331,7 +343,7 @@ export function BiotechDashboard() {
                 focus={focus}
                 highlight={chosen ? [chosen.lon, chosen.lat] : null}
                 basemap={basemap}
-                onSelect={(oid) => setPicked(picked === oid ? null : oid)}
+                onSelect={(oid) => setPicked(sel === oid ? null : oid)}
               />
               <BasemapGallery value={basemap} onChange={setBasemap} />
 
@@ -491,7 +503,7 @@ export function BiotechDashboard() {
                 <tbody className="divide-y divide-line">
                   {ordered.map((i) => {
                     const r = rows[i];
-                    const on = picked === r.oid;
+                    const on = sel === r.oid;
                     return (
                       <tr
                         key={r.oid}

@@ -65,6 +65,22 @@ export function PolesDashboard() {
     [rows, place],
   );
 
+  /*
+    Зураг дээр сонгосон шон нь ШҮҮЛТ — диаграм, үзүүлэлт түүгээр
+    хумигдана. Шугамын хэрчим (сөрөг дугаар) сонголт болохгүй; шүүлтэд
+    үлдээгүй шоны сонголт ч хүчингүй (дам гарна, эффектээр биш).
+  */
+  const sel =
+    picked != null && picked >= 0 && shown.some((r) => r.oid === picked)
+      ? picked
+      : null;
+
+  /** Сонголтоор хумигдсан мөрүүд — зураг өөрөө ҮЛ ХАМААРНА */
+  const kept = React.useMemo(
+    () => (sel == null ? shown : shown.filter((r) => r.oid === sel)),
+    [shown, sel],
+  );
+
   const visible = React.useMemo(() => {
     if (!data) return new Uint32Array(0);
     const on = new Set(shown.map((r) => r.oid));
@@ -111,6 +127,18 @@ export function PolesDashboard() {
 
   const byPlace = React.useMemo(() => {
     const m = new Map<string, number>();
+    for (const r of rows ?? []) {
+      if (sel != null && r.oid !== sel) continue;
+      m.set(r.place, (m.get(r.place) ?? 0) + 1);
+    }
+    return [...m]
+      .map(([k, v]) => ({ key: k, label: k, value: v }))
+      .sort((a, b) => b.value - a.value);
+  }, [rows, sel]);
+
+  /* Байршлын цэс сонголтоос ҮЛ ХАМААРНА — өөр шугам руу шилжих зам */
+  const placeItems = React.useMemo(() => {
+    const m = new Map<string, number>();
     for (const r of rows ?? []) m.set(r.place, (m.get(r.place) ?? 0) + 1);
     return [...m]
       .map(([k, v]) => ({ key: k, label: k, value: v }))
@@ -118,15 +146,15 @@ export function PolesDashboard() {
   }, [rows]);
 
   const stats = React.useMemo(() => {
-    const gaps = shown.map((r) => r.gap).filter((g): g is number => g != null);
+    const gaps = kept.map((r) => r.gap).filter((g): g is number => g != null);
     const length = gaps.reduce((s, g) => s + g, 0);
     return {
-      n: shown.length,
+      n: kept.length,
       length,
       avg: gaps.length ? length / gaps.length : 0,
       max: gaps.length ? Math.max(...gaps) : 0,
     };
-  }, [shown]);
+  }, [kept]);
 
   /*
     Байршил тус бүрийн ШОНГИЙН ТОО.
@@ -144,13 +172,11 @@ export function PolesDashboard() {
 
   /* ---------------- Сонголтын хүрээ (zoom action) ---------------- */
   const focus = React.useMemo<Extent | null>(() => {
-    if (picked == null && !place) return null;
+    if (sel == null && !place) return null;
     const b = new Bounds();
-    for (const r of picked != null ? shown.filter((x) => x.oid === picked) : shown) {
-      b.add(r.lon, r.lat);
-    }
+    for (const r of kept) b.add(r.lon, r.lat);
     return b.get(0.0012);
-  }, [shown, picked, place]);
+  }, [kept, sel, place]);
 
   const active = React.useMemo(() => {
     const id = hover ?? picked;
@@ -159,9 +185,8 @@ export function PolesDashboard() {
 
   /** ТОВШСОН шон — hover-оос ҮЛ ХАМААРНА */
   const chosen = React.useMemo(
-    () =>
-      picked == null ? null : (rows?.find((r) => r.oid === picked) ?? null),
-    [rows, picked],
+    () => (sel == null ? null : (rows?.find((r) => r.oid === sel) ?? null)),
+    [rows, sel],
   );
 
   function reset() {
@@ -193,7 +218,7 @@ export function PolesDashboard() {
     <div className="flex h-full min-h-0 flex-col gap-2.5">
       <FilterBar
         title="Цахилгааны шон"
-        activeCount={place ? 1 : 0}
+        activeCount={(place ? 1 : 0) + (sel != null ? 1 : 0)}
         onReset={reset}
         /* Бүх шон нэг дүүрэг, нэг хороонд байгаа тул түүнийг шүүлтүүр
            болгохгүй — байнга давтагдах утгыг гарчгийн хажууд бичнэ */
@@ -204,7 +229,7 @@ export function PolesDashboard() {
         }
       >
         {/* Байршил ганцхан утгатай бол цэс нь сонголт биш чимэг болно */}
-        {byPlace.length > 1 ? (
+        {placeItems.length > 1 ? (
           <FilterMenu
             label="Байршил"
             icon={Building2}
@@ -213,7 +238,7 @@ export function PolesDashboard() {
             onClear={() => setPlace(null)}
             width={230}
           >
-            <PickList items={byPlace} selected={place} onPick={setPlace} />
+            <PickList items={placeItems} selected={place} onPick={setPlace} />
           </FilterMenu>
         ) : null}
       </FilterBar>
@@ -266,7 +291,11 @@ export function PolesDashboard() {
                   labelPlacement: "line-center",
                 }}
                 basemap={basemap}
-                onSelect={(oid) => setPicked(picked === oid ? null : oid)}
+                onSelect={(oid) => {
+                  /* Хэрчим (сөрөг дугаар) сонгогдохгүй */
+                  if (oid < 0) return;
+                  setPicked(sel === oid ? null : oid);
+                }}
                 onHover={setHover}
                 focus={focus}
                 cluster={false}

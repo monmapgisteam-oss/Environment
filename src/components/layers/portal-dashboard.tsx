@@ -1260,6 +1260,8 @@ function LayersBoard({
       narrowed: boolean;
       /** Мөр шүүлтэд нийцэх эсэх; `skip` нь алгасах шүүлтийн түлхүүрүүд */
       passes: (row: Row, skip?: readonly string[]) => boolean;
+      /** Зөвхөн талбарын шүүлт ба хил — бичлэгийн сонголтыг үл тооно */
+      listPasses: (row: Row) => boolean;
       /** Шүүлтийн СУУРЬ мөрүүд — хилээс гадуурхгүй ({@link LayerSet.withinUB}) */
       inside: Row[];
     }[] = [];
@@ -1305,7 +1307,20 @@ function LayersBoard({
         });
       }
 
-      const passes = (row: Row, skip: readonly string[] = []) =>
+      /* Улаанбаатараас гадуурх бүртгэл ({@link LayerSet.withinUB}) */
+      const outside = set.withinUB?.includes(id) ? outsideUB(hit) : null;
+      const outRows = outside?.size
+        ? new Set(
+            Object.entries(hit.data.rows)
+              .filter(([k]) => outside.has(Number(k)))
+              .map(([, r]) => r),
+          )
+        : null;
+
+      /* ЗӨВХӨН талбарын шүүлт ба хилийн хасалт — бичлэгийн сонголтыг
+         үл тоох жагсаалтад (газрын жагсаалт нь сонгогч тул) */
+      const fieldPasses = (row: Row, skip: readonly string[] = []) =>
+        !outRows?.has(row) &&
         fields.every((f) => {
           if (skip.includes(f)) return true;
           const keys = keyBy.get(f)?.(row);
@@ -1340,11 +1355,23 @@ function LayersBoard({
       /* Өөр давхаргын бичлэг сонгогдсон бол энэ давхаргаас юу ч
          үлдэхгүй */
       const muted = chosen != null && only == null;
+      const onlyRow = only != null ? hit.data.rows[only] : undefined;
+
+      /*
+        ⚠⚠ ШҮҮЛТ + СОНГОЛТ НЭГ ДҮРЭМД (2026-10-20, хэрэглэгч: "map
+        deerees point songohod busad chartuud shuudehgui bn"). Урьд нь
+        `passes` нь ЗӨВХӨН талбарын шүүлтийг шалгадаг байсан тул түүгээр
+        өөрөө тоолдог картууд (хөндлөн хүснэгт, дүүргийн зурвас, байршлын
+        карт) зураг дээрх сонголтыг ҮЛ ТООДОГ байв. Одоо сонголт, хилийн
+        хасалт хоёр энд ороод бүх хэрэглэгчид нэг дор хүрнэ.
+      */
+      const passes = (row: Row, skip: readonly string[] = []) =>
+        !muted &&
+        (only == null || row === onlyRow) &&
+        fieldPasses(row, skip);
 
       const rows: Row[] = [];
       const oids = new Set<number>();
-      /* Улаанбаатараас гадуурх бүртгэл ({@link LayerSet.withinUB}) */
-      const outside = set.withinUB?.includes(id) ? outsideUB(hit) : null;
       if (!muted)
         for (const [oid, row] of Object.entries(hit.data.rows)) {
           if (outside?.has(Number(oid))) continue;
@@ -1400,6 +1427,7 @@ function LayersBoard({
         charts,
         narrowed: muted || only != null || fields.length > 0,
         passes,
+        listPasses: (row: Row) => fieldPasses(row),
         inside,
       });
     }
@@ -2610,7 +2638,9 @@ function LayersBoard({
         if (stats.ha > 0 && /(^|,\s*)га$/i.test(b.measure)) continue;
         if (seen.has(b.measure)) continue;
         seen.add(b.measure);
-        const total = b.values.reduce((sum, d) => sum + d.value, 0);
+        /* Диаграм ӨӨРИЙН талбарын шүүлтийг алгасдаг тул нийлбэрийг
+           шүүгдсэн мөрөөс дахин бодно — үзүүлэлт бүртгэлийн тоотой зөрөхгүй */
+        const total = b.recount(v.rows).values.reduce((sum, d) => sum + d.value, 0);
         if (!(total > 0)) continue;
         out.push({
           key: `${v.id}:${b.id}`,
@@ -2624,8 +2654,8 @@ function LayersBoard({
       for (const b of v.charts) {
         if (b.kind !== "year") continue;
         /* Хоосон жил ч тэг утгаар цуваанд ордог тул муж нь БҮРТГЭЛТЭЙ
-           хоёр үзүүрээр тогтоно */
-        const filled = b.values.filter((d) => d.value > 0);
+           хоёр үзүүрээр тогтоно; шүүгдсэн мөрөөс (дээрхтэй нэг шалтгаан) */
+        const filled = b.recount(v.rows).values.filter((d) => d.value > 0);
         if (filled.length < 2) continue;
         const from = filled[0].label;
         const to = filled[filled.length - 1].label;
@@ -3346,7 +3376,7 @@ function LayersBoard({
      */
     withCross = false,
   ) =>
-    views.map(({ id, hit, charts, rows, oids, passes }) => {
+    views.map(({ id, hit, charts, rows, oids, passes, listPasses }) => {
       /* ЗӨВХӨН ЗУРАГТ гарах давхарга ({@link LayerSet.mapOnly},
          {@link LayerSet.mapPicker}) */
       /* Заасан талбартай давхарга ({@link LayerSet.charts}) зурагт
@@ -4435,7 +4465,7 @@ function LayersBoard({
               base={uidBase(id)}
               tone={tone}
               word={set.record}
-              passes={passes}
+              passes={listPasses}
               palette={palettes[id]}
               picked={picked}
               onPick={(uid) => {

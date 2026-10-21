@@ -144,33 +144,77 @@ export function ChemSystemDashboard() {
     [],
   );
 
-  const places = React.useMemo(() => {
-    const m = new Map<string, number>();
-    for (const x of inScope) {
-      if (holdingLocs && !holdingLocs.has(x.loc.id)) continue;
-      const k = placeKey(x);
-      if (k) m.set(k, (m.get(k) ?? 0) + 1);
-    }
-    return [...m].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "mn"));
-  }, [inScope, holdingLocs, placeKey]);
-
-  /* Хамрах хүрээ солигдоход сонгосон дүүрэг алга болвол шүүлт ДАМ
-     цуцлагдана — эффектээр биш (`react-hooks/set-state-in-effect`) */
-  const activePlace = place && places.some(([k]) => k === place) ? place : null;
-
-  const shownLocs = React.useMemo(() => {
-    const q = locQuery.trim().toLowerCase();
-    return inScope.filter((s) => {
-      if (holdingLocs && !holdingLocs.has(s.loc.id)) return false;
-      if (activePlace && placeKey(s) !== activePlace) return false;
+  /* Агуулахын хайлт — жагсаалт, газрын зураг, байршлын диаграм гурвуулаа
+     НЭГ дүрмээр шүүгдэнэ */
+  const matchLoc = React.useCallback(
+    (s: LocStat) => {
+      const q = locQuery.trim().toLowerCase();
       if (!q) return true;
       return (
         (s.org?.name ?? "").toLowerCase().includes(q) ||
         s.loc.address.toLowerCase().includes(q) ||
         (s.org?.reg ?? "").includes(q)
       );
-    });
-  }, [inScope, locQuery, holdingLocs, activePlace, placeKey]);
+    },
+    [locQuery],
+  );
+
+  /*
+    Байршлын түлхүүрүүд — хайлтаас ҮЛ ХАМААРНА: хайлтын улмаас дүүрэг
+    тэг болсон ч сонгосон дүүргийн шүүлт цуцлагдахгүй, карт ч нуугдахгүй.
+  */
+  const placeKeys = React.useMemo(() => {
+    const out = new Set<string>();
+    for (const x of inScope) {
+      if (holdingLocs && !holdingLocs.has(x.loc.id)) continue;
+      const k = placeKey(x);
+      if (k) out.add(k);
+    }
+    return out;
+  }, [inScope, holdingLocs, placeKey]);
+
+  /* Хамрах хүрээ солигдоход сонгосон дүүрэг алга болвол шүүлт ДАМ
+     цуцлагдана — эффектээр биш (`react-hooks/set-state-in-effect`) */
+  const activePlace = place && placeKeys.has(place) ? place : null;
+
+  const shownLocs = React.useMemo(
+    () =>
+      inScope.filter((s) => {
+        if (holdingLocs && !holdingLocs.has(s.loc.id)) return false;
+        if (activePlace && placeKey(s) !== activePlace) return false;
+        return matchLoc(s);
+      }),
+    [inScope, holdingLocs, activePlace, placeKey, matchLoc],
+  );
+
+  /*
+    ЗУРАГ, ЖАГСААЛТЫН СОНГОЛТ нь ШҮҮЛТ: индикатор, байршлын диаграм,
+    бодисын жагсаалт тэр агуулахаар хумигдана. Шүүлт (хүрээ, дүүрэг,
+    хайлт, бодис) түүнийг хассан бол ДАМ цуцлагдана — нуугдсан
+    агуулахын бодис баруун талд үлдэхгүй.
+    ⚠ Газрын зураг, агуулахын жагсаалтыг ХУМИХГҮЙ: өөр агуулах сонгох боломж
+    үлдэнэ.
+  */
+  const selLoc =
+    pickedLoc != null && shownLocs.some((s) => s.loc.id === pickedLoc) ? pickedLoc : null;
+
+  /*
+    Байршлын тоо — өөрийн хэмжээсийг (дүүрэг) алгасч, хайлт ба сонголтыг
+    дагана. Мөр нь ШҮҮГДЭЭГҮЙ түлхүүрүүдээс (`placeKeys`) — тэг болсон
+    дүүрэг ч 0-ээр үлдэнэ: жагсаалт хумигдвал сонголтоо солих арга алга.
+  */
+  const places = React.useMemo(() => {
+    const m = new Map<string, number>();
+    for (const k of placeKeys) m.set(k, 0);
+    for (const x of inScope) {
+      if (holdingLocs && !holdingLocs.has(x.loc.id)) continue;
+      if (selLoc != null && x.loc.id !== selLoc) continue;
+      if (!matchLoc(x)) continue;
+      const k = placeKey(x);
+      if (k) m.set(k, (m.get(k) ?? 0) + 1);
+    }
+    return [...m].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "mn"));
+  }, [inScope, holdingLocs, selLoc, matchLoc, placeKey, placeKeys]);
 
   /**
    * Баруун талын жагсаалт.
@@ -183,8 +227,8 @@ export function ChemSystemDashboard() {
     if (!data || !ix) return [];
     const h = data.holdings;
 
-    if (pickedLoc != null) {
-      const s = ix.stats.find((x) => x.loc.id === pickedLoc);
+    if (selLoc != null) {
+      const s = ix.stats.find((x) => x.loc.id === selLoc);
       if (!s) return [];
       return s.rows
         .map((i) => ({
@@ -223,7 +267,7 @@ export function ChemSystemDashboard() {
       }))
       .filter((r) => !q || r.name.toLowerCase().includes(q))
       .sort((a, b) => b.sort - a.sort || a.name.localeCompare(b.name, "mn"));
-  }, [data, ix, shownLocs, pickedLoc, chemQuery]);
+  }, [data, ix, shownLocs, selLoc, chemQuery]);
 
   /* ---------------- Газрын зураг ---------------- */
 
@@ -263,11 +307,11 @@ export function ChemSystemDashboard() {
   );
 
   const focus = React.useMemo<Extent | null>(() => {
-    const s = pickedLoc == null ? null : mapped.find((x) => x.loc.id === pickedLoc);
+    const s = selLoc == null ? null : mapped.find((x) => x.loc.id === selLoc);
     if (!s) return null;
     const d = 0.008;
     return [s.loc.lon - d, s.loc.lat - d, s.loc.lon + d, s.loc.lat + d];
-  }, [mapped, pickedLoc]);
+  }, [mapped, selLoc]);
 
   const hovered = React.useMemo(
     () => (tip.oid == null ? null : (ix?.stats.find((s) => s.loc.id === tip.oid) ?? null)),
@@ -281,9 +325,15 @@ export function ChemSystemDashboard() {
 
   /* ---------------- Нэгтгэл ---------------- */
 
+  /*
+    Индикатор нь сонголтыг дагана. ⚠ "Устгал, дахин боловсруулалт" нь
+    ШҮҮГДЭХГҮЙ: хормын хувилбарын есөн устгалын бүртгэл бүгд байхгүй
+    аж ахуйн нэгж (№522–524) руу заадаг тул агуулахтай холбох зам алга.
+  */
   const totals = React.useMemo(() => {
     if (!data) return { orgs: 0, locs: 0, chems: 0, rows: 0 };
-    const keep = new Set(shownLocs.map((x) => x.loc.id));
+    const locs = selLoc == null ? shownLocs : shownLocs.filter((x) => x.loc.id === selLoc);
+    const keep = new Set(locs.map((x) => x.loc.id));
     const orgs = new Set<number>();
     const chems = new Set<number>();
     const h = data.holdings;
@@ -293,9 +343,9 @@ export function ChemSystemDashboard() {
       rows++;
       chems.add(h.chem[i]);
     }
-    for (const x of shownLocs) if (x.org) orgs.add(x.org.id);
-    return { orgs: orgs.size, locs: shownLocs.length, chems: chems.size, rows };
-  }, [data, shownLocs]);
+    for (const x of locs) if (x.org) orgs.add(x.org.id);
+    return { orgs: orgs.size, locs: locs.length, chems: chems.size, rows };
+  }, [data, shownLocs, selLoc]);
 
   /*
     ⚠⚠ ТОВЬЁОГ ХИМИЙН БҮЛГЭЭР (хэрэглэгчийн хүсэлт, 2026-09-23:
@@ -357,7 +407,7 @@ export function ChemSystemDashboard() {
     );
   }
 
-  const picked = pickedLoc == null ? null : ix.stats.find((s) => s.loc.id === pickedLoc);
+  const picked = selLoc == null ? null : ix.stats.find((s) => s.loc.id === selLoc);
   const searching = !picked && chemQuery.trim().length > 0;
   /*
     Бүлгийн тоо: товьёогийн горимд БҮРТГЭЛИЙН тоо (мөр бүрийн
@@ -494,8 +544,8 @@ export function ChemSystemDashboard() {
       {table ? (
         <AttrTable
           rows={shownLocs}
-          picked={pickedLoc}
-          onPick={(id) => setPickedLoc(pickedLoc === id ? null : id)}
+          picked={selLoc}
+          onPick={(id) => setPickedLoc(selLoc === id ? null : id)}
           note={pickedChemName ?? null}
         />
       ) : (
@@ -505,6 +555,7 @@ export function ChemSystemDashboard() {
         <PlaceCard
           title={scope === "city" ? "Дүүргээр" : "Аймгаар"}
           rows={places}
+          show={placeKeys.size >= 2}
           picked={activePlace}
           onPick={(k) => setPlace(activePlace === k ? null : k)}
         />
@@ -518,8 +569,8 @@ export function ChemSystemDashboard() {
           {shownLocs.map((s) => (
             <Row
               key={s.loc.id}
-              on={pickedLoc === s.loc.id}
-              onClick={() => setPickedLoc(pickedLoc === s.loc.id ? null : s.loc.id)}
+              on={selLoc === s.loc.id}
+              onClick={() => setPickedLoc(selLoc === s.loc.id ? null : s.loc.id)}
               onEnter={() => setListHover(s.loc.id)}
               onLeave={() => setListHover(null)}
               title={s.org?.name || s.loc.name}
@@ -539,7 +590,7 @@ export function ChemSystemDashboard() {
                 points={points}
                 visible={visible}
                 basemap={basemap}
-                onSelect={(oid) => setPickedLoc(pickedLoc === oid ? null : oid)}
+                onSelect={(oid) => setPickedLoc(selLoc === oid ? null : oid)}
                 onHover={tip.onHover}
                 focus={focus}
                 highlight={spot ? [spot.loc.lon, spot.loc.lat] : null}
@@ -689,16 +740,19 @@ export function ChemSystemDashboard() {
 function PlaceCard({
   title,
   rows,
+  show,
   picked,
   onPick,
 }: {
   title: string;
   rows: [string, number][];
+  /** Карт харагдах эсэх — хайлт, сонголтоос ҮЛ ХАМААРНА (карт үсрэхгүй) */
+  show: boolean;
   picked: string | null;
   onPick: (key: string) => void;
 }) {
   const max = Math.max(...rows.map(([, n]) => n), 1);
-  if (rows.length < 2) return null;
+  if (!show) return null;
   return (
     <div className="shrink-0 overflow-hidden rounded-xs border border-line bg-paper-2">
       <div className="flex items-baseline gap-2 border-b border-line px-2.5 py-1.5">

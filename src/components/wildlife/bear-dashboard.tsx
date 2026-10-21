@@ -695,8 +695,26 @@ export function BearDashboard() {
     setPicking(false);
   };
 
+  /*
+    Шүүлт тавих НЭГ зам (диаграм, цэс хоёулаа):
+    · долоо хоног солигдоход өдрийн шүүлт цуцлагдана — өөр долоо хоногийн
+      өдөр харагдахгүй атлаа самбарыг хумисаар үлдэх ёсгүй;
+    · дүүрэг солигдоход өөр дүүргийн хороо цуцлагдана — эс тэгвээс хоёр
+      шүүлт огтлолцохгүй, үр дүн хоосон гарна.
+  */
   const setFilter = React.useCallback((id: string, v: string | null) => {
-    setFilters((f) => ({ ...f, [id]: v ?? undefined }));
+    setFilters((f) => {
+      const next: Filters = { ...f, [id]: v ?? undefined };
+      if (id === "week" && f.week !== next.week) next.day = undefined;
+      if (
+        id === "district" &&
+        next.district &&
+        next.khoroo &&
+        !next.khoroo.startsWith(`${next.district} · `)
+      )
+        next.khoroo = undefined;
+      return next;
+    });
   }, []);
 
   const shown = React.useMemo(
@@ -704,61 +722,75 @@ export function BearDashboard() {
     [rows, filters],
   );
 
+  /*
+    Зураг, жагсаалтаас сонгосон тохиолдол нь ШҮҮЛТ — диаграм, үзүүлэлт
+    түүгээр хумигдана; зураг өөрөө хумигдахгүй (өөр цэг сонгох зам).
+    Шүүлтээс гарвал сонголт ДАМ цуцлагдана.
+  */
+  const sel =
+    picked != null && shown.some((r) => r.oid === picked) ? picked : null;
+
   /** Диаграм бүрийн мөрүүд — дараалал нь шүүгдээгүй, тоо нь бусад шүүлтээр */
-  const charts = React.useMemo(() => {
-    const out: Record<string, Datum[]> = {};
-    for (const d of DIMS) {
-      const total = new Map<string, number>();
-      const count = new Map<string, number>();
-      for (const r of rows) {
-        /* Хороо нь ДҮҮРГИЙН дотор: дүүрэг сонгосон бол зөвхөн тэр
-           дүүргийн хороо жагсана (хэрэглэгч 2026-10-14) */
-        if (
-          d.id === "khoroo" &&
-          filters.district &&
-          r.district !== filters.district
-        )
-          continue;
-        const k = d.keyOf(r);
-        total.set(k, (total.get(k) ?? 0) + 1);
-        if (passes(r, filters, d.id)) count.set(k, (count.get(k) ?? 0) + 1);
+  /* Диаграм сонголтыг дагана; шүүлтүүрийн цэс сонголтоор хумигдахгүй
+     (өөр утга руу шилжих зам) */
+  const { charts, menus } = React.useMemo(() => {
+    const build = (withSel: boolean) => {
+      const out: Record<string, Datum[]> = {};
+      for (const d of DIMS) {
+        const total = new Map<string, number>();
+        const count = new Map<string, number>();
+        for (const r of rows) {
+          /* Хороо нь ДҮҮРГИЙН дотор: дүүрэг сонгосон бол зөвхөн тэр
+             дүүргийн хороо жагсана (хэрэглэгч 2026-10-14) */
+          if (
+            d.id === "khoroo" &&
+            filters.district &&
+            r.district !== filters.district
+          )
+            continue;
+          const k = d.keyOf(r);
+          total.set(k, (total.get(k) ?? 0) + 1);
+          if (passes(r, filters, d.id) && (!withSel || sel == null || r.oid === sel))
+            count.set(k, (count.get(k) ?? 0) + 1);
+        }
+        const sorted = [...total.keys()].sort((a, b) =>
+          d.byKey
+            ? a.localeCompare(b)
+            : /* "Бүртгэгдээгүй" нь эцэст — дутуу бөглөлт гол задаргааг түрүүлэхгүй */
+              Number(a === NONE) - Number(b === NONE) ||
+              total.get(b)! - total.get(a)! ||
+              a.localeCompare(b, "mn"),
+        );
+        /* Өдөр нь ЗӨВХӨН сонгосон долоо хоногийн долоон өдөр */
+        const keys =
+          d.id === "week"
+            ? sorted
+            : d.id === "day"
+              ? filters.week && filters.week !== NONE
+                ? daysOfWeek(filters.week)
+                : []
+              : sorted;
+        const list = keys.map((k) => ({
+          key: k,
+          label: d.id === "week" ? weekText(k) : k,
+          value: count.get(k) ?? 0,
+        }));
+        /* Дүүрэг, хороонд шүүлтэд тохирохгүй (0) мөр ГАРАХГҮЙ (хэрэглэгч
+           2026-10-14: "зөвхөн шүүгдсэн дүүрэг хороо л үлдэнэ, 0 мэдээлэлтэй
+           бол харагдах албагүй"). Бусад диаграмд 0 мөр хэвээр — тэнд
+           ангиллын бүрэн жагсаалт нь өөрөө мэдээлэл. Өөрийн сонголт нь
+           алгасагдсан тул сонгосон мөр алга болохгүй. */
+        /* Долоо хоногт ч 0 багана ГАРАХГҮЙ (хэрэглэгч 2026-10-14: "0 7 хоног
+           хэрэггүй") — тохиолдолтой долоо хоногууд л дараалан */
+        out[d.id] =
+          d.id === "district" || d.id === "khoroo" || d.id === "week"
+            ? list.filter((x) => x.value > 0)
+            : list;
       }
-      const sorted = [...total.keys()].sort((a, b) =>
-        d.byKey
-          ? a.localeCompare(b)
-          : /* "Бүртгэгдээгүй" нь эцэст — дутуу бөглөлт гол задаргааг түрүүлэхгүй */
-            Number(a === NONE) - Number(b === NONE) ||
-            total.get(b)! - total.get(a)! ||
-            a.localeCompare(b, "mn"),
-      );
-      /* Өдөр нь ЗӨВХӨН сонгосон долоо хоногийн долоон өдөр */
-      const keys =
-        d.id === "week"
-          ? sorted
-          : d.id === "day"
-            ? filters.week && filters.week !== NONE
-              ? daysOfWeek(filters.week)
-              : []
-            : sorted;
-      const list = keys.map((k) => ({
-        key: k,
-        label: d.id === "week" ? weekText(k) : k,
-        value: count.get(k) ?? 0,
-      }));
-      /* Дүүрэг, хороонд шүүлтэд тохирохгүй (0) мөр ГАРАХГҮЙ (хэрэглэгч
-         2026-10-14: "зөвхөн шүүгдсэн дүүрэг хороо л үлдэнэ, 0 мэдээлэлтэй
-         бол харагдах албагүй"). Бусад диаграмд 0 мөр хэвээр — тэнд
-         ангиллын бүрэн жагсаалт нь өөрөө мэдээлэл. Өөрийн сонголт нь
-         алгасагдсан тул сонгосон мөр алга болохгүй. */
-      /* Долоо хоногт ч 0 багана ГАРАХГҮЙ (хэрэглэгч 2026-10-14: "0 7 хоног
-         хэрэггүй") — тохиолдолтой долоо хоногууд л дараалан */
-      out[d.id] =
-        d.id === "district" || d.id === "khoroo" || d.id === "week"
-          ? list.filter((x) => x.value > 0)
-          : list;
-    }
-    return out;
-  }, [rows, filters]);
+      return out;
+    };
+    return { charts: build(true), menus: build(false) };
+  }, [rows, filters, sel]);
 
   /*
     ЦЭГИЙН ӨНГӨ = БАТАЛГААЖИЛТ (хэрэглэгч 2026-10-20: шошгын өнгийг
@@ -771,13 +803,14 @@ export function BearDashboard() {
     () => placed.map((r) => statusHex(mapStatus(r))),
     [placed],
   );
-  /** Зургийн тайлбар — баталгаажилтын диаграмтай ИЖИЛ дараалал, зурагт байгаа нь л */
+  /** Зургийн тайлбар — баталгаажилтын диаграмтай ИЖИЛ дараалал, зурагт
+      (шүүлтэд үлдсэн байршилтай) байгаа нь л */
   const legend = React.useMemo(() => {
-    const on = new Set(placed.map(mapStatus));
+    const on = new Set(shown.filter(located).map(mapStatus));
     return charts.status
       .map((x) => x.key)
       .filter((k) => on.has(k) && k !== NONE);
-  }, [placed, charts]);
+  }, [shown, charts]);
 
   /*
     ЗУРГИЙН ШОШГО — баталгаажилт (хэрэглэгч 2026-10-14: "map-ийн label
@@ -817,12 +850,12 @@ export function BearDashboard() {
 
   /* Сонгосон тохиолдол шүүлтээс гарвал сонголт ДАМ цуцлагдана */
   const chosen = React.useMemo(
-    () =>
-      picked == null ? null : (shown.find((r) => r.oid === picked) ?? null),
-    [shown, picked],
+    () => (sel == null ? null : (shown.find((r) => r.oid === sel) ?? null)),
+    [shown, sel],
   );
 
-  const active = Object.values(filters).filter(Boolean).length;
+  const active =
+    Object.values(filters).filter(Boolean).length + (sel != null ? 1 : 0);
 
   /** Шүүлтэд тохирох байршилгүй тохиолдол — зурагт гарахгүй тул тусдаа жагсаалтад */
   const unplaced = React.useMemo(
@@ -850,15 +883,16 @@ export function BearDashboard() {
   }, [shown, chosen, active, typed]);
 
   const stats = React.useMemo(() => {
-    const c = (s: string) => shown.filter((r) => mapStatus(r) === s).length;
+    const kept = sel == null ? shown : shown.filter((r) => r.oid === sel);
+    const c = (s: string) => kept.filter((r) => mapStatus(r) === s).length;
     return {
-      n: shown.length,
+      n: kept.length,
       confirmed: c("Батлагдсан"),
       track: c("Мөр олдсон"),
       fake: c("Хуурамч (баавгай биш)"),
-      harm: shown.filter((r) => str(r.attrs["хохирол"]) !== NONE).length,
+      harm: kept.filter((r) => str(r.attrs["хохирол"]) !== NONE).length,
     };
-  }, [shown]);
+  }, [shown, sel]);
 
   if (error || !data) {
     return (
@@ -941,10 +975,8 @@ export function BearDashboard() {
     Огноо: ДОЛОО ХОНОГООР; багана дарахад тэр долоо хоног шүүлт болж, доор
     нь долоон өдөр нь гарна — өдөр дарахад тэр өдрөөр шүүнэ.
   */
-  const pickWeek = (k: string | null) =>
-    /* Долоо хоног солигдоход өдрийн шүүлт цуцлагдана — өөр долоо хоногийн
-       өдөр харагдахгүй атлаа самбарыг хумисаар үлдэх ёсгүй */
-    setFilters((f) => ({ ...f, week: k ?? undefined, day: undefined }));
+  /* Долоо хоног солигдоход өдрийн шүүлт `setFilter` дотор цуцлагдана */
+  const pickWeek = (k: string | null) => setFilter("week", k);
 
   const dateChart = () => {
     const week = filters.week && filters.week !== NONE ? filters.week : null;
@@ -1015,7 +1047,7 @@ export function BearDashboard() {
         label={d.title}
         icon={icon}
         value={
-          charts[id].find((x) => x.key === filters[id])?.label ??
+          menus[id].find((x) => x.key === filters[id])?.label ??
           filters[id] ??
           null
         }
@@ -1024,7 +1056,7 @@ export function BearDashboard() {
         width={240}
       >
         <PickList
-          items={charts[id]}
+          items={menus[id]}
           selected={filters[id] ?? null}
           onPick={(k) => setFilter(id, k)}
         />
@@ -1096,10 +1128,10 @@ export function BearDashboard() {
                 {unplaced.map((r) => (
                   <li key={r.oid}>
                     <button
-                      onClick={() => setPicked(picked === r.oid ? null : r.oid)}
+                      onClick={() => setPicked(sel === r.oid ? null : r.oid)}
                       className={cn(
                         "flex w-full items-baseline gap-2 px-3 py-1.5 text-left transition-colors hover:bg-paper-hi",
-                        picked === r.oid &&
+                        sel === r.oid &&
                           "bg-paper-hi shadow-[inset_2px_0_0_var(--data)]",
                       )}
                     >
@@ -1129,7 +1161,7 @@ export function BearDashboard() {
                 basemap={basemap}
                 onSelect={(oid) => {
                   setForestPick(null);
-                  setPicked(picked === oid ? null : oid);
+                  setPicked(sel === oid ? null : oid);
                 }}
                 onBlankClick={(lon, lat) => {
                   setPicked(null);

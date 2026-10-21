@@ -162,6 +162,16 @@ export function NeutralizationDashboard() {
     return m;
   }, [sites]);
 
+  /*
+    Сонгосон цэг (зураг эсвэл профайлын толгойноос) нь индикаторын ШҮҮЛТ —
+    дөрвөн профайл ба газрын зураг нь сонгох зам тул бүгд харагдсаар,
+    сонгосон нь тодорно.
+  */
+  const own = React.useMemo(
+    () => (picked == null ? sites : sites.filter((p) => p.oid === picked)),
+    [sites, picked],
+  );
+
   /* ---------------- Индикатор ---------------- */
   const stats = React.useMemo(() => {
     let exceed = 0;
@@ -169,7 +179,7 @@ export function NeutralizationDashboard() {
     let topPi = 0;
     let topAt = "";
     let topEl = "";
-    for (const p of sites) {
+    for (const p of own) {
       exceed += exceedCount(p);
       measured += measuredCount(p);
       for (let i = 0; i < ELEMENTS.length; i++) {
@@ -187,9 +197,10 @@ export function NeutralizationDashboard() {
       topPi,
       topAt,
       topEl,
-      districts: new Set(sites.map((p) => p.district)).size,
+      n: own.length,
+      districts: new Set(own.map((p) => p.district)).size,
     };
-  }, [sites]);
+  }, [own]);
 
   const selected = picked == null ? null : (sites.find((p) => p.oid === picked) ?? null);
   const activeCount = (element != null ? 1 : 0) + (picked != null ? 1 : 0);
@@ -247,7 +258,7 @@ export function NeutralizationDashboard() {
               <Stat
                 icon={MapPin}
                 label="Хэмжилт хийсэн цэг"
-                value={num(sites.length)}
+                value={num(stats.n)}
                 note={`${stats.districts} дүүрэг`}
               />
               {/*
@@ -284,6 +295,7 @@ export function NeutralizationDashboard() {
                 highlight={highlight}
                 cluster={false}
                 pulse
+                pickedMark={picked}
               />
               <BasemapGallery value={basemap} onChange={setBasemap} />
 

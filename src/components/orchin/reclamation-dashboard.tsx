@@ -115,6 +115,23 @@ export function ReclamationDashboard() {
     [sites, keep],
   );
 
+  /*
+    Сонгосон талбай нь диаграм, үзүүлэлтийн ШҮҮЛТ (хөндлөн шүүлт хоёр
+    тийш). Хугацаа, байршлын шүүлтэд тохирохгүй бол сонголт ДАМ цуцлагдана —
+    зураг хоосон, ойртолт буруу газар үлдэхгүй.
+  */
+  const sel = React.useMemo(
+    () => (picked != null && shown.some((s) => s.oid === picked) ? picked : null),
+    [shown, picked],
+  );
+
+  /** Диаграм, үзүүлэлтийн шүүлт — сонгосон талбайтай хамт */
+  const keepSel = React.useCallback(
+    (s: ReclamationSite, skip?: "year" | "district") =>
+      keep(s, skip) && (sel == null || s.oid === sel),
+    [keep, sel],
+  );
+
   /** Датаны хамрах хугацаа — шүүлтүүрийн хязгаар, "бүх хугацаа"-ны жишиг */
   const span = React.useMemo<[number, number] | null>(() => {
     const ys = (sites ?? []).map((x) => x.year).filter(Boolean);
@@ -133,8 +150,8 @@ export function ReclamationDashboard() {
      диаграм бүтнээрээ үлдэж (буцаж сонгох зам), зураг зөвхөн сонгосон
      талбайг зурна. Дахин товшиход бүгд эргэж гарна. */
   const mapped = React.useMemo(
-    () => (picked == null ? shown : shown.filter((s) => s.oid === picked)),
-    [shown, picked],
+    () => (sel == null ? shown : shown.filter((s) => s.oid === sel)),
+    [shown, sel],
   );
 
   const geo = React.useMemo<MapPoints>(() => {
@@ -181,12 +198,19 @@ export function ReclamationDashboard() {
   /* ---------------- Задаргаа ----------------
      Хэмжигдэхүүн нь БҮГД га — тоо ширхэг биш талбай харьцуулагдана.
      Эх үүсвэр ТУС БҮРД тусдаа тооцно: хоёр багана хоёр өөр бүртгэл. */
+  /* Хоёр багана БИЕ ДААСАН: сонголт нь зөвхөн ӨӨРИЙН эх үүсвэрийн
+     баганыг хумина — нөгөө баганын диаграм хоосрохгүй. */
+  const selFunding = React.useMemo(
+    () => (sel == null ? null : ((sites ?? []).find((s) => s.oid === sel)?.funding ?? null)),
+    [sites, sel],
+  );
   const sides = React.useMemo(
-    () => FUNDING.map((f) => sideOf(f.id, sites ?? [], keep)),
-    [sites, keep],
+    () => FUNDING.map((f) => sideOf(f.id, sites ?? [], keep, f.id === selFunding ? keepSel : keep)),
+    [sites, keep, keepSel, selFunding],
   );
 
-  /** Шүүлтүүрийн цэсэнд — хоёр эх үүсвэрийн байршил НЭГ жагсаалтад */
+  /** Шүүлтүүрийн цэсэнд — хоёр эх үүсвэрийн байршил НЭГ жагсаалтад.
+      Цэс сонголтоор хумигдахгүй (шүүгдээгүй жагсаалтаас). */
   const byDistrict = React.useMemo<Datum[]>(() => {
     const m = new Map<string, number>();
     for (const s of sites ?? []) {
@@ -199,11 +223,12 @@ export function ReclamationDashboard() {
   }, [sites, keep]);
 
   const stats = React.useMemo(() => {
-    const ha = shown.reduce((s, x) => s + x.ha, 0);
-    const years = new Set(shown.map((s) => s.year));
-    const cost = shown.reduce((s, x) => s + (x.cost ?? 0), 0);
+    const own = mapped;
+    const ha = own.reduce((s, x) => s + x.ha, 0);
+    const years = new Set(own.map((s) => s.year));
+    const cost = own.reduce((s, x) => s + (x.cost ?? 0), 0);
     return {
-      n: shown.length,
+      n: own.length,
       ha,
       years: years.size,
       span: years.size
@@ -211,22 +236,22 @@ export function ReclamationDashboard() {
         : "—",
       cost,
     };
-  }, [shown]);
+  }, [mapped]);
 
   /* Сонголт руу ойртох */
   /* ---------------- Сонголтын хүрээ (zoom action) ----------------
      Сонгосон талбай руу, эс бөгөөс шүүлтүүрт таарсан бүх талбай руу
      ойртоно. Шүүлтүүр цуцлагдвал `null` — зураг анхны байрлалдаа буцна. */
   const focus = React.useMemo<Extent | null>(() => {
-    if (picked == null && wholeRange && !district) return null;
+    if (sel == null && wholeRange && !district) return null;
     const b = new Bounds();
-    for (const site of picked != null ? shown.filter((s) => s.oid === picked) : shown) {
+    for (const site of mapped) {
       if (site.rings.length) {
         for (const ring of site.rings) for (const [x, y] of ring) b.add(x, y);
       } else b.add(site.lon, site.lat);
     }
     return b.get(0.003);
-  }, [shown, picked, wholeRange, district]);
+  }, [mapped, sel, wholeRange, district]);
 
   /** Хулгана дээр очсон талбай — газрын зурагнаас */
   const hovered = React.useMemo(
@@ -236,8 +261,8 @@ export function ReclamationDashboard() {
 
   /* Тогтмол самбар: товшсон, эсвэл ЖАГСААЛТЫН мөр дээр очсон талбай */
   const active = React.useMemo(
-    () => (sites ?? []).find((s) => s.oid === (hover ?? picked)) ?? null,
-    [sites, hover, picked],
+    () => (sites ?? []).find((s) => s.oid === (hover ?? sel)) ?? null,
+    [sites, hover, sel],
   );
 
   function clearRange() {
@@ -268,11 +293,11 @@ export function ReclamationDashboard() {
     );
   }
 
-  const activeCount = (wholeRange ? 0 : 1) + (district ? 1 : 0);
+  const activeCount = (wholeRange ? 0 : 1) + (district ? 1 : 0) + (sel != null ? 1 : 0);
   const [aan, tusuw] = sides;
   const sideProps = {
-    picked,
-    onPick: (oid: number) => setPicked(picked === oid ? null : oid),
+    picked: sel,
+    onPick: (oid: number) => setPicked(sel === oid ? null : oid),
     onHover: setHover,
     range,
     span,
@@ -374,9 +399,9 @@ export function ReclamationDashboard() {
                 <PointMap
                   points={geo}
                   visible={visible}
-                  shapes={{ data: polygons, selected: picked, labelZoom: 12 }}
+                  shapes={{ data: polygons, selected: sel, labelZoom: 12 }}
                   basemap={basemap}
-                  onSelect={setPicked}
+                  onSelect={(oid) => setPicked(sel === oid ? null : oid)}
                   onHover={tip.onHover}
                   focus={focus}
                   cluster={false}
@@ -478,12 +503,15 @@ function sideOf(
   id: FundingId,
   sites: ReclamationSite[],
   keep: (s: ReclamationSite, skip?: "year" | "district") => boolean,
+  /** Сонгосон талбайг тооцсон шүүлт — нэгтгэсэн диаграмд */
+  keepSel: (s: ReclamationSite, skip?: "year" | "district") => boolean,
 ): SideData {
   const own = sites.filter((s) => s.funding === id);
+  /* Жагсаалт, талбай тус бүрийн диаграм нь СОНГОХ зам — сонголтоор хумигдахгүй */
   const shown = own.filter((s) => keep(s));
 
   const y = new Map<number, number>();
-  for (const s of own) if (keep(s, "year")) y.set(s.year, (y.get(s.year) ?? 0) + s.ha);
+  for (const s of own) if (keepSel(s, "year")) y.set(s.year, (y.get(s.year) ?? 0) + s.ha);
   const byYear: Datum[] = [...y]
     .sort((a, b) => a[0] - b[0])
     .map(([k, ha]) => ({ key: String(k), label: String(k), value: ha }));
@@ -506,7 +534,7 @@ function sideOf(
   }
 
   const d = new Map<string, number>();
-  for (const s of own) if (keep(s, "district")) d.set(s.district, (d.get(s.district) ?? 0) + s.ha);
+  for (const s of own) if (keepSel(s, "district")) d.set(s.district, (d.get(s.district) ?? 0) + s.ha);
   const byDistrict: Datum[] = [...d]
     .map(([k, ha]) => ({ key: k, label: k, value: ha }))
     .sort((a, b) => b.value - a.value);

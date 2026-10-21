@@ -105,7 +105,8 @@ export function EcoDashboard() {
   const rows = data?.rows;
 
   /* ---------------- Шүүлт ---------------- */
-  const shownCorridors = React.useMemo(
+  /** Дүүрэг, бүсээр үлдсэн коридор — зориулалтын шүүлтээс ӨМНӨ */
+  const baseCorridors = React.useMemo(
     () =>
       (rows ?? []).filter(
         (r) => (!district || r.district === district) && (!zone || r.zone === zone),
@@ -113,19 +114,76 @@ export function EcoDashboard() {
     [rows, district, zone],
   );
 
-  const corridorOn = React.useMemo(
-    () => new Set(shownCorridors.map((r) => r.oid)),
-    [shownCorridors],
+  const baseOn = React.useMemo(
+    () => new Set(baseCorridors.map((r) => r.oid)),
+    [baseCorridors],
   );
+
+  /** Сонгосон зориулалттай нэгж талбартай коридорууд (дүүрэг, бүсээс үл хамаарна) */
+  const landuseCorr = React.useMemo(() => {
+    if (!landuse) return null;
+    const out = new Set<number>();
+    for (const p of data?.parcels ?? []) if (p.landuse === landuse) out.add(p.corridor);
+    return out;
+  }, [data, landuse]);
 
   /* Нэгж талбар нь ХАРЬЯА коридороороо ч шүүгдэнэ: дүүрэг сонгоход тэр
      дүүргийн коридорт байгаа талбарууд л үлдэнэ */
   const shownParcels = React.useMemo(
     () =>
       (data?.parcels ?? []).filter(
-        (p) => corridorOn.has(p.corridor) && (!landuse || p.landuse === landuse),
+        (p) => baseOn.has(p.corridor) && (!landuse || p.landuse === landuse),
       ),
-    [data, corridorOn, landuse],
+    [data, baseOn, landuse],
+  );
+
+  /*
+    Зориулалт сонгосон үед тийм нэгж талбаргүй коридор ч үлдэхгүй —
+    "Коридороор" диаграм, зураг, үзүүлэлт гурвуулаа нэг коридор харна.
+  */
+  const shownCorridors = React.useMemo(
+    () =>
+      landuseCorr ? baseCorridors.filter((r) => landuseCorr.has(r.oid)) : baseCorridors,
+    [baseCorridors, landuseCorr],
+  );
+
+  const corridorOn = React.useMemo(
+    () => new Set(shownCorridors.map((r) => r.oid)),
+    [shownCorridors],
+  );
+
+  /*
+    Зураг дээр сонгосон обьект нь ШҮҮЛТ. Коридор сонговол тэр коридор,
+    нэгж талбар сонговол тэр талбар (ба түүний коридор) — диаграм,
+    үзүүлэлт түүгээр хумигдана; зураг өөрөө хумигдахгүй. Шүүлтэд
+    үлдээгүй сонголт хүчингүй (дам гарна).
+  */
+  const selParcel = React.useMemo(() => {
+    if (picked == null || picked < PARCEL_BASE || !showParcels) return null;
+    return shownParcels.find((p) => p.oid === picked - PARCEL_BASE) ?? null;
+  }, [picked, showParcels, shownParcels]);
+  const selCorridor = selParcel
+    ? selParcel.corridor
+    : picked != null && picked < PARCEL_BASE && corridorOn.has(picked)
+      ? picked
+      : null;
+  const sel = selParcel || selCorridor != null ? picked : null;
+
+  const keptCorridors = React.useMemo(
+    () =>
+      selCorridor == null
+        ? shownCorridors
+        : shownCorridors.filter((r) => r.oid === selCorridor),
+    [shownCorridors, selCorridor],
+  );
+  const keptParcels = React.useMemo(
+    () =>
+      selParcel
+        ? [selParcel]
+        : selCorridor == null
+          ? shownParcels
+          : shownParcels.filter((p) => p.corridor === selCorridor),
+    [shownParcels, selParcel, selCorridor],
   );
 
   /*
@@ -181,23 +239,25 @@ export function EcoDashboard() {
     const m = new Map<string, number>();
     for (const r of rows ?? []) {
       if (zone && r.zone !== zone) continue;
+      if (landuseCorr && !landuseCorr.has(r.oid)) continue;
       m.set(r.district, (m.get(r.district) ?? 0) + r.ha);
     }
     return [...m]
       .map(([k, v]) => ({ key: k, label: k, value: v }))
       .sort((a, b) => b.value - a.value);
-  }, [rows, zone]);
+  }, [rows, zone, landuseCorr]);
 
   const byZone = React.useMemo<Datum[]>(() => {
     const m = new Map<string, number>();
     for (const r of rows ?? []) {
       if (district && r.district !== district) continue;
+      if (landuseCorr && !landuseCorr.has(r.oid)) continue;
       m.set(r.zone, (m.get(r.zone) ?? 0) + r.ha);
     }
     return [...m]
       .map(([k, v]) => ({ key: k, label: k, value: v }))
       .sort((a, b) => b.value - a.value);
-  }, [rows, district]);
+  }, [rows, district, landuseCorr]);
 
   /*
     Зориулалтын задаргаа — энэ самбарын ГОЛ диаграм.
@@ -206,16 +266,25 @@ export function EcoDashboard() {
     давхцсан хэсгийнх биш бүтэн талбарынх тул га-гийн нийлбэр нь
     "коридорын дотор хэдэн га" гэсэн худал утга өгнө.
   */
-  const byLanduse = React.useMemo<Datum[]>(() => {
-    const m = new Map<string, number>();
-    for (const p of data?.parcels ?? []) {
-      if (!corridorOn.has(p.corridor)) continue;
-      m.set(p.landuse, (m.get(p.landuse) ?? 0) + 1);
-    }
-    return [...m]
-      .map(([k, v]) => ({ key: k, label: k, value: v }))
-      .sort((a, b) => b.value - a.value);
-  }, [data, corridorOn]);
+  const landuseOf = React.useCallback(
+    (withSel: boolean): Datum[] => {
+      const m = new Map<string, number>();
+      for (const p of data?.parcels ?? []) {
+        /* Өөрийн хэмжээсийг (зориулалт) алгасна */
+        if (!baseOn.has(p.corridor)) continue;
+        if (withSel && selCorridor != null && p.corridor !== selCorridor) continue;
+        if (withSel && selParcel && p.oid !== selParcel.oid) continue;
+        m.set(p.landuse, (m.get(p.landuse) ?? 0) + 1);
+      }
+      return [...m]
+        .map(([k, v]) => ({ key: k, label: k, value: v }))
+        .sort((a, b) => b.value - a.value);
+    },
+    [data, baseOn, selCorridor, selParcel],
+  );
+  /* Диаграм сонголтыг дагана; цэс хумигдахгүй — өөр утга руу шилжих зам */
+  const byLanduse = React.useMemo(() => landuseOf(true), [landuseOf]);
+  const menuLanduse = React.useMemo(() => landuseOf(false), [landuseOf]);
 
   /*
     Эрхийн төрөл — БҮС ТУС БҮРЭЭР.
@@ -255,7 +324,11 @@ export function EcoDashboard() {
   const byCorridor = React.useMemo<Datum[]>(() => {
     /* Өөрийнхөө хэмжигдэхүүнийг (бүс) АЛГАСЧ шүүнэ — эс тэгвээс нэг бүс
        сонгомогц бусад нь алга болж, өөр бүс рүү шилжих боломжгүй болно */
-    const corridors = (rows ?? []).filter((r) => !district || r.district === district);
+    const corridors = (rows ?? []).filter(
+      (r) =>
+        (!district || r.district === district) &&
+        (selCorridor == null || r.oid === selCorridor),
+    );
     const zoneOf = new Map(corridors.map((r) => [r.oid, r.zone]));
 
     const count = new Map<string, number>();
@@ -263,13 +336,14 @@ export function EcoDashboard() {
       const z = zoneOf.get(p.corridor);
       if (!z) continue;
       if (landuse && p.landuse !== landuse) continue;
+      if (selParcel && p.oid !== selParcel.oid) continue;
       count.set(z, (count.get(z) ?? 0) + 1);
     }
 
     return corridors
       .filter((c) => count.has(c.zone))
       .map((c) => ({ key: c.zone, label: c.zone, value: count.get(c.zone)! }));
-  }, [data, rows, district, landuse]);
+  }, [data, rows, district, landuse, selCorridor, selParcel]);
 
   /**
    * Коридорын ТАЛБАЙ, га — диаграмын мөрд нэмэлт утга болж гарна.
@@ -291,36 +365,34 @@ export function EcoDashboard() {
   /** Эрхийн төрлийн задаргаа — картын толгойд нэг мөрөөр */
   const rightNote = React.useMemo(() => {
     const m = new Map<string, number>();
-    for (const p of data?.parcels ?? []) {
-      if (landuse && p.landuse !== landuse) continue;
-      m.set(p.right, (m.get(p.right) ?? 0) + 1);
-    }
+    /* Дүүрэг, бүс, зориулалт, сонголт бүгд үйлчилнэ */
+    for (const p of keptParcels) m.set(p.right, (m.get(p.right) ?? 0) + 1);
     return [...m]
       .sort((a, b) => b[1] - a[1])
       .map(([k, v]) => `${num(v)} ${k}`)
       .join(" · ");
-  }, [data, landuse]);
+  }, [keptParcels]);
 
   const stats = React.useMemo(() => {
-    const ha = shownCorridors.reduce((s, r) => s + r.ha, 0);
+    const ha = keptCorridors.reduce((s, r) => s + r.ha, 0);
     return {
-      n: shownCorridors.length,
+      n: keptCorridors.length,
       ha,
-      parcels: shownParcels.length,
-      landuses: new Set(shownParcels.map((p) => p.landuse)).size,
+      parcels: keptParcels.length,
+      landuses: new Set(keptParcels.map((p) => p.landuse)).size,
     };
-  }, [shownCorridors, shownParcels]);
+  }, [keptCorridors, keptParcels]);
 
   /* ---------------- Сонголтын хүрээ (zoom action) ---------------- */
   const focus = React.useMemo<Extent | null>(() => {
     if (!data) return null;
-    if (picked == null && !district && !zone && !landuse) return null;
+    if (sel == null && !district && !zone && !landuse) return null;
     const b = new Bounds();
 
-    if (picked != null) {
+    if (sel != null) {
       const src =
-        picked >= PARCEL_BASE ? data.parcelShapes.features : data.shapes.features;
-      const want = picked >= PARCEL_BASE ? picked - PARCEL_BASE : picked;
+        sel >= PARCEL_BASE ? data.parcelShapes.features : data.shapes.features;
+      const want = sel >= PARCEL_BASE ? sel - PARCEL_BASE : sel;
       const f = src.find((x) => Number(x.id) === want);
       b.addGeometry(f?.geometry);
       return b.get(0.0008);
@@ -338,7 +410,7 @@ export function EcoDashboard() {
       }
     }
     return b.get(0.004);
-  }, [data, corridorOn, shownParcels, picked, district, zone, landuse]);
+  }, [data, corridorOn, shownParcels, sel, district, zone, landuse]);
 
   /*
     Коридор ба нэгж талбар нь НЭГ дугаарын орон зайд шахагдсан
@@ -367,15 +439,7 @@ export function EcoDashboard() {
    * Коридор ба нэгж талбар хоёр ӨӨР бичилт тул төрлийг нь хамт
    * барина: талбарууд нь огт давхцахгүй.
    */
-  const chosen = React.useMemo(() => {
-    if (picked == null) return null;
-    if (picked >= PARCEL_BASE) {
-      const p = data?.parcels.find((x) => x.oid === picked - PARCEL_BASE);
-      return p ? ({ kind: "parcel", p } as const) : null;
-    }
-    const c = rows?.find((r) => r.oid === picked);
-    return c ? ({ kind: "corridor", c } as const) : null;
-  }, [data, rows, picked]);
+  const chosen = React.useMemo(() => resolve(sel), [resolve, sel]);
 
   function reset() {
     setDistrict(null);
@@ -402,7 +466,8 @@ export function EcoDashboard() {
     );
   }
 
-  const activeCount = (district ? 1 : 0) + (zone ? 1 : 0) + (landuse ? 1 : 0);
+  const activeCount =
+    (district ? 1 : 0) + (zone ? 1 : 0) + (landuse ? 1 : 0) + (sel != null ? 1 : 0);
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-2.5">
@@ -448,7 +513,7 @@ export function EcoDashboard() {
           width={330}
         >
           <PickList
-            items={byLanduse}
+            items={menuLanduse}
             selected={landuse}
             onPick={setLanduse}
             searchable
@@ -498,9 +563,9 @@ export function EcoDashboard() {
                 /* `glow` УНТРААЛТТАЙ: гэрэл нь цөөн том талбайд
                    зориулагдсан бөгөөд мянга гаруй жижиг нэгж талбар
                    дээр хоорондоо нийлж, зураг манантана */
-                shapes={{ data: shapes, selected: picked, labelZoom: 9 }}
+                shapes={{ data: shapes, selected: sel, labelZoom: 9 }}
                 basemap={basemap}
-                onSelect={setPicked}
+                onSelect={(oid) => setPicked(sel === oid ? null : oid)}
                 onHover={tip.onHover}
                 focus={focus}
                 overlays={overlays}

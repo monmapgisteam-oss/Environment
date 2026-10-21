@@ -12,6 +12,7 @@ import {
   MousePointerClick,
   Trash2,
   TriangleAlert,
+  X,
 } from "lucide-react";
 import { BasemapGallery } from "@/components/map/basemap-gallery";
 import { MapTip, MapTipRow, useMapTip } from "@/components/map/hover-tip";
@@ -29,6 +30,7 @@ import {
   type LayerInfo,
 } from "@/lib/portal-layers";
 import { WASTE } from "@/lib/hyanalt-layers";
+import { Bounds } from "@/lib/extent";
 import { cn, num } from "@/lib/utils";
 
 const PointMap = dynamic(
@@ -115,6 +117,9 @@ type Rec = {
   lon: number | null;
   lat: number | null;
   row: Record<string, unknown>;
+  /** Дүүргийн нэр (эх бичвэр) ба шүүлтийн түлхүүр */
+  dname: string;
+  dkey: string;
   /** Зөвхөн аюултайд — зөвшөөрөл олгосон, дуусах огноо (мс) */
   issued: number | null;
   expires: number | null;
@@ -178,6 +183,14 @@ function expiryTone(expires: number | null, today: number): string {
   return "var(--moss)";
 }
 
+/**
+ * Дүүргийн шүүлтийн түлхүүр — хоёр давхарга "Баянзүрх" / "Баянзүрх
+ * дүүрэг" гэж өөрөөр бичсэн байж болох тул дагавар, үсгийн томыг хасна.
+ */
+function distKey(name: string): string {
+  return name.replace(/\s*дүүрэг$/i, "").trim().toLowerCase();
+}
+
 function toRecs(
   kind: Kind,
   info: LayerInfo,
@@ -203,10 +216,13 @@ function toRecs(
       text(pick(row, kind === "hazard" ? "tosol_ner" : "tseg_ner", "ner", "name")) ||
       (firstString ? text(row[firstString]) : "") ||
       `№${oid}`;
+    const dname = text(pick(row, "duureg"));
     return {
       uid: base + oid,
       kind,
       name,
+      dname,
+      dkey: distKey(dname),
       place: [text(pick(row, "duureg")), text(pick(row, "horoo"))]
         .filter(Boolean)
         .join(" · "),
@@ -260,6 +276,8 @@ export function WasteDashboard() {
   const [today] = React.useState(() => Date.now());
   const [mode, setMode] = React.useState<Kind>("hazard");
   const [picked, setPicked] = React.useState<number | null>(null);
+  /** Дүүргийн шүүлт (`Rec.dkey`) — "Дүүргээр" картаас */
+  const [district, setDistrict] = React.useState<string | null>(null);
   const [basemap, setBasemap] = React.useState<Basemap>(defaultBasemap);
   const tip = useMapTip();
 
@@ -281,6 +299,35 @@ export function WasteDashboard() {
   const all = React.useMemo(() => [...permits, ...sites], [permits, sites]);
   const byUid = React.useMemo(() => new Map(all.map((r) => [r.uid, r])), [all]);
 
+  /*
+    ДҮҮРГИЙН ШҮҮЛТ — зураг, хоёр жагсаалт, үзүүлэлт бүгд хумигдана.
+    "Дүүргээр" карт өөрийн хэмжээсийг алгасна (өөр дүүрэг рүү шилжих
+    боломж үлдэнэ).
+  */
+  const permitsF = React.useMemo(
+    () => (district == null ? permits : permits.filter((r) => r.dkey === district)),
+    [permits, district],
+  );
+  const sitesF = React.useMemo(
+    () => (district == null ? sites : sites.filter((r) => r.dkey === district)),
+    [sites, district],
+  );
+
+  /*
+    ЗУРАГ, ЖАГСААЛТЫН СОНГОЛТ нь ШҮҮЛТ: үзүүлэлт тэр бүртгэлээр
+    хумигдана. Дүүргийн шүүлтээс гарсан бол ДАМ цуцлагдана — эффектээр
+    биш. ⚠ Зургийн `visible`, сонгох жагсаалтыг ХУМИХГҮЙ.
+  */
+  const pickedRec = picked == null ? null : (byUid.get(picked) ?? null);
+  const sel =
+    pickedRec && (district == null || pickedRec.dkey === district) ? pickedRec.uid : null;
+
+  const distLabel = React.useMemo(() => {
+    const m = new Map<string, string>();
+    for (const r of all) if (r.dname && !m.has(r.dkey)) m.set(r.dkey, r.dname);
+    return m;
+  }, [all]);
+
   /* Хугацааны туузны нийтлэг хуваарь — бүх мөр НЭГ тэнхлэгтэй */
   const span = React.useMemo(() => {
     let lo = Infinity;
@@ -298,11 +345,21 @@ export function WasteDashboard() {
     return { from, to };
   }, [permits, today]);
 
+  /* Үзүүлэлт — дүүрэг ба сонголтыг дагана */
+  const permitsS = React.useMemo(
+    () => (sel == null ? permitsF : permitsF.filter((r) => r.uid === sel)),
+    [permitsF, sel],
+  );
+  const sitesS = React.useMemo(
+    () => (sel == null ? sitesF : sitesF.filter((r) => r.uid === sel)),
+    [sitesF, sel],
+  );
+
   const stats = React.useMemo(() => {
     let valid = 0;
     let soon = 0;
     let expired = 0;
-    for (const r of permits) {
+    for (const r of permitsS) {
       if (r.expires == null) continue;
       if (r.expires < today) expired++;
       else {
@@ -311,7 +368,7 @@ export function WasteDashboard() {
       }
     }
     return { valid, soon, expired };
-  }, [permits, today]);
+  }, [permitsS, today]);
 
   /* ---------------- Газрын зураг ---------------- */
 
@@ -328,14 +385,23 @@ export function WasteDashboard() {
       marks[r.uid] = r.kind === "hazard" ? HAZARD_PIN : COMMON_PIN;
     }
     const points: MapPoints = { oid, lon, lat };
-    return { points, marks, visible: Uint32Array.from(oid, (_, i) => i) };
+    return { points, marks };
   }, [all]);
+
+  /* Дүүргийн шүүлт зургийг хумина; сонголт ХУМИХГҮЙ */
+  const visible = React.useMemo(() => {
+    const { oid } = map.points;
+    if (district == null) return Uint32Array.from(oid, (_, i) => i);
+    const out: number[] = [];
+    oid.forEach((u, i) => byUid.get(u)?.dkey === district && out.push(i));
+    return Uint32Array.from(out);
+  }, [map, district, byUid]);
 
   /* Хоёр давхарга хоёулаа ирсэн үед л зургийг үүсгэнэ: эх сурвалжийн
      тохиргоо нь анхны зурагдалтад л уншигддаг */
   const ready = (hazard || failed.hazard) && (common || failed.common);
 
-  const selected = picked == null ? null : (byUid.get(picked) ?? null);
+  const selected = sel == null ? null : pickedRec;
   const hovered = tip.oid == null ? null : (byUid.get(tip.oid) ?? null);
   const lit = hovered ?? selected;
   const highlight = React.useMemo<[number, number] | null>(
@@ -344,20 +410,41 @@ export function WasteDashboard() {
   );
 
   const focus = React.useMemo<Extent | null>(() => {
-    if (!selected || selected.lon == null || selected.lat == null) return null;
-    const d = 0.012;
-    return [selected.lon - d, selected.lat - d, selected.lon + d, selected.lat + d];
-  }, [selected]);
+    if (selected && selected.lon != null && selected.lat != null) {
+      const d = 0.012;
+      return [selected.lon - d, selected.lat - d, selected.lon + d, selected.lat + d];
+    }
+    if (district == null) return null;
+    /* Дүүрэг шүүхэд үлдсэн цэгүүд рүү ойртоно */
+    const b = new Bounds();
+    for (const r of [...permitsF, ...sitesF]) {
+      if (r.lon != null && r.lat != null) b.add(r.lon, r.lat);
+    }
+    return b.get(0.008);
+  }, [selected, district, permitsF, sitesF]);
 
   const choose = React.useCallback(
     (uid: number) => {
       const r = byUid.get(uid);
       if (!r) return;
       setMode(r.kind);
-      setPicked((p) => (p === uid ? null : uid));
+      /* Өөр дүүргийн бүртгэл сонговол дүүргийн шүүлт цуцлагдана — эс
+         тэгвээс сонголт шүүлтэд хасагдаж юу ч болоогүй мэт харагдана */
+      setDistrict((d) => (d != null && d !== r.dkey ? null : d));
+      setPicked((p) => (p === uid && sel === uid ? null : uid));
     },
-    [byUid],
+    [byUid, sel],
   );
+
+  const pickDistrict = React.useCallback((key: string) => {
+    setDistrict((d) => (d === key ? null : key));
+    setPicked(null);
+  }, []);
+
+  const clearDistrict = React.useCallback(() => {
+    setDistrict(null);
+    setPicked(null);
+  }, []);
 
   const toggleCommon = React.useCallback(() => {
     setMode((m) => (m === "common" ? "hazard" : "common"));
@@ -369,6 +456,18 @@ export function WasteDashboard() {
       {/* ---- ТОЛГОЙ: гарчиг ба баруун самбарын товч ---- */}
       <div className="workspace-filterbar flex shrink-0 flex-wrap items-center gap-2 rounded-xl border border-line bg-paper-2 px-3 py-2.5">
         <span className="shrink-0 text-[13px] font-semibold text-ink">Ландфилл</span>
+
+        {district != null ? (
+          <button
+            type="button"
+            onClick={clearDistrict}
+            className="flex shrink-0 items-center gap-1.5 rounded-xs border border-data/45 bg-data/10 px-2 py-1 text-[11px] leading-none text-ink"
+          >
+            <MapPin size={11} aria-hidden />
+            {distLabel.get(district) ?? "Тодорхойгүй"}
+            <X size={11} aria-hidden />
+          </button>
+        ) : null}
 
         <button
           type="button"
@@ -382,7 +481,7 @@ export function WasteDashboard() {
 
       {/* ---- ҮЗҮҮЛЭЛТ ---- */}
       <div className="analytics-overview" aria-label="Өгөгдлийн тойм">
-        <Stat icon={FileCheck2} label="Аюултай хог хаягдлын зөвшөөрөл" value={hazard ? num(permits.length) : "…"} />
+        <Stat icon={FileCheck2} label="Аюултай хог хаягдлын зөвшөөрөл" value={hazard ? num(permitsS.length) : "…"} />
         <Stat icon={CalendarClock} label="Хугацаа хүчинтэй зөвшөөрөл" value={hazard ? num(stats.valid) : "…"} />
         <Stat
           icon={CalendarX2}
@@ -390,7 +489,7 @@ export function WasteDashboard() {
           value={hazard ? num(stats.soon) : "…"}
           tone={stats.soon > 0 ? "var(--ochre)" : undefined}
         />
-        <Stat icon={Trash2} label="Энгийн хог хаягдлын цэг" value={common ? num(sites.length) : "…"} />
+        <Stat icon={Trash2} label="Энгийн хог хаягдлын цэг" value={common ? num(sitesS.length) : "…"} />
       </div>
 
       <Columns id="hyanalt-waste" left={340} right={330} className="min-h-0 flex-1">
@@ -399,7 +498,7 @@ export function WasteDashboard() {
           <PanelHead
             dot={HAZARD_HEX}
             title="Аюултай хог хаягдлын зөвшөөрөл"
-            count={hazard ? permits.length : undefined}
+            count={hazard ? permitsF.length : undefined}
           />
           {span ? <Axis from={span.from} to={span.to} today={today} /> : null}
           <div className="min-h-0 flex-1 overflow-y-auto">
@@ -407,17 +506,17 @@ export function WasteDashboard() {
               <Failed message={failed.hazard} />
             ) : !hazard ? (
               <Pending />
-            ) : permits.length === 0 ? (
+            ) : permitsF.length === 0 ? (
               <Waiting />
             ) : (
               <ul className="divide-y divide-line">
-                {permits.map((r) => (
+                {permitsF.map((r) => (
                   <PermitRow
                     key={r.uid}
                     rec={r}
                     span={span}
                     today={today}
-                    on={picked === r.uid}
+                    on={sel === r.uid}
                     hot={tip.oid === r.uid}
                     onPick={() => choose(r.uid)}
                   />
@@ -432,9 +531,9 @@ export function WasteDashboard() {
           {ready ? (
             <PointMap
               points={map.points}
-              visible={map.visible}
+              visible={visible}
               marks={map.marks}
-              pickedMark={picked}
+              pickedMark={sel}
               /* ⚠ Нэрийн шошго УНТРААЛТТАЙ (хэрэглэгч, 2026-10-05) — нэр нь
                  хөвөгч тайлбар, жагсаалт, баруун самбарт гардаг */
               basemap={basemap}
@@ -454,8 +553,8 @@ export function WasteDashboard() {
 
           <Legend
             items={[
-              { kind: "hazard", label: "Аюултай хог хаягдал", count: hazard?.recs.length },
-              { kind: "common", label: "Энгийн хог хаягдал", count: common?.recs.length },
+              { kind: "hazard", label: "Аюултай хог хаягдал", count: hazard ? permitsF.length : undefined },
+              { kind: "common", label: "Энгийн хог хаягдал", count: common ? sitesF.length : undefined },
             ]}
           />
 
@@ -505,23 +604,23 @@ export function WasteDashboard() {
               <PanelHead
                 dot={COMMON_HEX}
                 title="Энгийн хог хаягдлын цэг"
-                count={common ? sites.length : undefined}
+                count={common ? sitesF.length : undefined}
               />
               <div className="min-h-0 flex-1 overflow-y-auto">
                 {failed.common ? (
                   <Failed message={failed.common} />
                 ) : !common ? (
                   <Pending />
-                ) : sites.length === 0 ? (
+                ) : sitesF.length === 0 ? (
                   <Waiting />
                 ) : (
                   <div className="divide-y divide-line">
-                    {sites.map((r) => (
+                    {sitesF.map((r) => (
                       <SiteBlock
                         key={r.uid}
                         rec={r}
                         info={common.info}
-                        on={picked === r.uid}
+                        on={sel === r.uid}
                         onPick={() => choose(r.uid)}
                       />
                     ))}
@@ -545,7 +644,13 @@ export function WasteDashboard() {
                 ) : !hazard ? (
                   <Pending />
                 ) : (
-                  <Districts recs={permits} today={today} onPick={choose} />
+                  <Districts
+                    recs={permits}
+                    today={today}
+                    active={district}
+                    onDistrict={pickDistrict}
+                    onPick={choose}
+                  />
                 )}
               </div>
             </>
@@ -792,35 +897,63 @@ function PermitRow({
 
 /* ---------------- Баруун самбарын агуулга ---------------- */
 
-/** Сонгоогүй үед — дүүрэг бүрийн зөвшөөрлүүд, нэрээрээ */
+/**
+ * Сонгоогүй үед — дүүрэг бүрийн зөвшөөрлүүд, нэрээрээ. Дүүргийн мөр
+ * товшиход ДҮҮРГИЙН ШҮҮЛТ болно (зураг, жагсаалт, үзүүлэлт хумигдана);
+ * дахин товшиход цуцлагдана. Өөрийн хэмжээсийг алгасна — бүх дүүрэг
+ * харагдсаар байна.
+ */
 function Districts({
   recs,
   today,
+  active,
+  onDistrict,
   onPick,
 }: {
   recs: Rec[];
   today: number;
+  active: string | null;
+  onDistrict: (key: string) => void;
   onPick: (uid: number) => void;
 }) {
   const groups = React.useMemo(() => {
-    const m = new Map<string, Rec[]>();
+    const m = new Map<string, { label: string; list: Rec[] }>();
     for (const r of recs) {
-      const k = text(pick(r.row, "duureg")) || "Тодорхойгүй";
-      m.set(k, [...(m.get(k) ?? []), r]);
+      const g = m.get(r.dkey);
+      if (g) g.list.push(r);
+      else m.set(r.dkey, { label: r.dname || "Тодорхойгүй", list: [r] });
     }
-    return [...m].sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0], "mn"));
+    return [...m].sort(
+      (a, b) =>
+        b[1].list.length - a[1].list.length || a[1].label.localeCompare(b[1].label, "mn"),
+    );
   }, [recs]);
 
   if (!groups.length) return <Waiting />;
 
   return (
     <div className="divide-y divide-line">
-      {groups.map(([district, list]) => (
-        <div key={district} className="px-4 py-2.5">
-          <div className="flex items-baseline justify-between gap-2">
-            <span className="text-[12px] font-medium text-ink">{district}</span>
+      {groups.map(([key, { label: district, list }]) => (
+        <div
+          key={key}
+          className={cn(
+            "relative px-4 py-2.5",
+            active === key && "bg-data/6",
+            active != null && active !== key && "opacity-55",
+          )}
+        >
+          {active === key ? (
+            <span aria-hidden className="absolute inset-y-0 left-0 w-[2px] bg-data" />
+          ) : null}
+          <button
+            type="button"
+            aria-pressed={active === key}
+            onClick={() => onDistrict(key)}
+            className="flex w-full items-baseline justify-between gap-2 text-left"
+          >
+            <span className="text-[12px] font-medium text-ink hover:text-data">{district}</span>
             <span className="num text-[11px] text-ink-3">{num(list.length)}</span>
-          </div>
+          </button>
           <ul className="mt-1.5 space-y-1">
             {list.map((r) => (
               <li key={r.uid}>

@@ -120,6 +120,23 @@ export function LicensesDashboard() {
 
   const shown = React.useMemo(() => (rows ?? []).filter((l) => keep(l)), [rows, keep]);
 
+  /*
+    Сонгосон зөвшөөрөл нь диаграм, үзүүлэлтийн ШҮҮЛТ (хөндлөн шүүлт хоёр
+    тийш). Бусад шүүлтэд тохирохгүй бол сонголт ДАМ цуцлагдана. Газрын
+    зураг, жагсаалт сонголтоор хумигдахгүй — өөр зөвшөөрөл сонгох зам.
+  */
+  const sel = React.useMemo(
+    () => (picked != null && shown.some((l) => l.oid === picked) ? picked : null),
+    [shown, picked],
+  );
+
+  /** Диаграм, үзүүлэлтийн шүүлт — сонгосон зөвшөөрөлтэй хамт */
+  const keepSel = React.useCallback(
+    (l: License, skip?: "term" | "mineral" | "district" | "expiry") =>
+      keep(l, skip) && (sel == null || l.oid === sel),
+    [keep, sel],
+  );
+
   /** Датаны хамрах хугацаа — шүүлтүүрийн хязгаар, "бүх хугацаа"-ны жишиг */
   const span = React.useMemo<[number, number] | null>(() => {
     const ys = (rows ?? []).map((l) => l.expires).filter((y): y is number => y != null);
@@ -169,6 +186,18 @@ export function LicensesDashboard() {
   const byMineral = React.useMemo<Datum[]>(() => {
     const m = new Map<string, number>();
     for (const l of rows ?? []) {
+      if (!keepSel(l, "mineral")) continue;
+      m.set(l.mineral, (m.get(l.mineral) ?? 0) + 1);
+    }
+    return [...m]
+      .map(([k, v]) => ({ key: k, label: k, value: v }))
+      .sort((a, b) => b.value - a.value);
+  }, [rows, keepSel]);
+
+  /* Шүүлтүүрийн цэс сонголтоор хумигдахгүй — шүүгдээгүй жагсаалтаас */
+  const mineralMenu = React.useMemo<Datum[]>(() => {
+    const m = new Map<string, number>();
+    for (const l of rows ?? []) {
       if (!keep(l, "mineral")) continue;
       m.set(l.mineral, (m.get(l.mineral) ?? 0) + 1);
     }
@@ -196,7 +225,7 @@ export function LicensesDashboard() {
     /* Диаграм ӨӨРИЙНХӨӨ шүүлтийг алгасна — эс тэгвээс нэг он сонгомогц
        бусад багана алга болж, харьцуулах юм үлдэхгүй */
     const years = (rows ?? [])
-      .filter((l) => keep(l, "expiry"))
+      .filter((l) => keepSel(l, "expiry"))
       .map((l) => l.expires)
       .filter((y): y is number => y != null);
     if (!years.length) return [];
@@ -209,32 +238,34 @@ export function LicensesDashboard() {
       out.push({ key: String(y), label: String(y), value: c.get(y) ?? 0 });
     }
     return out;
-  }, [rows, keep]);
+  }, [rows, keepSel]);
 
   const stats = React.useMemo(() => {
-    const ha = shown.reduce((s, l) => s + l.ha, 0);
-    const soon = shown.filter((l) => termOf(l.expires, now) === "soon").length;
+    const own = sel == null ? shown : shown.filter((l) => l.oid === sel);
+    const ha = own.reduce((s, l) => s + l.ha, 0);
+    const soon = own.filter((l) => termOf(l.expires, now) === "soon").length;
     return {
-      n: shown.length,
+      n: own.length,
       ha,
-      holders: new Set(shown.map((l) => l.holder)).size,
+      holders: new Set(own.map((l) => l.holder)).size,
       soon,
     };
-  }, [shown, now]);
+  }, [shown, sel, now]);
 
   /* ---------------- Сонголтын хүрээ (zoom action) ----------------
      Сонгосон зөвшөөрөл рүү, эс бөгөөс шүүлтүүрт таарсан бүх талбай руу
      ойртоно. Шүүлтүүр цуцлагдвал `null` — зураг анхны байрлалдаа буцна. */
   const focus = React.useMemo<Extent | null>(() => {
     if (!data) return null;
-    if (picked == null && !term && !mineral && !district) return null;
-    const on = picked != null ? new Set([picked]) : new Set(shown.map((l) => l.oid));
+    /* Хугацааны муж ч шүүлт — хумигдвал зураг дагаж ойртоно */
+    if (sel == null && !term && wholeRange && !mineral && !district) return null;
+    const on = sel != null ? new Set([sel]) : new Set(shown.map((l) => l.oid));
     const b = new Bounds();
     for (const f of data.shapes.features) {
       if (on.has(Number(f.id))) b.addGeometry(f.geometry);
     }
     return b.get(0.002);
-  }, [data, shown, picked, term, mineral, district]);
+  }, [data, shown, sel, term, wholeRange, mineral, district]);
 
   /** Хулгана дээр очсон зөвшөөрөл — газрын зурагнаас */
   const hovered = React.useMemo(
@@ -244,9 +275,9 @@ export function LicensesDashboard() {
 
   /* Тогтмол самбар: товшсон, эсвэл ЖАГСААЛТЫН мөр дээр очсон зөвшөөрөл */
   const active = React.useMemo(() => {
-    const id = hover ?? picked;
+    const id = hover ?? sel;
     return id == null ? null : (rows?.find((l) => l.oid === id) ?? null);
-  }, [rows, hover, picked]);
+  }, [rows, hover, sel]);
 
   function clearRange() {
     setRange(span);
@@ -279,7 +310,11 @@ export function LicensesDashboard() {
   }
 
   const activeCount =
-    (term ? 1 : 0) + (wholeRange ? 0 : 1) + (mineral ? 1 : 0) + (district ? 1 : 0);
+    (term ? 1 : 0) +
+    (wholeRange ? 0 : 1) +
+    (mineral ? 1 : 0) +
+    (district ? 1 : 0) +
+    (sel != null ? 1 : 0);
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-2.5">
@@ -328,7 +363,7 @@ export function LicensesDashboard() {
           onClear={() => setMineral(null)}
           width={230}
         >
-          <PickList items={byMineral} selected={mineral} onPick={setMineral} />
+          <PickList items={mineralMenu} selected={mineral} onPick={setMineral} />
         </FilterMenu>
 
         <FilterMenu
@@ -366,12 +401,12 @@ export function LicensesDashboard() {
               {shown.map((l) => (
                 <button
                   key={l.oid}
-                  onClick={() => setPicked(picked === l.oid ? null : l.oid)}
+                  onClick={() => setPicked(sel === l.oid ? null : l.oid)}
                   onMouseEnter={() => setHover(l.oid)}
                   onMouseLeave={() => setHover(null)}
                   className={cn(
                     "block w-full px-3 py-2 text-left transition-colors hover:bg-paper-hi",
-                    picked === l.oid && "bg-paper-hi",
+                    sel === l.oid && "bg-paper-hi",
                   )}
                 >
                   <div className="flex items-baseline justify-between gap-2">
@@ -422,9 +457,9 @@ export function LicensesDashboard() {
                 <PointMap
                   points={NO_POINTS}
                   visible={NO_INDEX}
-                  shapes={{ data: shapes, selected: picked, labelZoom: 11, edge: "hair" }}
+                  shapes={{ data: shapes, selected: sel, labelZoom: 11, edge: "hair" }}
                   basemap={basemap}
-                  onSelect={setPicked}
+                  onSelect={(oid) => setPicked(sel === oid ? null : oid)}
                   onHover={tip.onHover}
                   focus={focus}
                   cluster={false}

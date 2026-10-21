@@ -127,6 +127,17 @@ export function MineralsDashboard() {
 
   const shown = React.useMemo(() => (sites ?? []).filter((s) => keep(s)), [sites, keep]);
 
+  /*
+    Сонгосон талбай нь задаргаа, үзүүлэлтийн ШҮҮЛТ (хөндлөн шүүлт хоёр
+    тийш). Бусад шүүлтэд тохирохгүй бол сонголт ДАМ цуцлагдана. Газрын
+    зураг, талбай тус бүрийн диаграм, хугацааны хуваарь нь СОНГОХ зам —
+    сонголтоор хумигдахгүй, зөвхөн тодруулна.
+  */
+  const sel = React.useMemo(
+    () => (picked != null && shown.some((s) => s.id === picked) ? picked : null),
+    [shown, picked],
+  );
+
   /** Датаны хамрах бүтэн хугацаа — шүүлтүүрийн хязгаар */
   const limits = React.useMemo<[number, number] | null>(() => {
     const ys = (sites ?? [])
@@ -208,14 +219,15 @@ export function MineralsDashboard() {
   );
 
   const stats = React.useMemo(() => {
-    const ha = shown.reduce((s, x) => s + x.ha, 0);
+    const own = sel == null ? shown : shown.filter((s) => s.id === sel);
+    const ha = own.reduce((s, x) => s + x.ha, 0);
     return {
-      n: shown.length,
+      n: own.length,
       ha,
-      holders: new Set(shown.map((s) => s.holder)).size,
-      expired: shown.filter((s) => isExpired(s, now)).length,
+      holders: new Set(own.map((s) => s.holder)).size,
+      expired: own.filter((s) => isExpired(s, now)).length,
     };
-  }, [shown, now]);
+  }, [shown, sel, now]);
 
   /*
     Хугацааны хуваарийн хуваарь. Бүх зөвшөөрлийн ХАМГИЙН эрт олгогдсон
@@ -236,9 +248,10 @@ export function MineralsDashboard() {
      ойртоно. Шүүлтүүр цуцлагдвал `null` — зураг анхны байрлалдаа буцна. */
   const focus = React.useMemo<Extent | null>(() => {
     if (!data) return null;
-    if (picked == null && !mineral && !district) return null;
+    /* Хугацааны муж ч шүүлт — хумигдвал зураг дагаж ойртоно */
+    if (sel == null && wholeRange && !mineral && !district) return null;
     const b = new Bounds();
-    for (const s of picked != null ? shown.filter((x) => x.id === picked) : shown) {
+    for (const s of sel != null ? shown.filter((x) => x.id === sel) : shown) {
       const box = data.bounds.get(s.id);
       if (!box) continue;
       b.add(box[0], box[1]);
@@ -246,7 +259,7 @@ export function MineralsDashboard() {
     }
     /* Талбай жижиг байж болно — хамгийн багадаа ~450м хүрээ өгнө */
     return b.get(0.004);
-  }, [data, shown, picked, mineral, district]);
+  }, [data, shown, sel, wholeRange, mineral, district]);
 
   /** Хулгана дээр очсон талбай — газрын зурагнаас */
   const hovered = React.useMemo(
@@ -260,9 +273,9 @@ export function MineralsDashboard() {
     тэнд утгагүй — зөвхөн газрын зураг дээр хөвнө.
   */
   const active = React.useMemo(() => {
-    const id = hover ?? picked;
+    const id = hover ?? sel;
     return id == null ? null : (sites?.find((s) => s.id === id) ?? null);
-  }, [sites, hover, picked]);
+  }, [sites, hover, sel]);
 
   function clearRange() {
     setRange(limits);
@@ -293,7 +306,8 @@ export function MineralsDashboard() {
     );
   }
 
-  const activeCount = (wholeRange ? 0 : 1) + (mineral ? 1 : 0) + (district ? 1 : 0);
+  const activeCount =
+    (wholeRange ? 0 : 1) + (mineral ? 1 : 0) + (district ? 1 : 0) + (sel != null ? 1 : 0);
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-2.5">
@@ -380,9 +394,9 @@ export function MineralsDashboard() {
               <PointMap
                 points={NO_POINTS}
                 visible={NO_INDEX}
-                shapes={{ data: shapes, selected: picked }}
+                shapes={{ data: shapes, selected: sel }}
                 basemap={basemap}
-                onSelect={setPicked}
+                onSelect={(oid) => setPicked(sel === oid ? null : oid)}
                 onHover={tip.onHover}
                 focus={focus}
                 overlays={overlays}
@@ -456,7 +470,7 @@ export function MineralsDashboard() {
               <RowChart
                 data={byLicense}
                 colorOf={(d) => rampColor(Number(d.key) - 1)}
-                selected={picked == null ? null : String(picked)}
+                selected={sel == null ? null : String(sel)}
                 onSelect={(k) => setPicked(k == null ? null : Number(k))}
                 format={(v) => num(v)}
               />
@@ -480,8 +494,8 @@ export function MineralsDashboard() {
               sites={shown}
               span={span}
               now={now}
-              picked={picked}
-              onPick={(id) => setPicked(picked === id ? null : id)}
+              picked={sel}
+              onPick={(id) => setPicked(sel === id ? null : id)}
               onHover={setHover}
             />
           ) : null}
