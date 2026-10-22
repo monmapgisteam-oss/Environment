@@ -28,7 +28,6 @@ import {
 } from "lucide-react";
 import { Panel, PanelHead } from "@/components/ui/panel";
 import { Badge } from "@/components/ui/data";
-import { Segments } from "@/components/unelgee/viz";
 import { DEPARTMENTS, SHORT_NAMES, STATUS_LABEL, getDepartment } from "@/lib/departments";
 import {
   LEAD_DEPT,
@@ -103,7 +102,7 @@ export function ZahirgaaOverview() {
           хоосон зай маш их байна") — урьд нь тайлан баруун талд давхарлагдаж,
           зүүн карт тэр өндрөөр сунаж доороо хоосон үлддэг байв */}
       <div className="grid gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
-        <StaffCard staff={staff} picked={picked} onPick={setPicked} />
+        <PositionsChart staff={staff} picked={picked} onPick={setPicked} />
         <EventsCalendar />
       </div>
     </div>
@@ -156,41 +155,7 @@ function LoadState<T>({ load, className }: { load: Load<T>; className?: string }
 
 /* ------------------------- албан хаагчийн карт -------------------- */
 
-const STAFF_VIEWS = [
-  { id: "dept", label: "Хэлтсээр" },
-  { id: "position", label: "Албан тушаалаар" },
-] as const;
-type StaffView = (typeof STAFF_VIEWS)[number]["id"];
-
-/**
- * Албан хаагчид — ХЭЛТСЭЭР ба АЛБАН ТУШААЛААР гэсэн хоёр харагдац НЭГ
- * картад, толгойн сэлгэгчээр (хэрэглэгч 2026-10-22: "давхарлаад switch
- * хийдэг болго"). Урьд нь хоёр тусдаа карт дээр доороо давхарлаж байв.
- *
- * ⚠ Хэлтсийн мөр товшиход тэр хэлтэс СОНГОГДОЖ, албан тушаалын харагдац
- * руу ӨӨРӨӨ шилжинэ — сонголтын зорилго нь яг тэр жагсаалтыг харах.
- * Сонголт сэлгэхэд хадгалагдана (бүтцийн хайрцаг тодорсон хэвээр);
- * "Бүх хэлтэс" товчоор цуцлагдана.
- */
-function StaffCard({ staff, picked, onPick }: { staff: Load<Staff>; picked: string | null; onPick: (k: string | null) => void }) {
-  const [view, setView] = React.useState<StaffView>("dept");
-  const switcher = <Segments options={STAFF_VIEWS} value={view} onChange={setView} />;
-  return view === "dept" ? (
-    <StaffChart
-      staff={staff}
-      picked={picked}
-      switcher={switcher}
-      onPick={(k) => {
-        onPick(k);
-        if (k) setView("position");
-      }}
-    />
-  ) : (
-    <PositionsChart staff={staff} picked={picked} onPick={onPick} switcher={switcher} />
-  );
-}
-
-/* ------------------------- хэлтсээрх диаграм ---------------------- */
+/* ------------------------- албан хаагчийн бүлэг -------------------- */
 
 /** Албан хаагчийг бүлэглэх түлхүүр: удирдлага · бүртгэлийн slug · эх бичиглэл */
 const groupOf = (s: Staff) => (s.lead ? LEAD_DEPT : (s.slug ?? (s.dept || "Бүртгэгдээгүй")));
@@ -205,130 +170,16 @@ function groupMeta(key: string): Omit<Group, "value"> {
   return { key, label: lead ? "Газрын удирдлага" : key, icon: lead ? Landmark : Users, color: "var(--tone)" };
 }
 
-/**
- * Албан хаагчдын тоо, хэлтсээр — ХЭВТЭЭ зурвас (2026-10-22, "чартуудыг
- * сайжруул"): босоо баганад товчлол (ХБОАХХ, БОҮУАӨХ) л багтдаг байсан
- * тул хэлтсийн БҮТЭН нэр, тэмдэг, эзлэх хувьтай болгов.
- * Мөн өдөр ("үүнийг нэг янзал"): баганын толгой, доор нь нийт мөр;
- * нэр · зурвас · тоо · хувь НЭГ мөрөнд.
- * ⚠⚠ ӨНГӨ ГАНЦ (`--tone`) — хэлтсийн өнгөөр будсан хувилбар ба
- * бүрэлдэхүүний олон өнгөт зурвасыг хэрэглэгч "хэт олон өнгөтэй" гэж
- * буцаав. Тэмдэг нь саарал, сонгосон мөрийнх л `--tone`.
- *
- * ⚠ Мөр товшиход хэлтэс СОНГОГДОЖ, баруун талын албан тушаалын жагсаалт
- * түүгээр шүүгдэнэ; дахин товшиход цуцлагдана.
- */
-function StaffChart({
-  staff,
-  picked,
-  onPick,
-  switcher,
-}: {
-  staff: Load<Staff>;
-  picked: string | null;
-  onPick: (k: string | null) => void;
-  switcher: React.ReactNode;
-}) {
-  const groups = React.useMemo<Group[]>(() => {
-    if (staff.state !== "ready") return [];
-    const counts = new Map<string, number>();
-    for (const s of staff.rows) counts.set(groupOf(s), (counts.get(groupOf(s)) ?? 0) + 1);
-    return [...counts]
-      .map(([k, v]) => ({ ...groupMeta(k), value: v }))
-      .sort((x, y) => y.value - x.value || x.label.localeCompare(y.label, "mn"));
-  }, [staff]);
-  const total = groups.reduce((t, g) => t + g.value, 0);
-  const max = Math.max(1, ...groups.map((g) => g.value));
-
-  return (
-    <Panel className="flex h-full flex-col">
-      <PanelHead
-        title="Албан хаагчдын тоо, хэлтсээр"
-        action={
-          <span className="flex items-center gap-3">
-            {staff.state === "ready" ? <span className="num text-[11.5px] text-ink-3">{num(total)} албан хаагч</span> : null}
-            {switcher}
-          </span>
-        }
-      />
-      {staff.state === "ready" ? (
-        <>
-          {/* Баганын толгой — мөрүүдтэй НЭГ тор (`ROW`) */}
-          <div className={cn(ROW, "mt-3 border-b border-line px-4 pb-1.5 text-[10px] tracking-wide text-ink-3 uppercase")}>
-            <span>Хэлтэс</span>
-            <span />
-            <span className="text-right">Тоо</span>
-            <span className="text-right">Хувь</span>
-          </div>
-
-          <div className="relative flex-1 xl:min-h-[260px]">
-            {/* xl-ээс дээш жагсаалт өндөрт ОРОЛЦОХГҮЙ (absolute) — мөрүүд нь
-                картын өндрийг тэнцүү хуваана, илүү бол дотроо гүйнэ */}
-            <ul className="flex flex-col divide-y divide-line overflow-y-auto xl:absolute xl:inset-0">
-              {groups.map((g) => {
-                const on = picked === g.key;
-                const dim = picked !== null && !on;
-                const share = total ? (g.value / total) * 100 : 0;
-                return (
-                  <li key={g.key} className="flex min-h-[38px] flex-1">
-                    <button
-                      type="button"
-                      aria-pressed={on}
-                      onClick={() => onPick(on ? null : g.key)}
-                      title={g.label}
-                      className={cn(
-                        ROW,
-                        "group w-full items-center px-4 py-1.5 text-left transition-[opacity,background-color] hover:bg-paper-hi",
-                        on && "bg-paper-hi shadow-[inset_2px_0_0_var(--tone)]",
-                        dim && "opacity-45 hover:opacity-90",
-                      )}
-                    >
-                      <span className="flex min-w-0 items-center gap-2">
-                        <g.icon size={15} strokeWidth={1.6} className={cn("shrink-0", on ? "text-(--tone)" : "text-ink-3")} />
-                        <span className={cn("min-w-0 text-[12px] leading-snug text-ink-2 group-hover:text-ink", on && "font-medium text-ink")}>
-                          {g.label}
-                        </span>
-                      </span>
-                      <span className="h-2 rounded-xs bg-paper-3">
-                        <span className="block h-full rounded-xs bg-(--tone)" style={{ width: `${(g.value / max) * 100}%`, opacity: on ? 1 : 0.75 }} />
-                      </span>
-                      <span className="num text-right text-[13px] font-semibold text-ink">{num(g.value)}</span>
-                      <span className="num text-right text-[11px] text-ink-3">{Math.round(share)}%</span>
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          </div>
-
-          {/* Нийт — баганууддаа эгнэнэ */}
-          <div className={cn(ROW, "items-center border-t border-line px-4 py-2 text-[11.5px]")}>
-            <span className="font-medium text-ink-2">Нийт</span>
-            <span />
-            <span className="num text-right text-[13px] font-semibold text-ink">{num(total)}</span>
-            <span className="num text-right text-[11px] text-ink-3">100%</span>
-          </div>
-        </>
-      ) : (
-        <LoadState load={staff} className="m-3 min-h-[240px] flex-1" />
-      )}
-    </Panel>
-  );
-}
-
-/**
- * Мөрийн тор: нэр (мөрөө залгана) · зурвас · тоо · хувь — толгой, мөр, нийт
- * гурвуулаа ИЖИЛ тор хуваалцана, эс тэгвээс багана зөрнө. Зурвасууд нэг
- * эгнээнээс эхэлж урт нь харьцуулагдана (нэрийн доор байхад нэр бүрийн
- * доор өөр өөр эхэлж, мөр хоёр давхар болдог байв).
- */
-const ROW = "grid grid-cols-[minmax(0,1fr)_minmax(64px,32%)_34px_34px] gap-3";
-
 /* ------------------------- албан тушаалаар ------------------------ */
 
 /**
  * Албан тушаалаар — хэлтэс сонгоогүй бол бүх газрын, сонгосон бол тэр
  * хэлтсийн албан тушаалууд, тоогоор буурахаар.
+ *
+ * ⚠⚠ "ХЭЛТСЭЭР" ХАРАГДАЦ УСТСАН (хэрэглэгч 2026-10-22: "энэ 2-ын агуулга
+ * давхцаж байгаа"): хэлтэс тус бүрийн тоо, хувь, зурвас нь байгууллагын
+ * бүтцийн картуудад аль хэдийн бий. Бүтцийн карт нь хэлтэс СОНГОГЧ болж,
+ * энэ карт зөвхөн албан тушаалыг харуулна. Дахин бүү нэм.
  *
  * ⚠ Албан тушаалын нэрийг бүлэглэж ЗОХИОХГҮЙ ("ахлах мэргэжилтэн" гэх мэт
  * ангилалд хураахгүй) — эх сурвалжийн нэрээр нь, бүтнээр нь харуулна.
@@ -337,12 +188,10 @@ function PositionsChart({
   staff,
   picked,
   onPick,
-  switcher,
 }: {
   staff: Load<Staff>;
   picked: string | null;
   onPick: (k: string | null) => void;
-  switcher: React.ReactNode;
 }) {
   const meta = picked ? groupMeta(picked) : null;
   const rows = React.useMemo(() => {
@@ -363,16 +212,13 @@ function PositionsChart({
   return (
     <Panel className="flex h-full flex-col">
       <PanelHead
-        title="Албан тушаалаар"
+        title="Албан хаагчид, албан тушаалаар"
         action={
-          <span className="flex items-center gap-3">
-            {staff.state === "ready" ? (
-              <span className="num text-[11.5px] text-ink-3">
-                {num(people)} албан хаагч · {num(rows.length)} албан тушаал
-              </span>
-            ) : null}
-            {switcher}
-          </span>
+          staff.state === "ready" ? (
+            <span className="num text-[11.5px] text-ink-3">
+              {num(people)} албан хаагч · {num(rows.length)} албан тушаал
+            </span>
+          ) : null
         }
       />
       {staff.state === "ready" ? (
