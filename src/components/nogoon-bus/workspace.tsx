@@ -3,7 +3,6 @@
 import dynamic from "next/dynamic";
 import {
   BadgeCheck,
-  ClipboardList,
   Dam,
   Droplet,
   Droplets,
@@ -124,29 +123,18 @@ const TABS = [
     full: "Гүний худгийн паспортын бүртгэл 2015–2026",
     icon: FileText,
   },
+  /*
+    ⚠ Бүртгэл (2021–2023, портал) ба тооллого (2026, Survey123) НЭГ цэс —
+    дотор нь оны товчоор сэлгэнэ (хэрэглэгч, 2026-10-22). "survey" гэсэн
+    хуучин табыг хадгалсан хэрэглэгч `useStoredTab`-ийн нөөцөөр анхдагч
+    руу буцна.
+  */
   {
     id: "gadarga",
     label: "Гадаргын усны бүртгэл",
-    note: "2021–2023",
+    note: "2021–2023 · 2026",
+    full: "Гадаргын усны бүртгэл 2021–2023 ба тооллого 2026",
     icon: Waves,
-  },
-  /*
-    ⚠ ПОРТАЛД БИШ, ArcGIS Online дээрх Survey123 маягт — дээрх
-    "Гадаргын усны бүртгэл 2021–2023"-тай ӨӨР зүйл: тэр нь хаагдсан
-    бүртгэл, энэ нь 2026 оны АМЬД маягт.
-
-    ⚠ Тайлбарт бичлэгийн тоо БИЧЭЭГҮЙ: маягт бөглөгдсөөр байгаа тул
-    энд бичсэн тоо маргааш худал болно.
-  */
-  {
-    id: "survey",
-    label: "Усны тооллого 2026",
-    /* Тайлбар нь маягтын ӨӨРИЙН `type` домэйнээс — булаг, рашаан,
-       гол горхи, нуур. Бичлэгийн тоо ОРООГҮЙ: маягт бөглөгдсөөр
-       байгаа тул энд бичсэн тоо маргааш хуучирна */
-    note: "Булаг · рашаан · гол · нуур",
-    full: "Гадаргын усны тооллого 2026",
-    icon: ClipboardList,
   },
 
   /*
@@ -225,7 +213,6 @@ const SETS: Record<TabId, (typeof NOGOON_TABS)[keyof typeof NOGOON_TABS]> = {
   hudag: NOGOON_TABS.hudag,
   passport: NOGOON_TABS.passport,
   gadarga: NOGOON_TABS.gadarga,
-  survey: NOGOON_TABS.survey,
   geree: NOGOON_TABS.geree,
   zuwshuurul: NOGOON_TABS.zuwshuurul,
   dugnelt: NOGOON_TABS.dugnelt,

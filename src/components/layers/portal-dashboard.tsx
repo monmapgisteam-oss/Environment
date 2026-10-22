@@ -551,7 +551,9 @@ export function PortalLayersDashboard({
     set.openAll
       ? [...set.layers]
       : set.exclusive
-        ? set.layers.slice(0, 1)
+        ? /* `open` нь анхдагч сонголтыг заана (гадаргын ус: 2026),
+             өгөөгүй бол жагсаалтын эхнийх */
+          [set.open?.find((id) => set.layers.includes(id)) ?? set.layers[0]]
         : (set.open ?? []).filter((id) => set.layers.includes(id)),
   );
 
@@ -1229,6 +1231,11 @@ export function PortalLayersDashboard({
       const keyBy = new Map<string, (row: Row) => string[]>();
       for (const b of hit.charts)
         if (!keyBy.has(filterKey(b))) keyBy.set(filterKey(b), b.keyOf);
+      /* Утгын товчны талбар диаграмгүй байж болно ({@link LayerSet.pickBar})
+         — мөрийн утгаар шууд шүүнэ */
+      const bar = set.pickBar;
+      if (bar?.layer === id && !keyBy.has(bar.field))
+        keyBy.set(bar.field, (row) => [categoryKey(row[bar.field])]);
       /* Тооцоолсон дүүрэг ({@link DISTRICT_KEY}) — мөрөөс дугаараар нь */
       const dist = districts[id];
       if (dist) {
@@ -1353,6 +1360,7 @@ export function PortalLayersDashboard({
     set.mapOnly,
     set.charts,
     set.withinUB,
+    set.pickBar,
   ]);
 
   /**
@@ -1489,6 +1497,19 @@ export function PortalLayersDashboard({
    * (товчны "x"). Эс тэгвээс жагсаалтад байвал хасна, байхгүй бол
    * нэмнэ — диаграм ба цэс хоёулаа энэ нэг үйлдлийг дуудна.
    */
+  /* Утгын товчны утгууд — ШҮҮГДЭЭГҮЙ мөрөөс, өсөхөөр ({@link LayerSet.pickBar}) */
+  const barValues = React.useMemo(() => {
+    const bar = set.pickBar;
+    const rows = bar ? loaded[bar.layer]?.data.rows : undefined;
+    if (!bar || !rows) return [];
+    const seen = new Set<string>();
+    for (const row of Object.values(rows)) {
+      const v = categoryKey(row[bar.field]);
+      if (v !== "Бүртгэгдээгүй") seen.add(v);
+    }
+    return [...seen].sort((a, b) => a.localeCompare(b, "mn"));
+  }, [set.pickBar, loaded]);
+
   const pick = React.useCallback(
     (id: string, field: string, key: string | null) => {
       setFilters((f) => {
@@ -2287,6 +2308,7 @@ export function PortalLayersDashboard({
     >();
     if (!set.tidy) return out;
     for (const v of views) {
+      if (set.noCross?.includes(v.id)) continue;
       let row: Breakdown | undefined;
       let col: Breakdown | undefined;
       const pair = set.cross?.[v.id];
@@ -2341,7 +2363,7 @@ export function PortalLayersDashboard({
       );
     }
     return out;
-  }, [views, set.tidy, set.cross]);
+  }, [views, set.tidy, set.cross, set.noCross]);
 
   /*
     БҮС БҮРД ХЭДЭН НЭГЖ ТАЛБАР ДАВХЦАЖ БАЙНА (хэрэглэгч, 2026-09-25:
@@ -4598,6 +4620,45 @@ export function PortalLayersDashboard({
                   }}
                 />
               </FilterMenu>
+            ) : null}
+
+            {/*
+              УТГЫН ТОВЧ — "Бүгд · 2021 · … · 2026" ({@link LayerSet.pickBar};
+              гадаргын ус, хэрэглэгч 2026-10-22: "onoor n l shuuyaa").
+              Нэг утга сонгоно, дахин товшиход "Бүгд" рүү буцна.
+            */}
+            {set.pickBar && barValues.length > 1 ? (
+              <div
+                className="flex items-center gap-1"
+                role="group"
+                aria-label={set.pickBar.label}
+              >
+                {[null, ...barValues].map((v) => {
+                  const bar = set.pickBar!;
+                  const cur = filters[bar.layer]?.[bar.field] ?? [];
+                  const isOn = v == null ? cur.length === 0 : cur.includes(v);
+                  return (
+                    <button
+                      key={v ?? ""}
+                      type="button"
+                      aria-pressed={isOn}
+                      onClick={() =>
+                        v == null || isOn
+                          ? pick(bar.layer, bar.field, null)
+                          : pickOnly(bar.layer, [[bar.field, v]])
+                      }
+                      className={cn(
+                        "num rounded-xs border px-2 py-1 text-[12px] transition-colors",
+                        isOn
+                          ? "border-data/45 bg-data/12 font-medium text-ink"
+                          : "border-line text-ink-2 hover:border-line-2 hover:text-ink",
+                      )}
+                    >
+                      {v ?? "Бүгд"}
+                    </button>
+                  );
+                })}
+              </div>
             ) : null}
 
             {set.exclusive ? (

@@ -26,7 +26,7 @@
  * бүлэглэхгүй, зөвхөн дарааллыг нь хадгална.
  */
 
-import type { LayerSet } from "@/lib/portal-layers";
+import type { LayerField, LayerSet, LayerUnion, Row } from "@/lib/portal-layers";
 
 /**
  * ХАРАГДАХ НЭР — үйлчилгээний нэрийн задаргаа.
@@ -67,8 +67,10 @@ import type { LayerSet } from "@/lib/portal-layers";
  * нэмэгдмэгц диаграм нь ӨӨРӨӨ гарч ирнэ.
  *
  * ⚠ Энэ нь `N01_Gadargiin_usnii_burtgel_21_23` ("Гадаргын усны
- * бүртгэл 2021–2023")-ТАЙ ӨӨР зүйл: тэр нь хаагдсан бүртгэл, энэ нь
- * 2026 оны амьд тооллого. Нэр нь төстэй тул НЭГТГЭХГҮЙ.
+ * бүртгэл 2021–2023")-ТАЙ ӨӨР эх сурвалж: тэр нь хаагдсан бүртгэл,
+ * энэ нь 2026 оны амьд тооллого. 2026-10-22-ноос НЭГ ЦЭСЭД, оны
+ * товчоор сэлгэгдэнэ ({@link NOGOON_TABS}.gadarga) — давхаргууд нь
+ * НИЙЛЭХГҮЙ, нэг удаад нэг нь.
  *
  * Хамгийн цэвэр шийдэл нь бусад давхаргын адил хэлтсийн порталд
  * нийтлэх — тэгвэл нэвтрэлт, токен бүгд нэг системд багтана.
@@ -322,6 +324,184 @@ function tab(
     ...more,
   };
 }
+
+/**
+ * ГАДАРГЫН УСНЫ НЭГТГЭСЭН БҮРТГЭЛ — 2021–2023 оны бүртгэл (`N01`) ба
+ * 2026 оны тооллого (Survey123) НЭГ бүртгэл (хэрэглэгч, 2026-10-22).
+ *
+ * ⚠⚠ ЗӨВХӨН ХОЁУЛАНД НЬ БАЙГАА ТАЛБАР (+ `N01`-ийн хэмжилт). Маягтын
+ * зөвхөн нэг талд байдаг асуултууд (хэсэг, устай эсэх, эмчилгээний
+ * төрөл …) энд ОРОХГҮЙ: нийлүүлбэл нөгөө эхийн бүх мөр "Бүртгэгдээгүй"
+ * зурвас болж задаргааг дарна. Хэмжилт (pH, TDS, температур) нь дундаж
+ * тул хоосон эх нь "—" л болно.
+ * ⚠ Талбарыг НЭР ЭСВЭЛ ALIAS-аар хайна — `N01`-ийн бүтэн талбарын
+ * жагсаалт токеноор шалгагдаагүй (2026-10-22); хайлт олдохгүй бол тэр
+ * эхийн нүд хоосон үлдэнэ, самбар унахгүй.
+ * ⚠ ОН: тооллого бүхэлдээ 2026; бүртгэлийнх нь "он" багана, байхгүй бол
+ * бүртгэсэн огнооноос; аль нь ч олдохгүй бол "2021–2023".
+ * ⚠ Усны төрлийн "ТО3-Булаг" гэсэн маягтын кодын угтварыг хасна;
+ * маягтын "Нуур" нь бүртгэлийн "Нуур, тойром"-той нэг ангилал.
+ * ⚠ Урсацын горимыг НЭГТГЭХГҮЙ ("Байнгын" ба "Байнгын урсацтай" —
+ * хэлтсийн шийдвэр хүлээгдэж буй).
+ * ⚠ Маягтын `ner` нь байгаль хамгаалагчийн НЭР — энд ОРОХГҮЙ.
+ */
+const SURFACE_ID = "gadarga_negtgel";
+
+const text = (v: unknown) =>
+  typeof v === "string" ? v.replace(/\s+/g, " ").trim() || null : null;
+
+/* ⚠ Хоосон нүд ТЭГ БИШ: `Number(null)` нь 0 тул шалгахгүй бол хэмжилтгүй
+   бүртгэл бүр дунджийг доош татаж pH 1–3 гэсэн утга гарч байв */
+const num = (v: unknown) => {
+  if (typeof v === "number") return Number.isFinite(v) ? v : null;
+  const t = text(v);
+  const n = t == null ? NaN : Number(t.replace(",", "."));
+  return Number.isFinite(n) ? n : null;
+};
+
+/**
+ * Бүртгэлийн ОН — эхний олдсон нь.
+ *
+ * ⚠⚠ ЭХНИЙ ХУВИЛБАР ЗӨВХӨН "он" ба огнооны талбарыг (тоо / ISO) уншдаг
+ * байсан тул `N01` дээр нэг ч он олдоогүй, гурван жил нэг "2021–2023"
+ * товч болж нийлсэн (хэрэглэгч, 2026-10-22: "on onoor n salgaa").
+ * `N01`-ийн талбарын жагсаалт токеноор шалгагдаагүй тул дарааллаар
+ * хайна: (1) нэр/alias-д он, огноо, хугацаа, year, date орсон талбар —
+ * тоо (он эсвэл мс) ба бичвэр ("2021.05.12", "2021 он") хоёуланг
+ * уншина; (2) аль ч бичвэр баганад огноо хэлбэртэй утга.
+ * ⚠ Зөвхөн 2000–2030 оныг авна — код, дугаар доторх дөрвөн оронтой тоо
+ * он мэт уншигдахаас сэргийлнэ.
+ */
+const YEAR_FIELD = /(^|_|\s)он($|_|\s)|оны|огноо|хугацаа|year|date|^on$|_on$/i;
+const DATE_TEXT = /(?:^|\D)(20[0-3]\d)[.\-/]\d{1,2}[.\-/]\d{1,2}(?:\D|$)|(?:^|\D)\d{1,2}[.\-/]\d{1,2}[.\-/](20[0-3]\d)(?:\D|$)/;
+
+function yearIn(v: unknown, loose: boolean): string | null {
+  if (typeof v === "number" && Number.isFinite(v)) {
+    if (v >= 2000 && v <= 2030) return String(Math.round(v));
+    if (v > 1e11) {
+      const y = new Date(v).getUTCFullYear();
+      return y >= 2000 && y <= 2030 ? String(y) : null;
+    }
+    return null;
+  }
+  if (typeof v !== "string") return null;
+  const d = DATE_TEXT.exec(v);
+  if (d) return d[1] ?? d[2];
+  if (!loose) return null;
+  const y = /(?:^|\D)(20[0-3]\d)(?:\D|$)/.exec(v);
+  return y ? y[1] : null;
+}
+
+function yearOf(row: Row, fields: readonly LayerField[]): string | null {
+  for (const f of fields)
+    if (YEAR_FIELD.test(f.name) || YEAR_FIELD.test(f.alias)) {
+      const y = yearIn(row[f.name], true);
+      if (y) return y;
+    }
+  for (const f of fields) {
+    const y = yearIn(row[f.name], false);
+    if (y && typeof row[f.name] === "string") return y;
+  }
+  return null;
+}
+
+const SURFACE: LayerUnion = {
+  parts: [
+    { layer: "N01_Gadargiin_usnii_burtgel_21_23" },
+    { layer: SURVEY, year: "2026" },
+  ],
+  fields: [
+    {
+      name: "он",
+      alias: "Он",
+      type: "String",
+      pick: (_get, part, row, fields) =>
+        part.year ?? yearOf(row, fields) ?? "Он тодорхойгүй",
+    },
+    {
+      name: "усны_төрөл",
+      alias: "Усны төрөл",
+      type: "String",
+      pick: (get) => {
+        const v = text(get(/усны_төрөл|усны төрөл|^type$/i))?.replace(
+          /^ТО\d+-/,
+          "",
+        );
+        return v === "Нуур" ? "Нуур, тойром" : v;
+      },
+    },
+    {
+      name: "нэр",
+      alias: "Нэр",
+      type: "String",
+      pick: (get) => text(get(/^нэр$|^(bulag|rashaan|gol|nuur)_ner$/i)),
+    },
+    {
+      name: "сум_дүүрэг",
+      alias: "Сум, дүүрэг",
+      type: "String",
+      /* Маягт "Хан Уул", бүртгэл "Хан-Уул" гэж бичдэг — нэг дүүрэг */
+      pick: (get) =>
+        text(get(/сум__дүүрэг|^sum$/i))
+          ?.replace(/\s+дүүрэг$/i, "")
+          .replace(/^Хан Уул$/i, "Хан-Уул") ?? null,
+    },
+    {
+      name: "баг_хороо",
+      alias: "Баг, хороо",
+      type: "String",
+      pick: (get) => text(get(/баг__хороо|^bag$/i)),
+    },
+    {
+      name: "газар_нутгийн_нэр",
+      alias: "Газар нутгийн нэр",
+      type: "String",
+      pick: (get) => text(get(/газар_нутгийн_нэр|gazar_nutgiin_ner/i)),
+    },
+    {
+      name: "горим",
+      alias: "Урсацын горим",
+      type: "String",
+      pick: (get) => text(get(/горим|gorim/i)),
+    },
+    {
+      name: "хамгаалалтын_бүс",
+      alias: "Хамгаалалтын бүс тогтоосон эсэх",
+      type: "String",
+      pick: (get) => text(get(/хамгаалалтын.?бүс|hamgaalaltiin_bus/i)),
+    },
+    {
+      name: "өндөр",
+      alias: "Өндөр, м",
+      type: "Double",
+      pick: (get) => num(get(/өндөр|undur|^h,\s*m$/i)),
+    },
+    {
+      name: "ph",
+      alias: "pH",
+      type: "Double",
+      pick: (get) => num(get(/^ph$/i)),
+    },
+    {
+      name: "tds",
+      alias: "TDS, мг/л",
+      type: "Double",
+      pick: (get) => num(get(/tds/i)),
+    },
+    {
+      name: "температур",
+      alias: "Температур, °C",
+      type: "Double",
+      pick: (get) => num(get(/температур|temp/i)),
+    },
+    {
+      name: "тайлбар",
+      alias: "Тайлбар",
+      type: "String",
+      pick: (get) => text(get(/тайлбар|^tailbar$/i)),
+    },
+  ],
+};
 
 export const NOGOON_TABS = {
   hamgaalagch: tab("hamgaalagch", "Байгаль хамгаалагчийн бүс", [
@@ -625,10 +805,45 @@ export const NOGOON_TABS = {
     topN: 5000,
     labelBy: "байршил",
   }),
-  gadarga: tab("gadarga", "Гадаргын усны бүртгэл", [
-    "N01_Gadargiin_usnii_burtgel_21_23",
-  ]),
-  survey: tab("survey", "Гадаргын усны тооллого 2026", [SURVEY]),
+  /*
+    ⚠⚠ ГАДАРГЫН УС — ХОЁР ЭХ СУРВАЛЖ НЭГ БҮРТГЭЛ, ЗӨВХӨН ОНООР ШҮҮНЭ
+    (хэрэглэгч, 2026-10-22: "ene 2 negdene" → "hoorond n negtgeed onoor
+    n l shuuyaa"). "Гадаргын усны бүртгэл 2021–2023" (`N01`, портал) ба
+    "Усны тооллого 2026" (Survey123) нь НЭГ зураг, НЭГ диаграмын багц
+    болно ({@link SURFACE}); шүүлтүүрийн мөрийн эхэнд "Бүгд · 2021 · … ·
+    2026" товч ({@link LayerSet.pickBar}).
+    ⚠ Эхний хувилбар нь хоёр эх сурвалжийг ТОВЧООР СЭЛГЭДЭГ (`exclusive`)
+    байсан — хэрэглэгч НИЙЛҮҮЛЭХИЙГ хүсэв.
+    ⚠ Эх сурвалжийн хуудас хоёр бодит давхаргыг {@link NOGOON}-оос
+    бүтэн нэрээр нь жагсаасаар байна — хийсвэр давхарга тэнд ОРОХГҮЙ.
+  */
+  gadarga: tab("gadarga", "Гадаргын усны бүртгэл", [SURFACE_ID], {
+    names: { ...NAMES, [SURFACE_ID]: "Гадаргын ус" },
+    hues: [HUES[AT.N01_Gadargiin_usnii_burtgel_21_23 ?? 0]],
+    unions: { [SURFACE_ID]: SURFACE },
+    pickBar: { layer: SURFACE_ID, field: "он", label: "Он" },
+    /*
+      ЭНГИЙН, ОЙЛГОМЖТОЙ (хэрэглэгч, 2026-10-22: "oilgomjtoi engiin
+      bolgo"). Хөндлөн хүснэгт, дундаж утгын олон баганат хүснэгт
+      ХАСАГДСАН — үлдэх нь дөрвөн энгийн тоолол (усны төрөл · сум,
+      дүүрэг · хамгаалалтын бүс · урсацын горим), тус бүр өөрийн
+      зурвасан картаар.
+      · он — товчоор шүүгдэнэ, диаграм болж давхардахгүй;
+      · өндөр, pH, TDS, температур — бичлэгийн цонхонд хэвээр, диаграмд
+        ороогүй (зөвхөн 2021–2023 оны бүртгэлд байдаг тул дундаж нь
+        оноор шүүхэд алга болж, "Нийт" мөр хоосон гардаг байв);
+      · нэр, газар нутаг, баг/хороо, тайлбар — танигч, задаргаа биш.
+    */
+    chartSkip: {
+      [SURFACE_ID]:
+        /^(он|өндөр|ph|tds|температур|газар_нутгийн_нэр|баг_хороо|тайлбар)$/,
+    },
+    noCross: [SURFACE_ID],
+    lead: ["усны_төрөл", "сум_дүүрэг"],
+    unfold: true,
+    axisBars: true,
+    labelBy: "нэр",
+  }),
 
   /*
     ⚠ УС АШИГЛАЛТЫН ЗУРГААН ЦЭС (хэлтэс 2026-09-17-нд нэмүүлэв).

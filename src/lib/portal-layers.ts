@@ -305,6 +305,8 @@ export type LayerSet = {
    * нэг утгат — эс тэгвээс мөрийн нийт ч давхарна.
    */
   cross?: Readonly<Record<string, readonly [string, string]>>;
+  /** Хөндлөн хүснэгт ГАРАХГҮЙ давхаргууд (гадаргын ус — "энгийн болго") */
+  noCross?: readonly string[];
   /**
    * АНГИЛЛЫН ДИАГРАМЫН ДЭЭД ТОО — анхдагч {@link MAX_CATEGORIES} (4).
    *
@@ -1065,7 +1067,56 @@ export type LayerSet = {
       }[];
     }
   >;
+  /**
+   * НЭГТГЭСЭН ДАВХАРГА — хэд хэдэн эх сурвалжийг НЭГ бүртгэл болгоно
+   * (хэрэглэгч, 2026-10-22, гадаргын ус: "hoorond n negtgeed onoor n l
+   * shuuyaa"). Түлхүүр нь `layers`-д бичигдэх ХИЙСВЭР давхаргын нэр;
+   * самбар түүнийг энгийн давхарга мэт харна.
+   * ⚠ Эх давхарга бүр ӨӨРИЙН дүрмээр татагдана (токен, `values`,
+   * бичиглэлийн нэгтгэл) — нэгтгэл нь зөвхөн мөрийг НИЙТЛЭГ талбарт
+   * буулгана ({@link UnionField}).
+   * ⚠ Дугаар нь эх тус бүрээр нэрийн орон зайд орно
+   * (`эхийн индекс × UNION_STRIDE + oid`) — хоёр давхарга хоёулаа
+   * 1-ээс эхэлдэг.
+   */
+  unions?: Readonly<Record<string, LayerUnion>>;
+  /**
+   * ШҮҮЛТҮҮРИЙН МӨРИЙН ЭХЭНД УТГЫН ТОВЧ ("Бүгд · 2021 · … · 2026").
+   * Талбар нь диаграмгүй байж болно ({@link chartSkip}) — шүүлт нь
+   * мөрийн утгаар шууд ажиллана.
+   */
+  pickBar?: { layer: string; field: string; label: string };
 };
+
+/** Нэгтгэсэн давхаргын нэг эх */
+export type UnionPart = {
+  layer: string;
+  /** Бүх мөрд онооно — тухайн эх нь нэг оных бол (тооллого 2026) */
+  year?: string;
+};
+
+/**
+ * Нийтлэг талбар. `pick`-ийн `get` нь эх давхаргын талбарыг НЭР ЭСВЭЛ
+ * ALIAS-аар нь хайна (таарсан талбаруудын эхний ХООСОН БИШ утга) —
+ * талбарын нэрийг кодод бичихгүй, эх сурвалж өөрчлөгдөхөд тэсвэртэй.
+ */
+export type UnionField = LayerField & {
+  pick: (
+    get: (re: RegExp) => unknown,
+    part: UnionPart,
+    /** Эх мөр ба түүний талбарууд — бүх баганыг гүйх шаардлагатай үед (он) */
+    row: Row,
+    fields: readonly LayerField[],
+  ) => unknown;
+};
+
+export type LayerUnion = {
+  parts: readonly UnionPart[];
+  fields: readonly UnionField[];
+};
+
+/** Нэгтгэлд эх тус бүрийн дугаарын зай — давхарга бүр 100 мянгаас цөөн бичлэгтэй */
+const UNION_STRIDE = 100_000;
 
 /** Давхаргын харагдах нэр — бүртгэлд байхгүй бол үйлчилгээнийхээр */
 export function layerName(
@@ -4312,10 +4363,123 @@ export function fetchLayerInfo(
   id: string,
   signal?: AbortSignal,
 ): Promise<LayerInfo> {
+  const union = set.unions?.[id];
+  if (union)
+    return abortable(
+      memo(infoCache, `union:${set.key}:${id}`, () =>
+        loadUnionInfo(set, id, union),
+      ),
+      signal,
+    );
   return abortable(
     memo(infoCache, serviceOf(set, id), () => loadLayerInfo(set, id)),
     signal,
   );
+}
+
+/** Нэгтгэсэн давхаргын эх давхаргууд — {@link fetchLayerFeatures} эндээс уншина */
+const unionParts = new WeakMap<LayerInfo, LayerInfo[]>();
+
+async function loadUnionInfo(
+  set: LayerSet,
+  id: string,
+  union: LayerUnion,
+): Promise<LayerInfo> {
+  const parts = await Promise.all(
+    union.parts.map((p) => fetchLayerInfo(set, p.layer)),
+  );
+  const info: LayerInfo = {
+    id,
+    set,
+    name: set.names[id] ?? id,
+    geometry: parts[0]?.geometry ?? "Point",
+    layerId: 0,
+    objectIdField: "objectid",
+    areaField: null,
+    areaInHa: false,
+    count: parts.reduce((n, p) => n + p.count, 0),
+    pageSize: Math.min(...parts.map((p) => p.pageSize)),
+    fields: union.fields.map(({ name, alias, type }) => ({ name, alias, type })),
+  };
+  unionParts.set(info, parts);
+  return info;
+}
+
+/** Нэг давхаргын атрибут, геометр — хоёр үе шат тус тусдаа кэштэй */
+function stagesOf(info: LayerInfo) {
+  const key = `${serviceOf(info.set, info.id)}/${info.layerId}`;
+  return {
+    rows: memo(rowsCache, key, () => loadLayerRows(info)),
+    shapes: memo(shapesCache, key, () => loadLayerShapes(info)),
+  };
+}
+
+/** Эх давхаргын талбарыг нэр эсвэл alias-аар нь хайгч */
+function getter(fields: readonly LayerField[]) {
+  const cache = new Map<RegExp, string[]>();
+  return (row: Row) => (re: RegExp) => {
+    let names = cache.get(re);
+    if (!names) {
+      names = fields
+        .filter((f) => re.test(f.name) || re.test(f.alias))
+        .map((f) => f.name);
+      cache.set(re, names);
+    }
+    for (const n of names) {
+      const v = row[n];
+      if (v != null && !(typeof v === "string" && !v.trim())) return v;
+    }
+    return null;
+  };
+}
+
+/** Нэгтгэсэн давхаргын хоёр үе шат — эх бүрийг өөрийн кэшээр татна */
+const unionCache = new WeakMap<
+  LayerInfo,
+  { rows: Promise<LayerRows>; shapes: Promise<GeoJSON.Feature[]> }
+>();
+
+function unionStages(info: LayerInfo, parts: LayerInfo[]) {
+  let hit = unionCache.get(info);
+  if (!hit) {
+    hit = mergeStages(info, parts);
+    unionCache.set(info, hit);
+    hit.rows.catch(() => unionCache.delete(info));
+    hit.shapes.catch(() => unionCache.delete(info));
+  }
+  return hit;
+}
+
+function mergeStages(info: LayerInfo, parts: LayerInfo[]) {
+  const union = info.set.unions![info.id];
+  const rows = Promise.all(parts.map((p) => stagesOf(p).rows)).then(
+    (all): LayerRows => {
+      const out: Record<number, Row> = {};
+      all.forEach((r, k) => {
+        const part = union.parts[k];
+        const get = getter(parts[k].fields);
+        for (const [oid, row] of Object.entries(r.rows)) {
+          const uid = k * UNION_STRIDE + Number(oid);
+          const g = get(row);
+          const next: Row = { objectid: uid };
+          for (const f of union.fields)
+            next[f.name] = f.pick(g, part, row, parts[k].fields) ?? null;
+          out[uid] = next;
+        }
+      });
+      return { rows: out, area: {} };
+    },
+  );
+  const shapes = Promise.all(parts.map((p) => stagesOf(p).shapes)).then(
+    (all) =>
+      all.flatMap((list, k) =>
+        list.map((f) => {
+          const uid = k * UNION_STRIDE + Number(f.id);
+          return { ...f, id: uid, properties: { oid: uid } };
+        }),
+      ),
+  );
+  return { rows, shapes };
 }
 
 const NO_SHAPES: GeoJSON.FeatureCollection = {
@@ -4334,9 +4498,8 @@ export function fetchLayerFeatures(
   signal?: AbortSignal,
   onRows?: (partial: LayerFeatures) => void,
 ): Promise<LayerFeatures> {
-  const key = `${serviceOf(info.set, info.id)}/${info.layerId}`;
-  const rows = memo(rowsCache, key, () => loadLayerRows(info));
-  const shapes = memo(shapesCache, key, () => loadLayerShapes(info));
+  const parts = unionParts.get(info);
+  const { rows, shapes } = parts ? unionStages(info, parts) : stagesOf(info);
   if (onRows) {
     void rows.then(
       (r) => {
