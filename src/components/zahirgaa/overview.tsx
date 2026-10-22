@@ -20,15 +20,6 @@ import * as React from "react";
 import Link from "next/link";
 import {
   ArrowUpRight,
-  ChevronDown,
-  FolderCog,
-  MessagesSquare,
-  Monitor,
-  Package,
-  Scale,
-  ScrollText,
-  Wallet,
-  Workflow,
   Landmark,
   Network,
   UserCheck,
@@ -42,7 +33,6 @@ import { DEPARTMENTS, SHORT_NAMES, STATUS_LABEL, getDepartment } from "@/lib/dep
 import {
   LEAD_DEPT,
   ORG_NAME,
-  ZAHIRGAA_FUNCTIONS,
   ZAHIRGAA_INTRO,
   ZAHIRGAA_LAYERS,
   fetchStaff,
@@ -97,7 +87,14 @@ export function ZahirgaaOverview() {
     <div className="w-full space-y-4" style={{ "--tone": `var(${DEPT.tone})` } as React.CSSProperties}>
       <Header />
 
-      <Intro />
+      <Panel>
+        <PanelHead title="Хэлтсийн танилцуулга" />
+        {ZAHIRGAA_INTRO ? (
+          <p className="px-4 py-3.5 text-[13px] leading-relaxed text-ink-2">{ZAHIRGAA_INTRO}</p>
+        ) : (
+          <Waiting className="m-3 py-6" />
+        )}
+      </Panel>
 
       <Structure staff={staff} picked={picked} onPick={setPicked} />
 
@@ -134,53 +131,6 @@ function Header() {
       </div>
       <div className="ruler mt-4 opacity-70" aria-hidden />
     </header>
-  );
-}
-
-/* --------------------------- танилцуулга -------------------------- */
-
-/* Чиг үүрэг бүрийн тэмдэг — {@link ZAHIRGAA_FUNCTIONS}-тэй ИЖИЛ дараалал */
-const FUNCTION_ICONS: LucideIcon[] = [ScrollText, Landmark, Workflow, Users, FolderCog, Monitor, Package, Wallet, Scale, MessagesSquare];
-
-/**
- * Хэлтсийн танилцуулга — ЧИГ ҮҮРГИЙН ЖАГСААЛТ (хэрэглэгч 2026-10-22,
- * дөрвөн хувилбараас сонгов). Урьд нь нэг урт догол мөр байсан тул уншихад
- * хүнд байв. Чиг үүрэг бүр тэмдэгтэй жижиг нүд; бүтэн бичвэр нь доор
- * "Дэлгэрэнгүй"-гээр дэлгэгдэнэ.
- * ⚠ Өнгө ГАНЦ (`--tone`) — хэлтсийн жагсаалт олон өнгөтэй байхад "хэт
- * олон өнгөтэй" гэж буцаагдсан.
- */
-function Intro() {
-  const [open, setOpen] = React.useState(false);
-  return (
-    <Panel>
-      <PanelHead title="Хэлтсийн танилцуулга" />
-      <ul className="grid grid-cols-2 gap-px bg-line sm:grid-cols-3 lg:grid-cols-5">
-        {ZAHIRGAA_FUNCTIONS.map((f, i) => {
-          const Icon = FUNCTION_ICONS[i] ?? ScrollText;
-          return (
-            <li key={f} className="flex items-center gap-2.5 bg-paper-2 px-4 py-3">
-              <span className="tinted flex size-8 shrink-0 items-center justify-center rounded-xs">
-                <Icon size={16} strokeWidth={1.6} className="text-(--tone)" />
-              </span>
-              <span className="text-[12.5px] leading-snug text-ink">{f}</span>
-            </li>
-          );
-        })}
-      </ul>
-      <div className="border-t border-line px-4 py-2">
-        <button
-          type="button"
-          aria-expanded={open}
-          onClick={() => setOpen((v) => !v)}
-          className="inline-flex items-center gap-1 text-[11.5px] text-ink-3 hover:text-ink"
-        >
-          Дэлгэрэнгүй
-          <ChevronDown size={13} className={cn("transition-transform", open && "rotate-180")} />
-        </button>
-        {open ? <p className="pt-1.5 pb-1 text-[12.5px] leading-relaxed text-ink-2">{ZAHIRGAA_INTRO}</p> : null}
-      </div>
-    </Panel>
   );
 }
 
