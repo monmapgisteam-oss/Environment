@@ -115,6 +115,23 @@ export function ReclamationDashboard() {
     [sites, keep],
   );
 
+  /*
+    Сонгосон талбай нь диаграм, үзүүлэлтийн ШҮҮЛТ (хөндлөн шүүлт хоёр
+    тийш). Хугацаа, байршлын шүүлтэд тохирохгүй бол сонголт ДАМ цуцлагдана —
+    зураг хоосон, ойртолт буруу газар үлдэхгүй.
+  */
+  const sel = React.useMemo(
+    () => (picked != null && shown.some((s) => s.oid === picked) ? picked : null),
+    [shown, picked],
+  );
+
+  /** Диаграм, үзүүлэлтийн шүүлт — сонгосон талбайтай хамт */
+  const keepSel = React.useCallback(
+    (s: ReclamationSite, skip?: "year" | "district") =>
+      keep(s, skip) && (sel == null || s.oid === sel),
+    [keep, sel],
+  );
+
   /** Датаны хамрах хугацаа — шүүлтүүрийн хязгаар, "бүх хугацаа"-ны жишиг */
   const span = React.useMemo<[number, number] | null>(() => {
     const ys = (sites ?? []).map((x) => x.year).filter(Boolean);
@@ -133,8 +150,8 @@ export function ReclamationDashboard() {
      диаграм бүтнээрээ үлдэж (буцаж сонгох зам), зураг зөвхөн сонгосон
      талбайг зурна. Дахин товшиход бүгд эргэж гарна. */
   const mapped = React.useMemo(
-    () => (picked == null ? shown : shown.filter((s) => s.oid === picked)),
-    [shown, picked],
+    () => (sel == null ? shown : shown.filter((s) => s.oid === sel)),
+    [shown, sel],
   );
 
   const geo = React.useMemo<MapPoints>(() => {
@@ -181,12 +198,19 @@ export function ReclamationDashboard() {
   /* ---------------- Задаргаа ----------------
      Хэмжигдэхүүн нь БҮГД га — тоо ширхэг биш талбай харьцуулагдана.
      Эх үүсвэр ТУС БҮРД тусдаа тооцно: хоёр багана хоёр өөр бүртгэл. */
+  /* Хоёр багана БИЕ ДААСАН: сонголт нь зөвхөн ӨӨРИЙН эх үүсвэрийн
+     баганыг хумина — нөгөө баганын диаграм хоосрохгүй. */
+  const selFunding = React.useMemo(
+    () => (sel == null ? null : ((sites ?? []).find((s) => s.oid === sel)?.funding ?? null)),
+    [sites, sel],
+  );
   const sides = React.useMemo(
-    () => FUNDING.map((f) => sideOf(f.id, sites ?? [], keep)),
-    [sites, keep],
+    () => FUNDING.map((f) => sideOf(f.id, sites ?? [], keep, f.id === selFunding ? keepSel : keep)),
+    [sites, keep, keepSel, selFunding],
   );
 
-  /** Шүүлтүүрийн цэсэнд — хоёр эх үүсвэрийн байршил НЭГ жагсаалтад */
+  /** Шүүлтүүрийн цэсэнд — хоёр эх үүсвэрийн байршил НЭГ жагсаалтад.
+      Цэс сонголтоор хумигдахгүй (шүүгдээгүй жагсаалтаас). */
   const byDistrict = React.useMemo<Datum[]>(() => {
     const m = new Map<string, number>();
     for (const s of sites ?? []) {
@@ -199,11 +223,12 @@ export function ReclamationDashboard() {
   }, [sites, keep]);
 
   const stats = React.useMemo(() => {
-    const ha = shown.reduce((s, x) => s + x.ha, 0);
-    const years = new Set(shown.map((s) => s.year));
-    const cost = shown.reduce((s, x) => s + (x.cost ?? 0), 0);
+    const own = mapped;
+    const ha = own.reduce((s, x) => s + x.ha, 0);
+    const years = new Set(own.map((s) => s.year));
+    const cost = own.reduce((s, x) => s + (x.cost ?? 0), 0);
     return {
-      n: shown.length,
+      n: own.length,
       ha,
       years: years.size,
       span: years.size
@@ -211,22 +236,22 @@ export function ReclamationDashboard() {
         : "—",
       cost,
     };
-  }, [shown]);
+  }, [mapped]);
 
   /* Сонголт руу ойртох */
   /* ---------------- Сонголтын хүрээ (zoom action) ----------------
      Сонгосон талбай руу, эс бөгөөс шүүлтүүрт таарсан бүх талбай руу
      ойртоно. Шүүлтүүр цуцлагдвал `null` — зураг анхны байрлалдаа буцна. */
   const focus = React.useMemo<Extent | null>(() => {
-    if (picked == null && wholeRange && !district) return null;
+    if (sel == null && wholeRange && !district) return null;
     const b = new Bounds();
-    for (const site of picked != null ? shown.filter((s) => s.oid === picked) : shown) {
+    for (const site of mapped) {
       if (site.rings.length) {
         for (const ring of site.rings) for (const [x, y] of ring) b.add(x, y);
       } else b.add(site.lon, site.lat);
     }
     return b.get(0.003);
-  }, [shown, picked, wholeRange, district]);
+  }, [mapped, sel, wholeRange, district]);
 
   /** Хулгана дээр очсон талбай — газрын зурагнаас */
   const hovered = React.useMemo(
@@ -236,8 +261,8 @@ export function ReclamationDashboard() {
 
   /* Тогтмол самбар: товшсон, эсвэл ЖАГСААЛТЫН мөр дээр очсон талбай */
   const active = React.useMemo(
-    () => (sites ?? []).find((s) => s.oid === (hover ?? picked)) ?? null,
-    [sites, hover, picked],
+    () => (sites ?? []).find((s) => s.oid === (hover ?? sel)) ?? null,
+    [sites, hover, sel],
   );
 
   function clearRange() {
@@ -268,11 +293,11 @@ export function ReclamationDashboard() {
     );
   }
 
-  const activeCount = (wholeRange ? 0 : 1) + (district ? 1 : 0);
+  const activeCount = (wholeRange ? 0 : 1) + (district ? 1 : 0) + (sel != null ? 1 : 0);
   const [aan, tusuw] = sides;
   const sideProps = {
-    picked,
-    onPick: (oid: number) => setPicked(picked === oid ? null : oid),
+    picked: sel,
+    onPick: (oid: number) => setPicked(sel === oid ? null : oid),
     onHover: setHover,
     range,
     span,
@@ -374,9 +399,9 @@ export function ReclamationDashboard() {
                 <PointMap
                   points={geo}
                   visible={visible}
-                  shapes={{ data: polygons, selected: picked, labelZoom: 12 }}
+                  shapes={{ data: polygons, selected: sel, labelZoom: 12 }}
                   basemap={basemap}
-                  onSelect={setPicked}
+                  onSelect={(oid) => setPicked(sel === oid ? null : oid)}
                   onHover={tip.onHover}
                   focus={focus}
                   cluster={false}
@@ -469,6 +494,8 @@ type SideData = {
    * Нэг байршилд хэд хэдэн талбай байвал оноор нь ялгана.
    */
   bySite: Datum[];
+  /** ААН: талбай тус бүрийн төсөвт өртөг (өртөггүй нь орохгүй) */
+  byCost: Datum[];
 };
 
 /** Нэг эх үүсвэрийн задаргаа — хоёр багана ижил тооцоог хуваалцана */
@@ -476,12 +503,15 @@ function sideOf(
   id: FundingId,
   sites: ReclamationSite[],
   keep: (s: ReclamationSite, skip?: "year" | "district") => boolean,
+  /** Сонгосон талбайг тооцсон шүүлт — нэгтгэсэн диаграмд */
+  keepSel: (s: ReclamationSite, skip?: "year" | "district") => boolean,
 ): SideData {
   const own = sites.filter((s) => s.funding === id);
+  /* Жагсаалт, талбай тус бүрийн диаграм нь СОНГОХ зам — сонголтоор хумигдахгүй */
   const shown = own.filter((s) => keep(s));
 
   const y = new Map<number, number>();
-  for (const s of own) if (keep(s, "year")) y.set(s.year, (y.get(s.year) ?? 0) + s.ha);
+  for (const s of own) if (keepSel(s, "year")) y.set(s.year, (y.get(s.year) ?? 0) + s.ha);
   const byYear: Datum[] = [...y]
     .sort((a, b) => a[0] - b[0])
     .map(([k, ha]) => ({ key: String(k), label: String(k), value: ha }));
@@ -504,7 +534,7 @@ function sideOf(
   }
 
   const d = new Map<string, number>();
-  for (const s of own) if (keep(s, "district")) d.set(s.district, (d.get(s.district) ?? 0) + s.ha);
+  for (const s of own) if (keepSel(s, "district")) d.set(s.district, (d.get(s.district) ?? 0) + s.ha);
   const byDistrict: Datum[] = [...d]
     .map(([k, ha]) => ({ key: k, label: k, value: ha }))
     .sort((a, b) => b.value - a.value);
@@ -518,6 +548,14 @@ function sideOf(
       value: s.ha,
     }))
     .sort((a, b) => b.value - a.value);
+  const byCost: Datum[] = shown
+    .filter((s) => s.cost != null && s.cost > 0)
+    .map((s) => ({
+      key: String(s.oid),
+      label: s.contractor ?? s.place,
+      value: Math.round(s.cost ?? 0),
+    }))
+    .sort((a, b) => b.value - a.value);
 
   return {
     id,
@@ -528,6 +566,7 @@ function sideOf(
     yearSeries,
     byDistrict,
     bySite,
+    byCost,
   };
 }
 
@@ -558,6 +597,7 @@ function Side({
   district: string | null;
   onDistrict: (d: string | null) => void;
 }) {
+  const haOf = new Map(side.shown.map((s) => [String(s.oid), s.ha]));
   return (
     <>
       <Card className="min-h-[120px] flex-1">
@@ -600,18 +640,27 @@ function Side({
       </Card>
 
       {/*
-        ААН талд оны диаграмын оронд ЦЭГЭН диаграм (хэрэглэгчийн санал,
-        2026-09-17): хэвтээ — нөхөн сэргээсэн талбай (га), босоо — төсөвт
-        өртөг. Талбай цөөн тул цэг бүр нэг талбай; товшилт нь тэр
-        талбайг сонгоно.
+        ААН талд оны диаграмын оронд талбай тус бүрийн ТӨСӨВТ ӨРТӨГ —
+        ЭНГИЙН мөрөн диаграм, талбай нь нэрийн ард (хэрэглэгч 2026-10-15:
+        "Талбай ба төсөвт өртөг chartiig engiin bolgoy"). Урьдын цэгэн
+        диаграм (x — га, y — өртөг) git түүхэнд. Товшилт тэр талбайг сонгоно.
       */}
       {side.id === "aan" ? (
         <Card className="shrink-0">
           <Head title="Талбай ба төсөвт өртөг">
-            <span className="text-[10.5px] text-ink-3">га · {COST_UNIT}</span>
+            <span className="text-[10.5px] text-ink-3">{COST_UNIT}</span>
           </Head>
-          <div className="p-3">
-            <CostScatter sites={side.shown} picked={picked} onPick={onPick} />
+          <div className="max-h-[220px] overflow-y-auto p-3">
+            {side.byCost.length ? (
+              <RowChart
+                data={side.byCost}
+                selected={picked == null ? null : String(picked)}
+                onSelect={(k) => onPick(Number(k ?? picked))}
+                note={(d) => `${haOf.get(d.key) ?? 0} га`}
+              />
+            ) : (
+              <div className="chart-empty">Үзүүлэлт байхгүй</div>
+            )}
           </div>
         </Card>
       ) : (
@@ -707,135 +756,6 @@ function AanRow({ s }: { s: ReclamationSite }) {
 }
 
 /* -------------------------------------------------------------------------- */
-
-/** "Гоё" тэнхлэгийн алхам: 1 / 2 / 5 × 10ⁿ */
-function niceStep(max: number, n: number): number {
-  const raw = max / Math.max(n, 1);
-  const p = 10 ** Math.floor(Math.log10(raw || 1));
-  const f = raw / p;
-  return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 5 ? 5 : 10) * p;
-}
-
-/**
- * Цэгэн диаграм: x — талбай (га), y — төсөвт өртөг. SVG-ээр гараар
- * (платформын дүрэм: гуравдагч сан нэмэхгүй).
- *
- * ⚠ ПИКСЕЛЭЭР зурна, `viewBox`-оор масштаблахгүй: эхний хувилбар
- * 320×170 хайрцгийг баганын өргөнд сунгадаг байсан тул үсэг, цэг
- * хамт томорч, бусад диаграмаас өөр "сонин" харагдаж байв (хэрэглэгч
- * 2026-09-17). Одоо өргөнөө `ResizeObserver`-оор хэмжиж, фонт 10px,
- * цэг 5px гэсэн бодит хэмжээгээр зурна — платформын бусад бичвэртэй
- * нэг хэмжээс.
- *
- * Цэг бүр НЭРТЭЙ: гуравхан цэг хоосон торонд нэргүй бол аль нь аль
- * талбай болох нь мэдэгдэхгүй. Баруун талд нь бичнэ, зургийн баруун
- * захад ойрхон бол зүүн талд; ижил өндөрт ойрхон хоёр цэг бол доод
- * нэрийг нэг мөрөөр доош шилжүүлнэ.
- */
-function CostScatter({
-  sites,
-  picked,
-  onPick,
-}: {
-  sites: ReclamationSite[];
-  picked: number | null;
-  onPick: (oid: number) => void;
-}) {
-  const box = React.useRef<HTMLDivElement>(null);
-  const [W, setW] = React.useState(0);
-  React.useLayoutEffect(() => {
-    const el = box.current;
-    if (!el) return;
-    const ro = new ResizeObserver(([e]) => setW(Math.round(e.contentRect.width)));
-    ro.observe(el);
-    setW(Math.round(el.clientWidth));
-    return () => ro.disconnect();
-  }, []);
-
-  const pts = sites.filter((s) => s.cost != null && s.ha > 0);
-
-  const H = 190;
-  /* Зүүн зай: босоо тэнхлэгийн нэр (эргүүлсэн) + хуваарийн тоо */
-  const L = 56;
-  const R = 12;
-  const T = 14;
-  const B = 28;
-
-  const maxX = Math.max(...pts.map((s) => s.ha), 0);
-  const maxY = Math.max(...pts.map((s) => s.cost ?? 0), 0);
-  const sx = niceStep(maxX, 4);
-  const sy = niceStep(maxY, 3);
-  const topX = Math.ceil(maxX / sx) * sx || sx;
-  const topY = Math.ceil(maxY / sy) * sy || sy;
-  const xs: number[] = [];
-  for (let v = 0; v <= topX + 1e-9; v += sx) xs.push(Number(v.toFixed(6)));
-  const ys: number[] = [];
-  for (let v = 0; v <= topY + 1e-9; v += sy) ys.push(Number(v.toFixed(6)));
-
-  const X = (v: number) => L + (v / topX) * Math.max(W - L - R, 1);
-  const Y = (v: number) => T + (1 - v / topY) * (H - T - B);
-
-  /* Цэг дээр НЭР БИЧИХГҮЙ (хэрэглэгч 2026-09-17: "нэрээ ав") — нэр,
-     хэмжээ, өртөг нь хулганы тайлбарт; аль талбай болох нь товшиход
-     жагсаалт, зураг дээр тодорно. */
-  const labels = pts.map((s) => ({ s, x: X(s.ha), y: Y(s.cost ?? 0) }));
-
-  return (
-    <div ref={box} className="w-full">
-      {W > 0 && pts.length ? (
-        <svg width={W} height={H} className="num block" role="img" aria-label="Талбай ба төсөвт өртөг">
-          {ys.map((v) => (
-            <g key={`y${v}`}>
-              <line x1={L} x2={W - R} y1={Y(v)} y2={Y(v)} stroke="var(--line)" strokeWidth={1} />
-              <text x={L - 6} y={Y(v)} textAnchor="end" dominantBaseline="middle" fontSize={10} fill="var(--ink-3)">
-                {num(v)}
-              </text>
-            </g>
-          ))}
-          {xs.map((v) => (
-            <g key={`x${v}`}>
-              <line x1={X(v)} x2={X(v)} y1={T} y2={H - B} stroke="var(--line)" strokeWidth={1} />
-              <text x={X(v)} y={H - B + 13} textAnchor="middle" fontSize={10} fill="var(--ink-3)">
-                {v}
-              </text>
-            </g>
-          ))}
-          {/* Тэнхлэгийн нэр: хэвтээ нь тэнхлэгийнхээ голд, босоо нь
-              тэнхлэгийн дагуу эргүүлж голлуулсан (хэрэглэгчийн хүсэлт) */}
-          <text x={(L + W - R) / 2} y={H - 3} textAnchor="middle" fontSize={10} fill="var(--ink-3)">
-            га
-          </text>
-          <text
-            x={10}
-            y={(T + H - B) / 2}
-            textAnchor="middle"
-            fontSize={10}
-            fill="var(--ink-3)"
-            transform={`rotate(-90 10 ${(T + H - B) / 2})`}
-          >
-            {COST_UNIT}
-          </text>
-
-          {[...labels]
-            .sort((a, b) => (a.s.oid === picked ? 1 : 0) - (b.s.oid === picked ? 1 : 0))
-            .map(({ s, x, y }) => {
-              const on = picked === s.oid;
-              const dim = picked != null && !on;
-              return (
-                <g key={s.oid} className="cursor-pointer" opacity={dim ? 0.35 : 1} onClick={() => onPick(s.oid)}>
-                  <title>{`${s.contractor ?? s.place} · ${s.ha} га · ${num(Math.round(s.cost ?? 0))} ${COST_UNIT}`}</title>
-                  {on ? <circle cx={x} cy={y} r={9} fill="none" stroke={TONE} strokeWidth={1.2} /> : null}
-                  <circle cx={x} cy={y} r={5} fill={TONE} fillOpacity={0.9} stroke="var(--paper-2)" strokeWidth={1} />
-                </g>
-              );
-            })}
-        </svg>
-      ) : pts.length ? null : (
-        <div className="chart-empty">Үзүүлэлт байхгүй</div>
-      )}
-    </div>
-  );
-}
 
 /* -------------------------------------------------------------------------- */
 

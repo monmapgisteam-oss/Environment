@@ -331,6 +331,8 @@ export type LayerSet = {
    * Олон мянган цэгтэй давхаргад: гэрэл нь нийлж толбо болдог.
    */
   dots?: Record<string, Record<string, number>>;
+  /** Зураг дээрх цэгийн хэмжээний үржүүлэгч ({@link WellsMap} `pointScale`), анхдагч 1 */
+  pointScale?: number;
   /**
    * ЦЭГИЙГ БӨӨГНӨРҮҮЛНЭ — холоос тоотой дугуй, ойртоход задарна
    * ({@link WellsMap} `cluster`). Анхдагч нь бөөгнөрөлгүй.
@@ -1327,8 +1329,12 @@ async function loadLayerInfo(
     .map((f) => ({
       name: f.name,
       /* Хэлтсийн өгсөн албан нэр эх сурвалжийн алиасыг дарна */
+      /* Түлхүүр нь талбарын нэр, эсвэл эх сурвалжийн alias — нэр нь
+         токенгүйгээр уншигдаагүй давхаргад alias-аар дарна */
       alias:
-        set.fields?.[f.name] ?? officialLabel((f.alias ?? "").trim() || f.name),
+        set.fields?.[f.name] ??
+        set.fields?.[(f.alias ?? "").trim()] ??
+        officialLabel((f.alias ?? "").trim() || f.name),
       type: f.type.replace("esriFieldType", ""),
     }));
 

@@ -194,6 +194,22 @@ export function UnelgeeDashboard() {
 
   const filtered = React.useMemo(() => (rows ?? []).filter((r) => passes(r)), [rows, passes]);
 
+  /*
+    Зураг дээр сонгосон нэгж талбар нь диаграм, цэс, үзүүлэлтийн ШҮҮЛТ
+    (хөндлөн шүүлт хоёр тийш). Бусад шүүлтэд тохирохгүй бол сонголт ДАМ
+    цуцлагдана. Газрын зураг сонголтоор хумигдахгүй — өөр талбар товших зам.
+  */
+  const sel = React.useMemo(
+    () => (picked != null && filtered.some((r) => r.oid === picked) ? picked : null),
+    [filtered, picked],
+  );
+
+  /** Диаграмын шүүлт — сонгосон нэгж талбартай хамт */
+  const passesSel = React.useCallback(
+    (r: Assessment, ...skips: Skip[]) => passes(r, ...skips) && (sel == null || r.oid === sel),
+    [passes, sel],
+  );
+
   /* ---------------- Өнгө — ШҮҮГДЭЭГҮЙ бүртгэлээс, тогтмол ---------------- */
   const rightColor = React.useMemo(() => {
     const m = new Map<string, number>();
@@ -231,6 +247,18 @@ export function UnelgeeDashboard() {
     (of: (r: Assessment) => string, ...skips: Skip[]) => {
       const m = new Map<string, number>();
       for (const r of rows ?? []) {
+        if (!passesSel(r, ...skips)) continue;
+        m.set(of(r), (m.get(of(r)) ?? 0) + 1);
+      }
+      return m;
+    },
+    [rows, passesSel],
+  );
+  /* Шүүлтүүрийн цэс сонголтоор хумигдахгүй — шүүгдээгүй жагсаалтаас */
+  const countAll = React.useCallback(
+    (of: (r: Assessment) => string, ...skips: Skip[]) => {
+      const m = new Map<string, number>();
+      for (const r of rows ?? []) {
         if (!passes(r, ...skips)) continue;
         m.set(of(r), (m.get(of(r)) ?? 0) + 1);
       }
@@ -245,11 +273,21 @@ export function UnelgeeDashboard() {
       .map(([k, v]) => ({ key: k, label: k, value: v }))
       .sort((a, b) => b.value - a.value);
   }, [count]);
+  const rightPick = React.useMemo<Datum[]>(() => {
+    const m = countAll((r) => r.right, "right");
+    return [...m]
+      .map(([k, v]) => ({ key: k, label: k, value: v }))
+      .sort((a, b) => b.value - a.value);
+  }, [countAll]);
 
   const sizeData = React.useMemo<Datum[]>(() => {
     const m = count((r) => String(sizeClass(r.m2)), "size");
     return SIZE_CLASSES.map((s) => ({ key: s.id, label: s.label, value: m.get(s.id) ?? 0 }));
   }, [count]);
+  const sizePick = React.useMemo<Datum[]>(() => {
+    const m = countAll((r) => String(sizeClass(r.m2)), "size");
+    return SIZE_CLASSES.map((s) => ({ key: s.id, label: s.label, value: m.get(s.id) ?? 0 }));
+  }, [countAll]);
 
   /* Шүүлтүүрийн цэс — хэмжээс тус бүрийн жагсаалт */
   const menu = React.useCallback(
@@ -265,9 +303,25 @@ export function UnelgeeDashboard() {
     },
     [count, dimOf, labelOf],
   );
+  const menuAll = React.useCallback(
+    (d: Dim): Datum[] => {
+      const m = countAll((r) => dimOf(r, d), d);
+      const out = [...m].map(([k, v]) => ({ key: k, label: labelOf(d, k), value: v }));
+      if (d === "activity") {
+        const order = new Map<string, number>(ACTIVITIES.map((a, i) => [a.id, i]));
+        return out.sort((a, b) => (order.get(a.key) ?? 99) - (order.get(b.key) ?? 99));
+      }
+      if (d === "size") return out.sort((a, b) => Number(a.key) - Number(b.key));
+      return out.sort((a, b) => b.value - a.value);
+    },
+    [countAll, dimOf, labelOf],
+  );
   const activityMenu = React.useMemo(() => menu("activity"), [menu]);
   const landuseMenu = React.useMemo(() => menu("landuse"), [menu]);
   const districtMenu = React.useMemo(() => menu("district"), [menu]);
+  const activityPick = React.useMemo(() => menuAll("activity"), [menuAll]);
+  const landusePick = React.useMemo(() => menuAll("landuse"), [menuAll]);
+  const districtPick = React.useMemo(() => menuAll("district"), [menuAll]);
 
   /* Сарын цуваа — бичлэггүй сар ч суудалтай */
   const monthData = React.useMemo<Datum[]>(() => {
@@ -275,7 +329,7 @@ export function UnelgeeDashboard() {
     let lo = Infinity;
     let hi = -Infinity;
     for (const r of rows ?? []) {
-      if (!passes(r, "period") || !r.period) continue;
+      if (!passesSel(r, "period") || !r.period) continue;
       c.set(r.period, (c.get(r.period) ?? 0) + 1);
       const t = Number(r.period.slice(0, 4)) * 12 + Number(r.period.slice(5)) - 1;
       if (t < lo) lo = t;
@@ -290,7 +344,7 @@ export function UnelgeeDashboard() {
       out.push({ key, label: `${y} оны ${mo}-р сар`, value: c.get(key) ?? 0 });
     }
     return out;
-  }, [rows, passes]);
+  }, [rows, passesSel]);
 
   /** Зургийн тайлбар */
   const legend = React.useMemo<LegendItem[]>(() => {
@@ -312,10 +366,11 @@ export function UnelgeeDashboard() {
 
   /* ---------------- Үзүүлэлт ---------------- */
   const stats = React.useMemo(() => {
+    const own = sel == null ? filtered : filtered.filter((r) => r.oid === sel);
     let m2 = 0;
     const applicants = new Set<string>();
     const byMonth = new Map<string, number>();
-    for (const r of filtered) {
+    for (const r of own) {
       m2 += r.m2;
       applicants.add(r.applicant);
       if (r.period) byMonth.set(r.period, (byMonth.get(r.period) ?? 0) + 1);
@@ -324,20 +379,20 @@ export function UnelgeeDashboard() {
     const ps = [...byMonth.keys()].sort();
     const nice = (v: string) => `${Number(v.slice(5))}-р сар`;
     return {
-      n: filtered.length,
+      n: own.length,
       ha: m2 / 10000,
       applicants: applicants.size,
-      perMonth: months.length ? filtered.length / months.length : 0,
+      perMonth: months.length ? own.length / months.length : 0,
       peak: months.length ? { label: nice(months[0][0]), n: months[0][1] } : null,
       span: ps.length ? `${nice(ps[0])} – ${nice(ps[ps.length - 1])}` : "—",
     };
-  }, [filtered]);
+  }, [filtered, sel]);
 
   const anyFilter = Boolean(activity || landuse || district || right || size || period);
   const focus = React.useMemo<Extent | null>(() => {
     if (!data) return null;
-    if (picked != null) {
-      const f = data.shapes.features.find((x) => Number(x.id) === picked);
+    if (sel != null) {
+      const f = data.shapes.features.find((x) => Number(x.id) === sel);
       if (!f) return null;
       const b = new Bounds();
       b.addGeometry(f.geometry);
@@ -347,15 +402,15 @@ export function UnelgeeDashboard() {
     const b = new Bounds();
     for (const f of shapes.features) b.addGeometry(f.geometry);
     return b.get();
-  }, [data, shapes, picked, anyFilter]);
+  }, [data, shapes, sel, anyFilter]);
 
   const hovered = React.useMemo(
     () => (tip.oid == null ? null : (rows?.find((r) => r.oid === tip.oid) ?? null)),
     [rows, tip.oid],
   );
   const selected = React.useMemo(
-    () => (picked == null ? null : (rows?.find((r) => r.oid === picked) ?? null)),
-    [rows, picked],
+    () => (sel == null ? null : (rows?.find((r) => r.oid === sel) ?? null)),
+    [rows, sel],
   );
 
   if (error || !data) {
@@ -363,7 +418,13 @@ export function UnelgeeDashboard() {
   }
 
   const activeCount =
-    (activity ? 1 : 0) + (landuse ? 1 : 0) + (district ? 1 : 0) + (right ? 1 : 0) + (size ? 1 : 0) + (period ? 1 : 0);
+    (activity ? 1 : 0) +
+    (landuse ? 1 : 0) +
+    (district ? 1 : 0) +
+    (right ? 1 : 0) +
+    (size ? 1 : 0) +
+    (period ? 1 : 0) +
+    (sel != null ? 1 : 0);
 
   return (
     <div
@@ -403,7 +464,7 @@ export function UnelgeeDashboard() {
           onClear={() => setActivity(null)}
           width={240}
         >
-          <PickList items={activityMenu} selected={activity} onPick={setActivity} />
+          <PickList items={activityPick} selected={activity} onPick={setActivity} />
         </FilterMenu>
         <FilterMenu
           label="Газрын зориулалт"
@@ -413,7 +474,7 @@ export function UnelgeeDashboard() {
           onClear={() => setLanduse(null)}
           width={300}
         >
-          <PickList items={landuseMenu} selected={landuse} onPick={setLanduse} />
+          <PickList items={landusePick} selected={landuse} onPick={setLanduse} />
         </FilterMenu>
         <FilterMenu
           label="Дүүрэг"
@@ -423,7 +484,7 @@ export function UnelgeeDashboard() {
           onClear={() => setDistrict(null)}
           width={210}
         >
-          <PickList items={districtMenu} selected={district} onPick={setDistrict} />
+          <PickList items={districtPick} selected={district} onPick={setDistrict} />
         </FilterMenu>
         <FilterMenu
           label="Эрхийн хэлбэр"
@@ -433,7 +494,7 @@ export function UnelgeeDashboard() {
           onClear={() => setRight(null)}
           width={200}
         >
-          <PickList items={rightData} selected={right} onPick={setRight} />
+          <PickList items={rightPick} selected={right} onPick={setRight} />
         </FilterMenu>
         <FilterMenu
           label="Талбайн хэмжээ"
@@ -443,7 +504,7 @@ export function UnelgeeDashboard() {
           onClear={() => setSize(null)}
           width={210}
         >
-          <PickList items={sizeData} selected={size} onPick={setSize} />
+          <PickList items={sizePick} selected={size} onPick={setSize} />
         </FilterMenu>
       </FilterBar>
 
@@ -510,9 +571,9 @@ export function UnelgeeDashboard() {
             <PolygonMap
               points={NO_POINTS}
               visible={NO_INDEX}
-              shapes={{ data: shapes, selected: picked, crisp: true }}
+              shapes={{ data: shapes, selected: sel, crisp: true }}
               basemap={basemap}
-              onSelect={(oid) => setPicked(picked === oid ? null : oid)}
+              onSelect={(oid) => setPicked(sel === oid ? null : oid)}
               onHover={tip.onHover}
               focus={focus}
               cluster={false}

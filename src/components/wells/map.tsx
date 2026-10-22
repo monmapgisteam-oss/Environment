@@ -1,100 +1,65 @@
 "use client";
+/* eslint-disable @typescript-eslint/no-explicit-any -- Esri SDK нь CDN-ээс AMD-ээр ачаалагддаг тул төрлийн тодорхойлолтгүй; энэ файлын бүх SDK обьект `any` */
 
+import type * as GeoJSON from "geojson";
 import { Minus, Plus } from "lucide-react";
-import { SceneOverlay } from "@/components/map/scene-overlay";
 import * as React from "react";
-import {
-  Map as MapLibreMap,
-  Marker,
-  prewarm,
-  setWorkerUrl,
-  type ExpressionSpecification,
-  type FilterSpecification,
-  type GeoJSONSource,
-  type IControl,
-  type ImageSource,
-  type StyleSpecification,
-} from "maplibre-gl";
-import "maplibre-gl/dist/maplibre-gl.css";
+import { SceneOverlay } from "@/components/map/scene-overlay";
 import { FIREFLY } from "@/components/wells/colors";
-import type { BoundarySet } from "@/lib/boundaries";
+import { esriModules } from "@/lib/arcgis-sdk";
+import { FIREFLY_CORE, FIREFLY_GLOW } from "@/lib/firefly";
 import { asset } from "@/lib/base-path";
+import type { BoundarySet } from "@/lib/boundaries";
 import { labelPoints } from "@/lib/extent";
 import { ratioText } from "@/lib/utils";
+
+/* ==========================================================================
+   НЭГДСЭН 2D ГАЗРЫН ЗУРАГ — ArcGIS Maps SDK `MapView` (2026-10-12)
+
+   ⚠⚠ Урьд нь MapLibre GL байсан (git түүхэнд бий). 3D нь аль хэдийн Esri `SceneView` тул 2D, 3D НЭГ хөдөлгүүр
+   болов. Пропын API ӨӨРЧЛӨГДӨӨГҮЙ — 26 самбар хөндөгдөхгүй.
+
+   ⚠ ZOOM-ЫН ХОЁР ХУВААРЬ. Дуудагч тал (шошгын хязгаар, бөөгнөрлийн
+   хязгаар, `onZoom`, `onView`) MapLibre-ийн zoom-оор ярьдаг: 512px
+   хавтан. Esri-ийн LOD нь 256px хавтан тул НЭГЭЭР их (`ML + 1`).
+   Хоорондын хөрвүүлэлт ЗӨВХӨН энэ файлд — гаднаас Esri-ийн түвшин
+   хэзээ ч харагдахгүй.
+
+   ⚠ Давхаргын харагдах муж нь МАСШТАБААР (`minScale`/`maxScale`) —
+   Esri-ийн жишиг. `scaleAt(ml)` нь MapLibre zoom-ыг Web Mercator-ын
+   НОМИНАЛ масштаб болгоно (Esri-ийн `view.scale`-тэй ижил хуваарь).
+
+   ⚠ ГАЗРЫН ЗУРАГ ГОРИМООС ҮЛ ХАМААРНА: бүх өнгө тогтмол hex,
+   платформын токен зураг дотор орохгүй.
+   ========================================================================== */
 
 /* --------------------------------------------------------------------------
    Масштабын ХАРЬЦАА (1:10 000)
    -------------------------------------------------------------------------- */
 
-/**
- * CSS пикселийн бодит хэмжээ. Вэбийн жишгээр 1 CSS пиксель = 1/96 инч.
- *
- * Дэлгэц бүрийн БОДИТ нягтрал үүнээс өөр (телефон 400+ ppi) тул дэлгэц
- * дээрх харьцаа нь цаасан зураг шиг үнэн зөв БАЙЖ ЧАДАХГҮЙ — ойролцоо
- * утга гэдгийг санах хэрэгтэй.
- */
+/** CSS пикселийн бодит хэмжээ — 1/96 инч */
 const M_PER_CSS_PX = 0.0254 / 96;
 
 /**
- * Масштабын харьцааг zoom болгоно (1:60 000 → z 11.69).
+ * Масштабын харьцааг zoom болгоно (1:60 000 → z 11.69), MapLibre-ийн
+ * хуваарьт (512px хавтан).
  *
- * MapLibre-ийн давхаргууд ЗӨВХӨН zoom мэддэг тул масштабаар илэрхийлсэн
- * дүрмийг (жишээ нь "1:20 000-аас ойр бол бодит цэг") энд хөрвүүлнэ.
- *
- * Хамаарал: D = 295 829 384 · cos(φ) / 2^z. Тогтмол нь дэлхийн бүслүүр
- * (40 075 016.686 м) ба MapLibre-ийн 512px хавтангаас гарна. Өргөрөг
- * ордог тул анхдагч нь УБ (47.9°) — энэ платформын бүх нягтралын дата
- * тэнд байна. Өөр өргөрөгт хэрэглэвэл `lat`-аа өгнө.
+ * Хамаарал: D = 295 829 384 · cos(φ) / 2^z. Өргөрөг ордог тул анхдагч нь
+ * УБ (47.9°) — энэ платформын бүх нягтралын дата тэнд байна.
  */
 export function zoomForScale(denominator: number, lat = 47.9) {
   const d0 = 295_829_384 * Math.cos((lat * Math.PI) / 180);
   return Math.log2(d0 / denominator);
 }
 
-/**
- * Зургийн буланд суух харьцааны заалт.
- *
- * Метр/пикселийг ТОМЪЁОГООР бус зургаас нь асууж тооцно: дэлгэцийн хоёр
- * цэгийг газарзүйн координат руу буулгаад хоорондын зайг хэмжинэ.
- * Ингэснээр проекц, өргөрөг, дэлгэцийн налуу зэрэг нь өөрөө тооцогдоно.
- */
-class RatioScaleControl implements IControl {
-  private el: HTMLElement | null = null;
-  private map: MapLibreMap | null = null;
-  private readonly update = () => {
-    const m = this.map;
-    const el = this.el;
-    if (!m || !el) return;
-    const y = m.getContainer().clientHeight / 2;
-    const span = 100;
-    const meters = m.unproject([0, y]).distanceTo(m.unproject([span, y]));
-    if (!Number.isFinite(meters) || meters <= 0) return;
-    el.textContent = ratioText(meters / span / M_PER_CSS_PX);
-  };
-
-  onAdd(map: MapLibreMap) {
-    this.map = map;
-    const el = document.createElement("div");
-    /* Хайрцаггүй, шууд зураг дээр суух тул уншигдац нь зөвхөн сүүдрээс
-       хамаарна — суурь зургийн товчтой ижил `drop-shadow` (хиймэл
-       дагуулын цайвар талбай дээр бичвэр дангаараа алга болно) */
-    el.className = "maplibregl-ctrl num text-[10px] leading-none text-ink-2";
-    el.style.filter = "drop-shadow(0 1px 2px rgba(0,0,0,.75))";
-    this.el = el;
-    map.on("move", this.update);
-    map.on("resize", this.update);
-    this.update();
-    return el;
-  }
-
-  onRemove() {
-    this.map?.off("move", this.update);
-    this.map?.off("resize", this.update);
-    this.el?.remove();
-    this.el = null;
-    this.map = null;
-  }
-}
+/** Web Mercator-ын 0-р түвшний номинал масштаб (256px, 96 dpi) */
+const S0 = 591_657_527.591555;
+/** MapLibre zoom → Esri-ийн номинал масштаб (`view.scale`-тэй ижил хуваарь) */
+const scaleAt = (ml: number) => S0 / 2 ** (ml + 1);
+/** Esri-ийн түвшин → MapLibre zoom */
+const mlOf = (esriZoom: number) => esriZoom - 1;
+/** Зургийн дээд ойртолт, MapLibre-ийн хуваарьт */
+const MAX_ML = 18;
 
 export type MapPoints = {
   oid: number[];
@@ -118,15 +83,26 @@ export type MapOverlay = {
     /** `gridcode` 1..N-ийн дагуух тунгалагийн шатлал */
     byGrid?: number[];
   };
-  line: { color: string; opacity: number; width: number };
+  /** `style` — зураасны хэв (анхдагч бүтэн) */
+  line: { color: string; opacity: number; width: number; style?: "solid" | "dash" | "short-dash" | "dot" };
+  /**
+   * Давхарга бүхэлдээ энэ түвшнөөс ОЙРТСОН үед л харагдана (`zoomForScale`).
+   * Өгөөгүй бол бүх масштабад. ЗӨВХӨН давхарга үүсэх мөчид уншигдана.
+   */
+  minzoom?: number;
+  /**
+   * Дүрс бүрийн НЭР шошго (`properties[field]`) — сонголттой. Өгөөгүй
+   * бол шошгогүй (бусад бүх дуудагч хуучнаараа). ЗӨВХӨН давхарга
+   * үүсэх мөчид уншигдана.
+   */
+  label?: { field: string; size?: number; color?: string; minzoom?: number };
   /**
    * ДАТА ДАВХАРГЫН ДЭЭР зурагдах эсэх.
    *
    * ⚠ Нэмэлт давхарга нь ерөнхийдөө СУУРЬ тул доор нь суудаг (хил,
    * бүсийн тор). Гэвч заримдаа тэр нь өөрөө ДАТА байна: бүстэй
    * давхцсан нэгж талбар нь бүсийн дүүргэлтийн ДООР орвол огт
-   * харагдахгүй (хэрэглэгч, 2026-09-29: "parcel 3 бүсийнхээ дээр
-   * харагдана шүү").
+   * харагдахгүй (хэрэглэгч, 2026-09-29).
    * ⚠ ШОШГЫН ДООР үлдэнэ: бичвэр нь үргэлж хамгийн дээр.
    */
   above?: boolean;
@@ -151,62 +127,50 @@ export type Basemap = {
   /**
    * Растерын засвар — Esri-ийн Firefly хавтан нь өнгө сулруулсан ч
    * БАРААН биш тул гэрэлтэх цэг ялгарахгүй байв (зургаар шалгасан).
+   * Нэрс нь MapLibre-ийнх хэвээр; Esri дээр CSS шүүлтүүр (`effect`) болно.
    */
   paint?: { "raster-brightness-max"?: number; "raster-saturation"?: number; "raster-contrast"?: number };
 };
 
-/** Хиймэл дагуул нь үндсэн суурь — цуглуулгын эхэнд байрлана */
+/**
+ * Хиймэл дагуул нь үндсэн суурь — цуглуулгын эхэнд байрлана.
+ *
+ * ⚠ НЭР нь Esri-ийн АЛБАН АНГЛИ нэр (хэрэглэгчийн шийдвэр, 2026-10-12:
+ * "нэршил нь бас англиар — хиймэл дагуул биш Imagery") — сонголт нь
+ * Esri-ийн `BasemapGallery` виджетэд гардаг.
+ */
 export const BASEMAPS: Basemap[] = [
   /*
-    ⚠⚠ **`maxzoom` нь ЗАРЛАСАН биш БОДИТ хамрах хүрээ.**
-
-    Esri үйлчилгээндээ 19–20 хүртэл түвшин зарладаг ч Монголын нутагт
-    бодит зураг нь ХАМААГҮЙ ЭРТ дуусдаг (2026-09-16-нд хавтан бүрчлэн
-    шалгасан):
-
+    ⚠⚠ **`maxzoom` нь ЗАРЛАСАН биш БОДИТ хамрах хүрээ** (Esri-ийн хавтангийн
+    түвшин, 256px). Esri үйлчилгээндээ 19–20 хүртэл түвшин зарладаг ч
+    Монголын нутагт бодит зураг нь эрт дуусдаг (2026-09-16-нд шалгасан):
       · Улаанбаатарын төв — хиймэл дагуул z19, гудамж z19, байр зүй z18
       · Хот ГАДУУР (Гачуурт, Горхи-Тэрэлж, Зуунмод) — ГУРВУУЛАА z17
-
-    Түүнээс цааш сервер 2,521 байтын "Map data not yet available"
-    гэсэн ГАНЦ орлуулагч зургийг буцаана. Зарласнаар нь бичвэл
-    хэрэглэгч ойртоход зураг саарал хавтангийн тор болж, систем
-    эвдэрсэн мэт харагдана (хэрэглэгч 2026-09-16-нд мэдээлсэн).
-
-    ⚠ `tileSize: 256` тул MapLibre нь газрын зургийн zoom дээр НЭГ
-    НЭМЖ хавтан гуйдаг (`tileZoom = mapZoom + 1`). Тиймээс z18-ын
-    хоосон хавтан нь газрын зураг 17 болоход л гарч ирнэ — хязгаарыг
-    тэр тооцоог оруулж тавина.
-
-    Хязгаарыг бодит хамрах хүрээгээр нь бичсэнээр MapLibre сүүлчийн
-    БОДИТ хавтанг томруулж харуулна: бага зэрэг бүдэг ч ХООСОН биш.
-    Хотод z18–19-ийн эх нарийвчлалыг алдаж байгаа нь ухамсартай
-    солилцоо — саарал хоосон тор нь бүдэг зурагнаас хамаагүй дор.
+    Түүнээс цааш сервер "Map data not yet available" гэсэн орлуулагч
+    зургийг буцаана. Иймээс энэ түвшнээс цааш СҮҮЛЧИЙН БОДИТ хавтанг
+    томруулж харуулна ({@link tileLayer}).
   */
-  { id: "imagery", name: "Хиймэл дагуул", service: "World_Imagery", dark: true, maxzoom: 17 },
+  { id: "imagery", name: "Imagery", service: "World_Imagery", dark: true, maxzoom: 17 },
   /*
-    ⚠ FIREFLY СУУРЬ (хэрэглэгч, 2026-10-07: "firelight гэж мэдэх үү").
-    Esri-ийн бараан, өнгө сулруулсан хиймэл дагуул — гэрэлтэх цэгт
-    (`dots`) зориулагдсан. Хост нь `fly.maptiles.arcgis.com`,
-    түлхүүргүй; УБ-д z18 хүртэл бодит хавтан (16–20 КБ) буцаахыг
-    шалгасан — хязгаар нь бусадтай ижил 17.
+    ⚠ FIREFLY СУУРЬ (хэрэглэгч, 2026-10-07). Esri-ийн бараан, өнгө
+    сулруулсан хиймэл дагуул — гэрэлтэх цэгт зориулагдсан. Хост нь
+    `fly.maptiles.arcgis.com`, түлхүүргүй.
   */
   {
     id: "firefly",
-    name: "Бараан хиймэл дагуул",
+    name: "Imagery (Firefly)",
     service: "World_Imagery_Firefly",
     dark: true,
     maxzoom: 17,
-    /* Бараан болгоно: гэрэлтэлтийн дээд хязгаар 45%, өнгө бараг саарал —
-       Esri-ийн firefly жишгийн харагдац */
     paint: { "raster-brightness-max": 0.45, "raster-saturation": -0.55, "raster-contrast": 0.1 },
     url: "https://fly.maptiles.arcgis.com/arcgis/rest/services/World_Imagery_Firefly/MapServer/tile/{z}/{y}/{x}",
   },
-  { id: "dark", name: "Бараан", service: "Canvas/World_Dark_Gray_Base", dark: true, maxzoom: 16 },
-  { id: "light", name: "Цайвар", service: "Canvas/World_Light_Gray_Base", dark: false, maxzoom: 16 },
-  { id: "street", name: "Гудамж", service: "World_Street_Map", dark: false, maxzoom: 17 },
-  { id: "topo", name: "Байр зүй", service: "World_Topo_Map", dark: false, maxzoom: 17 },
-  { id: "hillshade", name: "Газрын гадарга", service: "Elevation/World_Hillshade", dark: false, maxzoom: 16 },
-  { id: "natgeo", name: "NatGeo", service: "NatGeo_World_Map", dark: false, maxzoom: 16 },
+  { id: "dark", name: "Dark Gray Canvas", service: "Canvas/World_Dark_Gray_Base", dark: true, maxzoom: 16 },
+  { id: "light", name: "Light Gray Canvas", service: "Canvas/World_Light_Gray_Base", dark: false, maxzoom: 16 },
+  { id: "street", name: "Streets", service: "World_Street_Map", dark: false, maxzoom: 17 },
+  { id: "topo", name: "Topographic", service: "World_Topo_Map", dark: false, maxzoom: 17 },
+  { id: "hillshade", name: "Hillshade", service: "Elevation/World_Hillshade", dark: false, maxzoom: 16 },
+  { id: "natgeo", name: "National Geographic", service: "NatGeo_World_Map", dark: false, maxzoom: 16 },
 ];
 
 export function basemapTiles(b: Basemap) {
@@ -218,318 +182,800 @@ export function basemapThumb(b: Basemap) {
   return (b.url ?? ESRI(b.service)).replace("{z}/{y}/{x}", "5/11/24");
 }
 
-/*
-  Worker-ийн бэлтгэл. ЗӨВХӨН ХӨТӨЧ ДЭЭР дуудна — модулийн гадна талд бичвэл
-  SSR үед "Worker is not defined" гэж уначихна.
-
-  MapLibre v6 нь worker-ийнхөө хаягийг `import.meta.url`-ээс тооцдог. Next.js
-  кодыг багцлахад тэр нь багцын чанк руу заадаг тул `maplibre-gl-worker.mjs`
-  олдохгүй 404 болж, worker эхлэлдээ уначихдаг. Растер хавтан үндсэн урсгалаар
-  татагддаг учир газрын зураг ажиллаж байгаа мэт харагдана — гэвч GeoJSON эх
-  сурвалж worker дээр боловсрогддог тул бүх цэг чимээгүйхэн алга болно.
-  Файлыг `scripts/copy-maplibre-worker.mjs` (predev/prebuild) public/ рүү хуулна.
-
-  `prewarm()` нь worker санг амьд байлгана: `map.remove()` дуудагдахад сан
-  унтардаг бөгөөд React StrictMode эхний зургийг зориуд устгадаг тул хоёр дахь
-  зураг worker-гүй үлдэх эрсдэлтэй.
-*/
-let workerReady = false;
-function ensureWorker() {
-  if (workerReady) return;
-  workerReady = true;
-  setWorkerUrl(asset("/maplibre/maplibre-gl-worker.mjs"));
-  prewarm();
-}
-
 /** Анхны суурь зураг — хиймэл дагуул */
 export function defaultBasemap() {
   return BASEMAPS.find((b) => b.id === "imagery") ?? BASEMAPS[0];
 }
 
-/**
- * Бөөгнөрлийн хэмжээ. Радиусыг цэгийн тооны КВАДРАТ ЯЗГУУРААР томруулна —
- * дугуйн талбай нь тоотой шууд пропорциональ болж, харьцуулалт зөв уншигдана.
- * Тоо хэмжээг ЗӨВХӨН хэмжээ илэрхийлнэ; өнгө нь тогтмол.
- */
-const clusterRadius = [
-  "interpolate",
-  ["linear"],
-  ["sqrt", ["get", "point_count"]],
-  2,
-  10,
-  10,
-  18,
-  35,
-  28,
-  70,
-  38,
-] as ExpressionSpecification;
+/** MapLibre-ийн растерын засварыг CSS шүүлтүүр болгоно */
+function basemapEffect(b: Basemap) {
+  const p = b.paint;
+  if (!p) return null;
+  const parts: string[] = [];
+  if (p["raster-brightness-max"] != null) parts.push(`brightness(${p["raster-brightness-max"]})`);
+  if (p["raster-saturation"] != null) parts.push(`saturate(${1 + p["raster-saturation"]})`);
+  if (p["raster-contrast"] != null) parts.push(`contrast(${1 + p["raster-contrast"]})`);
+  return parts.join(" ") || null;
+}
 
 /* --------------------------------------------------------------------------
-   Зэрэглэсэн тэмдгийн илэрхийлэл
+   Өнгө, геометр
    -------------------------------------------------------------------------- */
 
-/** Олон өнцөгт өөрийн өнгө (`c`) авчраагүй үеийн нөөц өнгө */
-const SHAPE_FALLBACK = FIREFLY.glow;
-
-/** Утга (`g`) → шатлалын өнгө. Хоорондох утга шугаман холилдоно. */
-function gradeColor(stops: [number, string][]): ExpressionSpecification {
-  const e: unknown[] = ["interpolate", ["linear"], ["get", "g"]];
-  for (const [v, c] of stops) e.push(v, c);
-  return e as unknown as ExpressionSpecification;
-}
-
-/**
- * Утга → дулааны жин (0…1).
- *
- * Хамгийн бага утга дээр ч 0 БИШ жин өгнө: тэглэвэл цэвэр цэгүүд
- * гадаргуунд огт оролцохгүй бөгөөд "хэмжилт байгаа ч цэвэр" ба
- * "хэмжилт огт байхгүй" хоёр ялгагдахаа болино.
- */
-function heatWeight(stops: [number, string][]): ExpressionSpecification {
-  const lo = stops[0][0];
-  const hi = stops[stops.length - 1][0];
-  return ["interpolate", ["linear"], ["get", "g"], lo, 0.18, hi, 1] as unknown as ExpressionSpecification;
-}
-
-/**
- * Шатлалыг дулааны нягтралын өнгө болгоно.
- *
- * `heatmap-color`-ийн оролт нь 0…1 нягтрал тул шатлалын утгын мужийг
- * тэр хэмжээст буулгана. Хамгийн доод шат нь ЗААВАЛ тунгалаг байх
- * ёстой — эс тэгвээс бүх дэлгэц нэг өнгөөр будагдана.
- */
-function heatRamp(stops: [number, string][]): ExpressionSpecification {
-  const lo = stops[0][0];
-  const hi = stops[stops.length - 1][0];
-  const e: unknown[] = ["interpolate", ["linear"], ["heatmap-density"], 0, "rgba(0,0,0,0)"];
-  stops.forEach(([v, c], i) => {
-    const t = (v - lo) / (hi - lo);
-    /* Эхний өнгө хэт эрт орвол захын сарнилт хүртэл будагдана */
-    e.push(Math.max(t, i === 0 ? 0.12 : 0), hexRgba(c, i === 0 ? 0.55 : 0.88));
-  });
-  return e as unknown as ExpressionSpecification;
-}
-
-function hexRgba(hex: string, a: number) {
-  const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
-  return `rgba(${r},${g},${b},${a})`;
-}
-
-/**
- * Утга → радиус, ойртох тусам томорно.
- *
- * `["zoom"]` нь ЗААВАЛ дээд түвшний `interpolate`-ийн шууд оролт байх
- * ёстой. Үржүүлэх замаар (`["*", zoom-interpolate, value-interpolate]`)
- * хослуулбал MapLibre давхаргыг чимээгүйхэн голж, цэг огт зурагдахгүй
- * болно. Тиймээс zoom нь гадна, утга нь СУУДАЛ бүрийн дотор байрлана.
- */
-function gradedRadius(stops: [number, string][], scale: number): ExpressionSpecification {
-  const lo = stops[0][0];
-  const hi = stops[stops.length - 1][0];
-  /* Хэмжээний ялгаа 1.9 дахин — өнгөнөөс гадна хоёр дахь суваг болох
-     хэрэгтэй ч цэгүүд бие биенээ дарах хэмжээнд томрох ёсгүй */
-  const at = (z: number) => [
-    "interpolate",
-    ["linear"],
-    ["get", "g"],
-    lo,
-    z * scale,
-    hi,
-    z * 1.9 * scale,
-  ];
-  return [
-    "interpolate",
-    ["linear"],
-    ["zoom"],
-    8,
-    at(1.7),
-    12,
-    at(2.4),
-    16,
-    at(3.6),
-  ] as unknown as ExpressionSpecification;
-}
-
-/**
- * Бөөгнөрлийн тоог бичихэд фонтын glyph хэрэгтэй. Растер хавтан ганцаараа
- * glyph өгдөггүй тул нийтэд нээлттэй OpenMapTiles-ийн фонтын үйлчилгээг заана.
- */
-/** 1×1 тунгалаг PNG — растер эх сурвалжийн анхны дүүргэгч */
-const BLANK_PNG =
-  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
-
-const GLYPHS = "https://fonts.openmaptiles.org/{fontstack}/{range}.pbf";
-
-/** MapLibre-ийн дээд ойртолт — давхаргын zoom мужийн дээд хязгаарт */
-const MAX_ZOOM = 24;
-const FONT = ["Open Sans Bold"];
-
-/**
- * Хэдэн зурган тэмдэглэгээ хүртэл DOM дээр гаргах вэ. Тэмдэглэгээ бүр нь
- * жинхэнэ элемент бөгөөд зураг татдаг тул олноороо хөтчийг зогсооно.
- */
-const MARKER_CAP = 250;
-
-/**
- * Дугуй тэмдэглэгээ. Газрын зураг дээр цэг биш, ЮУ болохыг нь шууд харуулна.
- *
- * Агуулга нь хоёр хэлбэртэй байж болно:
- *  · зургийн хаяг (`/species/…webp`) — дугуй дүүрэн зураг;
- *  · SVG бичвэр (`<svg …`) — зурсан тэмдэг (зураг байхгүй зүйлд).
- * Хоёулаа өөрийн кодоос гаралтай тул `innerHTML` аюулгүй.
- */
-function markerEl(
-  mark: string,
-  onClick: () => void,
-  onHover?: (over: boolean) => void,
-  /** Тэмдэглэгээний өнгө (`--pin`). Өгөөгүй бол дата өнгө үлдэнэ */
-  tint?: string,
-) {
-  const el = document.createElement("button");
-  el.type = "button";
-  if (tint) el.style.setProperty("--pin", tint);
-
-  if (mark === "pulse") {
-    // Цөм + давтан тэлэх цагираг (globals.css → `.pulse-pin`)
-    el.className = "pulse-pin";
-    el.innerHTML = '<span class="ring"></span><span class="ring d"></span>';
-  } else if (mark.startsWith("<svg")) {
-    el.className = "species-pin";
-    el.innerHTML = mark;
-  } else {
-    el.className = "species-pin photo";
-    el.style.backgroundImage = `url("${mark}")`;
+/** "#rrggbb" / "rgba(r,g,b,a)" → [r, g, b, a(0…1)] */
+function parseColor(c: string): [number, number, number, number] {
+  if (c.startsWith("#")) {
+    let h = c.slice(1);
+    if (h.length === 3) h = h.replace(/./g, (x) => x + x);
+    const n = (i: number) => parseInt(h.slice(i, i + 2), 16);
+    return [n(0), n(2), n(4), h.length >= 8 ? n(6) / 255 : 1];
   }
-
-  el.addEventListener("click", (e) => {
-    e.stopPropagation();
-    onClick();
-  });
-  if (onHover) {
-    el.addEventListener("mouseenter", () => onHover(true));
-    el.addEventListener("mouseleave", () => onHover(false));
+  const m = c.match(/rgba?\(([^)]+)\)/);
+  if (m) {
+    const p = m[1].split(",").map((x) => Number(x.trim()));
+    return [p[0], p[1], p[2], p[3] ?? 1];
   }
-  return el;
+  return [255, 255, 255, 1];
 }
 
-/**
- * Тоог бөөгнөрлийн БАРУУН ДЭЭД буланд гаргах шилжилт (em нэгжээр, 10px
- * бичвэрт). Радиус нь цэгийн тооноос хамааран өөрчлөгддөг ч `text-offset`-д
- * массив буцаадаг илэрхийлэл бичих боломж хязгаартай тул алхмаар ойртуулав —
- * алхам бүр нь `clusterRadius`-ийн тухайн мужийн радиусын 0.7 дахин (45°).
- */
-const badgeOffset = [
-  "step",
-  ["get", "point_count"],
-  ["literal", [1, -1]],
-  10,
-  ["literal", [1.5, -1.5]],
-  100,
-  ["literal", [2.1, -2.1]],
-  1000,
-  ["literal", [2.7, -2.7]],
-] as unknown as ExpressionSpecification;
-
-/**
- * Тооны дэвсгэр болох сунадаг "шахмал". Дан дугуй зураг байсан бол 4 оронтой
- * тоо багтахгүй тул `icon-text-fit`-ийн сунах муж (`stretchX/Y`) заана —
- * икон нь бичвэрийнхээ уртад тааруулж өөрөө сунана.
- */
-function pillImage() {
-  const w = 26;
-  const h = 20;
-  const r = 9;
-  const c = document.createElement("canvas");
-  c.width = w;
-  c.height = h;
-  const g = c.getContext("2d")!;
-
-  g.beginPath();
-  g.moveTo(r, 0.5);
-  g.arcTo(w - 0.5, 0.5, w - 0.5, h - 0.5, r);
-  g.arcTo(w - 0.5, h - 0.5, 0.5, h - 0.5, r);
-  g.arcTo(0.5, h - 0.5, 0.5, 0.5, r);
-  g.arcTo(0.5, 0.5, w - 0.5, 0.5, r);
-  g.closePath();
-
-  g.fillStyle = "rgba(15,23,32,.92)";
-  g.fill();
-  g.strokeStyle = FIREFLY.glow;
-  g.lineWidth = 1;
-  g.stroke();
-
-  return {
-    data: g.getImageData(0, 0, w, h),
-    options: {
-      // Голын хэсэг нь сунана, булангийн дугуйрал нь хэвээр үлдэнэ
-      stretchX: [[r, w - r] as [number, number]],
-      stretchY: [[r, h - r] as [number, number]],
-      content: [3, 2, w - 3, h - 2] as [number, number, number, number],
-    },
-  };
+/** Энгийн тэмдгийн өнгө — тунгалаг нь 0…1 */
+function col(c: string, a?: number) {
+  const [r, g, b, al] = parseColor(c);
+  return [r, g, b, a ?? al];
 }
 
-function baseStyle(b: Basemap): StyleSpecification {
-  return {
-    version: 8,
-    glyphs: GLYPHS,
-    sources: {
-      base: {
-        type: "raster",
-        tiles: [basemapTiles(b)],
-        tileSize: 256,
-        maxzoom: b.maxzoom,
-      },
-    },
-    layers: [{ id: "base", type: "raster", source: "base", paint: b.paint ?? {} }],
-  };
+/** CIM-ийн өнгө — тунгалаг нь 0…255 */
+function cim(c: string, a?: number) {
+  const [r, g, b, al] = parseColor(c);
+  return [r, g, b, Math.round(255 * (a ?? al))];
 }
 
-/**
- * Суурь зургийг солино.
- *
- * `setTiles`-ээр зөвхөн хаяг солигдож, `maxzoom` хуучнаараа үлддэг. Үйлчилгээ
- * бүр өөр өөр дээд түвшинтэй (Canvas 16, Imagery 19) тул эх сурвалжийг бүтнээр
- * нь дахин үүсгэнэ. Тиймээс давхаргыг нь эхлээд авч, дараа нь доод талд нь
- * буцааж нэмнэ.
- */
-function applyBasemap(m: MapLibreMap, b: Basemap) {
-  /*
-    Устгагдсан зураг дээр дуудагдаж болзошгүй: React StrictMode ба
-    хөгжүүлэлтийн халуун ачаалалт (HMR) үед эхний зураг `remove()`
-    хийгдсэн ч түүнийг барьсан effect дахин ажиллана. Тэр үед
-    `getStyle()` нь `undefined` буцаадаг тул шууд гарна — хийх зүйл
-    байхгүй, харин шалгалтгүй бол бүхэл самбар унана.
-  */
-  const style = m.getStyle();
-  if (!style) return;
+function hexOf([r, g, b]: number[]) {
+  return `#${[r, g, b].map((v) => Math.round(v).toString(16).padStart(2, "0")).join("")}`;
+}
 
-  const first = style.layers.find((l) => l.id !== "base")?.id;
-  if (m.getLayer("base")) m.removeLayer("base");
-  if (m.getSource("base")) m.removeSource("base");
+/** Шатлалын өнгийг шугаман холино (MapLibre-ийн `interpolate linear`-тэй ижил) */
+function lerpStops(stops: [number, string][], v: number) {
+  if (v <= stops[0][0]) return stops[0][1];
+  for (let i = 1; i < stops.length; i++) {
+    const [b, cb] = stops[i];
+    if (v <= b) {
+      const [a, ca] = stops[i - 1];
+      const t = (v - a) / (b - a || 1);
+      const x = parseColor(ca);
+      const y = parseColor(cb);
+      return hexOf([0, 1, 2].map((k) => x[k] + (y[k] - x[k]) * t));
+    }
+  }
+  return stops[stops.length - 1][1];
+}
 
-  m.addSource("base", {
-    type: "raster",
-    tiles: [basemapTiles(b)],
-    tileSize: 256,
-    maxzoom: b.maxzoom,
-  });
-  m.addLayer({ id: "base", type: "raster", source: "base", paint: b.paint ?? {} }, first);
+const R_EARTH = 6378137;
+const toMerc = (lon: number, lat: number): [number, number] => [
+  (R_EARTH * lon * Math.PI) / 180,
+  R_EARTH * Math.log(Math.tan(Math.PI / 4 + (lat * Math.PI) / 360)),
+];
+const toLonLat = (x: number, y: number): [number, number] => [
+  ((x / R_EARTH) * 180) / Math.PI,
+  ((2 * Math.atan(Math.exp(y / R_EARTH)) - Math.PI / 2) * 180) / Math.PI,
+];
+
+type Family = "point" | "polyline" | "polygon";
+
+function familyOf(g: GeoJSON.Geometry | null | undefined): Family | null {
+  if (!g) return null;
+  switch (g.type) {
+    case "Point":
+    case "MultiPoint":
+      return "point";
+    case "LineString":
+    case "MultiLineString":
+      return "polyline";
+    case "Polygon":
+    case "MultiPolygon":
+      return "polygon";
+    default:
+      return null;
+  }
 }
 
 /*
-  Талбай "асаалттай" эсэх: СОНГОГДСОН эсвэл ХУЛГАНА дээр нь байгаа.
-
-  Хоёр төлөвийг нэг харагдацаар илэрхийлж байгаа шалтгаан: hover нь
-  сонголт ямар байхыг урьдчилан харуулдаг. Тусад нь өөр өнгө өгвөл газрын
-  зураг дээр гурван зэрэг үүсч, аль нь чухал болох нь бүдгэрнэ.
+  ⚠ ЭВДЭРСЭН ГЕОМЕТРИЙГ ЦЭВЭРЛЭНЭ. Esri-ийн GeoJSON задлагч (worker) нэг
+  хоосон цагирагт БҮХ давхаргаа унагадаг — ойн ялгаралын 6,264 дүрсийн
+  нэг нь мужаас гадуурх оройгоо хасуулаад хоосон цагирагтай үлдсэнээс
+  зураг бүхэлдээ гараагүй (2026-10-12). Дутуу цагираг, хоосон хэсгийг
+  хасаж, юу ч үлдээгүй бол дүрсийг алгасна.
 */
-const SHAPE_LIT = [
-  "any",
-  ["boolean", ["feature-state", "on"], false],
-  ["boolean", ["feature-state", "hot"], false],
-] as unknown as ExpressionSpecification;
+function cleanGeom(g: GeoJSON.Geometry | null | undefined): GeoJSON.Geometry | null {
+  if (!g) return null;
+  const okPos = (p: GeoJSON.Position | undefined) => !!p && Number.isFinite(p[0]) && Number.isFinite(p[1]);
+  const ring = (r: GeoJSON.Position[] | undefined) => (r ?? []).filter(okPos);
+  const poly = (rs: GeoJSON.Position[][] | undefined) => {
+    const out = (rs ?? []).map(ring).filter((r) => r.length >= 4);
+    return out.length ? out : null;
+  };
+  switch (g.type) {
+    case "Polygon": {
+      const c = poly(g.coordinates);
+      return c ? { type: "Polygon", coordinates: c } : null;
+    }
+    case "MultiPolygon": {
+      const c = (g.coordinates ?? []).map(poly).filter((x): x is GeoJSON.Position[][] => !!x);
+      return c.length ? { type: "MultiPolygon", coordinates: c } : null;
+    }
+    case "LineString": {
+      const c = ring(g.coordinates);
+      return c.length >= 2 ? { type: "LineString", coordinates: c } : null;
+    }
+    case "MultiLineString": {
+      const c = (g.coordinates ?? []).map(ring).filter((l) => l.length >= 2);
+      return c.length ? { type: "MultiLineString", coordinates: c } : null;
+    }
+    case "Point":
+      return okPos(g.coordinates) ? g : null;
+    default:
+      return null;
+  }
+}
+
+/** Цагираг тойргийн тэмдэгт талбай — эерэг бол цагийн зүүний эсрэг */
+function signedArea(r: GeoJSON.Position[]) {
+  let s = 0;
+  for (let i = 0, j = r.length - 1; i < r.length; j = i++) s += r[j][0] * r[i][1] - r[i][0] * r[j][1];
+  return s / 2;
+}
+
+/*
+  ⚠ ЦАГИРГИЙН ЧИГЛЭЛ. GeoJSON-д гадна цагираг цагийн зүүний ЭСРЭГ, Esri-д
+  цагийн зүүний ДАГУУ бөгөөд Esri нүхийг чиглэлээр нь таньдаг. Тиймээс
+  гадна цагиргийг цагийн зүүний дагуу, нүхийг эсрэг болгоно.
+*/
+function orient(poly: GeoJSON.Position[][]) {
+  return poly.map((ring, i) => {
+    const xy = ring.map((p) => [p[0], p[1]]);
+    const ccw = signedArea(xy) > 0;
+    return i === 0 === ccw ? xy.reverse() : xy;
+  });
+}
+
+/*
+  ⚠ БҮХ ДАВХАРГА WEB MERCATOR-Т. Харагдац нь Web Mercator тул 4326-ийн
+  геометрийг SDK обьект бүрд проекцлох байсан — 145 мянган жорлонгийн
+  цэг дээр хөтөч хэдэн арван секунд түгжигдэж байв (2026-10-12-нд
+  хэмжсэн). Хөрвүүлэлт нь энгийн томьёо тул энд нэг удаа.
+*/
+const MERC = { wkid: 102100 };
+const LAT_MAX = 85.05112878;
+const merc = (p: GeoJSON.Position) => toMerc(p[0], Math.max(-LAT_MAX, Math.min(LAT_MAX, p[1])));
+
+/** Газарзүйн цэг → Esri цэг (Web Mercator) */
+function mercPoint(lon: number, lat: number) {
+  const [x, y] = merc([lon, lat]);
+  return { type: "point", x, y, spatialReference: MERC };
+}
+
+/** GeoJSON геометр → Esri геометрийн JSON (autocast), Web Mercator-т */
+function esriGeom(g: GeoJSON.Geometry | null | undefined): any | null {
+  if (!g) return null;
+  const ring = (r: GeoJSON.Position[]) => r.map(merc);
+  switch (g.type) {
+    case "Point":
+      return mercPoint(g.coordinates[0], g.coordinates[1]);
+    case "MultiPoint":
+      return g.coordinates.length ? mercPoint(g.coordinates[0][0], g.coordinates[0][1]) : null;
+    case "LineString":
+      return { type: "polyline", paths: [ring(g.coordinates)], spatialReference: MERC };
+    case "MultiLineString":
+      return { type: "polyline", paths: g.coordinates.map(ring), spatialReference: MERC };
+    case "Polygon":
+      return { type: "polygon", rings: orient(g.coordinates).map(ring), spatialReference: MERC };
+    case "MultiPolygon":
+      return { type: "polygon", rings: g.coordinates.flatMap(orient).map(ring), spatialReference: MERC };
+    default:
+      return null;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   CIM тэмдэг — гэрэлтэх цэг (firefly)
+
+   MapLibre-ийн `circle-blur` (сарнисан гэрэл) Esri-д байхгүй. Сарнилтыг
+   ТӨВ НЭГТЭЙ гурван тунгалаг дискээр дуурайна: давхцсан хэсэг нь
+   нэмэгдэж төв рүүгээ тодорч, захдаа сулрах налуу гарна.
+
+   Хэмжээ нь ЦЭГИЙН ПИКСЕЛИЙН РАДИУС × 1.5 (пункт: px · 0.75 · 2).
+   Давхаргуудын харьцаа нь MapLibre-ийн z12 дээрх радиусаас; бүх тэмдгийн
+   үнэмлэхүй хэмжээг масштабын визуал хувьсагч тохируулна.
+   -------------------------------------------------------------------------- */
+
+/** Цагиргийн 32 өнцөгт, цагийн зүүний дагуу — CIM-ийн хүрээ ±5 */
+const RING = Array.from({ length: 33 }, (_, i) => {
+  const a = (-(i % 32) / 32) * Math.PI * 2;
+  return [5 * Math.cos(a), 5 * Math.sin(a)];
+});
+
+const pt = (rPx: number) => rPx * 1.5;
+
+function disc(rPx: number, fill: number[] | null, stroke?: [number[], number]) {
+  const layers: any[] = [];
+  if (stroke)
+    layers.push({ type: "CIMSolidStroke", enable: true, width: stroke[1] * 0.75, color: stroke[0], capStyle: "Round", joinStyle: "Round" });
+  if (fill) layers.push({ type: "CIMSolidFill", enable: true, color: fill });
+  return {
+    type: "CIMVectorMarker",
+    enable: true,
+    anchorPointUnits: "Relative",
+    size: pt(rPx),
+    frame: { xmin: -5, ymin: -5, xmax: 5, ymax: 5 },
+    markerGraphics: [
+      {
+        type: "CIMMarkerGraphic",
+        geometry: { rings: [RING] },
+        symbol: { type: "CIMPolygonSymbol", symbolLayers: layers },
+      },
+    ],
+    scaleSymbolsProportionally: false,
+    respectFrame: true,
+  };
+}
+
+/** Сарнисан гэрэл — гурван дискийн давхарга (`op` нь MapLibre-ийн тунгалаг) */
+function glow(rPx: number, color: string, op: number) {
+  return [
+    disc(rPx * 0.48, cim(color, op * 0.48)),
+    disc(rPx * 0.72, cim(color, op * 0.36)),
+    disc(rPx, cim(color, op * 0.28)),
+  ];
+}
+
+/** Давхаргуудыг ДЭЭРЭЭС ДООШ дарааллаар өгнө */
+function cimPoint(layers: any[]) {
+  return {
+    type: "cim",
+    data: { type: "CIMSymbolReference", symbol: { type: "CIMPointSymbol", symbolLayers: layers } },
+  };
+}
+
+type Fire = { glow: string; mid: string; core: string };
+
+/** Анхдагч firefly: сарнисан гэрэл → (цагираг) → бие → цөм */
+function fireSymbol(f: Fire, tint: string | null, ring: boolean) {
+  return cimPoint([
+    disc(2.3, cim(tint ?? f.core, 0.95)),
+    disc(5.6, cim(tint ?? f.mid, 0.6)),
+    ...(ring ? [disc(6.6, null, [cim("rgba(8,14,20,.7)"), 1.1])] : []),
+    ...glow(11, tint ?? f.glow, 0.38),
+  ]);
+}
+
+/** ЖИЖИГ firefly ({@link WellsMap} `dots`) */
+function dotSymbol(f: Fire, tint: string | null) {
+  return cimPoint([
+    disc(0.9, cim("#ffffff", 0.75)),
+    disc(2.5, cim(tint ?? f.mid, 0.95)),
+    ...glow(5.6, tint ?? f.glow, 0.42),
+  ]);
+}
+
+/** Зэрэглэсэн энгийн цэг — бараан нимгэн ирмэгтэй, сул гэрэлтэй */
+function gradedSymbol(color: string) {
+  return cimPoint([
+    disc(1, cim(color, 0.92), [cim("rgba(10,18,26,.55)"), 0.7]),
+    ...glow(2.4, color, 0.32),
+  ]);
+}
+
+/** Зэрэглэсэн гэрэлтэх цэг — нэг өнгөт */
+function gradedFireSymbol(f: Fire) {
+  return cimPoint([disc(0.95, cim(f.core, 0.95)), disc(2.2, cim(f.mid, 0.6)), ...glow(4.2, f.glow, 0.38)]);
+}
+
+/** Esri Firefly-ийн `CIMPictureMarker` давхарга (style-ийн тохиргоо хэвээр) */
+function picture(url: string, size: number, tint: number[], locked: boolean) {
+  return {
+    type: "CIMPictureMarker",
+    enable: true,
+    anchorPoint: { x: 0, y: 0 },
+    anchorPointUnits: "Relative",
+    size,
+    scaleX: 1,
+    textureFilter: "Picture",
+    tintColor: tint,
+    colorLocked: locked,
+    url,
+  };
+}
+
+/**
+ * Зэрэглэсэн гэрэлтэх цэг — ESRI-ИЙН FIREFLY тэмдэг (хэрэглэгч 2026-10-15,
+ * хөрсний мониторинг: "esri firefly"). Style-ийн `Firefly_N`-тэй ЯГ ижил:
+ * цагаан цөм (10pt, түгжээтэй) + шатлалын өнгөөр будсан гэрэл (20pt).
+ * Гараар зурсан дугуйн хувилбар БУЦААГДСАН. Хэмжээг `sizeByValue` масштаблана.
+ */
+function gradedMultiSymbol(color: string) {
+  return cimPoint([
+    picture(FIREFLY_CORE, 10, [255, 255, 255, 255], true),
+    picture(FIREFLY_GLOW, 20, cim(color, 1), false),
+  ]);
+}
+
+/**
+ * Масштабаас хамаарах хэмжээ — MapLibre-ийн `interpolate zoom` -ын
+ * орлогч. `stops` нь [MapLibre zoom, ТЭМДГИЙН ХАМГИЙН ТОМ давхаргын
+ * радиус px].
+ */
+function sizeByZoom(stops: [number, number][]) {
+  return {
+    type: "size",
+    valueExpression: "$view.scale",
+    stops: [...stops].reverse().map(([z, r]) => ({ value: scaleAt(z), size: pt(r) })),
+  };
+}
+
+/**
+ * Утга ба масштаб хоёулаа хэмжээнд орно (зэрэглэсэн тэмдэг).
+ * Суурь радиус нь z8 1.7 · z12 2.4 · z16 3.6 px, утгаараа 1.9 дахин томорно.
+ * ⚠ Esri-ийн визуал хувьсагч нэг л илэрхийлэл авдаг тул хоёр сувгийг
+ * Arcade дотор нийлүүлнэ; `stops` нь ижилсэлтийн хувиргалт.
+ */
+function sizeByValue(lo: number, hi: number, unit: number) {
+  const span = hi - lo || 1;
+  return {
+    type: "size",
+    valueExpression: `
+var z = Log(${S0} / $view.scale) / Log(2) - 1;
+var b = When(z <= 8, 1.7, z <= 12, 1.7 + (z - 8) / 4 * 0.7, z <= 16, 2.4 + (z - 12) / 4 * 1.2, 3.6);
+var g = $feature.g;
+var t = IIf(IsEmpty(g), 0, Max(0, Min(1, (g - ${lo}) / ${span})));
+return b * ${unit} * (1 + 0.9 * t) * 1.5;`,
+    stops: [
+      { value: 0, size: 0 },
+      { value: 400, size: 400 },
+    ],
+  };
+}
+
+/** Шатлалыг 24 ангилалд хувааж өнгө тус бүрд тэмдэг үүсгэнэ */
+function gradeRenderer(stops: [number, string][], symbol: (hex: string) => any, size: any) {
+  const lo = stops[0][0];
+  const hi = stops[stops.length - 1][0];
+  const N = 24;
+  const infos = Array.from({ length: N }, (_, i) => {
+    const a = lo + ((hi - lo) * i) / N;
+    const b = lo + ((hi - lo) * (i + 1)) / N;
+    return {
+      minValue: i === 0 ? -1e15 : a,
+      maxValue: i === N - 1 ? 1e15 : b,
+      symbol: symbol(lerpStops(stops, (a + b) / 2)),
+    };
+  });
+  return {
+    type: "class-breaks",
+    field: "g",
+    defaultSymbol: symbol(stops[0][1]),
+    classBreakInfos: infos,
+    visualVariables: [size],
+  };
+}
+
+/** Үл үзэгдэх тэмдэг — зөвхөн шошго үүрэх давхаргад */
+const INVISIBLE = {
+  type: "simple",
+  symbol: { type: "simple-marker", size: 0, color: [0, 0, 0, 0], outline: null },
+};
+
+/** Шошгын фонт — Esri-ийн фонтын үйлчилгээнд кирилл үсэгтэй гэр бүл */
+const FONT = { family: "Noto Sans", weight: "bold" } as const;
+const HALO = [8, 14, 20, 0.85];
+
+/** Харилцдаг давхаргын хамгийн их тэмдэглэгээ — DOM элемент бүр зураг татна */
+const MARKER_CAP = 250;
+
+/* --------------------------------------------------------------------------
+   SDK модулиуд
+   -------------------------------------------------------------------------- */
+
+type Esri = {
+  Map: any;
+  MapView: any;
+  Basemap: any;
+  BaseTileLayer: any;
+  FeatureLayer: any;
+  GeoJSONLayer: any;
+  GraphicsLayer: any;
+  GroupLayer: any;
+  Graphic: any;
+  TileInfo: any;
+  request: any;
+  reactive: any;
+};
+
+let esriP: Promise<Esri> | null = null;
+function loadEsri() {
+  esriP ??= esriModules<any[]>([
+    "esri/Map",
+    "esri/views/MapView",
+    "esri/Basemap",
+    "esri/layers/BaseTileLayer",
+    "esri/layers/FeatureLayer",
+    "esri/layers/GeoJSONLayer",
+    "esri/layers/GraphicsLayer",
+    "esri/layers/GroupLayer",
+    "esri/Graphic",
+    "esri/layers/support/TileInfo",
+    "esri/request",
+    "esri/core/reactiveUtils",
+  ]).then(([Map, MapView, Basemap, BaseTileLayer, FeatureLayer, GeoJSONLayer, GraphicsLayer, GroupLayer, Graphic, TileInfo, request, reactive]) => ({
+    Map,
+    MapView,
+    Basemap,
+    BaseTileLayer,
+    FeatureLayer,
+    GeoJSONLayer,
+    GraphicsLayer,
+    GroupLayer,
+    Graphic,
+    TileInfo,
+    request,
+    reactive,
+  }));
+  esriP.catch(() => {
+    esriP = null;
+  });
+  return esriP;
+}
+
+/** Хавтангийн дүрслэл — 20 түвшин (Esri 0…19 = MapLibre ≤ 18) */
+function tileInfoOf(E: Esri) {
+  return E.TileInfo.create({ size: 256, numLODs: 20, spatialReference: { wkid: 102100 } });
+}
+
+/*
+  СУУРЬ ЗУРГИЙН ХАВТАН. `WebTileLayer` нь зарласан түвшнээс цааш хавтан
+  гуйж "Map data not yet available" орлуулагч зургийг харуулна. Тиймээс
+  бодит хамрах хүрээнээс (`maxzoom`) цааш эцэг хавтангаа ТАЙРЧ томруулна —
+  MapLibre-ийн `maxzoom`-той ижил зан төлөв.
+*/
+let TileClass: any = null;
+function tileLayer(E: Esri, b: Basemap) {
+  TileClass ??= E.BaseTileLayer.createSubclass({
+    properties: { tpl: null, maxLevel: 17 },
+    fetchTile(this: any, level: number, row: number, col: number, options?: { signal?: AbortSignal }) {
+      const d = Math.max(0, level - this.maxLevel);
+      const url = String(this.tpl)
+        .replace("{z}", String(level - d))
+        .replace("{y}", String(row >> d))
+        .replace("{x}", String(col >> d));
+      const blank = () => {
+        const c = document.createElement("canvas");
+        c.width = c.height = 256;
+        return c;
+      };
+      return E.request(url, { responseType: "image", signal: options?.signal })
+        .then((res: any) => {
+          const img = res.data as HTMLImageElement;
+          if (!d) return img;
+          const n = 1 << d;
+          const s = 256 / n;
+          const c = blank();
+          const g = c.getContext("2d")!;
+          g.imageSmoothingEnabled = true;
+          g.drawImage(img, (col % n) * s, (row % n) * s, s, s, 0, 0, 256, 256);
+          return c;
+        })
+        .catch((e: any) => {
+          if (e?.name === "AbortError") throw e;
+          return blank();
+        });
+    },
+  });
+  return new TileClass({
+    tpl: basemapTiles(b),
+    maxLevel: b.maxzoom,
+    tileInfo: tileInfoOf(E),
+    ...(basemapEffect(b) ? { effect: basemapEffect(b) } : {}),
+  });
+}
+
+/**
+ * Зураг тус бүрийн Esri `Basemap` обьектууд — `id` нь манай `Basemap.id`.
+ * Галерей ба `map.basemap` НЭГ обьектыг заах ёстой: эс тэгвээс галерей
+ * сонгосон суурийг таньж тодруулахгүй.
+ */
+export function esriBasemaps(E: { Basemap: any; BaseTileLayer: any; TileInfo: any; request: any }, map: any): Map<string, any> {
+  if (!map.__basemaps) {
+    map.__basemaps = new Map(
+      BASEMAPS.map((b) => [
+        b.id,
+        new E.Basemap({ id: b.id, title: b.name, thumbnailUrl: basemapThumb(b), baseLayers: [tileLayer(E as Esri, b)] }),
+      ]),
+    );
+  }
+  return map.__basemaps;
+}
+
+/* --------------------------------------------------------------------------
+   Давхаргын туслахууд
+   -------------------------------------------------------------------------- */
+
+type Field = { name: string; type: "double" | "string" | "integer" };
+
+/*
+  ⚠⚠ ДАТАНЫ ДАВХАРГА нь `GeoJSONLayer` (blob хаягаас). Эхлээд клиент
+  `FeatureLayer` + `applyEdits` байсан: 145 мянган жорлонгийн цэг дээр
+  засвар 25 секундээс илүү үргэлжилж, хөтөч бүхэлдээ түгжигдэв
+  (2026-10-12-нд хэмжсэн). `GeoJSONLayer` нь өгөгдлөө WORKER дээр
+  задлах, проекцлох тул үндсэн урсгал чөлөөтэй.
+*/
+function geoLayer(E: Esri, geometryType: Family, fields: Field[], extra: Record<string, unknown>, features: GeoJSON.Feature[] = []) {
+  const url = URL.createObjectURL(
+    new Blob([JSON.stringify({ type: "FeatureCollection", features })], { type: "application/json" }),
+  );
+  const layer = new E.GeoJSONLayer({
+    url,
+    geometryType,
+    objectIdField: "fid",
+    fields: [{ name: "fid", type: "oid" }, ...fields],
+    outFields: ["*"],
+    ...extra,
+  });
+  layer.__spec = { geometryType, fields, extra };
+  layer.when(
+    () => URL.revokeObjectURL(url),
+    () => URL.revokeObjectURL(url),
+  );
+  return layer;
+}
+
+const clientLayer = (E: Esri, geometryType: Family, fields: Field[], extra: Record<string, unknown> = {}) =>
+  geoLayer(E, geometryType, fields, extra);
+
+/** Давхаргын байрлал — `get` нь одоогийн давхаргыг, `set` нь шинийг бүртгэнэ */
+type Slot = { key: string; get: () => any; set: (l: any) => void };
+
+/*
+  ДАТА СОЛИХ — шинэ давхарга ХУУЧНЫХАА ДЭЭР нэмэгдэж, зурагдаж дуусмагц
+  хуучин нь авагдана: зураг хоосрох агшин гарахгүй. Сүүлд тавигдсан
+  рендерер, шошго, бөөгнөрөл хуучнаасаа хуулагдана. Нэг байрлалын
+  солилтууд ДАРААЛНА; дараалалд хүлээж байх хооронд шинэ дата ирвэл
+  дундах нь алгасагдана.
+*/
+const queues = new Map<string, Promise<void>>();
+const latest = new Map<string, number>();
+function refill(E: Esri, view: any, slot: Slot, make: () => GeoJSON.Feature[]) {
+  const turn = (latest.get(slot.key) ?? 0) + 1;
+  latest.set(slot.key, turn);
+  const prev = queues.get(slot.key) ?? Promise.resolve();
+  const next = prev
+    .then(async () => {
+      if (latest.get(slot.key) !== turn) return;
+      const old = slot.get();
+      if (!old || old.destroyed || view.destroyed) return;
+      const features = make().map((f, i) => ({ ...f, properties: { ...f.properties, fid: i + 1 } }));
+      const spec = old.__spec;
+      const nu = geoLayer(
+        E,
+        spec.geometryType,
+        spec.fields,
+        {
+          ...spec.extra,
+          renderer: old.renderer?.clone(),
+          labelingInfo: old.labelingInfo?.map((c: any) => c.clone()) ?? null,
+          ...(old.featureReduction ? { featureReduction: old.featureReduction.clone() } : {}),
+          minScale: old.minScale,
+          maxScale: old.maxScale,
+        },
+        features,
+      );
+      for (const k of Object.keys(old)) if (k.startsWith("__") && k !== "__spec") nu[k] = old[k];
+      const coll = old.parent?.layers;
+      if (!coll) return;
+      coll.add(nu, coll.indexOf(old) + 1);
+      slot.set(nu);
+      try {
+        const lv = await view.whenLayerView(nu);
+        await E.reactive.whenOnce(() => !lv.updating);
+      } catch {
+        /* зурагдаагүй ч хуучныг авна — давхар дата үлдэхгүй */
+      }
+      /* ⚠ Ачаалж дуусаагүй давхаргыг устгавал SDK-ийн worker-ийн ажил
+         дундаа тасарч "reading 'reject'" алдаа шиднэ */
+      await old.when().catch(() => {});
+      await view.whenLayerView(old).catch(() => {});
+      coll.remove(old);
+      old.destroy();
+    })
+    .catch((e) => console.error("[map]", e));
+  queues.set(slot.key, next);
+  return next;
+}
+
+let slotSeq = 0;
+/** `layers` обьектын нэг талбарын байрлал */
+function slotOf(layers: any, key: string): Slot {
+  layers.__id ??= ++slotSeq;
+  return { key: `${layers.__id}:${key}`, get: () => layers[key], set: (l) => (layers[key] = l) };
+}
+
+const pointFeature = (lon: number, lat: number, properties: Record<string, unknown>): GeoJSON.Feature => ({
+  type: "Feature",
+  geometry: { type: "Point", coordinates: [lon, lat] },
+  properties,
+});
+
+/** Бөөгнөрлийн тоо — MapLibre-ийн `point_count_abbreviated` */
+const CLUSTER_TEXT = `var n = $feature.cluster_count;
+When(n >= 10000, Text(Round(n / 1000)) + "k", n >= 1000, Text(Round(n / 1000, 1)) + "k", Text(n))`;
+
+/* ==========================================================================
+   Бүрэлдэхүүн
+   ========================================================================== */
+
+type Mode = {
+  cluster: boolean;
+  clusterMaxZoom: number;
+  clusterLabel: "inside" | "badge";
+  weighted: boolean;
+  graded: [number, string][] | undefined;
+  gradedFire: boolean;
+  gradedFireColor: boolean;
+  shaped: boolean;
+  shapeGlow: boolean;
+  shapeCrisp: boolean;
+  shapeColor: string | undefined;
+  fire: Fire;
+  tinted: boolean;
+  dots: { rank?: Record<string, number> } | null;
+  /** Цэгийн хэмжээний үржүүлэгч (зэрэглэлгүй цэгт), анхдагч 1 */
+  pointScale: number;
+  shapeLabelZoom: number;
+  shapeFlow: boolean;
+  shapeLabelOnLine: boolean;
+  shapeThin: boolean;
+  shapeHair: boolean;
+  shapeOutline: boolean;
+  shapeLabelUnique: boolean;
+  labeled: boolean;
+  labelZoom: number;
+  labelOffset: number;
+  labelSize: number;
+  labelColors: Record<string, string> | null;
+  labelHalo: number;
+  valued: boolean;
+  valueZoom: number;
+  scale: number | undefined;
+};
+
+/** Зургийн бүх давхарга — нэг газар */
+type Layers = {
+  under: any;
+  bnd: Record<"country" | "aimag" | "soum", any | null>;
+  shapePoly: any | null;
+  shapeLine: any | null;
+  lit: any | null;
+  above: any;
+  shapeLabels: any | null;
+  heat: any | null;
+  points: any;
+  values: any | null;
+  hl: any;
+  /** ШАР тодруулга (`hotMark`) — цэг, олон өнцөгт, шугам */
+  hot: any;
+};
+
+type Live = { E: Esri; view: any; map: any; layers: Layers; mode: Mode };
+
+/* Олон өнцөгтийн зураасны өргөн (px) — MapLibre-ийн z8…z14 мужийн дунд */
+function strokes(m: Mode, lit: boolean) {
+  if (m.shapeCrisp) return { line: lit ? 2.5 : 1.35, cas: 0, fill: lit ? 0.26 : 0.12 };
+  const fill = lit ? 0.68 : 0.42;
+  if (m.shapeThin) return { line: lit ? 1.5 : 0.5, cas: lit ? 2.9 : 1.6, fill };
+  /* 0.5px хүрээ, касинггүй (хэрэглэгч 2026-10-15, эвдэрсэн газар: "outline 0.5px bolgo") */
+  if (m.shapeHair) return { line: lit ? 1.5 : 0.5, cas: 0, fill };
+  return { line: lit ? 2.2 : 0.85, cas: lit ? 5.5 : 3.5, fill };
+}
+
+function polySymbol(m: Mode, color: string, lit: boolean) {
+  const s = strokes(m, lit);
+  /* ХҮРЭЭГҮЙ горимд зөвхөн СОНГОСОН дүрс нимгэн хүрээтэй */
+  const outlined = m.shapeOutline || lit;
+  const line = !m.shapeOutline && lit ? 1.2 : s.line;
+  const cas = !m.shapeOutline && lit ? 2.6 : s.cas;
+  const layers: any[] = [];
+  if (outlined) {
+    layers.push({ type: "CIMSolidStroke", enable: true, width: line * 0.75, color: cim(color, m.shapeCrisp ? 1 : 0.9), joinStyle: "Round", capStyle: "Round" });
+    if (cas) layers.push({ type: "CIMSolidStroke", enable: true, width: cas * 0.75, color: cim("rgba(8,14,20,.55)"), joinStyle: "Round", capStyle: "Round" });
+  }
+  layers.push({ type: "CIMSolidFill", enable: true, color: cim(color, s.fill) });
+  return { type: "cim", data: { type: "CIMSymbolReference", symbol: { type: "CIMPolygonSymbol", symbolLayers: layers } } };
+}
+
+/** Чиглэлийн сум — шугамын дундад, чиглэлийн дагуу эргэнэ */
+const ARROW = {
+  type: "CIMVectorMarker",
+  enable: true,
+  size: 9,
+  anchorPointUnits: "Relative",
+  frame: { xmin: -5, ymin: -5, xmax: 5, ymax: 5 },
+  markerPlacement: { type: "CIMMarkerPlacementAtRatioPositions", positionArray: [0.5], angleToLine: true },
+  markerGraphics: [
+    {
+      type: "CIMMarkerGraphic",
+      geometry: { rings: [[[-4, -4], [-4, 4], [5, 0], [-4, -4]]] },
+      symbol: {
+        type: "CIMPolygonSymbol",
+        symbolLayers: [
+          { type: "CIMSolidStroke", enable: true, width: 1, color: cim("rgba(8,14,20,.85)") },
+          { type: "CIMSolidFill", enable: true, color: cim("#ffffff") },
+        ],
+      },
+    },
+  ],
+  scaleSymbolsProportionally: true,
+  respectFrame: true,
+};
+
+function lineSymbol(m: Mode, color: string, lit: boolean) {
+  const s = strokes(m, lit);
+  const layers: any[] = [];
+  if (m.shapeFlow) layers.push(ARROW);
+  layers.push({ type: "CIMSolidStroke", enable: true, width: Math.max(s.line, 1) * 0.75, color: cim(color, m.shapeCrisp ? 1 : 0.9), joinStyle: "Round", capStyle: "Round" });
+  if (s.cas) layers.push({ type: "CIMSolidStroke", enable: true, width: s.cas * 0.75, color: cim("rgba(8,14,20,.55)"), joinStyle: "Round", capStyle: "Round" });
+  return { type: "cim", data: { type: "CIMSymbolReference", symbol: { type: "CIMLineSymbol", symbolLayers: layers } } };
+}
+
+function shapeRenderer(m: Mode, colors: string[], sym: (m: Mode, c: string, lit: boolean) => any) {
+  const base = m.shapeColor ?? FIREFLY.glow;
+  return {
+    type: "unique-value",
+    field: "c",
+    defaultSymbol: sym(m, base, false),
+    uniqueValueInfos: colors.map((c) => ({ value: c, symbol: sym(m, c, false) })),
+  };
+}
+
+function pointSymbolFor(m: Mode): (tint: string | null) => any {
+  if (m.dots) return (t) => dotSymbol(m.fire, t);
+  return (t) => fireSymbol(m.fire, t, m.tinted);
+}
+
+function pointRenderer(m: Mode, colors: string[]) {
+  if (m.graded) {
+    const stops = m.graded;
+    const lo = stops[0][0];
+    const hi = stops[stops.length - 1][0];
+    if (m.gradedFire && !m.gradedFireColor)
+      return { type: "simple", symbol: gradedFireSymbol(m.fire), visualVariables: [sizeByValue(lo, hi, 4.2)] };
+    if (m.gradedFireColor) return gradeRenderer(stops, gradedMultiSymbol, sizeByValue(lo, hi, 3.6));
+    return gradeRenderer(stops, gradedSymbol, sizeByValue(lo, hi, 2.4));
+  }
+  const sym = pointSymbolFor(m);
+  const base: [number, number][] = m.dots
+    ? [
+        [9, 3.4],
+        [12, 5.6],
+        [14, 7.5],
+        [17, 12],
+      ]
+    : [
+        [8, 7],
+        [12, 11],
+        [16, 18],
+      ];
+  const size = sizeByZoom(base.map(([z, s]) => [z, s * m.pointScale]));
+  return {
+    type: "unique-value",
+    field: "c",
+    defaultSymbol: sym(null),
+    uniqueValueInfos: colors.map((c) => ({ value: c, symbol: sym(c) })),
+    visualVariables: [size],
+  };
+}
+
+/** Тодруулгын цагираг — тогтмол хэмжээ (z12) */
+function highlightSymbol(f: Fire) {
+  return cimPoint([disc(10, null, [cim(f.core, 0.9), 1.3]), ...glow(15, f.glow, 0.4)]);
+}
 
 export function WellsMap({
   points,
@@ -540,6 +986,8 @@ export function WellsMap({
   onExtent,
   onZoom,
   onView,
+  onMapClick,
+  onBlankClick,
   focus = null,
   cluster = true,
   clusterMaxZoom = 15,
@@ -547,19 +995,19 @@ export function WellsMap({
   marks,
   pulse = false,
   pickedMark = null,
+  hotMark = null,
   pulseColor,
   onHover,
-  onProbe,
   firefly,
   colors,
   dots,
+  pointScale,
   highlight = null,
   overlays,
-  field,
+  adminLines = true,
   shapes,
   grades,
   weights,
-  detail,
   labels,
   values,
   scale,
@@ -573,465 +1021,208 @@ export function WellsMap({
   extent?: boolean;
   onExtent?: (e: Extent | null) => void;
   /**
-   * Ойртолт өөрчлөгдөх бүрд одоогийн түвшинг дамжуулна.
-   *
-   * Дуудагч тал ойртолтоос хамааран өөрийн дүрслэлээ солиход
-   * (жишээ нь тодорхой масштабаас цааш тэмдэглэгээ гаргах) хэрэглэнэ.
-   * `zoomend` дээр л дуудагдана — чирэх явцад биш, зогссоны дараа.
+   * Ойртолт өөрчлөгдөх бүрд одоогийн түвшинг (MapLibre-ийн хуваарьт)
+   * дамжуулна — зураг зогссоны дараа.
    */
   onZoom?: (zoom: number) => void;
   /**
-   * ХАРАГДАХ ХҮРЭЭ — `moveend` дээр л дуудагдана.
-   *
-   * Урьд нь зураг зөвхөн `onZoom` дуугаргадаг байсан тул хүрээг дуудагч
-   * тал мэдэх аргагүй байв. ⚠ Чирэх ЯВЦАД дуугарахгүй: дуудагч тал
-   * сервер рүү асуулга явуулдаг (нэгж талбар) тул хулгана хөдлөх бүрд
-   * дуугарвал хүсэлтийн үер болно.
+   * ХАРАГДАХ ХҮРЭЭ — зураг зогссоны дараа л дуудагдана.
+   * ⚠ Чирэх ЯВЦАД дуугарахгүй: дуудагч тал сервер рүү асуулга явуулдаг
+   * (нэгж талбар) тул хулгана хөдлөх бүрд дуугарвал хүсэлтийн үер болно.
    */
   onView?: (box: Extent, zoom: number) => void;
+  /**
+   * БАЙРШИЛ СОНГОХ горим — өгвөл ЗУРАГ ДЭЭРХ ДУРЫН товшилт энэ рүү
+   * `lon, lat`-аа дамжуулна (цэгийг сонгохгүй), заагч загалмай болно.
+   * Өгөөгүй үед зан төлөв хөндөгдөхгүй.
+   */
+  onMapClick?: (lon: number, lat: number) => void;
+  /**
+   * Цэг, дүрс ТААРААГҮЙ товшилт — суурь давхаргын (`overlays`) цонх
+   * гаргахад (баавгайн самбарын ойн төрөл). Нэмэлт давхарга нь
+   * харилцдаггүй тул аль дүрсэнд орсныг дуудагч тал өөрөө тогтооно.
+   */
+  onBlankClick?: (lon: number, lat: number) => void;
   /** Сонголтын хүрээ — өөрчлөгдөх бүрд зураг тийш нь ойртоно (zoom action) */
   focus?: Extent | null;
-  /**
-   * Бөөгнөрүүлэх эсэх. ЗӨВХӨН анхны зурагдалтад уншигдана — GeoJSON эх
-   * сурвалжийн шинж тул дараа нь солих боломжгүй (самбар бүр өөрийн
-   * зураг үүсгэдэг учир хязгаарлалт биш).
-   */
+  /** Бөөгнөрүүлэх эсэх. ЗӨВХӨН анхны зурагдалтад уншигдана */
   cluster?: boolean;
-  /**
-   * Бөөгнөрөл ЭНЭ түвшнээс цааш задарна (анхны утга 15).
-   *
-   * Цэг ЦӨӨН, тус бүр нь хаяг заадаг датад (үйлчилгээний цэгийн лавлах)
-   * 15 нь хэт гүн: хот даяар харахад зөвхөн бөөгнөрлийн бөмбөлөг
-   * харагдаж, тэмдэглэгээ бараг гарч ирдэггүй. Тархалт уншуулах датад
-   * (12 мянган худаг) эсрэгээрээ гүн байх нь зөв.
-   *
-   * ЗӨВХӨН анхны зурагдалтад уншигдана — эх сурвалжийн шинж.
-   */
+  /** Бөөгнөрөл ЭНЭ түвшнээс цааш задарна (MapLibre-ийн zoom, анхдагч 15) */
   clusterMaxZoom?: number;
   /** Тоог дугуйн дотор бичих үү, баруун дээд буланд тэмдэг болгох уу */
   clusterLabel?: "inside" | "badge";
   /**
-   * `oid` → SVG тэмдэг. Өгвөл тухайн цэг дугуй ТЭМДГЭЭР тэмдэглэгдэнэ
-   * (энгийн цэгийн оронд) — бөөгнөрөл задарсан үед л харагдана.
+   * `oid` → SVG тэмдэг эсвэл зургийн хаяг. Өгвөл тухайн цэг дугуй
+   * ТЭМДГЭЭР тэмдэглэгдэнэ — бөөгнөрөл задарсан үед л харагдана.
    */
   marks?: Record<number, string>;
-  /**
-   * Цэг бүрийг ДОХИОЛОЛ маягийн тэмдэглэгээгээр харуулах эсэх: цөм нь
-   * тогтмол, гадуур нь давтан тэлэх цагираг. Цөөн, тодруулах шаардлагатай
-   * объектод (жишээ нь нийтийн 17 бие засах газар) зориулав.
-   */
+  /** Цэг бүрийг ДОХИОЛОЛ маягийн тэмдэглэгээгээр харуулах эсэх */
   pulse?: boolean;
   /**
-   * СОНГОГДСОН тэмдэглэгээ — `marks`, `pulse` горимд.
-   *
-   * ⚠⚠ Цэгэн давхаргын `highlight` цагираг нь ЗУРАГТ (canvas) зурагддаг
-   * бол тэмдэглэгээ нь DOM элемент тул түүний ДЭЭГҮҮР сууна. Улмаас
-   * жагсаалтаас нэгийг сонгож зураг ойртоход тэр цагираг тэмдгийн
-   * АРД дарагдаж, аль нь сонгогдсоныг ялгах боломжгүй байв
-   * (хэрэглэгч 2026-09-17-нд мэдээлсэн).
-   *
-   * Тиймээс сонголтыг ТЭМДЭГ ӨӨРӨӨ үүрнэ: `is-picked` анги нь
-   * цөмийг томсгож, тогтмол (анивчдаггүй) тод цагираг нэмнэ.
+   * СОНГОГДСОН тэмдэглэгээ — `marks`, `pulse` горимд. Тэмдэглэгээ нь
+   * DOM элемент тул зургийн тодруулгын цагирагийг ДАРНА; сонголтыг
+   * тэмдэг өөрөө (`is-picked`) үүрнэ.
    */
   pickedMark?: number | null;
   /**
-   * Дохиоллын тэмдэглэгээний өнгө — `oid` бүрд.
-   *
-   * `pulse` асаалттай үед л уншигдана. Өгөөгүй, эсвэл `undefined`
-   * буцаавал платформын дата өнгө үлдэнэ. Эрэмбэтэй хэмжүүрийг
-   * (эрсдэлийн зэрэг) цохилтоор дамжуулахад зориулав — цэгийн давхарга
-   * ба тэмдэглэгээ хоёр НЭГ өнгө барихад л зураг уншигдана.
+   * ШАРААР ТОДРОХ бүртгэл (засварын цонхны хүснэгтийн мөр дээр хулгана
+   * очиход, хэрэглэгч 2026-10-21). `marks`, `pulse` горимд тэмдэглэгээний
+   * ангийг сэлгэнэ; бусад цэг ба олон өнцөгт, шугамыг `hot` давхаргад шараар
+   * давхарлана (ArcGIS Online-ийн вэб зургийн тодруулга шиг).
    */
+  hotMark?: number | null;
+  /** Дохиоллын тэмдэглэгээний өнгө — `oid` бүрд */
   pulseColor?: (oid: number) => string | undefined;
   /**
-   * Хулгана тэмдэглэгээ дээр очиход — гарахад `null`.
-   *
-   * `at` нь зургийн ЗУРАГДАХ талбар доторх пикселийн байрлал. Хөвөгч
-   * тайлбар (tooltip) хулганаа дагахад л хэрэгтэй тул сонголтоор өгнө —
-   * зөвхөн `oid` хүлээж авдаг хуучин дуудагчид өөрчлөх шаардлагагүй.
+   * Хулгана тэмдэглэгээ дээр очиход — гарахад `null`. `at` нь зургийн
+   * талбар доторх пикселийн байрлал (хөвөгч тайлбарт).
    */
   onHover?: (oid: number | null, at?: { x: number; y: number }) => void;
+  /** Цэгийн давхаргын өнгөний гурвал. ЗӨВХӨН анхны зурагдалтад */
+  firefly?: Fire;
   /**
-   * Хулганы доорх ГАЗАРЗҮЙН ЦЭГ — обьект байгаа эсэхээс үл хамаарна.
-   *
-   * `onHover` нь зөвхөн дата обьект дээр ажилладаг тул растер талбар
-   * ({@link field}) дээр юу ч мэдэгдэхгүй: тэнд обьект байхгүй, зөвхөн
-   * тор бий. Дуудагч тал солбицлоос нүдээ өөрөө олно.
-   */
-  onProbe?: (at: { lon: number; lat: number; x: number; y: number } | null) => void;
-  /**
-   * Цэгийн давхаргын өнгөний гурвал. Өгөөгүй бол платформын цэнхэр
-   * firefly. ЗӨВХӨН анхны зурагдалтад уншигдана.
-   *
-   * Ойн хэлтсийн самбарууд ногоон хувилбар өгдөг — цэнхэр ой нь
-   * газрын зураг дээр ус мэт уншигдана.
-   */
-  firefly?: { glow: string; mid: string; core: string };
-  /**
-   * Цэг бүрийн АНГИЛЛЫН өнгө (hex), индекс нь `points`-тэй ижил.
-   *
-   * Өгөгдсөн цэг гурван давхаргаараа (сарнисан гэрэл → бие → цөм) тэр
-   * өнгөөр зурагдана (олон өнгөт `grades.firefly: "graded"`-тэй нэг хэл);
-   * өгөгдөөгүй цэг `firefly` өнгөндөө үлдэнэ. Зэрэглэсэн горимоос ялгаатай
-   * нь РАДИУС тогтмол — ангилал бол эрэмбэгүй тул хэмжээгээр илэрхийлэх
-   * зүйлгүй.
-   *
-   * ⚠ Ангилал ЦӨӨН үед л хэрэглэ ({@link lib/tone-ramp.ts}) — биеийн доор
-   * бараан цагираг нэмэгдэнэ, эс тэгвээс ногоон, шар өнгө хиймэл дагуулын
-   * газарт уусна (олон өнгөт шатлалтай ижил шалтгаан).
+   * Цэг бүрийн АНГИЛЛЫН өнгө (hex), индекс нь `points`-тэй ижил. Ангилал
+   * ЦӨӨН үед л — биеийн доор бараан цагираг нэмэгдэнэ.
    */
   colors?: ArrayLike<string | undefined>;
   /**
-   * ТОД ЖИЖИГ ЦЭГ — firefly гэрэлгүй (хэрэглэгч, 2026-10-07, нийслэлийн
-   * худгийн зургаар: "map маш муу байна"). 14 мянган цэгийн гэрэл
-   * (`wells-glow`, 7–18px сарнисан дугуй) нийлээд хотыг бүрхсэн НЭГ
-   * толбо болж, ангиллын өнгө, цөөн цэг (зөвшөөрөлгүй 1,996) доор нь
-   * дарагдаж байв. Энэ горимд ганц давхарга: ойртолтоор томордог жижиг
-   * дугуй, бараан нимгэн хүрээтэй — нягт газарт ч цэг бүр салж харагдана.
-   *
-   * `rank` — өнгө (hex) → зурах дараалал; их нь ДЭЭР. Цөөн ч чухал
-   * ангиллыг (анхааруулга) олонхын доор дарагдуулахгүй.
-   * ⚠ Эх сурвалж үүсэх МӨЧИД уншигдана.
+   * ЖИЖИГ FIREFLY ЦЭГ (хэрэглэгч, 2026-10-07). `rank` — өнгө (hex) →
+   * зурах дараалал; их нь ДЭЭР.
    */
   dots?: { rank?: Record<string, number> };
-  /**
-   * Тодруулах цэгийн байрлал `[lon, lat]`. Өгвөл тэр цэгийг гэрэлтэх
-   * цаграгаар тойруулна.
-   *
-   * Хөвөгч тайлбар нь "энэ бол ЯМАР цэг бэ" гэдгийг хэлдэггүй — 12 мянган
-   * цэгийн дунд хулганы үзүүр аль дээр нь байгаа нь тодорхойгүй. Цагираг
-   * нь тайлбарыг цэгтэй нь холбоно.
-   */
+  /** Цэгийн хэмжээний үржүүлэгч (зэрэглэлгүй цэгт), анхдагч 1 */
+  pointScale?: number;
+  /** Тодруулах цэгийн байрлал `[lon, lat]` — гэрэлтэх цагираг */
   highlight?: [number, number] | null;
-  /**
-   * Нэмэлт хил, бүсийн давхаргууд. Дата давхаргын ДООР суух тул цэг,
-   * бөөгнөрөл нь тэдгээрээр далдлагдахгүй.
-   */
+  /** Нэмэлт хил, бүсийн давхаргууд — дата давхаргын ДООР */
   overlays?: MapOverlay[];
   /**
-   * ТООЦООЛЛЫН ТАЛБАР — тогтмол торон дээр бодогдсон утгыг растераар
-   * зурна (үерийн ус, азотын агууламж). Суурь зургийн ДЭЭР, хилийн
-   * ДООР суух тул зам, хилийн шугам уншигдсаар байна.
-   *
-   * ⚠⚠ ЗУРАГ МЕРКАТОРЫН ТОРОНД БЭЛТГЭГДЭНЭ. Тооцооллын тор нь UTM
-   * дээр жигд ч газарзүйн солбицолд бага зэрэг эргэлддэг: дөрвөн
-   * булангаар нь шууд байрлуулахад **87 метрийн** зөрүү гарна
-   * (хэмжсэн). Тиймээс дуудагч тал пиксел бүрийг эргүүлж торын нүд рүү
-   * буулгаж зурах ба энд өгөх нь ердийн хавтгай тэгш өнцөгт болно.
-   *
-   * ⚠ `image` нь ДАХИН ХЭРЭГЛЭГДДЭГ обьект тул шинэчлэлийг `tick`
-   * тоолуураар мэдэгдэнэ — агуулга нь солигдсон ч ижил заагч ирнэ.
+   * Засаг захиргааны (улс · аймаг · сум) суурь хил — анхдагч асаалттай.
+   * Дуудагч тал өөрийн хилийг `overlays`-ээр зурдаг бол унтраана: хоёр
+   * хил давхцаж зураг замбараагүй болно.
    */
-  field?: {
-    /** Зүүн, өмнөд, баруун, хойд ирмэг */
-    bounds: [number, number, number, number];
-    image: ImageData | null;
-    /** Агуулга шинэчлэгдсэнийг мэдэгдэх тоолуур */
-    tick: number;
-    opacity?: number;
-  };
+  adminLines?: boolean;
   /**
-   * ДАТА олон өнцөгт (талбай, тусгай зөвшөөрөл, эвдэрсэн газар).
-   *
-   * `overlays`-аас ялгаатай нь энэ нь харилцдаг: `properties.oid`-оор
-   * товшилт, hover дамжина, `properties.c`-д өнгөө авч явж болно.
-   * Сонгогдсон талбай нь `selected`-ээр тодорно.
-   *
-   * Талбай нь ЦЭГИЙН ДООР зурагдана — хоёуланг нь өгвөл цэг нь тухайн
-   * талбайн төлөөлөл (жишээ нь төвлөрсөн цэг) байх нь зохимжтой.
+   * ДАТА олон өнцөгт — харилцдаг: `properties.oid`-оор товшилт, hover,
+   * `properties.c`-д өнгө, `properties.t`-д шошго.
    */
   shapes?: {
     data: GeoJSON.FeatureCollection;
     selected?: number | null;
-    /**
-     * Хүрээг сарнисан гэрлээр тойруулах эсэх (bloom). Талбай ЦӨӨН үед л
-     * асаа — олон зуун олон өнцөгт дээр гэрэл нь хоорондоо нийлж, зураг
-     * бүхэлдээ манантана. ЗӨВХӨН анхны зурагдалтад уншигдана.
-     */
+    /** Хүрээг гэрлээр тойруулах (bloom) — цөөн талбайд. Анхны зурагдалтад */
     glow?: boolean;
-    /**
-     * ТОД ХҮРЭЭ, БҮДЭГ ДҮҮРГЭЛТ — хоёулаа ИЖИЛ өнгөөр.
-     *
-     * Байгаль орчны үнэлгээний хэлтсийн газрын зурагт (цаг агаараас
-     * бусад; хэрэглэгч, 2026-10-06: "polygon бол outline нарийхан тод
-     * өнгөтэй, fill transparency өгсөн байх шаардлагатай — товчхондоо
-     * outline тод, fill бүдэг, гэхдээ 2 ижил өнгөтэй"). Анхдагч хэв нь
-     * 42%-ийн дүүргэлт + бараан касинг тул хүрээ нь бараан, дүүргэлт нь
-     * өтгөн харагддаг байв.
-     * ⚠ Асаахад: дүүргэлт 12% (сонгогдвол 26%), касинг ба `glow`
-     * ЗУРАГДАХГҮЙ (тэд хүрээг бараан, бүдүүн болгодог), хүрээ нь бүтэн
-     * тод, нарийн (1.1 → 1.6px). Бусад хэлтсийн зураг ХӨНДӨГДӨХГҮЙ.
-     * ЗӨВХӨН анхны зурагдалтад уншигдана.
-     * ⚠ Нэр нь `crisp`, `outline` БИШ: `outline` нь ХҮРЭЭ ГАРАХ ЭСЭХ
-     * (анхдагчаар гарна) гэсэн өөр утгатай — хоёр салааг нийлүүлэхэд
-     * (2026-10-07) ижил нэр хоёр эсрэг утга авсан байв.
-     */
+    /** ТОД НАРИЙН ХҮРЭЭ, БҮДЭГ ДҮҮРГЭЛТ (үнэлгээний хэлтэс) */
     crisp?: boolean;
-    /**
-     * Давхаргын өнгө (hex). Өгөөгүй бол платформын дата өнгө.
-     * ЗӨВХӨН анхны зурагдалтад уншигдана.
-     */
+    /** Давхаргын өнгө (hex) */
     color?: string;
-    /**
-     * Олон өнцөгтийн шошго нь энэ zoom-оос ойртсон үед л гарна.
-     * Талбай олонтой самбарт заавал өг — эс тэгвээс алсаас бүх шошго
-     * нэг дор гарч, хүрээ нь өөрөө уншигдахаа болино.
-     */
+    /** Шошго энэ zoom-оос (MapLibre-ийн хуваарь) ойртсон үед л */
     labelZoom?: number;
-    /**
-     * `LineString` дүрс дээр ЧИГЛЭЛИЙН сум нэмэх эсэх.
-     *
-     * Шугам нь хоёр цэгийг холбодог ч аль нь эхлэл, аль нь төгсгөл
-     * болохыг хэлдэггүй. Урсгал (хаанаас хаашаа) илэрхийлдэг датад
-     * заавал асаа — эс тэгвээс чиглэл нь тайлбар уншихгүйгээр
-     * мэдэгдэхгүй.
-     */
+    /** `LineString` дүрс дээр ЧИГЛЭЛИЙН сум */
     flow?: boolean;
-    /**
-     * Шошгыг хаана байрлуулах вэ.
-     *
-     * `point` (анхдагч) — дүрс бүрд НЭГ шошго, олон өнцөгтийн хамгийн
-     * хол дотоод цэгт. `line-center` — шугамын дундад, чиглэлийн дагуу
-     * эргэсэн. Сүүлийнх нь шугамын ХЭСГИЙГ (уртыг, зайг) тэмдэглэхэд
-     * зориулагдсан: тухайн хэрчим өөрөө шошгоо үүрнэ.
-     */
+    /** `point` — дүрс бүрд нэг шошго; `line-center` — шугамын дундад */
     labelPlacement?: "point" | "line-center";
-    /**
-     * НИМГЭН ХҮРЭЭ (хэрэглэгч, 2026-10-06: "голын татмын border-ийг
-     * засаарай, бүдүүн байна"). Татам нь голын дагуух НАРИЙН, салаалсан
-     * дүрсүүд тул анхдагч бараан касинг (2.8–4.2px) ба хүрээ нийлээд
-     * дүрсийн өөрийнхөө өргөнтэй тэнцэж, дүүргэлт нь харагдахаа больдог
-     * байв. Энэ үед касинг, хүрээ хоёр ойролцоогоор ХАГАС өргөнтэй.
-     * ⚠ Эх сурвалж үүсгэх МӨЧИД уншигдана (`modeRef`).
-     */
-    edge?: "thin";
-    /**
-     * ОЛОН ӨНЦӨГТИЙН ХҮРЭЭ (анхдагчаар гарна).
-     *
-     * `false` үед дүрс нь зөвхөн ДҮҮРГЭЛТЭЭРЭЭ харагдана — хүрээ ч,
-     * доорх бараан касинг ч зурагдахгүй.
-     *
-     * ⚠⚠ ЗӨВХӨН ОЛОН ӨНЦӨГТӨД: `shape-line` нь ШУГАМАН геометрийг ч
-     * зурдаг (минжний маршрут, 100 м зурвас) — тэнд хүрээ бол дүрс
-     * ӨӨРӨӨ тул хаавал давхарга бүхэлдээ алга болно.
-     * ⚠ СОНГОСОН дүрсэд хүрээ ҮРГЭЛЖ гарна (нимгэн) — дүүргэлт нь
-     * 42%-аас 68% болдог ч тэр ялгаа хиймэл дагуулын дэвсгэр дээр
-     * бараг мэдэгдэхгүй.
-     * ⚠ 2026-09-24-нд ЭСРЭГ засвар хийгдсэн тул БҮХ самбарт
-     * асаахгүй — хэлтсийн бүртгэлийн шийдвэр
-     * ({@link LayerSet.shapeOutline}).
-     */
+    /** НИМГЭН ХҮРЭЭ (голын татам); `hair` — 0.5px, бараан касинггүй (эвдэрсэн газар) */
+    edge?: "thin" | "hair";
+    /** ОЛОН ӨНЦӨГТИЙН ХҮРЭЭ (анхдагчаар гарна); сонгосон дүрс үргэлж хүрээтэй */
     outline?: boolean;
-    /**
-     * НЭГ БИЧВЭРТ ЯГ НЭГ ШОШГО (анхдагчаар дүрс бүрд нэг).
-     *
-     * ⚠ Ангиллын багана шошго болох үед ({@link LayerSet.labelBy})
-     * нэг нэр олон дүрсэд давтагдана — татамын "Хэрлэн" нь 23 дүрст.
-     * MapLibre зөвхөн ДАВХЦСАНЫГ хасдаг тул ижил бичвэр зураг даяар
-     * тарж бичигдэнэ.
-     * ⚠ Хамгийн ТОМ дүрс дээр суух тул гол биеийг заана.
-     */
+    /** НЭГ БИЧВЭРТ ЯГ НЭГ ШОШГО — хамгийн том дүрс дээр */
     labelUnique?: boolean;
   };
-  /**
-   * Цэгийн бичвэр шошго.
-   *
-   * `text` нь `points`-той ИЖИЛ УРТТАЙ — цэг бүрийн шошго. Хоосон мөр
-   * бол тухайн цэг шошгогүй.
-   *
-   * Зөвхөн `minzoom`-оос ойртсон үед гарна: холоос бүх шошго нэг дор
-   * гарвал цэгээ дарж, тархалт уншигдахаа болино. Давхцлыг MapLibre
-   * өөрөө шийднэ — нягт хэсэгт багтсан нь л үлдэнэ.
-   */
-  /**
-   * ЦЭГИЙН ОРОНД ХЭМЖИЛТИЙН УТГА.
-   *
-   * ⚠⚠ Олон улсын цаг уурын зургийн жишиг (WMO-гийн station model):
-   * станцын байрлалд тоо нь ӨӨРӨӨ сууна — уншигч цэг товшилгүйгээр
-   * заалтыг уншина. Windy, Ventusky зэрэг орчин үеийн зураг мөн ижил
-   * зарчимтай: алсаас тоо, ойроос дэлгэрэнгүй.
-   *
-   * Өгвөл `maxzoom`-оос ХОЛ байх үед цэгийн давхаргууд нуугдаж тоо
-   * гарна; ойртоход эсрэгээр — тоо алга болж цэг үлдэнэ.
-   *
-   * ⚠ Тоонууд давхцвал MapLibre өөрөө цөөрүүлнэ (`text-allow-overlap`
-   * анхдагчаар үгүй) тул алсаас зураг бөглөрөхгүй.
-   */
-  /**
-   * АНХНЫ ХАРАГДАЦЫН МАСШТАБ (хуваарийн хуваарь: 900_000 → 1:900 000).
-   *
-   * Өгөөгүй бол зураг өгөгдлийнхөө хүрээнд ТААРУУЛНА (`fitBounds`) —
-   * цэгийн тархалтаас хамаарч масштаб нь өөр өөр гарна. Өгвөл төв нь
-   * хэвээр, ойртолт нь ТОГТМОЛ болно: ижил хэлтсийн зураг үргэлж нэг
-   * хэмжээнд нээгдэнэ.
-   */
+  /** АНХНЫ ХАРАГДАЦЫН МАСШТАБ (900_000 → 1:900 000) */
   scale?: number;
+  /**
+   * ЦЭГИЙН ОРОНД ХЭМЖИЛТИЙН УТГА (WMO-гийн station model). `maxzoom`-оос
+   * ХОЛ байх үед цэг нуугдаж тоо гарна; ойртоход эсрэгээр.
+   */
   values?: {
-    /** Цэг бүрийн бичвэр ("15.6 °C"). Хоосон бол тэр цэгт гарахгүй */
     text: string[];
-    /** Утгын шатлалын өнгө, hex. Өгөөгүй бол цайвар саарал */
     color?: string[];
-    /** Үүнээс ЦААШ ойртвол тоо алга болж, цэг гарна (анхдагч 13) */
     maxzoom?: number;
   };
+  /** Цэгийн бичвэр шошго — `minzoom`-оос ойртсон үед */
   labels?: {
     text: string[];
     minzoom?: number;
-    /**
-     * Цэгээс доош шилжих зай (em, анхдагч 0.7).
-     *
-     * Тэмдэглэгээт горимд (`marks`) цэг нь 30px дискээр солигдох тул
-     * анхдагч зай хүрэлцэхгүй — шошго дискний доор нуугдана.
-     */
+    /** Цэгээс доош шилжих зай (em, анхдагч 0.7) */
     offset?: number;
+    /** Бичвэрийн хэмжээ (pt, анхдагч 8). ЗӨВХӨН анхны зурагдалтад */
+    size?: number;
+    /**
+     * Шошгын БИЧВЭР → өнгө (hex). Жагсаалтад байхгүй бичвэр анхдагч
+     * цагаанаар. ЗӨВХӨН анхны зурагдалтад.
+     */
+    colors?: Record<string, string>;
+    /** Хүрээний зузаан (pt, анхдагч 0.9). ЗӨВХӨН анхны зурагдалтад */
+    halo?: number;
   };
   /**
-   * Цэг бүрийн ХЭМЖИГДЭХҮҮН. Өгвөл зураг ЗЭРЭГЛЭСЭН тэмдгийн горимд
-   * шилжинэ: цэг бүр утгынхаа дагуу шатлалаас өнгө авч, хэмжээгээрээ
-   * ч томорно (ArcGIS-ийн graduated symbol).
-   *
-   * Хэмжигдэхүүн нь ЭРЭМБЭТЭЙ байх ёстой — нэрлэсэн ангиллыг (аймаг,
-   * гүйцэтгэгч) өнгөөр ялгавал дэлгэц утгагүй солонго болно.
-   *
-   * `values` нь `points`-той ижил урттай, `stops` нь [утга, өнгө]
-   * хосуудын ӨСӨХ дараалал.
-   *
-   * `heat` асаавал алсаас ТАСРАЛТГҮЙ ГАДАРГУУ (дулааны зураг) харагдаж,
-   * ойртох тусам цэг рүү шилжинэ. Гадаргуу нь цэгүүдийн хоорондох
-   * утгыг мужлан харуулна — тохиромжтой байдлын үнэлгээний зурагтай
-   * ижил уншигдана.
-   * ⚠⚠ **УТГЫН ЗУРАГТ ХЭРЭГЛЭХГҮЙ.** MapLibre-ийн heatmap нь кернелүүдээ
-   * НЭМДЭГ — жинг утгаар өгсөн ч үр дүн нь нягтрал × утга: цэг олон
-   * газар улаан, цөөн газар ногоон. Хөрсний PLI дээр хотын төв
-   * "бүхэлдээ бохирдолтой" мэт харагдаж байсан (2026-09-17, хэрэглэгч
-   * анзаарсан). Утга харуулах бол зэрэглэсэн ЦЭГ (`heat` унтраалттай);
-   * `heat` нь зөвхөн "хаана олон байна" гэсэн асуултад л зөв.
+   * Цэг бүрийн ХЭМЖИГДЭХҮҮН — ЗЭРЭГЛЭСЭН тэмдэг: өнгө ба хэмжээ хоёулаа
+   * утгаас. `firefly: true` — нэг өнгөт гэрэлтэлт; `"graded"` — олон
+   * өнгөт гэрэлтэлт.
    */
   grades?: {
     values: ArrayLike<number>;
     stops: [number, string][];
-    heat?: boolean;
-    /**
-     * Цэгийг ГЭРЭЛТЭХ (firefly) загвараар зурах эсэх.
-     *
-     * Зэрэглэсэн горим нь анхдагчаар хоёр давхаргатай, бараан ирмэгтэй
-     * тодорхой тэмдэг зурдаг — өнгө нь ангилал заадаг тул ирмэг нь
-     * хөрш өнгөнүүдийг тусгаарлана. Харин шатлалын хоёр үзүүрт НЭГ өнгө
-     * өгсөн үед (зөвхөн радиус нь хэмжигдэхүүн үүрэх үед) тэр ирмэг
-     * утгагүй болж, цэг нь платформын бусад зурагнаас өөрөөр харагдана.
-     *
-     * Энэ тугийг асаавал бусад зурагтай ижил гурван давхаргын гэрэлтэлт
-     * (сарнисан гэрэл → бие → цөм) хэрэглэгдэнэ. Өнгө нь `firefly`
-     * пропоос ирэх бөгөөд `stops`-ийн ӨНГИЙГ АШИГЛАХГҮЙ — тиймээс
-     * ЗӨВХӨН нэг өнгөт шатлалд тавь. Радиус нь хэвээрээ утгаасаа
-     * хамаарна.
-     *
-     * `"graded"` — ОЛОН ӨНГӨТ гэрэлтэлт (Esri-ийн firefly загвар,
-     * хэрэглэгчийн хүсэлт 2026-09-17): сарнисан гэрэл ба бие нь цэг
-     * бүрийн ӨӨРИЙН шатлалын өнгөөр, цөм нь мөн тэр өнгө (цагаан
-     * биш — хэрэглэгчийн шийдвэр). Олон өнгөт шатлалд (PLI) хэрэглэнэ — ангилал өнгөөрөө,
-     * гэрэлтэлт нь платформын бусад зурагтай ижил хэлээр уншигдана.
-     */
     firefly?: boolean | "graded";
   };
   /**
-   * Цэг бүрийн ЖИН (`points`-той ижил урттай). Өгвөл зураг НЯГТРАЛЫН
-   * горимд шилжинэ: алсаас дулааны зураг, ойртоход жингээрээ томордог
-   * цэг. Нэг цэг = нэг бичлэг биш, нүд бүрийн хуримтлал болох үед л
-   * хэрэглэнэ (жишээ нь 145 мянган жорлонг 11 мянган нүдэнд хурааж).
+   * Цэг бүрийн ЖИН. Өгвөл НЯГТРАЛЫН горим: 1:20 000 хүртэл дулааны
+   * зураг, түүнээс ойр бодит цэг.
    */
   weights?: number[];
-  /**
-   * ДЭЛГЭРЭНГҮЙ цэг. Ойртоход нэгтгэсэн нүдийг сольж, эх сурвалжаас
-   * бодит бичлэгүүдийг харагдацын хүрээгээр татна.
-   *
-   * Зураг нь домэйноо мэдэхгүй: хэзээ (`minZoom`), хаанаас (`load`)
-   * гэдгийг дуудагч тал өгнө. Зураг нь зөвхөн хөдөлгөөнийг сонсох,
-   * давхардсан хүсэлтийг таслах, давхаргыг зурах үүрэгтэй.
-   *
-   * `key` нь шүүлтүүрийн хурууны хээ — өөрчлөгдвөл кэшийг хаяж дахин
-   * татна (эс тэгвээс дүүрэг солиход хуучин цэгүүд үлдэнэ).
-   */
-  detail?: {
-    minZoom: number;
-    key: string;
-    load: (bounds: Extent, signal: AbortSignal) => Promise<GeoJSON.FeatureCollection>;
-  };
 }) {
   const holder = React.useRef<HTMLDivElement>(null);
-  const map = React.useRef<MapLibreMap | null>(null);
+  const markLayer = React.useRef<HTMLDivElement>(null);
+  const ratio = React.useRef<HTMLDivElement>(null);
+  /*
+    SDK-ийн обьектууд REF-д — тэдгээр нь өөрчлөгддөг (давхаргын рендерер,
+    график) тул React-ийн төлөвт барьж болохгүй. `ready` нь зөвхөн
+    эффектүүдийг сэрээх туг.
+  */
+  const engine = React.useRef<Live | null>(null);
+  const [ready, setReady] = React.useState(false);
+  const [lost, setLost] = React.useState(false);
+  const [failed, setFailed] = React.useState<string | null>(null);
+
   const fitted = React.useRef(false);
+  /** Сүүлд зурагт илгээсэн цэгийн датаны оролтууд */
+  const applied = React.useRef<unknown[]>([]);
+  /** oid → Esri геометр — сонгосон, хулганы доорх дүрсийг тод зурахад */
+  const shapeGeoms = React.useRef(new Map<number, { geojson: GeoJSON.Geometry; c: string | null; esri?: any }>());
   /** Анхны (сонголтгүй) хүрээ — сонголт цуцлагдахад буцаж очно */
   const home = React.useRef<Extent | null>(null);
-  /** Сонголтоор ойртсон эсэх — эхний удаа гэрт нь дэмий нисэхээс сэргийлнэ */
+  /** Сонголтоор ойртсон эсэх */
   const zoomed = React.useRef(false);
-  /*
-    Бэлэн болсныг зөвхөн true/false тугаар хадгалж БОЛОХГҮЙ. React StrictMode
-    хөгжүүлэлтийн үед effect-ийг давхар дуудаж, эхний зураг устаад хоёр дахь нь
-    үүсдэг. Туг аль хэдийн true болчихсон тохиолдолд өгөгдлийн effect дахин
-    ажиллахгүй бөгөөд шинэ зураг хоосон үлднэ. Тиймээс обьектыг өөрийг нь барина.
-  */
-  const [live, setLive] = React.useState<MapLibreMap | null>(null);
 
-  /*
-    ⚠⚠ WEBGL КОНТЕКСТ АЛДАГДАЖ БОЛНО (2026-09-29, хэрэглэгч: "мапууд
-    заримдаа харагдахгүй, асаж унтраах байдал").
-
-    Зураг GPU-г шууд хэрэглдэг тул хөтөч контекстийг ХЯЛБАРААР
-    алдагдуулдаг: драйвер дахин ачаалах, төхөөрөмж унтаад сэрэх, GPU
-    нөөц багасах, зэрэг контекст хэтрэх. Тэгвэл туван ЦАГААН болж,
-    алдаа нь ЗӨВХӨН консольд бичигддэг байв.
-
-    ✅ MapLibre ӨӨРӨӨ СЭРГЭЭЖ ЧАДДАГ (эх кодоор шалгасан):
-    `webglcontextrestored` дээр алдагдах мөчийн стайлыг
-    `setStyle(…, {diff: false})`-ээр буцааж тавьдаг. GeoJSON эх
-    сурвалжийн `setData` дата нь `serialize()`-д үлддэг (`_data.geojson`)
-    тул цэг, дүрс алдагдахгүй. Тиймээс сэргэхийг ҮРГЭЛЖ ХҮЛЭЭНЭ —
-    шууд дахин байгуулбал татагдсан дата дэмий хаягдана.
-
-    ⚠⚠ ГЭХДЭЭ СЭРГЭХ нь БАТЛААГДААГҮЙ: төхөөрөмж нөөцөө буцааж өгөөгүй
-    бол `webglcontextrestored` ХЭЗЭЭ Ч ирэхгүй. Тэр тохиолдолд зургийг
-    БҮХЭЛДЭЭ дахин байгуулна (`gen` → асаах эффектийн deps) — шинэ зам
-    бичихгүй, аль хэдийн туршигдсан замаараа бүх давхарга, шүүлт,
-    тэмдэг буцаж угсарна.
-  */
-  const [gen, setGen] = React.useState(0);
-  const [lost, setLost] = React.useState(false);
-  /** Контекст сэргэхийг хүлээж буй хугацаалагч */
-  const revive = React.useRef<number | null>(null);
-  /*
-    СҮҮЛИЙН КАМЕР — дахин байгуулахад байрлалыг сэргээнэ.
-    ⚠ ЗӨВХӨН контекст алдагдсанаас болсон дахин байгуулалтад хэрэглэнэ
-    (`rebuilt`). Таб солих, хэлтэс солих зэрэг ЖИРИЙН дахин суулгалтад
-    байрлал сэргээхгүй — тэр нь 26 самбарын анхны харагдацыг өөрчлөх
-    бөгөөд хүсээгүй зүйл.
-  */
-  const camera = React.useRef<{
-    center: [number, number];
-    zoom: number;
-  } | null>(null);
-  const rebuilt = React.useRef(false);
-
-  /*
-    Хамгийн сүүлийн callback-ийг ref-д хадгална. Ингэснээр газрын зургийг
-    үүсгэх effect нэг л удаа ажиллаж, дотроо үргэлж шинэ функц дуудна.
-  */
   const selectCb = React.useRef(onSelect);
   const hoverCb = React.useRef(onHover);
-  const probeCb = React.useRef(onProbe);
   const extentCb = React.useRef(onExtent);
   const zoomCb = React.useRef(onZoom);
   const viewCb = React.useRef(onView);
-  /** Анх үүсгэх үеийн суурь зураг — effect-ийг дахин ажиллуулахгүйн тулд ref */
+  const pickCb = React.useRef(onMapClick);
+  const blankCb = React.useRef(onBlankClick);
+  const pulseColorRef = React.useRef(pulseColor);
+  const hotRef = React.useRef(hotMark);
+  const markEls = React.useRef<Map<number, HTMLElement> | null>(null);
+  React.useEffect(() => {
+    selectCb.current = onSelect;
+    hoverCb.current = onHover;
+    extentCb.current = onExtent;
+    zoomCb.current = onZoom;
+    viewCb.current = onView;
+    pickCb.current = onMapClick;
+    blankCb.current = onBlankClick;
+    pulseColorRef.current = pulseColor;
+  });
   const basemapRef = React.useRef(basemap);
+
   /** Эх сурвалж үүсгэх үед л уншигдах тохиргоо */
-  const modeRef = React.useRef({
+  const modeRef = React.useRef<Mode>({
     cluster,
     clusterMaxZoom,
     clusterLabel,
     weighted: Boolean(weights),
     graded: grades?.stops,
-    gradedHeat: Boolean(grades?.heat),
     gradedFire: Boolean(grades?.firefly),
     gradedFireColor: grades?.firefly === "graded",
     shaped: Boolean(shapes),
@@ -1041,1538 +1232,560 @@ export function WellsMap({
     fire: firefly ?? FIREFLY,
     tinted: Boolean(colors),
     dots: dots ?? null,
+    pointScale: pointScale ?? 1,
     shapeLabelZoom: shapes?.labelZoom ?? 0,
     shapeFlow: Boolean(shapes?.flow),
     shapeLabelOnLine: shapes?.labelPlacement === "line-center",
     shapeThin: shapes?.edge === "thin",
+    shapeHair: shapes?.edge === "hair",
     shapeOutline: shapes?.outline !== false,
     shapeLabelUnique: Boolean(shapes?.labelUnique),
-    detailZoom: detail?.minZoom,
     labeled: Boolean(labels),
     labelZoom: labels?.minzoom ?? 12,
     labelOffset: labels?.offset ?? 0.7,
+    labelSize: labels?.size ?? 8,
+    labelColors: labels?.colors ?? null,
+    labelHalo: labels?.halo ?? 0.9,
     valued: Boolean(values),
     valueZoom: values?.maxzoom ?? 13,
     scale,
   });
-  const detailRef = React.useRef(detail);
-  React.useEffect(() => {
-    detailRef.current = detail;
-  }, [detail]);
-  /** Зурган тэмдэглэгээ — oid → maplibre marker */
-  const markers = React.useRef(new Map<number, Marker>());
-  React.useEffect(() => {
-    selectCb.current = onSelect;
-  }, [onSelect]);
-  React.useEffect(() => {
-    extentCb.current = onExtent;
-  }, [onExtent]);
-  React.useEffect(() => {
-    zoomCb.current = onZoom;
-  }, [onZoom]);
-  React.useEffect(() => {
-    viewCb.current = onView;
-  }, [onView]);
-  React.useEffect(() => {
-    hoverCb.current = onHover;
-  }, [onHover]);
-  React.useEffect(() => {
-    probeCb.current = onProbe;
-  }, [onProbe]);
-  /* Өнгө тодорхойлогчийг ref-д барина — эс тэгвээс дуудагч тал шинэ
-     функц дамжуулах бүрд бүх тэмдэглэгээ дахин үүснэ */
-  const pulseColorRef = React.useRef(pulseColor);
-  React.useEffect(() => {
-    pulseColorRef.current = pulseColor;
-  }, [pulseColor]);
 
   /* ---------------- Газрын зураг үүсгэх ---------------- */
   React.useEffect(() => {
-    if (!holder.current || map.current) return;
-    ensureWorker();
+    const el = holder.current;
+    if (!el) return;
+    let alive = true;
+    let view: any = null;
+    const handles: { remove: () => void }[] = [];
 
-    /* Контекст алдагдсанаас болж дахин байгуулж байгаа бол байрлалыг
-       сэргээнэ — хэрэглэгч хаана байснаа алдах ёсгүй */
-    const back = rebuilt.current ? camera.current : null;
-    rebuilt.current = false;
+    loadEsri()
+      .then((E) => {
+        if (!alive || !holder.current) return;
+        const mode = modeRef.current;
 
-    const m = new MapLibreMap({
-      container: holder.current,
-      style: baseStyle(basemapRef.current),
-      center: back?.center ?? [106.9, 47.9],
-      /* Масштаб заагдсан бол АНХНААСАА тэр хэмжээнд — олон өнцөгт л
-         харуулдаг зурагт цэгийн тааруулалт (`fitted`) ажилладаггүй тул
-         энд тавихгүй бол 9-д үлдэнэ */
-      zoom: back?.zoom ?? (modeRef.current.scale ? zoomForScale(modeRef.current.scale) : 9),
-      /*
-        ⚠ ДЭЭД ОЙРТОЛТЫГ хязгаарлана. Суурь зургийн бодит хамрах
-        хүрээнээс цааш ойртвол MapLibre сүүлчийн хавтанг улам бүр
-        томруулж, зураг нь таних аргагүй болтол бүдгэрнэ. 1:500-аас
-        нарийн масштаб энэ платформд хэрэггүй: бүртгэлийн цэг нь
-        байршил заадаг болохоос барилгын дотоод бүтэц биш.
-      */
-      maxZoom: 18,
-      attributionControl: false,
-    });
-    map.current = m;
+        /* ---- Давхаргууд, ДООРООС ДЭЭШ ---- */
+        const under = new E.GroupLayer({ title: "under" });
 
-    // MapLibre-ийн алдаа консол руу дуугаралгүй өнгөрдөг тул ил гаргана
-    m.on("error", (e) => {
-      console.error("[map]", e.error?.message ?? e);
-    });
-
-    /* Байрлал сэргэсэн бол өгөгдлийн хүрээнд ДАХИН тааруулахгүй */
-    if (back) fitted.current = true;
-
-    /*
-      КОНТЕКСТ АЛДАГДАХ — туван цагаан болж болно. MapLibre өөрөө
-      сэргээж чаддаг тул түүнийг ХҮЛЭЭНЭ; ирэхгүй бол зургийг бүхэлдээ
-      дахин байгуулна.
-      ⚠ 3 СЕКУНД: драйвер дахин ачаалахад сэргэлт секунд шахам
-      зарцуулдаг тул хэт богино бол датаа дэмий дахин татна; хэт урт
-      бол хэрэглэгч цагаан туван хараад сууна.
-    */
-    m.on("webglcontextlost", () => {
-      setLost(true);
-      if (revive.current != null) window.clearTimeout(revive.current);
-      revive.current = window.setTimeout(() => {
-        revive.current = null;
-        rebuilt.current = true;
-        setGen((n) => n + 1);
-      }, 3000);
-    });
-
-    m.on("webglcontextrestored", () => {
-      if (revive.current != null) window.clearTimeout(revive.current);
-      revive.current = null;
-      setLost(false);
-      /* Стайл шинээр тавигдсан тул хэмжээг дахин авна */
-      m.resize();
-    });
-
-    // Томруулах товч байхгүй — дугуй эргүүлэх, хос товшилтоор ажиллана
-    m.addControl(new RatioScaleControl(), "bottom-left");
-
-    m.on("load", () => {
-      /*
-        Засаг захиргааны хил. Харагдах хүрээ (visible range) нь шатлалаар:
-        улсын хил үргэлж, аймаг 5-аас, сум 8-аас. Ингэснээр алсаас харахад
-        зураг цэвэрхэн, ойртох тусам нарийвчлал нэмэгдэнэ.
-      */
-      m.addSource("bnd", {
-        type: "geojson",
-        data: { type: "FeatureCollection", features: [] },
-      });
-
-      const boundary = (
-        id: string,
-        key: "country" | "aimag" | "soum",
-        minzoom: number,
-        width: ExpressionSpecification,
-        opacity: number,
-        dash?: [number, number],
-      ) => {
-        m.addLayer({
-          id,
-          type: "line",
-          source: "bnd",
-          filter: ["==", ["get", "level"], key],
-          minzoom,
-          layout: { "line-join": "round", "line-cap": "round" },
-          paint: {
-            "line-color": "#ffffff",
-            "line-width": width,
-            "line-opacity": opacity,
-            ...(dash ? { "line-dasharray": dash } : {}),
-          },
-        });
-      };
-
-      boundary(
-        "bnd-soum",
-        "soum",
-        8,
-        ["interpolate", ["linear"], ["zoom"], 8, 0.4, 12, 0.8] as ExpressionSpecification,
-        0.3,
-        [3, 3],
-      );
-      boundary(
-        "bnd-aimag",
-        "aimag",
-        5,
-        ["interpolate", ["linear"], ["zoom"], 5, 0.6, 10, 1.1] as ExpressionSpecification,
-        0.45,
-        [6, 3],
-      );
-      boundary(
-        "bnd-country",
-        "country",
-        0,
-        ["interpolate", ["linear"], ["zoom"], 3, 1, 8, 1.8, 12, 2.4] as ExpressionSpecification,
-        0.75,
-      );
-
-      /*
-        Дата олон өнцөгт (талбай). Хилийн ДЭЭР, цэгийн ДООР суулгана:
-        энэ нь дата тул засаг захиргааны хилээс чухал, гэхдээ цэгэн
-        давхаргыг дарах ёсгүй.
-
-        Нэмэлт давхаргаас (`overlays`) ялгаатай нь энэ нь ХАРИЛЦДАГ:
-        товшилт, hover нь `oid`-оор дамжина.
-      */
-      if (modeRef.current.shaped) {
-        m.addSource("shapes", {
-          type: "geojson",
-          data: { type: "FeatureCollection", features: [] },
-        });
-
-        /* Шошгын ЦЭГҮҮД — дүрс бүрд яг нэг ({@link labelPoints}) */
-        m.addSource("shape-labels", {
-          type: "geojson",
-          data: { type: "FeatureCollection", features: [] },
-        });
-
-        /*
-          Сарнисан гэрэл (bloom) — хүрээний ДООР, дүүргэлтийн ч доор.
-
-          Цэгэн давхаргын firefly загвартай нэг хэл: биет өөрөө гэрэл
-          ялгаруулж буй мэт. `line-blur` нь зурааснаас ГАДАГШ ч, ДОТОГШ
-          ч сарнидаг тул нарийн талбай бүхэлдээ гэрэлтэнэ.
-
-          ГУРВАН дамжлага давхарлана — нэг өргөн зураас бүдгэрүүлээд
-          орхивол зүгээр л "бүдэг зузаан хүрээ" болно, гэрлийн мэдрэмж
-          төрөхгүй. Жинхэнэ bloom нь ТӨВДӨӨ хүчтэй, захдаа хурдан
-          суларсан налуутай байдаг: гурван өөр өргөнтэй давхарга
-          нэмэгдэж яг тэр налууг гаргана.
-
-          Өргөнийг зумаас ХАМААРУУЛЖ томруулна — тогтмол пикселийн
-          гэрэл нь холоос талбайгаа бүрэн залгиж, ойртоход алга болно.
-        */
-        if (modeRef.current.shapeGlow) {
-          /** Нэг дамжлага: `k` нь өргөний үржүүлэгч, `o` нь тунгалаг */
-          const pass = (id: string, k: number, o: number) =>
-            m.addLayer({
-              id,
-              type: "line",
-              source: "shapes",
-              layout: { "line-join": "round" },
-              paint: {
-                "line-color": ["coalesce", ["get", "c"], modeRef.current.shapeColor ?? SHAPE_FALLBACK] as unknown as ExpressionSpecification,
-                "line-width": [
-                  "interpolate",
-                  ["linear"],
-                  ["zoom"],
-                  8,
-                  ["case", SHAPE_LIT, 5 * k, 3 * k],
-                  16,
-                  ["case", SHAPE_LIT, 26 * k, 16 * k],
-                ] as unknown as ExpressionSpecification,
-                /* Бүдгэрэлт нь өргөнтэйгээ ойролцоо — үүнээс бага бол
-                   ирмэг нь хатуу, их бол гэрэл нь хэт шингэрнэ */
-                "line-blur": [
-                  "interpolate",
-                  ["linear"],
-                  ["zoom"],
-                  8,
-                  4 * k,
-                  16,
-                  20 * k,
-                ] as unknown as ExpressionSpecification,
-                "line-opacity": [
-                  "case",
-                  SHAPE_LIT,
-                  Math.min(o * 1.7, 0.95),
-                  o,
-                ] as unknown as ExpressionSpecification,
-              },
-            });
-
-          pass("shape-glow-3", 2.6, 0.3); // хамгийн гадна, сарнисан
-          pass("shape-glow-2", 1.3, 0.42); // дунд
-          pass("shape-glow-1", 0.6, 0.6); // хүрээний дэргэдэх тод цөм
-        }
-
-        m.addLayer({
-          id: "shape-fill",
-          type: "fill",
-          source: "shapes",
-          /*
-            ЗӨВХӨН олон өнцөгт. MapLibre-ийн `fill` давхарга нь
-            `LineString`-ийг ХААЖ дүүргэдэг тул шугам нь эхлэл, төгсгөлөө
-            холбосон дүүрэн гурвалжин болж харагдана — цахилгааны шонгийн
-            шугам дээр яг ингэж гарсан. Геометрийн төрлөөр шүүх нь энэ
-            давхаргын зорилготой ч нийцнэ: дүүргэлт нь ТАЛБАЙН шинж.
-
-            Хоёр нэрийг ЗЭРЭГ бичсэн нь санаатай: зурагдалтын үед
-            `geometry-type` нь Multi* хэлбэрийг ганцаарчилсан нэр рүү
-            хураадаг ("Polygon") ч, асуулгын үр дүн дээр эх нэрээрээ
-            ирдэг. Ганцхан "Polygon" бичвэл нөхөн сэргээлтийн
-            `MultiPolygon` талбайнууд нөхцөл байдлаас шалтгаалж
-            дүүргэлтгүй үлдэх эрсдэлтэй.
-          */
-          filter: ["in", ["geometry-type"], ["literal", ["Polygon", "MultiPolygon"]]],
-          paint: {
-            "fill-color": ["coalesce", ["get", "c"], modeRef.current.shapeColor ?? SHAPE_FALLBACK] as unknown as ExpressionSpecification,
-            "fill-opacity": modeRef.current.shapeCrisp
-              ? (["case", SHAPE_LIT, 0.26, 0.12] as unknown as ExpressionSpecification)
-              : (["case", SHAPE_LIT, 0.68, 0.42] as unknown as ExpressionSpecification),
-          },
-        });
-
-        /*
-          БАРААН КАСИНГ — хүрээний ДООР (2026-09-24, хэрэглэгч:
-          "map дээр югд юу ч гарч ирэхгүй байна").
-
-          Давхаргын өнгө нь хэлтсийн өнцөгөөс гардаг бөгөөд ангиллын
-          шатлалын цайвар үзүүр нь L 0.88 — хиймэл дагуулын ургамал,
-          цас дээр бараг цагаан болж уусна. Цэгэн давхаргад яг энэ
-          шалтгаанаар `wells-ring` нэмэгдсэн — энэ нь түүний олон
-          өнцөгт хувилбар.
-
-          ⚠ Касинг нь ХҮРЭЭНИЙ ӨНГӨД ХӨРӨНДӨХГҮЙ: түүний ДООР сууж,
-          хоёр талаараа л цухуйна — өнгө нь ангиллаа заасаар байж,
-          зөвхөн ирмэг нь дэвсгэрээс сална.
-          ⚠ Горимоос ҮЛ ХАМААРНА: тогтмол rgba — платформын токен
-          зураг дотор орохгүй ("газрын зураг хоёр горимд ижил" дүрэм).
-        */
-        /*
-          ХҮРЭЭНИЙ ӨРГӨН — бүртгэл хүрээг хаасан үед ОЛОН ӨНЦӨГТ дээр
-          тэг болно ({@link shapes.outline}).
-
-          ⚠ ШУГАМАН дүрс ХӨНДӨГДӨХГҮЙ: `shape-line` нь маршрут, зурвас
-          зэрэг `LineString`-ийг ч зурдаг бөгөөд тэнд хүрээ нь дүрс
-          ӨӨРӨӨ — тэг өгвөл давхарга бүхэлдээ алга болно.
-          ⚠ ХҮРЭЭГҮЙ ГОРИМД СОНГОЛТЫН ЗУРААС НАРИЙН (`thin`): ердийн
-          горимд сонгосон хүрээ нь ХӨРШ дүрсүүдийн хүрээнээс ялгарах
-          ёстой тул бүдүүн; хүрээгүй горимд зураг дээрх ЦОРЫН ГАНЦ
-          зураас тул тэр жин шаардлагагүй.
-          ⚠ `["zoom"]` нь `interpolate`-ийн ШУУД оролт хэвээр: шалгалт
-          нь СУУДАЛ бүрийн дотор — эсрэгээр бичвэл MapLibre давхаргыг
-          чимээгүй голно.
-        */
-        const outlined = modeRef.current.shapeOutline;
-        const strokeAt = (lit: number, plain: number, thin = lit) =>
-          (outlined
-            ? ["case", SHAPE_LIT, lit, plain]
-            : ["case", SHAPE_LIT, thin, ["in", ["geometry-type"], ["literal", ["Polygon", "MultiPolygon"]]], 0, plain]) as unknown as ExpressionSpecification;
-
-        /* `crisp` горимд касинг ЗУРАГДАХГҮЙ — хүрээ тод хэвээр байх ёстой.
-           Давхарга нь байх ёстой (бусад код `beforeId`-ээр иш татаж
-           магадгүй) тул нуухын оронд тунгалаг болгоно */
-        m.addLayer({
-          id: "shape-case",
-          type: "line",
-          source: "shapes",
-          layout: { "line-join": "round" },
-          paint: {
-            "line-color": modeRef.current.shapeCrisp ? "rgba(0,0,0,0)" : "rgba(8,14,20,.55)",
-            /* Нимгэн горимд ойролцоогоор хагас ({@link shapes.edge});
-               хүрээгүй горимыг `strokeAt` барина */
-            "line-width": (modeRef.current.shapeThin
-              ? [
-                  "interpolate",
-                  ["linear"],
-                  ["zoom"],
-                  8,
-                  strokeAt(2.4, 1.2, 1.6),
-                  14,
-                  strokeAt(3.4, 2, 2),
-                ]
-              : [
-                  "interpolate",
-                  ["linear"],
-                  ["zoom"],
-                  8,
-                  strokeAt(4.6, 2.8, 2.2),
-                  14,
-                  strokeAt(6.4, 4.2, 3),
-                ]) as unknown as ExpressionSpecification,
-          },
-        });
-
-        m.addLayer({
-          id: "shape-line",
-          type: "line",
-          source: "shapes",
-          layout: { "line-join": "round" },
-          paint: {
-            "line-color": ["coalesce", ["get", "c"], modeRef.current.shapeColor ?? SHAPE_FALLBACK] as unknown as ExpressionSpecification,
-            /* `["zoom"]` нь дээд түвшний `interpolate`-ийн шууд оролт
-               байх ёстой — сонголтын шалгалтыг СУУДАЛ бүрийн дотор
-               оруулав, эсрэгээр бичвэл давхарга чимээгүйхэн гологдоно */
-            "line-width": (modeRef.current.shapeCrisp
-              ? [
-                  "interpolate",
-                  ["linear"],
-                  ["zoom"],
-                  8,
-                  ["case", SHAPE_LIT, 2.2, 1.1],
-                  14,
-                  ["case", SHAPE_LIT, 2.8, 1.6],
-                ]
-              : modeRef.current.shapeThin
-              ? [
-                  "interpolate",
-                  ["linear"],
-                  ["zoom"],
-                  8,
-                  strokeAt(1.2, 0.35, 0.8),
-                  14,
-                  strokeAt(1.8, 0.7, 1),
-                ]
-              : [
-                  "interpolate",
-                  ["linear"],
-                  ["zoom"],
-                  8,
-                  strokeAt(1.8, 0.5, 1),
-                  14,
-                  strokeAt(2.6, 1.2, 1.4),
-                ]) as unknown as ExpressionSpecification,
-            "line-opacity": modeRef.current.shapeCrisp ? 1 : 0.9,
-          },
-        });
-
-        /*
-          Чиглэлийн сум — `LineString` дүрсийн дундад.
-
-          `symbol-placement: "line-center"` нь тэмдгийг шугамын дундад
-          тавиад ЧИГЛЭЛИЙН ДАГУУ эргүүлдэг тул сум өөрөө эхлэлээс
-          төгсгөл рүү заана. Олон өнцөгт дээр ч ажиллана (гадна хүрээг
-          дагана) боловч тэнд утгагүй тул `flow` -г зөвхөн урсгал
-          илэрхийлдэг самбарт л асаана.
-        */
-        if (modeRef.current.shapeFlow) {
-          m.addLayer({
-            id: "shape-flow",
-            type: "symbol",
-            source: "shapes",
-            layout: {
-              "symbol-placement": "line-center",
-              "text-field": "→",
-              "text-font": FONT,
-              "text-size": ["interpolate", ["linear"], ["zoom"], 6, 14, 12, 20],
-              "text-allow-overlap": true,
-              "text-ignore-placement": true,
-            },
-            paint: {
-              "text-color": "#ffffff",
-              "text-halo-color": "rgba(8,14,20,.85)",
-              "text-halo-width": 1.4,
-            },
+        const bndLayer = (level: string) =>
+          new E.GraphicsLayer({
+            title: `bnd-${level}`,
+            ...(level === "aimag" ? { minScale: scaleAt(5) } : level === "soum" ? { minScale: scaleAt(8) } : {}),
           });
-        }
+        const bnd = { country: bndLayer("country"), aimag: bndLayer("aimag"), soum: bndLayer("soum") };
 
+        const shapeFields: Field[] = [
+          { name: "oid", type: "double" },
+          { name: "c", type: "string" },
+          { name: "t", type: "string" },
+        ];
+        const shapePoly = mode.shaped
+          ? clientLayer(E, "polygon", shapeFields, {
+              renderer: shapeRenderer(mode, [], polySymbol),
+              ...(mode.shapeGlow ? { effect: "bloom(1.4, 2px, 0)" } : {}),
+            })
+          : null;
+        const lineLabels = mode.shaped && mode.shapeLabelOnLine;
+        const shapeLine = mode.shaped
+          ? clientLayer(E, "polyline", shapeFields, {
+              renderer: shapeRenderer(mode, [], lineSymbol),
+              ...(mode.shapeGlow ? { effect: "bloom(1.4, 2px, 0)" } : {}),
+            })
+          : null;
+        /* Сонгосон, хулганы доорх дүрс — тод хувилбараар давхарлана */
+        const lit = mode.shaped ? new E.GraphicsLayer({ title: "lit" }) : null;
+        const above = new E.GroupLayer({ title: "above" });
         /*
-          Талбайн шошго — `properties.t` бичигдсэн байвал.
-
-          MapLibre полигоны шошгыг талбайн ХАМГИЙН ХОЛ ДОТООД цэгт
-          (pole of inaccessibility) тавьдаг тул нарийн, хонхор хэлбэр
-          дээр ч гадуур гарахгүй. Тиймээс төвлөрсөн цэг тооцох
-          шаардлагагүй.
+          ⚠ ХЭРЧМИЙН ШОШГО ч мөн ЦЭГЭН давхаргад (шугамын жинхэнэ дунд цэг):
+          Esri-ийн `center-along` нь бичвэр хэрчимдээ багтахгүй бол огт
+          тавьдаггүй — 60 м-ийн шонгийн хэрчим дээр нэг ч шошго гарахгүй байв.
         */
-        m.addLayer({
-          id: "shape-label",
-          type: "symbol",
-          /* Хэрчим дээр шошго нь шугамаа дагах ёстой тул `shapes`
-             дээрээ үлдэнэ; бусад тохиолдолд дүрс бүрд НЭГ цэг */
-          source: modeRef.current.shapeLabelOnLine ? "shapes" : "shape-labels",
-          minzoom: modeRef.current.shapeLabelZoom,
-          filter: ["has", "t"],
-          layout: {
-            "text-field": ["get", "t"],
-            "text-font": FONT,
-            "text-size": ["interpolate", ["linear"], ["zoom"], 8, 9, 14, 12],
-            "text-padding": 4,
-            ...(modeRef.current.shapeLabelOnLine
-              ? {
-                  "symbol-placement": "line-center" as const,
-                  /* Хэрчим богино байж болно — багтахгүй бол шошго нь
-                     алга болохоос илүү давхарласан нь дээр */
-                  "text-allow-overlap": true,
-                  "text-ignore-placement": true,
-                }
-              : {}),
-          },
-          paint: {
-            "text-color": "#ffffff",
-            "text-halo-color": "rgba(8,14,20,.85)",
-            "text-halo-width": 1.2,
-          },
-        });
-      }
+        const shapeLabels =
+          mode.shaped
+            ? clientLayer(E, "point", [{ name: "t", type: "string" }], {
+                renderer: INVISIBLE,
+                labelingInfo: [
+                  {
+                    labelExpressionInfo: { expression: "$feature.t" },
+                    labelPlacement: "center-center",
+                    deconflictionStrategy: lineLabels ? "none" : "static",
+                    minScale: mode.shapeLabelZoom ? scaleAt(mode.shapeLabelZoom) * 1.01 : 0,
+                    symbol: { type: "text", color: "#ffffff", haloColor: HALO, haloSize: 0.9, font: { ...FONT, size: 8 } },
+                  },
+                ],
+              })
+            : null;
 
-      /*
-        Бөөгнөрүүлэлт (clustering) — 12 мянган цэгийг тархалтаар нь уншуулна.
-        Ойртох тусам бөөгнөрөл задарч, `clusterMaxZoom`-оос цааш дан цэг болно.
-      */
-      m.addSource("wells", {
-        type: "geojson",
-        data: { type: "FeatureCollection", features: [] },
-        cluster: modeRef.current.cluster,
-        clusterRadius: 48,
-        clusterMaxZoom: modeRef.current.clusterMaxZoom,
-      });
+        const pointFields: Field[] = [
+          { name: "oid", type: "double" },
+          { name: "w", type: "double" },
+          { name: "g", type: "double" },
+          { name: "c", type: "string" },
+          { name: "t", type: "string" },
+          { name: "r", type: "integer" },
+        ];
 
-      /*
-        Бөөгнөрөл: дүүргэлт нь тунгалаг, хүрээ нь ИЖИЛ өнгөөр бүтэн.
-        Ингэснээр доорх суурь зураг харагдсаар үлдэж, аль ч суурин дээр
-        (бараан, хиймэл дагуул, гудамж) уншигдана.
-
-        Өнгө нь firefly-ийн гэрэлтэй нэг байна — бөөгнөрөл задрахад цэг өөр
-        өнгө рүү үсрэх нь ижил датаг өөр зүйл мэт харагдуулна.
-      */
-      const badge = modeRef.current.clusterLabel === "badge";
-
-      if (modeRef.current.cluster) {
-        m.addLayer({
-          id: "clusters",
-          type: "circle",
-          source: "wells",
-          filter: ["has", "point_count"],
-          paint: {
-            "circle-color": modeRef.current.fire.glow,
-            // Тоо нь дотроо биш бол дугуй нь илүү хоосон, бөгж маягтай
-            "circle-opacity": badge ? 0.14 : 0.22,
-            "circle-radius": clusterRadius,
-            "circle-stroke-width": badge ? 2 : 1.4,
-            "circle-stroke-color": modeRef.current.fire.glow,
-            "circle-stroke-opacity": 0.95,
-          },
-        });
-
-        if (badge) {
-          /*
-            Тоо нь дугуйн БАРУУН ДЭЭД буланд жижиг тэмдэг болж суух хувилбар.
-            Дугуйн дотор нь чөлөөтэй үлдэх тул доорх суурь зураг, цэгийн
-            тархалт харагдсаар байна.
-          */
-          const pill = pillImage();
-          if (!m.hasImage("cluster-pill")) {
-            m.addImage("cluster-pill", pill.data, pill.options);
-          }
-
-          m.addLayer({
-            id: "cluster-count",
-            type: "symbol",
-            source: "wells",
-            filter: ["has", "point_count"],
-            layout: {
-              "icon-image": "cluster-pill",
-              "icon-text-fit": "both",
-              "icon-text-fit-padding": [1, 3, 1, 3],
-              "icon-allow-overlap": true,
-              "text-field": ["get", "point_count_abbreviated"],
-              "text-font": FONT,
-              "text-size": 10,
-              "text-offset": badgeOffset,
-              "text-allow-overlap": true,
-            },
-            paint: { "text-color": "#ffffff" },
-          });
-        } else {
-          m.addLayer({
-            id: "cluster-count",
-            type: "symbol",
-            source: "wells",
-            filter: ["has", "point_count"],
-            layout: {
-              "text-field": ["get", "point_count_abbreviated"],
-              "text-font": FONT,
-              "text-size": ["step", ["get", "point_count"], 10, 100, 11, 1000, 12],
-              "text-allow-overlap": true,
-            },
-            paint: {
-              "text-color": "#ffffff",
-              "text-halo-color": "rgba(0,0,0,.7)",
-              "text-halo-width": 1.2,
-            },
-          });
-        }
-      }
-
-      if (modeRef.current.weighted) {
         /*
-          НЯГТРАЛЫН горим. Нүд бүр олон бичлэгийн хуримтлал тул firefly
-          гурван давхарга утгагүй — алсаас дулааны зураг тархалтыг, ойртоход
-          жингээрээ томордог цэг нүд бүрийн хэмжээг хэлнэ.
-
-          Өнгө нь ГАНЦ: тунгалагаас `--data` руу шилжих шатлал. Улаан-шар
-          "халуун" градиент нь өөр хэмжигдэхүүн (эрсдэл) мэт эндүүрүүлнэ.
-
-          ХАРАГДАХ ХҮРЭЭ нь МАСШТАБААР заагдана (zoom-оор биш) — хэлтэс
-          "1:20 000-аас ойр бол бодит цэг, бусад тохиолдолд дулааны зураг"
-          гэж тавьсан. `zoomForScale` нь түүнийг zoom болгоно (1:20 000 →
-          z 13.28). Хоёр шат:
-            алсаас 1:20 000 хүртэл   дулааны зураг
-            1:20 000-аас ойр         бодит цэг
-          Заагт нь давхцах цонх ЗААВАЛ хэрэгтэй — эс тэгвээс нэг давхарга
-          алга болоод нөгөө нь гарах хүртэл зураг хоосорно.
+          НЯГТРАЛЫН горим: 1:20 000 хүртэл дулааны зураг, түүнээс ойр бодит
+          цэг. Заагт 0.6 түвшний давхцал — нэг нь алга болоод нөгөө нь
+          гарах хооронд зураг хоосрохгүй.
         */
         const zDot = zoomForScale(20_000);
-        /** Шилжилтийн цонхны өргөн (zoom нэгжээр) */
-        const FADE = 0.6;
         /*
-          Цэг нь ойртоход АЛГА БОЛОХ нь зөвхөн дэлгэрэнгүй давхарга
-          түүнийг солих үед л зөв. Бүх цэг аль хэдийн хөтөч дээр байвал
-          дүрслэх зүйл үлдэхгүй болж зураг хоосорно.
+          ⚠ НЭГ ДАВХАРГА, ХОЁР РЕНДЕРЕР: дулааны зураг ба бодит цэг ижил
+          145 мянган цэгийг хоёр давхаргад хуулбарлавал хөтөч хоёр дахин
+          ачаална. Масштаб заагийг давах бүрд рендерер солигдоно.
         */
-        const zDetail = modeRef.current.detailZoom;
-        const dotFade = (full: number): ExpressionSpecification =>
-          zDetail == null
-            ? ["interpolate", ["linear"], ["zoom"], zDot - FADE, 0, zDot, full]
-            : [
-                "interpolate",
-                ["linear"],
-                ["zoom"],
-                zDot - FADE,
-                0,
-                zDot,
-                full,
-                zDetail,
-                full,
-                zDetail + 0.4,
-                0,
-              ];
-
-        m.addLayer({
-          id: "cells-heat",
+        const heatRenderer = {
           type: "heatmap",
-          source: "wells",
-          maxzoom: zDot + 0.4,
-          paint: {
-            "heatmap-weight": [
-              "interpolate",
-              ["linear"],
-              ["get", "w"],
-              0,
-              0,
-              60,
-              1,
-            ],
-            "heatmap-intensity": ["interpolate", ["linear"], ["zoom"], 8, 0.7, 13, 1.4],
-            "heatmap-radius": ["interpolate", ["linear"], ["zoom"], 8, 6, 12, 14, 13.5, 22],
-            // 1:20 000 дээр дулааны зураг бүрэн арилж, бодит цэг үлдэнэ
-            "heatmap-opacity": ["interpolate", ["linear"], ["zoom"], zDot - FADE, 0.9, zDot, 0],
-            "heatmap-color": [
-              "interpolate",
-              ["linear"],
-              ["heatmap-density"],
-              0,
-              "rgba(0,200,255,0)",
-              0.25,
-              "rgba(0,200,255,.32)",
-              0.6,
-              "rgba(92,225,255,.62)",
-              1,
-              "rgba(230,251,255,.92)",
-            ],
+          radius: 9,
+          maxDensity: 3,
+          minDensity: 0,
+          /* Өнгө нь цэгийн палитраас (`firefly`) — самбар өөрийн
+             диаграмтай нэг өнгөний гэр бүл өгч болно. Анхдагч нь cyan. */
+          colorStops: [
+            { ratio: 0, color: col(mode.fire.glow, 0) },
+            { ratio: 0.25, color: col(mode.fire.glow, 0.32) },
+            { ratio: 0.6, color: col(mode.fire.mid, 0.62) },
+            { ratio: 1, color: col(mode.fire.core, 0.92) },
+          ],
+        };
+        const dotRenderer = {
+          type: "simple",
+          symbol: {
+            type: "simple-marker",
+            color: col(mode.fire.glow, 0.9),
+            outline: { color: [0, 0, 0, 0.5], width: 0.3 },
           },
+          visualVariables: [
+            sizeByZoom([
+              [zDot - 0.6, 1.2],
+              [15, 1.8],
+              [18, 2.6],
+            ]),
+          ],
+        };
+        const heat = null;
+
+        const valueScale = mode.valued ? scaleAt(mode.valueZoom) : 0;
+
+        const pointRendererNow = mode.weighted ? heatRenderer : pointRenderer(mode, []);
+
+        const badge = mode.clusterLabel === "badge";
+        const points = clientLayer(E, "point", pointFields, {
+          renderer: pointRendererNow,
+          ...(mode.valued ? { minScale: valueScale } : {}),
+          ...(mode.dots ? { orderBy: [{ field: "r", order: "ascending" }] } : {}),
+          ...(mode.cluster && !mode.weighted
+            ? {
+                featureReduction: {
+                  type: "cluster",
+                  clusterRadius: "48px",
+                  clusterMinSize: `${pt(10)}pt`,
+                  clusterMaxSize: `${pt(38)}pt`,
+                  maxScale: scaleAt(mode.clusterMaxZoom),
+                  /* ⚠ `renderer` БИШ `symbol`: өөрийн рендерер өгвөл НЭГ гишүүнтэй
+                     бөөгнөрөл ч цагираг болж зурагддаг байв */
+                  symbol: {
+                    type: "simple-marker",
+                    color: col(mode.fire.glow, badge ? 0.14 : 0.22),
+                    outline: { color: col(mode.fire.glow, 0.95), width: (badge ? 2 : 1.4) * 0.75 },
+                  },
+                  labelingInfo: [
+                    badge
+                      ? {
+                          deconflictionStrategy: "none",
+                          labelExpressionInfo: { expression: CLUSTER_TEXT },
+                          labelPlacement: "above-right",
+                          symbol: {
+                            type: "text",
+                            color: "#ffffff",
+                            backgroundColor: [15, 23, 32, 0.92],
+                            borderLineColor: col(mode.fire.glow),
+                            borderLineSize: 0.75,
+                            font: { ...FONT, size: 7.5 },
+                          },
+                        }
+                      : {
+                          deconflictionStrategy: "none",
+                          labelExpressionInfo: { expression: CLUSTER_TEXT },
+                          labelPlacement: "center-center",
+                          symbol: {
+                            type: "text",
+                            color: "#ffffff",
+                            haloColor: [0, 0, 0, 0.7],
+                            haloSize: 0.9,
+                            font: { ...FONT, size: 8 },
+                          },
+                        },
+                  ],
+                },
+              }
+            : {}),
+          ...(mode.labeled
+            ? {
+                labelingInfo: (() => {
+                  /* Бичвэр тус бүрийн өнгө — анги тутамд НЭГ шошгын класс */
+                  const q = (t: string) => `'${t.replace(/'/g, "''")}'`;
+                  const cls = (where: string, color: string) => ({
+                    labelExpressionInfo: { expression: "$feature.t" },
+                    where,
+                    labelPlacement: "below-center",
+                    deconflictionStrategy: "static",
+                    minScale: scaleAt(mode.labelZoom) * 1.01,
+                    symbol: {
+                      type: "text",
+                      color,
+                      haloColor: HALO,
+                      haloSize: mode.labelHalo,
+                      lineWidth: 80,
+                      yoffset: -mode.labelOffset * 6,
+                      font: { ...FONT, size: mode.labelSize },
+                    },
+                  });
+                  const pairs = Object.entries(mode.labelColors ?? {});
+                  if (!pairs.length) return [cls("t IS NOT NULL", "#eef4f8")];
+                  return [
+                    ...pairs.map(([t, c]) => cls(`t = ${q(t)}`, c)),
+                    cls(`t IS NOT NULL AND t NOT IN (${pairs.map(([t]) => q(t)).join(", ")})`, "#eef4f8"),
+                  ];
+                })(),
+              }
+            : {}),
         });
 
-        m.addLayer({
-          id: "wells-dot",
-          type: "circle",
-          source: "wells",
-          minzoom: zDot - FADE,
-          ...(zDetail == null ? {} : { maxzoom: zDetail + 0.4 }),
-          paint: {
-            /*
-              Хэмжээ нь ЖИЖИГ бөгөөд тогтмол.
+        /* ХЭМЖИЛТИЙН УТГА — цэгийн ОРОНД, зөвхөн шошго үүрэх давхарга */
+        const valuesLayer = mode.valued
+          ? clientLayer(
+              E,
+              "point",
+              [
+                { name: "v", type: "string" },
+                { name: "vc", type: "string" },
+              ],
+              { renderer: INVISIBLE, maxScale: valueScale },
+            )
+          : null;
 
-              Урьд нь радиусыг нүд доторх тоогоор томруулж байсан нь
-              бүтсэнгүй: том дугуйнууд хоорондоо нийлж, суурь зургийг
-              бүрхсэн эгнээ болж хувирсан. Одоо бичлэг тутам нэг цэг
-              болсон тул бүр ч жижиг байх ёстой — нягт хороололд 20
-              метрийн зайд хэдэн жорлон байх ба 3px-ийн дугуйнууд
-              нийлээд нэг толбо болно. Тоо хэмжээг ДУЛААНЫ зураг аль
-              хэдийн хэлсэн; цэг нь зөвхөн "яг энд бий" гэдгийг хэлнэ.
-            */
-            "circle-radius": ["interpolate", ["linear"], ["zoom"], zDot - FADE, 1.2, 15, 1.8, 18, 2.6],
-            "circle-color": modeRef.current.fire.glow,
-            "circle-opacity": dotFade(0.9),
-            /* Хүрээ нь радиусын хагасаас хэтэрвэл цэг нь дугуй биш
-               толбо болно — 1.2px радиуст 0.35 нь дээд хязгаар */
-            "circle-stroke-width": 0.35,
-            "circle-stroke-color": "rgba(0,0,0,.5)",
-            "circle-stroke-opacity": dotFade(1),
-          },
-        });
+        const hl = new E.GraphicsLayer({ title: "hl" });
+        const hot = new E.GraphicsLayer({ title: "hot" });
 
-        /*
-          Бодит цэгийн давхарга. Эх сурвалж нь ХООСОН эхэлж, ойртоход
-          `detail.load`-оор дүүрнэ (доорх effect). Нүдтэй зэрэгцэж
-          гарч ирээд түүнийг сольж авна.
-        */
-        if (modeRef.current.detailZoom != null) {
-          const zd = modeRef.current.detailZoom;
-          m.addSource("detail", {
-            type: "geojson",
-            data: { type: "FeatureCollection", features: [] },
-          });
-          m.addLayer({
-            id: "detail-dot",
-            type: "circle",
-            source: "detail",
-            minzoom: zd - 0.4,
-            paint: {
-              "circle-radius": ["interpolate", ["linear"], ["zoom"], 13, 2.2, 16, 4, 18, 6],
-              "circle-color": modeRef.current.fire.core,
-              "circle-opacity": ["interpolate", ["linear"], ["zoom"], zd - 0.4, 0, zd, 0.95],
-              "circle-stroke-width": 0.7,
-              "circle-stroke-color": "rgba(0,0,0,.5)",
-              "circle-stroke-opacity": ["interpolate", ["linear"], ["zoom"], zd - 0.4, 0, zd, 1],
-            },
-          });
-        }
-      } else if (modeRef.current.graded) {
-        /*
-          Зэрэглэсэн тэмдэг. Ангилал ЭРЭМБЭТЭЙ тул хоёр суваг зэрэг
-          ажиллана: өнгө нь зэргийг, ХЭМЖЭЭ нь мөн зэргийг давхар
-          хэлнэ. Зөвхөн өнгөөр ялгавал өнгө ялгах чадвар султай хүнд
-          зураг унших боломжгүй болно.
-        */
-        const stops = modeRef.current.graded;
-        const heat = modeRef.current.gradedHeat;
-        /** Ойртоход гадаргуугаас цэг рүү шилжих уусалт */
-        const fade = (to: number) =>
-          ["interpolate", ["linear"], ["zoom"], 11.5, 0, 13, to] as ExpressionSpecification;
-
-        if (heat) {
-          /*
-            Тасралтгүй гадаргуу. Дулааны давхарга нь цэгийн ЖИНГЭЭР
-            ажиллана: утга нь өндөр цэг орчиндоо илүү нөлөөлж, цэг
-            хоорондын зай мужлагдана. Тиймээс өнгө нь "хэдэн цэг байна"
-            биш "энэ орчны түвшин" гэж уншигдана.
-
-            Цэг сийрэг (500 ширхэг) тул радиус нь жорлонгийнхоос
-            хамаагүй том — эс тэгвээс гадаргуу үүсэхгүй, салангид толбо
-            болно.
-          */
-          m.addLayer({
-            id: "grade-heat",
-            type: "heatmap",
-            source: "wells",
-            maxzoom: 13.5,
-            paint: {
-              "heatmap-weight": heatWeight(stops),
-              "heatmap-intensity": ["interpolate", ["linear"], ["zoom"], 7, 0.8, 13, 1.5],
-              "heatmap-radius": ["interpolate", ["linear"], ["zoom"], 7, 16, 10, 32, 13.5, 64],
-              // Ойртох тусам гадаргуу арилж, цэг гарч ирнэ
-              "heatmap-opacity": ["interpolate", ["linear"], ["zoom"], 11.5, 0.82, 13.4, 0],
-              "heatmap-color": heatRamp(stops),
-            },
-          });
-        }
-
-        /*
-          Гэрэлтэх хувилбарт өнгө нь шатлалаас БИШ `firefly` гурвалаас
-          ирнэ (нэг өнгөт шатлалд л зөвшөөрөгдөнө — пропын тайлбарыг
-          үзнэ үү). Радиусын үржүүлэгчид нь бөөгнөрөлгүй firefly-ийн
-          харьцааг давтана: сарнисан гэрэл ≈ 4.2, бие ≈ 2.2, цөм ≈ 0.95.
-        */
-        const fire = modeRef.current.gradedFire;
-        /* Олон өнгөт гэрэлтэлт: өнгө шатлалаас, цөм нь цайвар хувилбар */
-        const multi = modeRef.current.gradedFireColor;
-        const glowColor = multi ? gradeColor(stops) : modeRef.current.fire.glow;
-        const midColor = multi ? gradeColor(stops) : modeRef.current.fire.mid;
-        /* Цөм нь биетэйгээ НЭГ өнгө (хэрэглэгч 2026-09-17: "улаан бол цөм нь
-           улаан") — цайвар/цагаан цөм ХЭРЭГЛЭХГҮЙ; гэрэлтэлт нь давхаргын
-           тунгалагийн ялгаанаас гарна */
-        const coreColor = multi ? gradeColor(stops) : modeRef.current.fire.core;
-
-        /*
-          ⚠ БӨӨГНӨРЛИЙГ ШҮҮНЭ. Зэрэглэсэн цэг нь бөөгнөрсөн обьект дээр
-          ч зурагддаг байсан тул бөөгнөрлийн дугуйн ТӨВД суугаад
-          доторх тоог халхалдаг байв (`cluster` асаалттай, зэрэглэсэн
-          горимд — химийн бүртгэлийн самбар энэ хослолыг анх хэрэглэв).
-          Бөөгнөрөлгүй firefly салбарт энэ шүүлт анхнаасаа байсан.
-        */
-        const single: FilterSpecification = ["!", ["has", "point_count"]];
-
-        m.addLayer({
-          id: "wells-glow",
-          type: "circle",
-          source: "wells",
-          filter: single,
-          ...(heat ? { minzoom: 11.5 } : {}),
-          paint: {
-            "circle-radius": gradedRadius(stops, fire ? (multi ? 3.0 : 4.2) : 2.4),
-            "circle-color": fire ? glowColor : gradeColor(stops),
-            "circle-blur": 1,
-            "circle-opacity": heat ? fade(fire ? 0.38 : 0.32) : fire ? 0.38 : 0.32,
-          },
-        });
-
-        /* Дундах бие — ЗӨВХӨН гэрэлтэх хувилбарт. Сарнисан гэрэл ба
-           цөмийн хооронд шилжилт үүсгэнэ; үүнгүй бол цөм нь манан дээр
-           наалдсан мэт харагдана */
-        if (fire) {
-          /*
-            ⚠ Олон өнгөт шатлалд БАРААН ЦАГИРАГ биеийн доор. Шатлалын
-            ногоон үзүүр (PLI < 1) хиймэл дагуулын ногоон ургамалтай
-            нэг өнгө тул цэг газартаа уусаж алга болж байв (хэрэглэгч
-            2026-09-17: "цэгүүд сайн харагдахгүй"). Нэг өнгөт firefly-д
-            энэ асуудал байхгүй — цэнхэр нь газрын өнгөнд байдаггүй.
-            Цагираг нь биеийн ГАДНА, гэрлийн ДОТОР сууна: гэрэлтэлтийг
-            таслахгүй, харин биеийг дэвсгэрээс ялгана. Тунгалаг дүүргэлт,
-            зөвхөн ирмэг — бүтэн бараан дугуй бол цэгийн өнгийг нь
-            бараанжуулна.
-            ⚠ Горимоос ҮЛ ХАМААРНА: газрын зураг гэрэл/харанхуйд ЯГ ИЖИЛ
-            зурагдана (хэрэглэгчийн шийдвэр, 2026-09-17) — суурь зураг нь
-            өөрөө хиймэл дагуул тул платформын токен энд орох ёсгүй.
-          */
-          if (multi) {
-            m.addLayer({
-              id: "wells-ring",
-              type: "circle",
-              source: "wells",
-              filter: single,
-              ...(heat ? { minzoom: 11.5 } : {}),
-              paint: {
-                "circle-radius": gradedRadius(stops, 1.6),
-                "circle-opacity": 0,
-                "circle-stroke-width": 1.1,
-                "circle-stroke-color": "rgba(8,14,20,.7)",
-                "circle-stroke-opacity": heat ? fade(1) : 1,
-              },
-            });
-          }
-          m.addLayer({
-            id: "wells-halo",
-            type: "circle",
-            source: "wells",
-            filter: single,
-            ...(heat ? { minzoom: 11.5 } : {}),
-            paint: {
-              "circle-radius": gradedRadius(stops, multi ? 1.6 : 2.2),
-              "circle-color": midColor,
-              "circle-blur": multi ? 0.3 : 0.6,
-              /* Олон өнгөт: цөм нь биетэйгээ нэг өнгө тул бие нь өөрөө
-                 гол дүрс — бүдэг байвал цагираг дотроо хоосон харагдана */
-              "circle-opacity": heat ? fade(multi ? 0.85 : 0.6) : multi ? 0.85 : 0.6,
-            },
-          });
-        }
-
-        m.addLayer({
-          id: "wells-dot",
-          type: "circle",
-          source: "wells",
-          filter: single,
-          ...(heat ? { minzoom: 11.5 } : {}),
-          paint: {
-            "circle-radius": gradedRadius(stops, fire ? (multi ? 0.7 : 0.95) : 1),
-            "circle-color": fire ? coreColor : gradeColor(stops),
-            "circle-opacity": heat ? fade(fire ? 0.95 : 0.92) : fire ? 0.95 : 0.92,
-            /*
-              Нимгэн бараан ирмэг — цайвар суурь зураг дээр цэг арилахаас
-              хамгаална, гэрэлтэлтийг таслахааргүй сул.
-
-              Гэрэлтэх хувилбарт ирмэг ТАВИХГҮЙ: гэрэлтэж буй биет
-              ирмэггүй байх ёстой, зураас нь гэрлийг таслаад энгийн цэг
-              болгочихно (бөөгнөрөлгүй firefly-тэй ижил шалтгаан).
-            */
-            "circle-stroke-width": fire ? 0 : 0.7,
-            "circle-stroke-color": "rgba(10,18,26,.55)",
-            "circle-stroke-opacity": heat ? fade(1) : 1,
-          },
-        });
-      } else {
-      /*
-        Бөөгнөрөлд ороогүй дан худаг — firefly загвар.
-
-        Гурван давхарга дээрээс дээр давхарлана: сарнисан гэрэл → бие → цөм.
-        Давхцсан цэгүүд бие биенийхээ гэрлийг нэмэгдүүлдэг тул өтгөн хэсэг
-        өөрөө тод болж, тархалт нэмэлт өнгөгүйгээр уншигдана.
-
-        `circle-blur` нь радиустай харьцангуй ажилладаг: 1 гэдэг нь ирмэг
-        төвөөсөө захад хүртэл бүрэн сарних гэсэн үг. Тиймээс гадна давхаргын
-        радиус томрох тусам гэрэл нь ч зөөлөрнө.
-      */
-      /* Ангиллын өнгө (`colors` проп, `c`) өгөгдсөн цэг гурван давхаргаараа тэр
-         өнгөөр; бусад нь firefly-ийн анхдагч өнгөнд */
-      const tint = (fallback: string): ExpressionSpecification =>
-        ["coalesce", ["get", "c"], fallback] as unknown as ExpressionSpecification;
-
-      const dotMode = modeRef.current.dots;
-      if (dotMode) {
-        /*
-          ЖИЖИГ FIREFLY ЦЭГ ({@link dots}). Гурван давхарга (гэрэл → бие
-          → цагаан цөм) ердийн firefly-тэй ижил ч гэрэл нь ХАГАС хэмжээтэй:
-          14 мянган цэгийн 7–18px гэрэл нийлж нэг толбо болдог байсан
-          (хэрэглэгч, 2026-10-07). Бараан Firefly суурь дээр жижиг гэрэл
-          тод ялгарна.
-          ⚠ Бие нь `wells-halo` нэрээр — оноолт, hover, шүүлтийн хязгаар
-          өөрчлөгдөхгүй. Дараалал (`circle-sort-key`) гурвууланд.
-        */
-        const rank = Object.entries(dotMode.rank ?? {});
-        const sortKey = rank.length
-          ? {
-              "circle-sort-key": [
-                "match",
-                ["get", "c"],
-                ...rank.flatMap(([hex, r]) => [hex, r]),
-                0,
-              ] as unknown as ExpressionSpecification,
-            }
-          : {};
-        m.addLayer({
-          id: "wells-glow",
-          type: "circle",
-          source: "wells",
-          filter: ["!", ["has", "point_count"]],
-          layout: sortKey,
-          paint: {
-            "circle-radius": ["interpolate", ["linear"], ["zoom"], 9, 3.4, 12, 5.6, 14, 7.5, 17, 12],
-            "circle-color": tint(modeRef.current.fire.glow),
-            "circle-blur": 1,
-            "circle-opacity": 0.42,
-          },
-        });
-        m.addLayer({
-          id: "wells-halo",
-          type: "circle",
-          source: "wells",
-          filter: ["!", ["has", "point_count"]],
-          layout: sortKey,
-          paint: {
-            "circle-radius": ["interpolate", ["linear"], ["zoom"], 9, 1.6, 12, 2.5, 14, 3.4, 17, 5.4],
-            "circle-color": tint(modeRef.current.fire.mid),
-            "circle-blur": 0.2,
-            "circle-opacity": 0.95,
-          },
-        });
-        m.addLayer({
-          id: "wells-dot",
-          type: "circle",
-          source: "wells",
-          filter: ["!", ["has", "point_count"]],
-          layout: sortKey,
-          paint: {
-            "circle-radius": ["interpolate", ["linear"], ["zoom"], 9, 0.5, 12, 0.9, 14, 1.3, 17, 2.1],
-            "circle-color": "#ffffff",
-            "circle-opacity": 0.75,
-          },
-        });
-      } else {
-      m.addLayer({
-        id: "wells-glow",
-        type: "circle",
-        source: "wells",
-        filter: ["!", ["has", "point_count"]],
-        paint: {
-          "circle-radius": ["interpolate", ["linear"], ["zoom"], 8, 7, 12, 11, 16, 18],
-          "circle-color": tint(modeRef.current.fire.glow),
-          "circle-blur": 1,
-          "circle-opacity": 0.38,
-        },
-      });
-
-      /* Ангиллын өнгөтэй үед биеийн доор БАРААН ЦАГИРАГ — олон өнгөт
-         шатлалтай нэг шалтгаан: ногоон, шар нь хиймэл дагуулын газарт уусдаг */
-      if (modeRef.current.tinted) {
-        m.addLayer({
-          id: "wells-ring",
-          type: "circle",
-          source: "wells",
-          filter: ["!", ["has", "point_count"]],
-          paint: {
-            "circle-radius": ["interpolate", ["linear"], ["zoom"], 8, 4.4, 12, 6.6, 16, 10.8],
-            "circle-opacity": 0,
-            "circle-stroke-width": 1.1,
-            "circle-stroke-color": "rgba(8,14,20,.7)",
-          },
-        });
-      }
-
-      m.addLayer({
-        id: "wells-halo",
-        type: "circle",
-        source: "wells",
-        filter: ["!", ["has", "point_count"]],
-        paint: {
-          "circle-radius": ["interpolate", ["linear"], ["zoom"], 8, 3.6, 12, 5.6, 16, 9.5],
-          "circle-color": tint(modeRef.current.fire.mid),
-          "circle-blur": 0.6,
-          "circle-opacity": 0.6,
-        },
-      });
-
-      /*
-        Цөм. Хар хүрээ ТАВИХГҮЙ — гэрэлтэж буй биет ирмэггүй байх ёстой,
-        зураас нь гэрлийг таслаад энгийн цэг болгочихно.
-      */
-      m.addLayer({
-        id: "wells-dot",
-        type: "circle",
-        source: "wells",
-        filter: ["!", ["has", "point_count"]],
-        paint: {
-          "circle-radius": ["interpolate", ["linear"], ["zoom"], 8, 1.5, 12, 2.3, 16, 4],
-          "circle-color": tint(modeRef.current.fire.core),
-          "circle-opacity": 0.95,
-        },
-      });
-      }
-      }
-
-      /*
-        Цэгийн бичвэр шошго — бүх цэгийн давхаргын ДЭЭР суух ёстой тул
-        хамгийн сүүлд нэмнэ.
-
-        `minzoom`-оос хол байхад огт зурагдахгүй: холоос шошго нь цэгээ
-        дарж, тархалт уншигдахаа болино. Давхцлыг MapLibre-т өөрт нь
-        шийдүүлнэ (`text-allow-overlap` тавихгүй) — нягт хэсэгт багтсан
-        нь л үлдэж, зураг цэвэр хэвээр байна.
-
-        Шошго нь цэгийн ДООР. Дээр тавьбал firefly гэрэлтэй давхцана.
-        Хар контур нь хиймэл дагуулын цайвар, бараан аль ч хэсэг дээр
-        бичвэрийг уншигдахуйц байлгана.
-      */
-      if (modeRef.current.labeled) {
-        m.addLayer({
-          id: "wells-label",
-          type: "symbol",
-          source: "wells",
-          minzoom: modeRef.current.labelZoom,
-          filter: ["all", ["!", ["has", "point_count"]], ["has", "t"]],
-          layout: {
-            "text-field": ["get", "t"],
-            "text-font": FONT,
-            "text-size": ["interpolate", ["linear"], ["zoom"], 11, 10, 16, 12],
-            "text-anchor": "top",
-            "text-offset": [0, modeRef.current.labelOffset],
-            "text-padding": 3,
-            /* Урт нэрийг хоёр мөр болгож таслана — нэг мөрөнд сунгавал
-               хөрш цэгийнхээ шошгыг түлхэж хаяна */
-            "text-max-width": 9,
-          },
-          paint: {
-            "text-color": "#eef4f8",
-            "text-halo-color": "rgba(8,14,20,.85)",
-            "text-halo-width": 1.2,
-          },
-        });
-      }
-
-      /*
-        ХЭМЖИЛТИЙН УТГА — цэгийн ОРОНД.
-
-        ⚠⚠ Олон улсын цаг уурын зургийн жишиг (WMO-гийн station model):
-        станцын байрлалд заалт нь өөрөө бичигдэнэ. Алсаас тоо уншигдаж,
-        ойртоход цэг рүү шилжинэ — хоёр өөр асуултад хоёр өөр дүрслэл:
-        "хаана хэд вэ" ба "яг хаана байна вэ".
-
-        ⚠ Бичвэрийн өнгө нь УТГЫНХ (`vc`) — шатлалаас гарсан hex.
-        Гэрэл, харанхуй горимд ижил байхын тулд платформын токен
-        ОРОХГҮЙ; уншигдацыг бараан контур барина.
-      */
-      if (modeRef.current.valued) {
-        m.addLayer({
-          id: "wells-value",
-          type: "symbol",
-          source: "wells",
-          maxzoom: modeRef.current.valueZoom,
-          filter: ["all", ["!", ["has", "point_count"]], ["has", "v"]],
-          layout: {
-            "text-field": ["get", "v"],
-            "text-font": FONT,
-            "text-size": ["interpolate", ["linear"], ["zoom"], 6, 11, 12, 14],
-            "text-anchor": "center",
-            "text-padding": 4,
-            "text-max-width": 8,
-          },
-          paint: {
-            "text-color": ["coalesce", ["get", "vc"], "#eef4f8"],
-            "text-halo-color": "rgba(8,14,20,.9)",
-            "text-halo-width": 1.6,
-          },
-        });
-
-        /*
-          Утга харагдаж байх үед ЦЭГ нуугдана (хэрэглэгчийн шийдвэр,
-          2026-09-21: "цэгийн point биш утгууд нь харагдмаар байна").
-          Хоёулаа зэрэг гарвал тоо нь цэгийнхээ гэрэлтэлт дээр суух тул
-          аль аль нь уншигдахаа болино.
-        */
-        for (const id of ["wells-dot", "wells-glow", "wells-halo", "wells-ring"]) {
-          if (m.getLayer(id)) m.setLayerZoomRange(id, modeRef.current.valueZoom, 24);
-        }
-      }
-
-      // Бөөгнөрөл дээр товшвол задалж ойртоно
-      if (modeRef.current.cluster) m.on("click", "clusters", (e) => {
-        const f = e.features?.[0];
-        if (!f) return;
-        const id = f.properties?.cluster_id;
-        if (id == null) return;
-        const g = f.geometry;
-        if (g.type !== "Point") return;
-        const src = m.getSource("wells") as GeoJSONSource;
-        src.getClusterExpansionZoom(Number(id)).then((zoom) => {
-          m.easeTo({
-            center: g.coordinates as [number, number],
-            zoom: Math.min(zoom + 0.4, 17),
-            duration: 500,
-          });
-        });
-      });
-
-      /*
-        Товшилтыг ЦӨМ дээр биш, дунд давхарга дээр барина: цөм нь 2 цэг орчим
-        тул хулганаар оносон эсэхийг мэдрэхэд хэцүү. Дунд давхарга нь харагдаж
-        буй гэрэлтэй ойролцоо хэмжээтэй бөгөөд цөмийг бүрэн агуулна.
-        (`circle-blur` нь зөвхөн зурагдалтад нөлөөлдөг — оноход радиусаар л
-        тооцогддог тул сарнисан гэрэл дээр санамсаргүй дарагдахгүй.)
-      */
-      /*
-        Оноход хэрэглэх давхарга. Цөм нь хэдхэн пиксел тул түүн дээр
-        бариулбал хулганаар оноход хэцүү. Гадна давхарга нь харагдаж
-        буй гэрэлтэй ойролцоо хэмжээтэй бөгөөд цөмийг бүрэн агуулна
-        (`circle-blur` нь зөвхөн зурагдалтад нөлөөлдөг — оноход
-        радиусаараа тооцогдоно).
-      */
-      const hitLayer = modeRef.current.weighted
-        ? "wells-dot"
-        : modeRef.current.graded
-          ? "wells-glow"
-          : "wells-halo";
-      /* Гэрэлтэх зэрэглэлд `wells-halo` мөн үүсдэг ч оноолт нь гадна
-         давхарга дээрээ үлдэнэ — цөм нь хэдхэн пиксел */
-      m.on("click", hitLayer, (e) => {
-        const f = e.features?.[0];
-        if (f) selectCb.current(Number(f.properties?.oid));
-      });
-
-      const hoverable = modeRef.current.cluster
-        ? ["clusters", hitLayer]
-        : [hitLayer];
-      for (const id of hoverable) {
-        m.on("mouseenter", id, () => {
-          m.getCanvas().style.cursor = "pointer";
-        });
-        m.on("mouseleave", id, () => {
-          m.getCanvas().style.cursor = "";
-        });
-      }
-
-      /*
-        Давхарга дээрх hover. Тэмдэглэгээт горимд (`marks`, `pulse`) энэ
-        нь DOM элемент дээр аль хэдийн бариулдаг — эндхийн бариул нь
-        ЦЭГЭН давхаргад зориулав. Хоёулаа ижил `oid` явуулдаг тул
-        давхацсан ч зөрчилдөхгүй.
-      */
-      m.on("mousemove", hitLayer, (e) => {
-        const f = e.features?.[0];
-        if (f) hoverCb.current?.(Number(f.properties?.oid), { x: e.point.x, y: e.point.y });
-      });
-      m.on("mouseleave", hitLayer, () => hoverCb.current?.(null));
-
-      /* Зургийн ЯМАР Ч цэг дээрх солбицол — растер талбарт зориулав */
-      m.on("mousemove", (e) => {
-        probeCb.current?.({
-          lon: e.lngLat.lng,
-          lat: e.lngLat.lat,
-          x: e.point.x,
-          y: e.point.y,
-        });
-      });
-      m.on("mouseout", () => probeCb.current?.(null));
-
-      /* Олон өнцөгт нь мөн товшигдоно — цэгтэй ижил `oid` дамжуулна */
-      if (modeRef.current.shaped) {
-        /*
-          ⚠⚠ ЦЭГ нь ОЛОН ӨНЦӨГТӨӨС ДАВУУ ЭРХТЭЙ (2026-09-30, хэрэглэгч:
-          "map дээр булаг дээр дарахад булгийн pop up гарна,
-          хамгаалалтын бүсийнх биш").
-
-          MapLibre нь товшилтыг ДАВХАРГА ТУС БҮРД тусад нь дуугаргадаг
-          тул давхцсан цэг, дүрсэн дээр НЭГ товшилт ХОЁР хариу үүсгэнэ:
-          цэгийн бариул эхэлж (эрт бүртгэгдсэн), олон өнцөгтийнх нь
-          ДАРАА — улмаас сүүлчийнх нь дардаг. Булаг нь өөрийн
-          хамгаалалтын бүсийн ДОТОР сууна тул булаг дээр дарахад ҮРГЭЛЖ
-          бүс сонгогдож байв.
-
-          Цэг нь дүрсээс жижиг бөгөөд түүний дотор сууна тул давхцахад
-          хэрэглэгчийн хүссэн зүйл нь ЦЭГ: онолт нь илүү нарийн.
-        */
-        const onPoint = (pt: { x: number; y: number }) =>
-          !!m.getLayer(hitLayer) &&
-          m.queryRenderedFeatures([pt.x, pt.y], { layers: [hitLayer] }).length >
-            0;
-
-        m.on("click", "shape-fill", (e) => {
-          if (onPoint(e.point)) return;
-          const f = e.features?.[0];
-          if (f) selectCb.current(Number(f.properties?.oid));
-        });
-        /* Хулганы доорх талбайг ТУХАЙН ЗУРАГ өөрөө тодруулна — React
-           төлөвөөр буцаалт хийвэл хулгана хөдлөх бүрд самбар дахин
-           зурагдана. `id` нь GeoJSON feature-ийн тоон дугаар. */
-        let hot: number | string | null = null;
-        const setHot = (id: number | string | null) => {
-          if (hot === id) return;
-          const put = (x: number | string | null, on: boolean) => {
-            if (x == null) return;
-            try {
-              m.setFeatureState({ source: "shapes", id: x }, { hot: on });
-            } catch {
-              /* Эх сурвалж хараахан ачаалагдаагүй байж болно */
-            }
-          };
-          put(hot, false);
-          put(id, true);
-          hot = id;
+        const layers: Layers = {
+          under,
+          bnd,
+          shapePoly,
+          shapeLine,
+          lit,
+          above,
+          shapeLabels,
+          heat,
+          points,
+          values: valuesLayer,
+          hl,
+          hot,
         };
 
-        m.on("mousemove", "shape-fill", (e) => {
-          m.getCanvas().style.cursor = "pointer";
-          /* Цэг давхцаж байвал тайлбар нь ЦЭГИЙНХ — дүрсийн
-             тодруулгыг ч унтраана */
-          if (onPoint(e.point)) return setHot(null);
-          const f = e.features?.[0];
-          if (!f) return;
-          setHot(f.id ?? null);
-          hoverCb.current?.(Number(f.properties?.oid), { x: e.point.x, y: e.point.y });
-        });
-        m.on("mouseleave", "shape-fill", () => {
-          m.getCanvas().style.cursor = "";
-          setHot(null);
-          hoverCb.current?.(null);
+        const map = new E.Map({
+          layers: [
+            under,
+            bnd.soum,
+            bnd.aimag,
+            bnd.country,
+            ...[shapePoly, shapeLine, lit].filter(Boolean),
+            above,
+            ...[shapeLabels, heat].filter(Boolean),
+            points,
+            ...[valuesLayer].filter(Boolean),
+            hl,
+            hot,
+          ],
         });
 
-        /*
-          ШУГАМАН геометр нь `shape-fill` дээр оногддоггүй (дүүргэлт нь
-          талбайгүй) тул хүрээний давхарга дээр тусад нь барина. Олон
-          өнцөгт дээр хоёулаа ажиллах ч ижил `oid` явуулдаг тул
-          зөрчилдөхгүй.
-        */
-        m.on("click", "shape-line", (e) => {
-          if (onPoint(e.point)) return;
-          const f = e.features?.[0];
-          if (f) selectCb.current(Number(f.properties?.oid));
+        map.basemap = esriBasemaps(E, map).get(basemapRef.current.id);
+        const lods = tileInfoOf(E).lods;
+        view = new E.MapView({
+          container: holder.current,
+          map,
+          center: [106.9, 47.9],
+          zoom: (mode.scale ? zoomForScale(mode.scale) : 9) + 1,
+          constraints: { lods, minZoom: 1, maxZoom: MAX_ML + 1, snapToZoom: false, rotationEnabled: false },
+          ui: { components: [] },
+          popupEnabled: false,
+          /* Хулганы доорх тодруулгыг өөрсдөө зурна — SDK-ийн цэнхэр хүрээ хэрэггүй */
+          highlightOptions: { color: [0, 0, 0, 0], haloOpacity: 0, fillOpacity: 0 },
         });
-        m.on("mousemove", "shape-line", (e) => {
-          m.getCanvas().style.cursor = "pointer";
-          if (onPoint(e.point)) return setHot(null);
-          const f = e.features?.[0];
-          if (!f) return;
-          setHot(f.id ?? null);
-          hoverCb.current?.(Number(f.properties?.oid), { x: e.point.x, y: e.point.y });
-        });
-        m.on("mouseleave", "shape-line", () => {
-          m.getCanvas().style.cursor = "";
-          setHot(null);
-          hoverCb.current?.(null);
-        });
-      }
 
-      /*
-        ТОДРУУЛГЫН ЦАГИРАГ. Тусдаа эх сурвалж дээр суусан шалтгаан: үндсэн
-        цэгийн эх сурвалж бөөгнөрдөг тул `feature-state` нь задарсан цэг
-        дээр л ажиллана — бөөгнөрөл дундаас гарч ирсэн цэгийг тодруулж
-        чадахгүй. Ганц цэгтэй жижиг эх сурвалж нь ямар ч горимд ажиллана.
+        return view.when().then(() => {
+          if (!alive) return;
 
-        Бүх дата давхаргын ДЭЭР суух ёстой тул хамгийн сүүлд нэмэгдэнэ.
-      */
-      m.addSource("hl", {
-        type: "geojson",
-        data: { type: "FeatureCollection", features: [] },
+          /* ---- Масштабын заалт, тэмдэглэгээний байрлал ---- */
+          handles.push(
+            E.reactive.watch(
+              () => view.extent,
+              () => {
+                const r = ratio.current;
+                if (r) {
+                  const y = view.height / 2;
+                  const a = view.toMap({ x: 0, y });
+                  const b = view.toMap({ x: 100, y });
+                  if (a && b) {
+                    const [lon1, lat1] = toLonLat(a.x, a.y);
+                    const [lon2, lat2] = toLonLat(b.x, b.y);
+                    const meters = haversine(lon1, lat1, lon2, lat2);
+                    if (meters > 0) r.textContent = ratioText(meters / 100 / M_PER_CSS_PX);
+                  }
+                }
+                placeMarks(view, markLayer.current);
+              },
+              { initial: true },
+            ),
+          );
+
+          /* ---- Зогсох бүрд: ойртолт, хүрээ ---- */
+          let lastZoom = NaN;
+          const stationary = () => {
+            const z = mlOf(view.zoom);
+            if (z !== lastZoom) {
+              lastZoom = z;
+              zoomCb.current?.(z);
+            }
+            const box = extentOf(view);
+            if (box) viewCb.current?.(box, z);
+          };
+          stationary();
+          handles.push(E.reactive.when(() => view.stationary, stationary));
+
+          if (mode.weighted) {
+            const zone = scaleAt(zDot - 0.3);
+            handles.push(
+              E.reactive.watch(
+                () => view.scale > zone,
+                (far: boolean) => {
+                  layers.points.renderer = far ? heatRenderer : dotRenderer;
+                },
+                { initial: true },
+              ),
+            );
+          }
+
+          /* ---- WebGL тасалдал — SDK өөрөө сэргээх оролдлого хийнэ ---- */
+          let revive: number | null = null;
+          handles.push(
+            E.reactive.watch(
+              () => view.fatalError,
+              (err: unknown) => {
+                if (!alive) return;
+                setLost(Boolean(err));
+                if (err) {
+                  if (revive != null) window.clearTimeout(revive);
+                  revive = window.setTimeout(() => view.tryFatalErrorRecovery(), 1500);
+                }
+              },
+            ),
+          );
+
+          const self: Live = { E, view, map, layers, mode };
+          bindPointer(view, layers, selectCb, hoverCb, pickCb, blankCb, (id) => {
+            if (!layers.lit) return;
+            layers.lit.__hot = id;
+            redrawLit(self, shapeGeoms.current);
+          });
+
+          engine.current = self;
+          /*
+            Суурь зургийн галерейд ({@link src/components/map/basemap-gallery.tsx})
+            зургийг олгоно: тэр нь самбар бүрд зурагтайгаа ХӨРШ бүрэлдэхүүн
+            тул React-аар дамжих зам байхгүй — DOM үйл явдлаар.
+          */
+          const root = holder.current?.parentElement as any;
+          if (root) {
+            root.__engine = self;
+            root.dispatchEvent(new CustomEvent("wells-ready", { bubbles: true, detail: self }));
+          }
+          setLost(false);
+          setReady(true);
+        });
+      })
+      .catch((e: unknown) => {
+        if (alive) setFailed(e instanceof Error ? e.message : "Газрын зураг ачаалагдсангүй");
       });
-      m.addLayer({
-        id: "hl-glow",
-        type: "circle",
-        source: "hl",
-        paint: {
-          "circle-radius": ["interpolate", ["linear"], ["zoom"], 8, 11, 12, 15, 16, 22],
-          "circle-color": modeRef.current.fire.glow,
-          "circle-blur": 1,
-          "circle-opacity": 0.4,
-        },
-      });
-      m.addLayer({
-        id: "hl-ring",
-        type: "circle",
-        source: "hl",
-        paint: {
-          "circle-radius": ["interpolate", ["linear"], ["zoom"], 8, 7, 12, 10, 16, 15],
-          // Дүүргэлтгүй — доорх цэг өөрөө харагдсаар үлдэнэ
-          "circle-color": "rgba(0,0,0,0)",
-          "circle-stroke-color": modeRef.current.fire.core,
-          "circle-stroke-width": 1.3,
-          "circle-stroke-opacity": 0.9,
-        },
-      });
-
-      /* Ойртолтын мэдэгдэл — эхний утгыг мөн нэг удаа өгнө, эс тэгвээс
-         дуудагч тал анхны түвшнээ мэдэхгүй */
-      zoomCb.current?.(m.getZoom());
-      m.on("zoomend", () => zoomCb.current?.(m.getZoom()));
-
-      /* Харагдах хүрээ — анхны утгыг мөн нэг удаа өгнө */
-      const view = () => {
-        const b = m.getBounds();
-        viewCb.current?.(
-          [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()],
-          m.getZoom(),
-        );
-      };
-      view();
-      m.on("moveend", view);
-
-      /* Байрлалыг тэмдэглэж явна — дахин байгуулахад хэрэгтэй */
-      const mark = () => {
-        const c = m.getCenter();
-        camera.current = { center: [c.lng, c.lat], zoom: m.getZoom() };
-      };
-      mark();
-      m.on("moveend", mark);
-
-      m.resize();
-
-      setLost(false);
-      setLive(m);
-    });
 
     return () => {
-      if (revive.current != null) {
-        window.clearTimeout(revive.current);
-        revive.current = null;
-      }
-      m.remove();
-      map.current = null;
+      alive = false;
+      for (const h of handles) h.remove();
+      view?.destroy();
       fitted.current = false;
-      setLive(null);
+      engine.current = null;
+      setReady(false);
     };
-  }, [gen]);
+  }, []);
 
   /* ---------------- Засаг захиргааны хил ---------------- */
   React.useEffect(() => {
-    if (!live) return;
+    const live = engine.current;
+    if (!ready || !live) return;
     let alive = true;
-
+    const { E, layers } = live;
+    if (!adminLines) {
+      for (const level of ["country", "aimag", "soum"] as const) layers.bnd[level]?.removeAll();
+      return;
+    }
     // eslint-disable-next-line no-restricted-globals -- өөрийн статик /api/boundaries — портал биш, токен хэрэггүй
     fetch(asset("/api/boundaries"))
       .then((r) => (r.ok ? r.json() : null))
       .then((b: BoundarySet | null) => {
         if (!alive || !b) return;
-        const src = live.getSource("bnd");
-        if (!src || !("setData" in src)) return;
-
-        // Гурван түвшнийг нэг эх сурвалжид нэгтгэж, `level`-ээр ялгана
-        const features = (["country", "aimag", "soum"] as const).flatMap((level) =>
-          b[level].features.map((f) => ({
-            ...f,
-            properties: { ...f.properties, level },
-          })),
-        );
-        (src as GeoJSONSource).setData({ type: "FeatureCollection", features });
+        const style = {
+          country: { color: [255, 255, 255, 0.75], width: 1.35, style: "solid" },
+          aimag: { color: [255, 255, 255, 0.45], width: 0.65, style: "dash" },
+          soum: { color: [255, 255, 255, 0.3], width: 0.45, style: "short-dash" },
+        } as const;
+        for (const level of ["country", "aimag", "soum"] as const) {
+          const line = { type: "simple-line", ...style[level], cap: "round", join: "round" };
+          const graphics = b[level].features
+            .map((f) => {
+              const geometry = esriGeom(f.geometry);
+              if (!geometry) return null;
+              const symbol =
+                geometry.type === "polygon"
+                  ? { type: "simple-fill", color: [0, 0, 0, 0], outline: line }
+                  : line;
+              return new E.Graphic({ geometry, symbol });
+            })
+            .filter(Boolean);
+          layers.bnd[level]?.removeAll();
+          layers.bnd[level]?.addMany(graphics);
+        }
       })
       .catch(() => {});
-
     return () => {
       alive = false;
     };
-  }, [live]);
+  }, [ready, adminLines]);
 
   /* ---------------- Суурь зураг солих ---------------- */
   React.useEffect(() => {
     basemapRef.current = basemap;
-    if (live) applyBasemap(live, basemap);
-  }, [live, basemap]);
+    const live = engine.current;
+    if (!ready || !live) return;
+    /* ⚠ ИЖИЛ суурийг дахин тавихгүй: зураг бэлэн болмогц энэ эффект
+       ажилладаг бөгөөд үүсэж буй хавтангийн давхаргыг солиход SDK
+       "reading 'reject'" алдаа шиддэг байв */
+    if (live.map.basemap?.id === basemap.id) return;
+    live.map.basemap = esriBasemaps(live.E, live.map).get(basemap.id);
+  }, [ready, basemap]);
 
-  /* ---------------- Харагдацын үйлдэл (map action) ----------------
-     ArcGIS Dashboard-ийн "map extent" үйлдэлтэй ижил: асаалттай үед зураг
-     хөдлөх бүрд одоогийн хүрээг дээш дамжуулж, бусад элементүүд түүгээр
-     шүүгддэг. Унтраахад `null` явуулж шүүлтийг арилгана. */
+  /* ---------------- Харагдацын үйлдэл (map action) ---------------- */
   React.useEffect(() => {
-    if (!live) return;
+    const live = engine.current;
+    if (!ready || !live) return;
     if (!extent) {
       extentCb.current?.(null);
       return;
     }
     const emit = () => {
-      const b = live.getBounds();
-      extentCb.current?.([b.getWest(), b.getSouth(), b.getEast(), b.getNorth()]);
+      const box = extentOf(live.view);
+      if (box) extentCb.current?.(box);
     };
     emit();
-    live.on("moveend", emit);
-    return () => {
-      live.off("moveend", emit);
-    };
-  }, [live, extent]);
+    const h = live.E.reactive.when(() => live.view.stationary, emit);
+    return () => h.remove();
+  }, [ready, extent]);
 
-  /* ---------------- Дэлгэрэнгүй цэг татах ----------------
-     Ойртоход эх сурвалжаас харагдацын хүрээгээр бодит бичлэг татна.
-
-     Гурван зүйлээс болгоомжилно:
-       · ХҮРЭЭГ ТЭЛЖ татна (35%) — жижиг гүйлгэлт бүрд шинэ хүсэлт явуулах
-         нь хамгийн үнэтэй алдаа. Татсан хайрцаг доторх хөдөлгөөнийг
-         алгасна.
-       · Хуучин хүсэлтийг ТАСАЛНА (`AbortController`) — хурдан гүйлгэхэд
-         олон хүсэлт зэрэг явж, сүүлд ирсэн нь хамгийн шинэ нь БАЙХГҮЙ
-         байж болно.
-       · Хол очвол эх сурвалжийг ЦЭВЭРЛЭНЭ — эс тэгвээс алс дурдсан
-         цэгүүд дулааны зураг дээр хэвээр үлдэнэ. */
+  /* ---------------- Сонголт руу ойртох (zoom action) ---------------- */
   React.useEffect(() => {
-    const minZoom = detail?.minZoom;
-    if (!live || minZoom == null) return;
-
-    const source = () => live.getSource("detail") as GeoJSONSource | undefined;
-    /** Аль хайрцгийн дата эх сурвалжид байгаа вэ */
-    let loaded: Extent | null = null;
-    let running: AbortController | null = null;
-    /* Хариу ирэх дараалал баталгаагүй тул хамгийн сүүлийнхийг л хүлээж авна */
-    let turn = 0;
-
-    const inside = (v: Extent, box: Extent) =>
-      v[0] >= box[0] && v[1] >= box[1] && v[2] <= box[2] && v[3] <= box[3];
-
-    const run = () => {
-      const b = live.getBounds();
-      const view: Extent = [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()];
-
-      if (live.getZoom() < minZoom - 0.4) {
-        running?.abort();
-        running = null;
-        if (loaded) {
-          loaded = null;
-          source()?.setData({ type: "FeatureCollection", features: [] });
-        }
-        return;
-      }
-      if (loaded && inside(view, loaded)) return;
-
-      const padX = (view[2] - view[0]) * 0.35;
-      const padY = (view[3] - view[1]) * 0.35;
-      const box: Extent = [
-        view[0] - padX,
-        view[1] - padY,
-        view[2] + padX,
-        view[3] + padY,
-      ];
-
-      running?.abort();
-      const ac = new AbortController();
-      running = ac;
-      const mine = ++turn;
-
-      detailRef.current
-        ?.load(box, ac.signal)
-        .then((fc: GeoJSON.FeatureCollection) => {
-          if (mine !== turn || ac.signal.aborted) return;
-          loaded = box;
-          source()?.setData(fc);
-        })
-        .catch(() => {
-          /* Таслагдсан эсвэл татагдаагүй — дараагийн хөдөлгөөнд дахин оролдоно */
-        });
-    };
-
-    run();
-    live.on("moveend", run);
-    return () => {
-      live.off("moveend", run);
-      running?.abort();
-    };
-    /* `key` нь шүүлтүүрийн хээ: солигдоход кэш хүчингүй болж дахин татна */
-  }, [live, detail?.minZoom, detail?.key]);
-
-  /* ---------------- Сонголт руу ойртох (zoom action) ----------------
-     ArcGIS Dashboard-ийн "zoom" үйлдэл: диаграмаас сум, аймаг сонгоход
-     зураг тухайн сонголтын хүрээ рүү нисч ойртоно. Сонголт цуцлагдвал
-     анхны хүрээ рүү буцна. Гараар гүйлгэсэн байрлалыг бид дарахгүй —
-     зөвхөн сонголт өөрчлөгдөх мөчид л хөдөлнө. */
-  React.useEffect(() => {
-    if (!live) return;
-    /* Масштаб заагдсан зурагт буцах байрлал ҮРГЭЛЖ бий — цэггүй (зөвхөн
-       олон өнцөгт) зурагт `home` нь цэгийн тааруулалтаас тавигддаггүй тул
-       шүүлт цэвэрлэхэд зураг хөдлөхгүй үлдэх байв. Тэр үед УБ-ын төв. */
-    const back =
-      home.current ?? (modeRef.current.scale ? ([106.9, 47.9, 106.9, 47.9] as Extent) : null);
+    const live = engine.current;
+    if (!ready || !live) return;
+    const { view, mode } = live;
+    const back = home.current ?? (mode.scale ? ([106.9, 47.9, 106.9, 47.9] as Extent) : null);
     const target = focus ?? (zoomed.current ? back : null);
     if (!target) return;
     zoomed.current = focus != null;
-
     const [w, s, e, n] = target;
-    /* Масштаб заагдсан зураг АНХНЫ хэмжээндээ буцна — хүрээнд
-       тааруулбал сонголт цуцлах бүрд өөр ойртолт гарна */
-    if (!focus && modeRef.current.scale) {
-      live.easeTo({
-        center: [(w + e) / 2, (s + n) / 2],
-        zoom: zoomForScale(modeRef.current.scale, (s + n) / 2),
-        duration: 700,
-      });
+    if (!focus && mode.scale) {
+      view
+        .goTo({ center: [(w + e) / 2, (s + n) / 2], zoom: zoomForScale(mode.scale, (s + n) / 2) + 1 }, { duration: 700 })
+        .catch(() => {});
       return;
     }
-    live.fitBounds(
-      [
-        [w, s],
-        [e, n],
-      ],
-      {
-        padding: 44,
-        // Ганц худаг сонгогдвол хүрээ нь цэг болно — хэт ойртохоос хамгаална
-        maxZoom: focus ? 14 : 13,
-        duration: 700,
-      },
-    );
-  }, [live, focus]);
+    fitTo(view, target, 44, focus ? 14 : 13, 700);
+  }, [ready, focus]);
 
-  /* ---------------- Хэмжээ өөрчлөгдөхөд ---------------- */
+  /* ---------------- Цэгийн өгөгдөл ---------------- */
+  const dotRank = dots?.rank ? JSON.stringify(dots.rank) : "";
   React.useEffect(() => {
-    const el = holder.current;
-    if (!live || !el) return;
-    const ro = new ResizeObserver(() => live.resize());
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, [live]);
-
-  /* ---------------- Өгөгдөл шинэчлэх ---------------- */
-  React.useEffect(() => {
-    if (!live) return;
-    const src = live.getSource("wells");
-    if (!src || !("setData" in src)) return;
-
+    const live = engine.current;
+    if (!ready || !live) return;
+    const { E, layers, mode, view } = live;
+    /* ИЖИЛ датаг дахин ачаалахгүй — StrictMode болон хамааралгүй
+       шинэчлэл 145 мянган цэгийг дахин илгээх байв */
+    const sig = [live, points, visible, weights, grades, labels, values, colors, dotRank];
+    if (applied.current.length === sig.length && sig.every((v, i) => v === applied.current[i])) return;
+    applied.current = sig;
     const { lon, lat, oid } = points;
-
     const text = labels?.text;
+    const rank = dotRank ? (JSON.parse(dotRank) as Record<string, number>) : null;
 
-    const features = new Array(visible.length);
+    const tints = new Set<string>();
+    const features: GeoJSON.Feature[] = new Array(visible.length);
     for (let k = 0; k < visible.length; k++) {
       const i = visible[k];
-      const props: Record<string, unknown> = { oid: oid[i] };
-      if (weights) props.w = weights[i];
-      else if (grades) props.g = grades.values[i];
-      if (colors?.[i]) props.c = colors[i];
-      /* Хоосон шошгыг ОГТ бичихгүй — давхаргын `has t` шүүлт үүнд
-         тулгуурлаж, шошгогүй цэгийг алгасна */
-      if (text?.[i]) props.t = text[i];
-      /* Утга ба түүний өнгө — `has v` шүүлт хоосныг алгасна */
-      if (values?.text[i]) {
-        props.v = values.text[i];
-        const c = values.color?.[i];
-        if (c) props.vc = c;
+      const c = colors?.[i];
+      if (c) tints.add(c);
+      features[k] = pointFeature(lon[i], lat[i], {
+        oid: oid[i],
+        w: weights ? weights[i] : null,
+        g: grades ? grades.values[i] : null,
+        c: c ?? null,
+        /* Хоосон шошгыг ОГТ бичихгүй — `t IS NOT NULL` шүүлт */
+        t: text?.[i] || null,
+        r: c && rank ? (rank[c] ?? 0) : 0,
+      });
+    }
+    if (!mode.weighted && !mode.graded) {
+      const list = [...tints].sort();
+      const key = list.join("|");
+      if (layers.points.__tints !== key) {
+        layers.points.__tints = key;
+        layers.points.renderer = pointRenderer(mode, list);
       }
-      features[k] = {
-        type: "Feature",
-        geometry: { type: "Point", coordinates: [lon[i], lat[i]] },
-        properties: props,
-      };
+    }
+    refill(E, view, slotOf(layers, "points"), () => features);
+
+    if (layers.values && values) {
+      const groups = new Set<string>();
+      const vals: GeoJSON.Feature[] = [];
+      for (let k = 0; k < visible.length; k++) {
+        const i = visible[k];
+        const v = values.text[i];
+        if (!v) continue;
+        const vc = values.color?.[i] ?? "#eef4f8";
+        groups.add(vc);
+        vals.push(pointFeature(lon[i], lat[i], { v, vc }));
+      }
+      /* Шошгын өнгө нь УТГЫНХ — Esri-ийн шошго атрибутаас өнгө авдаггүй
+         тул өнгө тус бүрд нэг анги */
+      layers.values.labelingInfo = [...groups].map((vc) => ({
+        labelExpressionInfo: { expression: "$feature.v" },
+        where: `vc = '${vc}'`,
+        labelPlacement: "center-center",
+        deconflictionStrategy: "static",
+        symbol: {
+          type: "text",
+          color: vc,
+          haloColor: [8, 14, 20, 0.9],
+          haloSize: 1.2,
+          font: { ...FONT, size: 10 },
+        },
+      }));
+      refill(E, view, slotOf(layers, "values"), () => vals);
     }
 
-    (src as GeoJSONSource).setData({
-      type: "FeatureCollection",
-      features,
-    } as GeoJSON.FeatureCollection);
-
     /*
-      Эхний удаа өгөгдлийн гол бөөгнөрөл рүү тааруулна. Бүх цэгийг багтаавал
-      улс даяар тархсан ~2% нь харагдацыг сунгаж, Улаанбаатарын өтгөн хэсэг
-      цэг болж хумигдана. Тиймээс 1–99 хувийн муж дээр тааруулав.
-
-      Энэ хүрээг `home`-д хадгална — сонголт цуцлагдахад буцаж ирэх байрлал.
+      Эхний удаа өгөгдлийн гол бөөгнөрөл рүү тааруулна — 1–99 хувийн муж:
+      улс даяар тархсан ~2% нь харагдацыг сунгаж, өтгөн хэсэг цэг болж
+      хумигдахаас сэргийлнэ. Энэ хүрээ нь `home` — сонголт цуцлагдахад
+      буцах байрлал.
     */
     if (!fitted.current && visible.length > 0) {
       fitted.current = true;
@@ -2587,463 +1800,695 @@ export function WellsMap({
       const lo = Math.floor(xs.length * 0.01);
       const hi = Math.ceil(xs.length * 0.99) - 1;
       home.current = [xs[lo], ys[lo], xs[hi], ys[hi]];
-      /*
-        Масштаб заагдсан бол ойртолт нь ТОГТМОЛ: төв нь өгөгдлийнхөө
-        дундаж, хэмжээ нь бүртгэлээс. Эс тэгвээс хүрээнд тааруулна.
-      */
-      if (modeRef.current.scale) {
-        live.jumpTo({
-          center: [(xs[lo] + xs[hi]) / 2, (ys[lo] + ys[hi]) / 2],
-          /* Өргөрөг нь ЭНЭ өгөгдлийнх — `zoomForScale`-ийн анхдагч
-             (УБ, 47.9°) нь ойролцоо ч харьцааны заалттай хагас хувиар
-             зөрдөг */
-          zoom: zoomForScale(modeRef.current.scale, (ys[lo] + ys[hi]) / 2),
-        });
+      if (mode.scale) {
+        view
+          .goTo(
+            { center: [(xs[lo] + xs[hi]) / 2, (ys[lo] + ys[hi]) / 2], zoom: zoomForScale(mode.scale, (ys[lo] + ys[hi]) / 2) + 1 },
+            { animate: false },
+          )
+          .catch(() => {});
       } else {
-        live.fitBounds(
-          [
-            [xs[lo], ys[lo]],
-            [xs[hi], ys[hi]],
-          ],
-          { padding: 30, duration: 0, maxZoom: 13 },
-        );
+        fitTo(view, home.current, 30, 13, 0);
       }
     }
-  }, [live, points, visible, weights, grades, labels, values, colors]);
+  }, [ready, points, visible, weights, grades, labels, values, colors, dotRank]);
 
-  /*
-    Шошгын ХЯЗГААР нь амьд.
-
-    Бусад горимын тохиргоо эх сурвалж үүсгэх мөчид уншигддаг
-    (`modeRef`) ба энэ нь ихэнхдээ зөв: өнгө, бөөгнөрөл солигдвол
-    давхаргыг бүхэлд нь дахин барих шаардлагатай. Харин шошго хэдээс
-    эхлэн гарах нь ЗӨВХӨН нэг тоо бөгөөд `setLayerZoomRange` түүнийг
-    шууд сольдог.
-
-    ⚠ Үүнгүй бол дуудагч тал хязгаараа өөрчлөхөд ЧИМЭЭГҮЙ юу ч
-    болохгүй: зураг дахин үүсэх хүртэл (хуудас бүтнээр нь дахин
-    ачаалах хүртэл) хуучин утга хэвээр үлдэж, өөрчлөлт нь ажиллахгүй
-    мэт харагдана.
-  */
+  /* ---------------- Шошгын хязгаар — АМЬД ---------------- */
   const shapeLabelZoom = shapes?.labelZoom;
   const pointLabelZoom = labels?.minzoom;
-
   React.useEffect(() => {
-    if (!live) return;
-    if (shapeLabelZoom != null && live.getLayer("shape-label")) {
-      live.setLayerZoomRange("shape-label", shapeLabelZoom, MAX_ZOOM);
-    }
-    if (pointLabelZoom != null && live.getLayer("wells-label")) {
-      live.setLayerZoomRange("wells-label", pointLabelZoom, MAX_ZOOM);
-    }
-  }, [live, shapeLabelZoom, pointLabelZoom]);
-
-  /*
-    ЦЭГИЙН ЗУРАХ ДАРААЛАЛ ({@link dots}) АМЬД — ангиллын өнгө нь дата
-    ирсний дараа тогтдог тул эх сурвалж үүсэх мөчид дараалал хоосон
-    байж болно. Түлхүүр нь мөр болгосон дараалал: шинэ объект бүрд биш,
-    утга өөрчлөгдөхөд л шинэчилнэ.
-  */
-  const dotRank = dots?.rank ? JSON.stringify(dots.rank) : "";
-  React.useEffect(() => {
-    if (!live || !dotRank) return;
-    const rank = Object.entries(JSON.parse(dotRank) as Record<string, number>);
-    if (!rank.length) return;
-    const key = [
-      "match",
-      ["get", "c"],
-      ...rank.flatMap(([hex, r]) => [hex, r]),
-      0,
-    ] as unknown as ExpressionSpecification;
-    for (const id of ["wells-glow", "wells-halo", "wells-dot"])
-      if (live.getLayer(id)) live.setLayoutProperty(id, "circle-sort-key", key);
-  }, [live, dotRank]);
+    const live = engine.current;
+    if (!ready || !live) return;
+    const { layers } = live;
+    const set = (layer: any, z: number | undefined) => {
+      if (!layer?.labelingInfo?.length || z == null) return;
+      layer.labelingInfo = layer.labelingInfo.map((c: any) => {
+        const n = c.clone();
+        n.minScale = scaleAt(z) * 1.01;
+        return n;
+      });
+    };
+    set(layers.shapeLabels ?? layers.shapeLine, shapeLabelZoom);
+    if (!live.mode.cluster || live.mode.weighted) set(layers.points, pointLabelZoom);
+    else if (pointLabelZoom != null && layers.points.labelingInfo?.length) set(layers.points, pointLabelZoom);
+  }, [ready, shapeLabelZoom, pointLabelZoom]);
 
   /* ---------------- Дата олон өнцөгт ---------------- */
   const shapeData = shapes?.data;
   React.useEffect(() => {
-    if (!live || !shapeData) return;
-    const src = live.getSource("shapes");
-    if (!src || !("setData" in src)) return;
-    /*
-      `promoteId` хэрэглэхгүй: GeoJSON эх сурвалж дээр `feature-state`
-      ажиллахад тоон ID хэрэгтэй тул `id`-г нь features дотор нь өгсөн
-      гэж үзнэ (дуудагч тал `oid`-той тэнцүү `id` тавина).
-    */
-    (src as GeoJSONSource).setData(shapeData);
-    /* Шошгын цэгүүд дүрстэйгээ ХАМТ шинэчлэгдэнэ — эс тэгвээс шүүлт
-       тавихад алга болсон дүрсийн шошго зураг дээр үлдэнэ */
-    const lab = live.getSource("shape-labels");
-    if (lab && "setData" in lab)
-      (lab as GeoJSONSource).setData(
-        labelPoints(shapeData, modeRef.current.shapeLabelUnique),
+    const live = engine.current;
+    if (!ready || !live || !shapeData) return;
+    const { E, layers, mode } = live;
+    const geoms = shapeGeoms.current;
+    geoms.clear();
+    const polys: GeoJSON.Feature[] = [];
+    const lines: GeoJSON.Feature[] = [];
+    const colorSet = new Set<string>();
+    for (const f of shapeData.features) {
+      const geometry = cleanGeom(f.geometry);
+      const fam = familyOf(geometry);
+      if (!geometry || (fam !== "polygon" && fam !== "polyline")) continue;
+      const p = f.properties ?? {};
+      const o = Number(p.oid ?? f.id);
+      const c = typeof p.c === "string" ? p.c : null;
+      if (c) colorSet.add(c);
+      /* Esri геометр нь ЗӨВХӨН тодруулах үед хөрвүүлэгдэнэ (`redrawLit`) */
+      geoms.set(o, { geojson: geometry, c });
+      (fam === "polygon" ? polys : lines).push({
+        type: "Feature",
+        geometry,
+        properties: { oid: o, c, t: typeof p.t === "string" && p.t ? p.t : null },
+      });
+    }
+    const list = [...colorSet].sort();
+    const key = list.join("|");
+    if (layers.shapePoly && layers.shapePoly.__tints !== key) {
+      layers.shapePoly.__tints = key;
+      layers.shapePoly.renderer = shapeRenderer(mode, list, polySymbol);
+      layers.shapeLine.renderer = shapeRenderer(mode, list, lineSymbol);
+    }
+    if (layers.shapePoly) refill(E, live.view, slotOf(layers, "shapePoly"), () => polys);
+    if (layers.shapeLine) refill(E, live.view, slotOf(layers, "shapeLine"), () => lines);
+    /* Шошгын цэгүүд дүрстэйгээ ХАМТ шинэчлэгдэнэ */
+    if (layers.shapeLabels) {
+      const lp = mode.shapeLabelOnLine ? lineMidpoints(shapeData) : labelPoints(shapeData, mode.shapeLabelUnique);
+      refill(E, live.view, slotOf(layers, "shapeLabels"), () =>
+        lp.features.flatMap((f) => {
+          const geometry = cleanGeom(f.geometry);
+          return geometry ? [{ type: "Feature" as const, geometry, properties: { t: f.properties?.t ?? null } }] : [];
+        }),
       );
-  }, [live, shapeData]);
+    }
+    redrawLit(live, geoms);
+  }, [ready, shapeData]);
 
-  /* Сонгогдсон талбайг тодруулах — `feature-state`-ээр, дахин зурахгүй */
+  /* Сонгогдсон талбай */
   const shapePick = shapes?.selected ?? null;
-  const lastPick = React.useRef<number | null>(null);
   React.useEffect(() => {
-    if (!live || !shapes) return;
-    const set = (id: number | null, on: boolean) => {
-      if (id == null) return;
-      try {
-        live.setFeatureState({ source: "shapes", id }, { on });
-      } catch {
-        /* Эх сурвалж хараахан ачаалагдаагүй байж болно */
-      }
-    };
-    set(lastPick.current, false);
-    set(shapePick, true);
-    lastPick.current = shapePick;
-  }, [live, shapes, shapePick, shapeData]);
+    const live = engine.current;
+    if (!ready || !live?.layers.lit) return;
+    live.layers.lit.__picked = shapePick;
+    redrawLit(live, shapeGeoms.current);
+  }, [ready, shapePick, shapeData]);
 
-  /* ---------------- Нэмэлт давхарга (хил, бүс) ----------------
-     Дата давхаргын ДООР суулгана: эс тэгвээс бүсийн дүүргэлт цэгүүдийг
-     дардаг. Хамгийн доод дата давхарга нь засаг захиргааны хил тул
-     түүний өмнө оруулна. */
+  /* ---------------- Нэмэлт давхарга (хил, бүс) ---------------- */
   React.useEffect(() => {
-    if (!live) return;
-    /*
-      ⚠⚠ УСТГАГДСАН ЗУРАГ. `live` нь ТӨЛӨВ тул зургийг дахин байгуулах
-      үед (WebGL сэргээлт, Fast Refresh) цэвэрлэгээний `setLive(null)`
-      нь ЯГ ТЭР commit-д хүчин төгөлдөр БОЛОХГҮЙ: React бүх эффектийн
-      цэвэрлэгээг түрүүлж дуудаад (`m.remove()`), дараа нь эффектүүдийг
-      ХУУЧИН хаалтаараа ажиллуулна.
-      `getSource`, `getLayer` нь `?.`-тай тул `undefined` буцаадаг ч
-      `getStyle()` нь мөн `undefined` буцаах бөгөөд түүний `.layers`-ыг
-      уншихад САМБАР БҮХЭЛДЭЭ УНАНА (2026-09-29-нд ногоон бүсийн
-      хуудсан дээр гарсан: "Cannot read properties of undefined").
-    */
-    const style = live.getStyle();
-    if (!style) return;
+    const live = engine.current;
+    if (!ready || !live) return;
+    const { E, layers } = live;
     const list = overlays ?? [];
-    const wanted = new Set(list.map((o) => `ov-${o.id}`));
-
-    // Хасагдсаныг цэвэрлэнэ
-    for (const layer of style.layers) {
-      if (!layer.id.startsWith("ov-")) continue;
-      const base = layer.id.replace(/-(fill|line)$/, "");
-      if (wanted.has(base)) continue;
-      if (live.getLayer(layer.id)) live.removeLayer(layer.id);
+    const kept = new Set(list.map((o) => o.id));
+    for (const group of [layers.under, layers.above]) {
+      for (const l of group.layers.toArray()) {
+        if (!kept.has(l.__ovId) || l.__above !== (group === layers.above)) {
+          group.remove(l);
+          l.destroy();
+        }
+      }
     }
-    for (const id of Object.keys(style.sources)) {
-      if (id.startsWith("ov-") && !wanted.has(id)) live.removeSource(id);
-    }
-
-    const under = live.getLayer("bnd-country") ? "bnd-country" : undefined;
-    /* Дата давхаргын ДЭЭР, гэхдээ шошгоны ДООР */
-    const over = live.getLayer("shape-label") ? "shape-label" : undefined;
-
     for (const o of list) {
-      const src = `ov-${o.id}`;
-      const had = live.getSource(src);
-      if (!had) {
-        live.addSource(src, { type: "geojson", data: o.data });
-      } else if ("setData" in had) {
-        /*
-          ⚠⚠ БАЙГАА ЭХ СУРВАЛЖИЙН ДАТАГ ШИНЭЧЛЭНЭ. Урьд нь `addSource`
-          нь ЗӨВХӨН эх сурвалж байхгүй үед дуудагдаж, `setData` огт
-          дуудагддаггүй байв. Хил, бүсийн давхаргууд нэг удаа татагдаад
-          хөдөлдөггүй тул алдаа далд үлдсэн — НЭГЖ ТАЛБАР нь харагдах
-          хүрээ бүрд ДАХИН татагддаг тул шууд илэрлээ: эхний тор
-          зурагдаад зураг хөдлөхөд шинэ дүрс ОГТ гарахгүй байв.
-        */
-        (had as GeoJSONSource).setData(o.data);
-      }
-
-      if (o.fill && !live.getLayer(`${src}-fill`)) {
-        live.addLayer(
-          {
-            id: `${src}-fill`,
-            type: "fill",
-            source: src,
-            paint: {
-              "fill-color": o.fill.color,
-              /*
-                `gridcode` 1..N → тунгалагийн шатлал. Илэрхийллийн бүтэц
-                нь хувьсах урттай тул TS-ийн `match` загварт таарахгүй —
-                `unknown` дамжуулан хөрвүүлнэ.
-              */
-              "fill-opacity": o.fill.byGrid
-                ? ([
-                    "match",
-                    ["get", "gridcode"],
-                    ...o.fill.byGrid.flatMap((v, i) => [i + 1, v]),
-                    o.fill.byGrid[0],
-                  ] as unknown as ExpressionSpecification)
-                : (o.fill.opacity ?? 0.08),
+      const group = o.above ? layers.above : layers.under;
+      const fam = familyOf(o.data.features.find((f) => f.geometry)?.geometry) ?? "polygon";
+      let layer = group.layers.find((l: any) => l.__ovId === o.id);
+      const line = { type: "simple-line", color: col(o.line.color, o.line.opacity), width: o.line.width * 0.75, join: "round", style: o.line.style ?? "solid" };
+      const fillOpacity = o.fill?.opacity ?? 0.08;
+      const renderer =
+        fam === "polygon"
+          ? o.fill?.byGrid
+            ? {
+                type: "unique-value",
+                field: "gridcode",
+                defaultSymbol: { type: "simple-fill", color: col(o.fill.color, o.fill.byGrid[0]), outline: line },
+                uniqueValueInfos: o.fill.byGrid.map((v, i) => ({
+                  value: i + 1,
+                  symbol: { type: "simple-fill", color: col(o.fill!.color, v), outline: line },
+                })),
+              }
+            : {
+                type: "simple",
+                symbol: { type: "simple-fill", color: o.fill ? col(o.fill.color, fillOpacity) : [0, 0, 0, 0], outline: line },
+              }
+          : fam === "polyline"
+            ? { type: "simple", symbol: line }
+            : { type: "simple", symbol: { type: "simple-marker", size: 4, color: col(o.line.color, o.line.opacity), outline: null } };
+      const feats = () =>
+        o.data.features.flatMap((f) => {
+          const geometry = cleanGeom(f.geometry);
+          if (!geometry || familyOf(geometry) !== fam) return [];
+          const gc = Number(f.properties?.gridcode);
+          const t = o.label ? f.properties?.[o.label.field] : null;
+          return [
+            {
+              type: "Feature" as const,
+              geometry,
+              properties: {
+                gridcode: Number.isFinite(gc) ? gc : null,
+                t: typeof t === "string" && t.trim() ? t.trim() : null,
+              },
             },
+          ];
+        });
+      if (!layer || layer.geometryType !== fam) {
+        if (layer) {
+          group.remove(layer);
+          layer.destroy();
+        }
+        const labelingInfo = o.label
+          ? [
+              {
+                labelExpressionInfo: { expression: "$feature.t" },
+                where: "t IS NOT NULL",
+                labelPlacement: fam === "polygon" ? "always-horizontal" : "center-along",
+                deconflictionStrategy: "static",
+                minScale: o.label.minzoom != null ? scaleAt(o.label.minzoom) * 1.01 : 0,
+                symbol: {
+                  type: "text",
+                  color: o.label.color ?? "#eef4f8",
+                  haloColor: HALO,
+                  haloSize: 0.8,
+                  font: { ...FONT, size: o.label.size ?? 8 },
+                },
+              },
+            ]
+          : null;
+        layer = geoLayer(
+          E,
+          fam,
+          [
+            { name: "gridcode", type: "integer" },
+            { name: "t", type: "string" },
+          ],
+          {
+            renderer,
+            ...(labelingInfo ? { labelingInfo, labelsVisible: true } : {}),
+            ...(o.minzoom != null ? { minScale: scaleAt(o.minzoom) * 1.01 } : {}),
           },
-          o.above ? over : under,
+          feats(),
+        );
+        layer.__ovId = o.id;
+        layer.__above = Boolean(o.above);
+        layer.__data = o.data;
+        group.add(layer);
+      } else if (layer.__style !== JSON.stringify(renderer)) {
+        layer.renderer = renderer;
+      }
+      layer.__style = JSON.stringify(renderer);
+      if (layer.__data !== o.data) {
+        layer.__data = o.data;
+        const id = o.id;
+        refill(
+          E,
+          live.view,
+          {
+            key: `ov:${(layers as any).__id ?? 0}:${id}`,
+            /* Солилтын агшинд хуучин, шинэ хоёр зэрэг байж болно — сүүлийнх нь шинэ */
+            get: () => group.layers.filter((l: any) => l.__ovId === id).at(-1),
+            set: () => {},
+          },
+          feats,
         );
       }
-
-      if (!live.getLayer(`${src}-line`)) {
-        live.addLayer(
-          {
-            id: `${src}-line`,
-            type: "line",
-            source: src,
-            layout: { "line-join": "round" },
-            paint: {
-              "line-color": o.line.color,
-              "line-opacity": o.line.opacity,
-              "line-width": o.line.width,
-            },
-          },
-          o.above ? over : under,
-        );
+    }
+    /* Давхарын дараалал = жагсаалтын дараалал. `group.add` нь шинийг ДЭЭР
+       нэмдэг тул хожуу ирсэн (эсвэл унтрааж асаасан) суурь давхарга хил
+       дээгүүр гарч байв (баавгайн самбарын ойн төрөл, 2026-10-20) */
+    for (const group of [layers.under, layers.above]) {
+      let at = 0;
+      for (const o of list) {
+        if (Boolean(o.above) !== (group === layers.above)) continue;
+        for (const l of group.layers.filter((x: any) => x.__ovId === o.id).toArray())
+          group.reorder(l, at++);
       }
     }
-  }, [live, overlays]);
-
-  /* ---------------- Тооцооллын талбар (растер) ----------------
-     Суурь зургийн ДЭЭР, хилийн ДООР: тооцоолсон утга нь газрын
-     зургийг халхлах ёсгүй, хил нь харагдсаар байх ёстой. */
-  const fieldBounds = field?.bounds;
-  React.useEffect(() => {
-    if (!live) return;
-    if (!fieldBounds) {
-      if (live.getLayer("field")) live.removeLayer("field");
-      if (live.getSource("field")) live.removeSource("field");
-      return;
-    }
-    const [w, s, e, n] = fieldBounds;
-    const corners: [
-      [number, number], [number, number], [number, number], [number, number],
-    ] = [
-      [w, n],
-      [e, n],
-      [e, s],
-      [w, s],
-    ];
-    const src = live.getSource("field") as ImageSource | undefined;
-    if (src) {
-      src.setCoordinates(corners);
-      return;
-    }
-    live.addSource("field", {
-      type: "image",
-      /* 1×1 тунгалаг зураг — эх сурвалж үүсгэхэд зураг шаардлагатай ч
-         жинхэнэ агуулга нь доорх эффектээс `updateImage`-ээр ирнэ */
-      url: BLANK_PNG,
-      coordinates: corners,
-    });
-    live.addLayer(
-      {
-        id: "field",
-        type: "raster",
-        source: "field",
-        paint: {
-          "raster-opacity": 0.88,
-          /* Шинэ кадр бүрд бүдгэрч тодрох нь анивчилт болно */
-          "raster-fade-duration": 0,
-          /* Нүд бүр нэг утга — жигдрүүлбэл ангиллын зааг замхарна */
-          "raster-resampling": "nearest",
-        },
-      },
-      live.getLayer("bnd-soum") ? "bnd-soum" : undefined,
-    );
-  }, [live, fieldBounds]);
-
-  const fieldTick = field?.tick;
-  const fieldImage = field?.image;
-  const fieldOpacity = field?.opacity ?? 0.88;
-  React.useEffect(() => {
-    if (!live || !fieldImage) return;
-    const src = live.getSource("field") as ImageSource | undefined;
-    if (!src) return;
-    src.updateImage({ image: fieldImage });
-    if (live.getLayer("field")) {
-      live.setPaintProperty("field", "raster-opacity", fieldOpacity);
-    }
-  }, [live, fieldImage, fieldTick, fieldOpacity]);
+  }, [ready, overlays]);
 
   /* ---------------- Тодруулгын цагираг ---------------- */
   React.useEffect(() => {
-    if (!live) return;
-    const src = live.getSource("hl") as GeoJSONSource | undefined;
-    if (!src) return;
-    src.setData({
-      type: "FeatureCollection",
-      features: highlight
-        ? [
-            {
-              type: "Feature",
-              properties: {},
-              geometry: { type: "Point", coordinates: highlight },
-            },
-          ]
-        : [],
-    });
-  }, [live, highlight]);
+    const live = engine.current;
+    if (!ready || !live) return;
+    const { E, layers, mode } = live;
+    layers.hl.removeAll();
+    if (highlight)
+      layers.hl.add(
+        new E.Graphic({
+          geometry: mercPoint(highlight[0], highlight[1]),
+          symbol: highlightSymbol(mode.fire),
+        }),
+      );
+  }, [ready, highlight]);
 
-  /* ---------------- Зурган тэмдэглэгээ ----------------
+  /* ---------------- Тэмдэглэгээ (DOM) ----------------
      Бөөгнөрөлтэй ЗЭРЭГЦЭЖ ажиллана: бөөгнөрөл задарч дан цэг болсон
-     бичлэг л зургаа харуулна. Аль цэг задарсныг зөвхөн MapLibre мэднэ
-     тул `querySourceFeatures`-ээр асууж, зураг тогтох бүрд (`idle`)
-     дахин тааруулна.
-
-     DOM элемент бүр зураг татдаг тул харагдах хүрээ болон `MARKER_CAP`
-     хоёроор хязгаарлана — эс тэгвээс ойртоход хэдэн зуун зураг зэрэг
-     ачаалагдаж хөтөч зогсоно. */
+     бичлэг л тэмдгээ харуулна. DOM элемент бүр зураг татдаг тул
+     харагдах хүрээ ба `MARKER_CAP` хоёроор хязгаарлана. */
   React.useEffect(() => {
-    if (!live) return;
-    const markerRefs = markers.current;
-
-    const clear = () => {
-      for (const mk of markerRefs.values()) mk.remove();
-      markerRefs.clear();
-    };
-
+    const host = markLayer.current;
+    const live = engine.current;
+    if (!ready || !live || !host) return;
+    const { E, view, layers, mode } = live;
+    const els = new Map<number, HTMLElement>();
+    markEls.current = els;
     if (!marks && !pulse) {
-      clear();
+      host.replaceChildren();
       return;
     }
+    let turn = 0;
 
-    const sync = () => {
-      const want = new Map<
-        number,
-        { mark: string; pos: [number, number]; tint?: string }
-      >();
-
-      if (pulse) {
-        /*
-          Дохиоллын горим: бөөгнөрөл байхгүй, цэг цөөн тул эх өгөгдлөөс
-          шууд уншина — `querySourceFeatures` шаардлагагүй.
-        */
-        const { lon, lat, oid } = points;
-        for (let k = 0; k < visible.length && want.size < MARKER_CAP; k++) {
-          const i = visible[k];
-          want.set(oid[i], {
-            mark: "pulse",
-            pos: [lon[i], lat[i]],
-            tint: pulseColorRef.current?.(oid[i]),
-          });
-        }
-      } else if (marks) {
-        const bounds = live.getBounds();
-        for (const f of live.querySourceFeatures("wells", {
-          filter: ["!", ["has", "point_count"]],
-        })) {
-          if (want.size >= MARKER_CAP) break;
-          const id = Number(f.properties?.oid);
-          if (!Number.isFinite(id) || want.has(id)) continue;
-          const mark = marks[id];
-          if (!mark) continue;
-          const g = f.geometry;
-          if (g.type !== "Point") continue;
-          const pos = g.coordinates as [number, number];
-          if (!bounds.contains(pos)) continue;
-          want.set(id, { mark, pos });
-        }
-      }
-
-      // Хуучирсныг авч, шинийг л нэмнэ — бүгдийг дахин үүсгэвэл зураг анивчина
-      for (const [id, mk] of markerRefs) {
+    const draw = (want: Map<number, { mark: string; pos: [number, number]; tint?: string }>) => {
+      for (const [id, el] of els)
         if (!want.has(id)) {
-          mk.remove();
-          markerRefs.delete(id);
+          el.remove();
+          els.delete(id);
         }
-      }
       for (const [id, { mark, pos, tint }] of want) {
-        if (markerRefs.has(id)) continue;
+        if (els.has(id)) continue;
         const el = markerEl(
           mark,
           () => selectCb.current(id),
-          /*
-            Тэмдэглэгээ нь DOM элемент тул хулганы байрлалыг зургаас
-            биш, ТЭМДЭГЛЭГЭЭНИЙ БАЙРШЛААС тооцно (`project`) — хөвөгч
-            тайлбар тэмдгийнхээ хажууд тогтож, хулганы чичиргээнээс
-            хамаарахгүй.
-          */
           hoverCb.current
-            ? (over) =>
-                hoverCb.current?.(over ? id : null, over ? live.project(pos) : undefined)
+            ? (over) => {
+                const at = screenOf(view, pos);
+                hoverCb.current?.(over ? id : null, over && at ? { x: at[0], y: at[1] } : undefined);
+              }
             : undefined,
           tint,
         );
-        markerRefs.set(id, new Marker({ element: el }).setLngLat(pos).addTo(live));
+        const wrap = document.createElement("div");
+        wrap.className = "wells-mark";
+        wrap.dataset.lon = String(pos[0]);
+        wrap.dataset.lat = String(pos[1]);
+        wrap.appendChild(el);
+        host.appendChild(wrap);
+        els.set(id, wrap);
       }
+      for (const [id, wrap] of els) {
+        wrap.firstElementChild?.classList.toggle("is-picked", id === pickedMark);
+        wrap.firstElementChild?.classList.toggle("is-hot", id === hotRef.current);
+      }
+      placeMarks(view, host);
+    };
 
+    const sync = async () => {
+      const mine = ++turn;
+      const want = new Map<number, { mark: string; pos: [number, number]; tint?: string }>();
+      const { lon, lat, oid } = points;
+      if (pulse) {
+        for (let k = 0; k < visible.length && want.size < MARKER_CAP; k++) {
+          const i = visible[k];
+          want.set(oid[i], { mark: "pulse", pos: [lon[i], lat[i]], tint: pulseColorRef.current?.(oid[i]) });
+        }
+        return draw(want);
+      }
+      const box = extentOf(view);
+      if (!box || !marks) return;
+      const inView = (x: number, y: number) => x >= box[0] && x <= box[2] && y >= box[1] && y <= box[3];
       /*
-        Сонголтыг БАЙГАА тэмдгүүд дээр тэмдэглэнэ.
-
-        ⚠ Тэмдгүүд нь дугаараар кэшлэгддэг (анивчихаас сэргийлж
-        зөвхөн шинийг нэмдэг) тул сонголт солигдоход дахин үүсэхгүй —
-        ангийг нь ШУУД солино.
+        Бөөгнөрсөн цэгийг АЛГАСНА: бөөгнөрлүүдийг SDK-ээс асууж, хоёроос
+        олон гишүүнтэйн бүрэлдэхүүнийг хасна. SDK хариулахгүй бол
+        бөөгнөрлийн хязгаараас ойр үед л тэмдэглэнэ.
       */
-      for (const [id, mk] of markerRefs) {
-        mk.getElement().classList.toggle("is-picked", id === pickedMark);
+      let clustered: Set<number> | null = null;
+      const z = mlOf(view.zoom);
+      if (mode.cluster && z < mode.clusterMaxZoom) {
+        clustered = new Set();
+        try {
+          const lv = await view.whenLayerView(layers.points);
+          const agg = await lv.queryAggregates();
+          const ids = agg.features.filter((f: any) => (f.attributes?.cluster_count ?? 1) > 1).map((f: any) => f.attributes.aggregateId);
+          if (ids.length) {
+            const res = await lv.queryFeatures({ aggregateIds: ids, outFields: ["oid"], returnGeometry: false });
+            for (const f of res.features) clustered.add(Number(f.attributes.oid));
+          }
+        } catch {
+          clustered = null;
+          if (mine === turn) draw(new Map());
+          return;
+        }
       }
+      if (mine !== turn) return;
+      for (let k = 0; k < visible.length && want.size < MARKER_CAP; k++) {
+        const i = visible[k];
+        const id = oid[i];
+        const mark = marks[id];
+        if (!mark || !inView(lon[i], lat[i]) || clustered?.has(id)) continue;
+        want.set(id, { mark, pos: [lon[i], lat[i]] });
+      }
+      draw(want);
     };
 
     sync();
-    // Дохиоллын горим өгөгдлөөсөө шууд уншдаг тул `idle` сонсох шаардлагагүй
-    if (!pulse) live.on("idle", sync);
+    /* Зураг тогтож, давхарга (бөөгнөрөл) зурагдаж дуусах бүрд — дата
+       солигдож шинэ давхарга орж ирэхэд ч мөн */
+    let last = "";
+    const h = pulse
+      ? null
+      : E.reactive.when(
+          () => !live.view.updating && live.view.stationary,
+          () => {
+            /* Асуулга өөрөө `updating`-ийг сэлгэж болно — байрлал, давхарга
+               өөрчлөгдөөгүй бол дахин асуухгүй (төгсгөлгүй давталт) */
+            const c = view.center;
+            const key = `${view.zoom.toFixed(3)}|${Math.round(c.x)}|${Math.round(c.y)}|${layers.points.uid}`;
+            if (key === last) return;
+            last = key;
+            void sync();
+          },
+        );
     return () => {
-      if (!pulse) live.off("idle", sync);
-      clear();
+      turn++;
+      h?.remove();
+      host.replaceChildren();
     };
-  }, [live, marks, pulse, points, visible, pickedMark]);
+  }, [ready, marks, pulse, points, visible, pickedMark]);
+
+  React.useEffect(() => {
+    hotRef.current = hotMark;
+    for (const [id, wrap] of markEls.current ?? []) wrap.firstElementChild?.classList.toggle("is-hot", id === hotMark);
+  }, [hotMark]);
+
+  React.useEffect(() => {
+    const live = engine.current;
+    if (!ready || !live) return;
+    const { E, layers } = live;
+    layers.hot.removeAll();
+    if (hotMark == null) return;
+    const g = shapeGeoms.current.get(hotMark);
+    if (g) {
+      g.esri ??= esriGeom(g.geojson);
+      if (!g.esri) return;
+      const symbol =
+        g.esri.type === "polygon"
+          ? { type: "simple-fill", color: [255, 230, 0, 0.22], outline: { color: [255, 230, 0, 1], width: 2.6 } }
+          : { type: "simple-line", color: [255, 230, 0, 1], width: 4, cap: "round", join: "round" };
+      layers.hot.add(new E.Graphic({ geometry: g.esri, symbol }));
+      return;
+    }
+    if (marks || pulse) return;
+    const i = points.oid.indexOf(hotMark);
+    if (i < 0) return;
+    layers.hot.add(
+      new E.Graphic({
+        geometry: mercPoint(points.lon[i], points.lat[i]),
+        symbol: { type: "simple-marker", size: 15, color: [255, 230, 0, 0.95], outline: { color: [8, 14, 20, 0.85], width: 1.6 } },
+      }),
+    );
+  }, [ready, hotMark, points, shapeData, marks, pulse]);
 
   /*
-    Өндрийг `h-full`-ээр өгнө. `absolute inset-0` ажиллахгүй —
-    maplibre-gl.css нь `.maplibregl-map { position: relative }` тавьдаг тул
-    байрлал дарагдаж, элемент 0 өндөртэй болно.
-  */
-  /*
-    2D / 3D (хэрэглэгчийн хүсэлт, 2026-09-17). 2D нь одоогийн MapLibre
-    зураг хэвээр; 3D нь түүний ДЭЭГҮҮР Esri-ийн `SceneView` давхарга
-    ([map/scene-overlay.tsx](src/components/map/scene-overlay.tsx)) —
-    гурван нэгдсэн торон загварыг харуулна. MapLibre доор нь амьд
-    үлдэнэ тул 2D руу буцахад байрлал, давхарга, сонголт бүгд хэвээр.
-    3D-д ойртуулах товч нуугдана — тэр нь MapLibre-ийнх бөгөөд торон
-    загварт нөлөөлөхгүй; SceneView-г хулгана, хуруугаар удирдана.
+    2D / 3D (хэрэглэгчийн хүсэлт, 2026-09-17). 3D нь 2D-ийн ДЭЭГҮҮР
+    Esri-ийн `SceneView` — 2D зураг доор нь амьд үлдэнэ.
   */
   const [dim, setDim] = React.useState<"2d" | "3d">("2d");
+  const root = React.useRef<HTMLDivElement>(null);
+  /*
+    3D-д самбарын 2D зурагт зориулсан ХӨВӨГЧ удирдлагууд (нэмэлт давхаргын
+    товч, шатлалын тайлбар, бичлэгийн цонх …) НУУГДАНА — тэд 3D-ийн
+    баруун дээд буланд суух хэрэгслүүдтэй давхцаж, 3D-д хамааралгүй
+    зүйлийг зааж байв (хэрэглэгч 2026-10-15). Самбар бүр өөрөөр
+    байрлуулдаг тул ЗӨВХӨН зургийн эх элементийн `absolute` хүүхдүүд.
+  */
+  React.useLayoutEffect(() => {
+    const host = root.current?.parentElement;
+    if (!host || dim !== "3d") return;
+    const hidden: HTMLElement[] = [];
+    for (const el of Array.from(host.children) as HTMLElement[]) {
+      if (el === root.current || el.style.visibility === "hidden") continue;
+      const pos = getComputedStyle(el).position;
+      if (pos !== "absolute" && pos !== "fixed") continue;
+      el.style.visibility = "hidden";
+      hidden.push(el);
+    }
+    return () => hidden.forEach((el) => (el.style.visibility = ""));
+  }, [dim]);
 
   return (
-    <div className="relative h-full w-full">
+    <div ref={root} className="wells-esri relative h-full w-full">
       <div ref={holder} className="h-full w-full" />
+      <div ref={markLayer} className="pointer-events-none absolute inset-0 z-[1] overflow-hidden" />
+      {/* Хайрцаггүй, шууд зураг дээр суух тул уншигдац нь сүүдрээс хамаарна */}
+      <div
+        ref={ratio}
+        className="num pointer-events-none absolute bottom-2.5 left-2.5 z-[2] text-[10px] leading-none text-ink-2"
+        style={{ filter: "drop-shadow(0 1px 2px rgba(0,0,0,.75))" }}
+      />
       {/*
-        ТАСАЛДЛЫГ ИЛ ХЭЛНЭ. Урьд нь контекст алдагдахад туван цагаан
-        болж, алдаа нь ЗӨВХӨН консольд бичигддэг тул хэрэглэгчид ЗУРАГ
-        ЭВДЭРСЭН мэт харагдаж байв — платформын "чимээгүй бүтэлгүйтэл
-        гаргахгүй" дүрмийн зөрчил.
-        ⚠ Нэг мөр, арга зүйн тайлбар БИШ: болсон зүйлийг л хэлнэ.
-        ⚠ `--ochre` (анхааруулга), `--clay` БИШ: дүрслэл сэргэх
-        боломжтой тул ноцтой биш.
+        ТАСАЛДЛЫГ ИЛ ХЭЛНЭ — туван цагаан болоход хэрэглэгч зураг эвдэрсэн
+        гэж үзнэ. ⚠ `--ochre`: дүрслэл сэргэх боломжтой.
       */}
-      {lost ? (
+      {lost || failed ? (
         <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
-          <p className="elevated max-w-[320px] rounded-xs border border-line bg-paper/92 px-4 py-3 text-center text-[12.5px] leading-relaxed text-ochre backdrop-blur-md">
-            Газрын зургийн дүрслэл тасалдав. Сэргээж байна.
+          <p
+            className={`elevated max-w-[320px] rounded-xs border border-line bg-paper/92 px-4 py-3 text-center text-[12.5px] leading-relaxed backdrop-blur-md ${failed ? "text-clay" : "text-ochre"}`}
+          >
+            {failed ?? "Газрын зургийн дүрслэл тасалдав. Сэргээж байна."}
           </p>
         </div>
       ) : null}
       {dim === "3d" && <SceneOverlay />}
-      {dim === "2d" && <ZoomButtons map={map} />}
+      {dim === "2d" && <ZoomButtons engine={engine} />}
       <DimensionToggle value={dim} onChange={setDim} />
     </div>
   );
 }
 
+/* --------------------------------------------------------------------------
+   Тусламжийн функцууд
+   -------------------------------------------------------------------------- */
+
+function haversine(lon1: number, lat1: number, lon2: number, lat2: number) {
+  const r = Math.PI / 180;
+  const a =
+    Math.sin(((lat2 - lat1) * r) / 2) ** 2 +
+    Math.cos(lat1 * r) * Math.cos(lat2 * r) * Math.sin(((lon2 - lon1) * r) / 2) ** 2;
+  return 2 * 6371008.8 * Math.asin(Math.sqrt(a));
+}
+
+/** Шугамын УРТЫН дунд цэг — хэрчмийн шошгонд */
+function lineMidpoints(fc: GeoJSON.FeatureCollection): GeoJSON.FeatureCollection {
+  const features: GeoJSON.Feature[] = [];
+  for (const f of fc.features) {
+    const t = f.properties?.t;
+    const g = f.geometry;
+    if (typeof t !== "string" || !t || !g) continue;
+    const line =
+      g.type === "LineString" ? g.coordinates : g.type === "MultiLineString" ? g.coordinates.reduce((a, b) => (b.length > a.length ? b : a), [] as GeoJSON.Position[]) : null;
+    if (!line || line.length < 2) continue;
+    const seg = line.slice(1).map((p, i) => Math.hypot(p[0] - line[i][0], p[1] - line[i][1]));
+    let half = seg.reduce((a, b) => a + b, 0) / 2;
+    let at: GeoJSON.Position = line[0];
+    for (let i = 0; i < seg.length; i++) {
+      if (half <= seg[i]) {
+        const k = seg[i] ? half / seg[i] : 0;
+        at = [line[i][0] + (line[i + 1][0] - line[i][0]) * k, line[i][1] + (line[i + 1][1] - line[i][1]) * k];
+        break;
+      }
+      half -= seg[i];
+    }
+    features.push({ type: "Feature", properties: { t }, geometry: { type: "Point", coordinates: at } });
+  }
+  return { type: "FeatureCollection", features };
+}
+
+/** Харагдах хүрээ — газарзүйн солбицолд */
+function extentOf(view: any): Extent | null {
+  const e = view?.extent;
+  if (!e) return null;
+  const [w, s] = toLonLat(e.xmin, e.ymin);
+  const [ea, n] = toLonLat(e.xmax, e.ymax);
+  return [w, s, ea, n];
+}
+
+/** Газарзүйн цэгийн дэлгэцийн байрлал (эргүүлэлтгүй зураг) */
+function screenOf(view: any, [lon, lat]: [number, number]): [number, number] | null {
+  const e = view?.extent;
+  if (!e) return null;
+  const [x, y] = toMerc(lon, lat);
+  return [((x - e.xmin) / (e.xmax - e.xmin)) * view.width, ((e.ymax - y) / (e.ymax - e.ymin)) * view.height];
+}
+
+/** Тэмдэглэгээнүүдийг зургийн одоогийн байрлалд тааруулна */
+function placeMarks(view: any, host: HTMLElement | null) {
+  if (!host) return;
+  for (const el of host.children as unknown as Iterable<HTMLElement>) {
+    const at = screenOf(view, [Number(el.dataset.lon), Number(el.dataset.lat)]);
+    if (at) el.style.transform = `translate(${at[0]}px, ${at[1]}px)`;
+  }
+}
+
 /**
- * 2D / 3D сэлгэгч — ойртуулах товчны доор, баруун ирмэгт.
- *
- * Бичвэр нь "2D", "3D" — икон биш: хоёр үсэг нь ямар ч иконоос илүү
- * ойлгомжтой бөгөөд товчлол задлах дүрэмд хамаарахгүй (олон улсын
- * тэмдэглэгээ). Идэвхтэй тал `--data` өнгөөр.
+ * Хүрээнд тааруулна — MapLibre-ийн `fitBounds`-тай ижил (`padding` px,
+ * `maxMl` нь MapLibre-ийн zoom).
  */
-function DimensionToggle({
-  value,
-  onChange,
-}: {
-  value: "2d" | "3d";
-  onChange: (v: "2d" | "3d") => void;
-}) {
+function fitTo(view: any, [w, s, e, n]: Extent, padding: number, maxMl: number, duration: number) {
+  const [x0, y0] = toMerc(w, s);
+  const [x1, y1] = toMerc(e, n);
+  const W = Math.max(1, view.width - padding * 2);
+  const H = Math.max(1, view.height - padding * 2);
+  const res = Math.max((x1 - x0) / W, (y1 - y0) / H, 1e-6);
+  const zoom = Math.min(Math.log2(156543.03392804097 / res), maxMl + 1);
+  const center = toLonLat((x0 + x1) / 2, (y0 + y1) / 2);
+  view.goTo({ center, zoom }, duration ? { duration } : { animate: false }).catch(() => {});
+}
+
+/** Сонгосон ба хулганы доорх дүрсийг тод хувилбараар зурна */
+function redrawLit(live: Live, geoms: Map<number, { geojson: GeoJSON.Geometry; c: string | null; esri?: any }>) {
+  const lit = live.layers.lit;
+  if (!lit) return;
+  const { E, mode } = live;
+  lit.removeAll();
+  const ids = new Set<number>([lit.__picked, lit.__hot].filter((x) => x != null));
+  for (const id of ids) {
+    const g = geoms.get(id);
+    if (!g) continue;
+    g.esri ??= esriGeom(g.geojson);
+    if (!g.esri) continue;
+    const c = g.c ?? mode.shapeColor ?? FIREFLY.glow;
+    const symbol = g.esri.type === "polygon" ? polySymbol(mode, c, true) : lineSymbol(mode, c, true);
+    lit.add(new E.Graphic({ geometry: g.esri, symbol }));
+  }
+}
+
+/*
+  ТОВШИЛТ, HOVER — SDK-ийн `hitTest`-ээр.
+
+  ⚠⚠ ЦЭГ нь ОЛОН ӨНЦӨГТӨӨС ДАВУУ ЭРХТЭЙ (2026-09-30): булаг нь өөрийн
+  хамгаалалтын бүсийн ДОТОР сууна тул товшилт ЦЭГИЙГ сонгох ёстой.
+  ⚠ Hover-ийн `hitTest` нэг удаад НЭГ — явж байхад ирсэн хөдөлгөөний
+  СҮҮЛИЙНХ нь л дараа нь асуугдана.
+*/
+function bindPointer(
+  view: any,
+  layers: Layers,
+  selectCb: React.RefObject<(oid: number) => void>,
+  hoverCb: React.RefObject<((oid: number | null, at?: { x: number; y: number }) => void) | undefined>,
+  pickCb: React.RefObject<((lon: number, lat: number) => void) | undefined>,
+  blankCb: React.RefObject<((lon: number, lat: number) => void) | undefined>,
+  /** Хулганы доорх дүрс (олон өнцөгт) — тод хувилбараар зурагдана */
+  onHot: (id: number | null) => void,
+) {
+  const test = async (p: { x: number; y: number }) => {
+    /* Давхарга дата солигдох бүрд шинэчлэгддэг тул ҮРГЭЛЖ одоогийнхыг авна */
+    const include = [layers.points, layers.shapePoly, layers.shapeLine].filter(Boolean);
+    const res = await view.hitTest(p, { include });
+    let point: any = null;
+    let shape: any = null;
+    for (const r of res.results ?? []) {
+      if (r.type !== "graphic") continue;
+      if (r.layer === layers.points && !point) point = r.graphic;
+      else if (r.layer !== layers.points && !shape) shape = r.graphic;
+    }
+    return { point, shape };
+  };
+
+  const isCluster = (g: any) => g?.isAggregate || g?.attributes?.cluster_count > 1;
+
+  view.on("click", async (e: any) => {
+    /* Байршил сонгох горимд цэг, дүрс сонгохгүй — товшсон газар л */
+    const pick = pickCb.current;
+    if (pick) {
+      const m = e.mapPoint;
+      if (m && Number.isFinite(m.longitude) && Number.isFinite(m.latitude))
+        pick(m.longitude, m.latitude);
+      return;
+    }
+    const { point, shape } = await test({ x: e.x, y: e.y });
+    if (point && isCluster(point)) {
+      view.goTo({ target: point.geometry, zoom: Math.min(view.zoom + 2, 18) }, { duration: 500 }).catch(() => {});
+      return;
+    }
+    const g = point ?? shape;
+    const oid = Number(g?.attributes?.oid);
+    if (g && Number.isFinite(oid)) selectCb.current?.(oid);
+    else if (!g) {
+      const m = e.mapPoint;
+      if (m && Number.isFinite(m.longitude) && Number.isFinite(m.latitude))
+        blankCb.current?.(m.longitude, m.latitude);
+    }
+  });
+
+  let busy = false;
+  let next: { x: number; y: number } | null = null;
+  let over = false;
+  let hot: number | null = null;
+  const setHot = (id: number | null) => {
+    if (hot === id) return;
+    hot = id;
+    onHot(id);
+  };
+
+  const run = async () => {
+    busy = true;
+    while (next) {
+      const p = next;
+      next = null;
+      let hit: { point: any; shape: any };
+      try {
+        hit = await test(p);
+      } catch {
+        continue;
+      }
+      const g = hit.point ?? hit.shape;
+      view.container.style.cursor = pickCb.current ? "crosshair" : g ? "pointer" : "";
+      const oid = Number(g?.attributes?.oid);
+      if (g && !isCluster(g) && Number.isFinite(oid)) {
+        over = true;
+        hoverCb.current?.(oid, p);
+      } else if (over) {
+        over = false;
+        hoverCb.current?.(null);
+      }
+      const shapeId = !hit.point && hit.shape ? Number(hit.shape.attributes?.oid) : null;
+      setHot(Number.isFinite(shapeId) ? shapeId : null);
+    }
+    busy = false;
+  };
+
+  view.on("pointer-move", (e: any) => {
+    next = { x: e.x, y: e.y };
+    if (!busy) void run();
+  });
+  view.on("pointer-leave", () => {
+    next = null;
+    view.container.style.cursor = "";
+    setHot(null);
+    if (over) {
+      over = false;
+      hoverCb.current?.(null);
+    }
+  });
+}
+
+/**
+ * Дугуй тэмдэглэгээ — зургийн хаяг, SVG тэмдэг эсвэл дохиоллын цохилт.
+ * Хоёулаа өөрийн кодоос гаралтай тул `innerHTML` аюулгүй.
+ */
+function markerEl(mark: string, onClick: () => void, onHover?: (over: boolean) => void, tint?: string) {
+  const el = document.createElement("button");
+  el.type = "button";
+  if (tint) el.style.setProperty("--pin", tint);
+  if (mark === "pulse") {
+    el.className = "pulse-pin";
+    el.innerHTML = '<span class="ring"></span><span class="ring d"></span>';
+  } else if (mark.startsWith("<svg")) {
+    el.className = "species-pin";
+    el.innerHTML = mark;
+  } else {
+    el.className = "species-pin photo";
+    el.style.backgroundImage = `url("${mark}")`;
+  }
+  el.addEventListener("click", (e) => {
+    e.stopPropagation();
+    onClick();
+  });
+  if (onHover) {
+    el.addEventListener("mouseenter", () => onHover(true));
+    el.addEventListener("mouseleave", () => onHover(false));
+  }
+  return el;
+}
+
+/** 2D / 3D сэлгэгч — ойртуулах товчны доор, баруун ирмэгт */
+function DimensionToggle({ value, onChange }: { value: "2d" | "3d"; onChange: (v: "2d" | "3d") => void }) {
   return (
     <div
       role="radiogroup"
@@ -3073,32 +2518,25 @@ function DimensionToggle({
 }
 
 /**
- * ОЙРТУУЛАХ, ХОЛДУУЛАХ товч.
- *
- * ⚠ Урьд нь платформ дээр товч БАЙХГҮЙ байсан (дугуй, хос товшилтоор
- * л ойртдог). Хэрэглэгч 2026-09-16-нд нэмүүлэв: хулганы дугуйгүй
- * төхөөрөмж дээр, мөн зургийн дээгүүр хөвөгч цонх байх үед дугуй нь
- * цонхонд баригдаж зураг ойртдоггүй.
- *
- * ⚠ БҮХ ДӨРВӨН БУЛАН ЭЗЭЛГДСЭН: дээд талд суурь зургийн сонголт
- * (баруун эсвэл зүүн), зүүн дээд буланд hover карт, доод буланд
- * товшилтын цонх, масштабын заалт, тарвагын тэмдэглэгээ. Тиймээс
- * товчнууд БАРУУН ИРМЭГИЙН ДУНДАД суана — тэнд юу ч байхгүй.
- *
- * Хөвөгч гадаргуу тул `.elevated` сүүдэр зөвшөөрөгдөнө.
+ * ОЙРТУУЛАХ, ХОЛДУУЛАХ товч — БАРУУН ИРМЭГИЙН ДУНДАД (бусад дөрвөн
+ * булан эзэлгдсэн). Хөвөгч гадаргуу тул `.elevated` сүүдэр зөвшөөрөгдөнө.
  */
-function ZoomButtons({ map }: { map: React.RefObject<MapLibreMap | null> }) {
+function ZoomButtons({ engine }: { engine: React.RefObject<Live | null> }) {
+  const step = (d: number) => {
+    const view = engine.current?.view;
+    view?.goTo({ zoom: view.zoom + d }, { duration: 250 }).catch(() => {});
+  };
   return (
     <div className="elevated absolute top-1/2 right-2.5 z-10 flex -translate-y-1/2 flex-col divide-y divide-line overflow-hidden rounded-xs border border-line-2 bg-paper/92 backdrop-blur-md">
       <button
-        onClick={() => map.current?.zoomIn()}
+        onClick={() => step(1)}
         aria-label="Ойртуулах"
         className="flex size-7 items-center justify-center text-ink-2 transition-colors hover:bg-paper-hi hover:text-ink"
       >
         <Plus size={13} />
       </button>
       <button
-        onClick={() => map.current?.zoomOut()}
+        onClick={() => step(-1)}
         aria-label="Холдуулах"
         className="flex size-7 items-center justify-center text-ink-2 transition-colors hover:bg-paper-hi hover:text-ink"
       >

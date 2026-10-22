@@ -17,10 +17,12 @@ import { FilterBar, FilterMenu, PickList } from "@/components/wells/filter-bar";
 import {
   defaultBasemap,
   type Basemap,
+  type Extent,
   type MapOverlay,
 } from "@/components/wells/map";
 import { Columns } from "@/components/ui/resizable-columns";
 import { fetchBeaver, type BeaverData } from "@/lib/beaver";
+import { Bounds } from "@/lib/extent";
 import { cn, num } from "@/lib/utils";
 
 const PointMap = dynamic(
@@ -88,15 +90,31 @@ export function BeaverDashboard() {
 
   const visible = React.useMemo(() => Uint32Array.from(shown), [shown]);
 
+  /*
+    Зураг дээр сонгосон ажиглалт нь ШҮҮЛТ — диаграм, үзүүлэлт түүгээр
+    хумигдана; зураг өөрөө хумигдахгүй. Шүүлтэд үлдээгүй сонголт
+    хүчингүй (дам гарна).
+  */
+  const sel = React.useMemo(() => {
+    if (!data || picked == null) return null;
+    return shown.some((i) => data.spots[i].oid === picked) ? picked : null;
+  }, [data, shown, picked]);
+
   /* Диаграм бүр өөрийнхөө тэнхлэгийг АЛГАСЧ шүүгдэнэ */
   const tally = React.useCallback(
-    (of: (i: number) => string, skip: "kind" | "round" | "place"): Datum[] => {
+    (
+      of: (i: number) => string,
+      skip: "kind" | "round" | "place",
+      /* Цэс сонголтоор хумигдахгүй — өөр утга руу шилжих зам */
+      withSel = true,
+    ): Datum[] => {
       if (!data) return [];
       const counts = new Map<string, number>();
       data.spots.forEach((s, i) => {
         if (skip !== "kind" && kind && s.kind !== kind) return;
         if (skip !== "round" && round && s.round !== round) return;
         if (skip !== "place" && place && s.place !== place) return;
+        if (withSel && sel != null && s.oid !== sel) return;
         const key = of(i);
         if (!key) return;
         counts.set(key, (counts.get(key) ?? 0) + 1);
@@ -105,7 +123,7 @@ export function BeaverDashboard() {
         .sort((a, b) => b[1] - a[1])
         .map(([key, value]) => ({ key, label: key, value }));
     },
-    [data, kind, round, place],
+    [data, kind, round, place, sel],
   );
 
   const byKind = React.useMemo(
@@ -156,7 +174,15 @@ export function BeaverDashboard() {
     [tally, data],
   );
   const byPlace = React.useMemo(
-    () => tally((i) => data?.spots[i].place ?? "", "place"),
+    () => tally((i) => data?.spots[i].place ?? "", "place", false),
+    [tally, data],
+  );
+  const menuKind = React.useMemo(
+    () => tally((i) => data?.spots[i].kind ?? "", "kind", false),
+    [tally, data],
+  );
+  const menuRound = React.useMemo(
+    () => tally((i) => data?.spots[i].round ?? "", "round", false),
     [tally, data],
   );
 
@@ -225,19 +251,40 @@ export function BeaverDashboard() {
   const stats = React.useMemo(() => {
     if (!data) return null;
     const kinds = new Set<string>();
-    for (const i of shown) kinds.add(data.spots[i].kind);
+    let spots = 0;
+    for (const i of shown) {
+      if (sel != null && data.spots[i].oid !== sel) continue;
+      spots++;
+      kinds.add(data.spots[i].kind);
+    }
     return {
-      spots: shown.length,
+      spots,
       kinds: kinds.size,
       ha: data.areas.reduce((t, a) => t + a.ha, 0),
       km: data.routeKm,
     };
-  }, [data, shown]);
+  }, [data, shown, sel]);
 
   const detail = React.useMemo(() => {
-    if (!data || picked == null) return null;
-    return data.spots.find((s) => s.oid === picked) ?? null;
-  }, [data, picked]);
+    if (!data || sel == null) return null;
+    return data.spots.find((s) => s.oid === sel) ?? null;
+  }, [data, sel]);
+
+  /*
+    ОЙРТОХ ҮЙЛДЭЛ: ажиглалт сонговол түүн рүү, шүүлт тавьвал үлдсэн
+    бүхнийг багтаана. Шүүлтгүй үед `null` — анхны харагдац хэвээр.
+  */
+  const focus = React.useMemo<Extent | null>(() => {
+    if (!data) return null;
+    const b = new Bounds();
+    if (detail) {
+      b.add(detail.lon, detail.lat);
+      return b.get();
+    }
+    if (!(kind || round || place) || shown.length === 0) return null;
+    for (const i of shown) b.add(data.spots[i].lon, data.spots[i].lat);
+    return b.get();
+  }, [data, detail, kind, round, place, shown]);
 
   if (error) {
     return (
@@ -257,7 +304,8 @@ export function BeaverDashboard() {
     );
   }
 
-  const activeCount = (kind ? 1 : 0) + (round ? 1 : 0) + (place ? 1 : 0);
+  const activeCount =
+    (kind ? 1 : 0) + (round ? 1 : 0) + (place ? 1 : 0) + (sel != null ? 1 : 0);
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-2.5">
@@ -279,7 +327,7 @@ export function BeaverDashboard() {
           onClear={() => setKind(null)}
           width={250}
         >
-          <PickList items={byKind} selected={kind} onPick={setKind} />
+          <PickList items={menuKind} selected={kind} onPick={setKind} />
         </FilterMenu>
 
         <FilterMenu
@@ -290,7 +338,7 @@ export function BeaverDashboard() {
           onClear={() => setRound(null)}
           width={220}
         >
-          <PickList items={byRound} selected={round} onPick={setRound} />
+          <PickList items={menuRound} selected={round} onPick={setRound} />
         </FilterMenu>
 
         <FilterMenu
@@ -335,7 +383,8 @@ export function BeaverDashboard() {
                 */
                 highlight={detail ? [detail.lon, detail.lat] : null}
                 basemap={basemap}
-                onSelect={(oid) => setPicked(picked === oid ? null : oid)}
+                onSelect={(oid) => setPicked(sel === oid ? null : oid)}
+                focus={focus}
               />
               <BasemapGallery value={basemap} onChange={setBasemap} />
 

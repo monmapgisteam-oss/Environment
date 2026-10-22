@@ -212,6 +212,45 @@ async function loadSim(): Promise<SimData> {
 }
 
 /**
+ * Нэг жорлонгийн ХАЯГ — ПОРТАЛААС, сонгох үед л (хэрэглэгч 2026-10-12:
+ * "Байршил — хаяг нь шүү").
+ *
+ * ⚠⚠ Хаяг нь айл өрхийн гудамж, хашааны дугаар тул `public/` багцад ОРООГҮЙ
+ * (`scripts/build-latrine-sim.mjs`). Порталын `X10_UB_pit_toilet` байгууллагын
+ * хүрээнд хаалттай тул энд зөвхөн нэвтэрсэн хэрэглэгчид `arcgisJson`-оор
+ * (токентой), НЭГ жорлонгийнх л ирнэ. Талбарууд токеноор шалгагдсан
+ * (2026-10-12): `duureg` ("Хан-Уул дүүрэг"), `khorooid` (12), `address_st`
+ * ("Туул-5"), `address_kh` ("19 а"); `address_st` хоосон мөр 0.
+ */
+const ADDR = new Map<number, Promise<string | null>>();
+export function fetchLatrineAddress(id: number): Promise<string | null> {
+  let hit = ADDR.get(id);
+  if (!hit) {
+    const url = `${PIT_SERVICE}/query?${new URLSearchParams({
+      f: "json",
+      where: `id = ${Math.trunc(id)}`,
+      outFields: "duureg,khorooid,address_st,address_kh",
+      returnGeometry: "false",
+    })}`;
+    hit = arcgisJson<{ features?: { attributes: Record<string, string | number | null> }[] }>(url, "Нүхэн жорлонгийн хаяг").then((j) => {
+      const a = j.features?.[0]?.attributes;
+      if (!a) return null;
+      const txt = (v: unknown) => (v == null ? "" : String(v).trim());
+      const parts = [
+        txt(a.duureg),
+        a.khorooid != null && a.khorooid !== "" ? `${txt(a.khorooid)}-р хороо` : "",
+        txt(a.address_st),
+        txt(a.address_kh),
+      ].filter(Boolean);
+      return parts.length ? parts.join(", ") : null;
+    });
+    hit.catch(() => ADDR.delete(id));
+    ADDR.set(id, hit);
+  }
+  return hit;
+}
+
+/**
  * Жорлон бүрийн байршил — ПОРТАЛААС, багцын `id`-аар холбож.
  *
  * ⚠⚠ Багцад координат БАЙХГҮЙ (`scripts/build-latrine-sim.mjs`-ийн

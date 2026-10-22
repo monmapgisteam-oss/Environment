@@ -98,6 +98,23 @@ export function PetitionsDashboard() {
   const shown = React.useMemo(() => (rows ?? []).filter((p) => keep(p)), [rows, keep]);
 
   /*
+    Сонгосон өргөдөл нь диаграм, үзүүлэлтийн ШҮҮЛТ (хөндлөн шүүлт хоёр
+    тийш). Бусад шүүлтэд тохирохгүй бол сонголт ДАМ цуцлагдана. Газрын
+    зураг, жагсаалт сонголтоор хумигдахгүй — өөр өргөдөл сонгох зам.
+  */
+  const sel = React.useMemo(
+    () => (picked != null && shown.some((p) => p.oid === picked) ? picked : null),
+    [shown, picked],
+  );
+
+  /** Диаграм, үзүүлэлтийн шүүлт — сонгосон өргөдөлтэй хамт */
+  const keepSel = React.useCallback(
+    (p: Petition, skip?: "screening" | "stage" | "district") =>
+      keep(p, skip) && (sel == null || p.oid === sel),
+    [keep, sel],
+  );
+
+  /*
     Талбайн хүрээ, дээр нь бүртгэлийн ДУГААР шошго болж бичигдэнэ
     (`properties.t`). Аж ахуйн нэгжийн нэр биш дугаарыг сонгосон нь:
     нэр нь урт, талбай нь жижиг тул хүрээнээсээ давж гарна.
@@ -121,6 +138,20 @@ export function PetitionsDashboard() {
   const byScreening = React.useMemo<Datum[]>(() => {
     const m = new Map<string, number>();
     for (const p of rows ?? []) {
+      if (!keepSel(p, "screening")) continue;
+      m.set(p.screening, (m.get(p.screening) ?? 0) + 1);
+    }
+    return SCREENINGS.filter((s) => m.has(s.id)).map((s) => ({
+      key: s.id,
+      label: s.label,
+      value: m.get(s.id) ?? 0,
+    }));
+  }, [rows, keepSel]);
+
+  /* Шүүлтүүрийн цэс сонголтоор хумигдахгүй — шүүгдээгүй жагсаалтаас */
+  const screeningMenu = React.useMemo<Datum[]>(() => {
+    const m = new Map<string, number>();
+    for (const p of rows ?? []) {
       if (!keep(p, "screening")) continue;
       m.set(p.screening, (m.get(p.screening) ?? 0) + 1);
     }
@@ -132,6 +163,18 @@ export function PetitionsDashboard() {
   }, [rows, keep]);
 
   const byStage = React.useMemo<Datum[]>(() => {
+    const m = new Map<string, number>();
+    for (const p of rows ?? []) {
+      if (!keepSel(p, "stage")) continue;
+      m.set(p.stage, (m.get(p.stage) ?? 0) + 1);
+    }
+    return [...m]
+      .map(([k, v]) => ({ key: k, label: k, value: v }))
+      .sort((a, b) => b.value - a.value);
+  }, [rows, keepSel]);
+
+  /* Шүүлтүүрийн цэс сонголтоор хумигдахгүй — шүүгдээгүй жагсаалтаас */
+  const stageMenu = React.useMemo<Datum[]>(() => {
     const m = new Map<string, number>();
     for (const p of rows ?? []) {
       if (!keep(p, "stage")) continue;
@@ -154,33 +197,34 @@ export function PetitionsDashboard() {
   }, [rows, keep]);
 
   const stats = React.useMemo(() => {
-    const ha = shown.reduce((s, p) => s + p.ha, 0);
-    const pass = shown.filter((p) => p.screening === "pass").length;
+    const own = sel == null ? shown : shown.filter((p) => p.oid === sel);
+    const ha = own.reduce((s, p) => s + p.ha, 0);
+    const pass = own.filter((p) => p.screening === "pass").length;
     return {
-      n: shown.length,
+      n: own.length,
       ha,
       pass,
-      passPct: shown.length ? (pass / shown.length) * 100 : 0,
-      companies: new Set(shown.map((p) => p.company)).size,
+      passPct: own.length ? (pass / own.length) * 100 : 0,
+      companies: new Set(own.map((p) => p.company)).size,
     };
-  }, [shown]);
+  }, [shown, sel]);
 
   /* ---------------- Сонголтын хүрээ (zoom action) ----------------
      Сонгосон өргөдөл рүү, эс бөгөөс шүүлтүүрт таарсан бүх талбай руу
      ойртоно. Шүүлтүүр цуцлагдвал `null` — зураг анхны байрлалдаа буцна. */
   const focus = React.useMemo<Extent | null>(() => {
     if (!data) return null;
-    if (picked == null && !screening && !stage && !district) return null;
+    if (sel == null && !screening && !stage && !district) return null;
     const b = new Bounds();
-    if (picked != null) {
-      const f = data.shapes.features.find((x) => Number(x.id) === picked);
+    if (sel != null) {
+      const f = data.shapes.features.find((x) => Number(x.id) === sel);
       b.addGeometry(f?.geometry);
     } else {
       /* `shapes` нь аль хэдийн шүүгдсэн — дахин шүүх шаардлагагүй */
       for (const f of shapes.features) b.addGeometry(f.geometry);
     }
     return b.get(0.002);
-  }, [data, shapes, picked, screening, stage, district]);
+  }, [data, shapes, sel, screening, stage, district]);
 
   /** Хулгана дээр очсон өргөдөл — газрын зурагнаас */
   const hovered = React.useMemo(
@@ -190,9 +234,9 @@ export function PetitionsDashboard() {
 
   /* Тогтмол самбар: товшсон, эсвэл ЖАГСААЛТЫН мөр дээр очсон өргөдөл */
   const active = React.useMemo(() => {
-    const id = hover ?? picked;
+    const id = hover ?? sel;
     return id == null ? null : (rows?.find((p) => p.oid === id) ?? null);
-  }, [rows, hover, picked]);
+  }, [rows, hover, sel]);
 
   function reset() {
     setScreening(null);
@@ -219,8 +263,9 @@ export function PetitionsDashboard() {
     );
   }
 
-  const activeCount = (screening ? 1 : 0) + (stage ? 1 : 0) + (district ? 1 : 0);
-  const selected = picked == null ? null : (rows?.find((p) => p.oid === picked) ?? null);
+  const activeCount =
+    (screening ? 1 : 0) + (stage ? 1 : 0) + (district ? 1 : 0) + (sel != null ? 1 : 0);
+  const selected = sel == null ? null : (rows?.find((p) => p.oid === sel) ?? null);
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-2.5">
@@ -233,7 +278,7 @@ export function PetitionsDashboard() {
           onClear={() => setScreening(null)}
           width={250}
         >
-          <PickList items={byScreening} selected={screening} onPick={setScreening} />
+          <PickList items={screeningMenu} selected={screening} onPick={setScreening} />
         </FilterMenu>
 
         <FilterMenu
@@ -244,7 +289,7 @@ export function PetitionsDashboard() {
           onClear={() => setStage(null)}
           width={300}
         >
-          <PickList items={byStage} selected={stage} onPick={setStage} />
+          <PickList items={stageMenu} selected={stage} onPick={setStage} />
         </FilterMenu>
 
         <FilterMenu
@@ -365,9 +410,9 @@ export function PetitionsDashboard() {
                 <PointMap
                   points={NO_POINTS}
                   visible={NO_INDEX}
-                  shapes={{ data: shapes, selected: picked, labelZoom: 12 }}
+                  shapes={{ data: shapes, selected: sel, labelZoom: 12, edge: "hair" }}
                   basemap={basemap}
-                  onSelect={setPicked}
+                  onSelect={(oid) => setPicked(sel === oid ? null : oid)}
                   onHover={tip.onHover}
                   focus={focus}
                   cluster={false}

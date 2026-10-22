@@ -246,12 +246,6 @@
 .intro-copy h1 > span {
   color: var(--moss);
 }
-.intro-description {
-  margin-top: 22px;
-  color: var(--ink-3);
-  font-size: 14px;
-  line-height: 1.9;
-}
 .intro-actions {
   display: flex;
   align-items: center;
@@ -383,6 +377,133 @@
 .landscape-feature:hover .landscape-arrow {
   background: var(--workspace-accent);
   color: var(--workspace-accent-ink);
+}
+/* Хуанли — нүүр хуудасны баруун карт (2026-10-13). Зураг нь дэвсгэр болж
+   бараан хөшигний цаана үлдэнэ; карт горимоос үл хамааран бараан. */
+.calendar-card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 22px 26px 22px;
+}
+.calendar-card::after {
+  background: linear-gradient(180deg, #071c1cd9, #071c1cf2 60%);
+}
+.calendar-card:hover > img {
+  transform: none;
+}
+.calendar-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.calendar-kicker {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #d1ddcc;
+  font-size: 9px;
+  letter-spacing: 0.16em;
+}
+.calendar-head h2 {
+  margin-top: 8px;
+  min-height: 1.2em;
+  font-family: var(--font-manrope), sans-serif;
+  font-weight: 500;
+  /* Хэрэглэгч 2026-10-13: том үсгээр, налуу, 1px жижиг (28 → 27). */
+  font-size: clamp(19px, calc(2vw - 1px), 27px);
+  font-style: italic;
+  line-height: 1.2;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+.calendar-head h2 .num {
+  color: #d7f08b;
+}
+.calendar-nav {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.calendar-nav button {
+  display: grid;
+  place-items: center;
+  min-width: 32px;
+  height: 32px;
+  border: 1px solid #ffffff33;
+  border-radius: 50%;
+  transition:
+    background 160ms,
+    color 160ms;
+}
+.calendar-nav button:hover {
+  background: var(--workspace-accent);
+  color: var(--workspace-accent-ink);
+  border-color: transparent;
+}
+.calendar-nav .calendar-today {
+  padding-inline: 12px;
+  border-radius: 16px;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+}
+.calendar-grid {
+  flex: 1;
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  grid-template-rows: auto repeat(6, minmax(0, 1fr));
+  gap: 2px;
+}
+.calendar-wd {
+  padding-bottom: 6px;
+  border-bottom: 1px solid #ffffff1f;
+  text-align: center;
+  color: #d1ddcc;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+}
+.calendar-day {
+  display: grid;
+  place-items: center;
+  min-height: 30px;
+  font-size: 13px;
+  color: #f2f6f1;
+}
+.calendar-wd.is-weekend,
+.calendar-day.is-weekend {
+  color: #ffffff8c;
+}
+.calendar-day.is-today {
+  position: relative;
+  color: #10261a;
+  font-weight: 600;
+}
+.calendar-day.is-today::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #d7f08b;
+}
+.calendar-day.is-today {
+  isolation: isolate;
+}
+.calendar-foot {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-height: 18px;
+  padding-top: 10px;
+  border-top: 1px solid #ffffff1f;
+  color: #d1ddcc;
+  font-size: 11px;
+}
+.calendar-foot strong {
+  color: #fff;
+  font-weight: 600;
 }
 .system-summary {
   display: grid;
@@ -808,10 +929,6 @@
     font-size: clamp(35px, 9.3vw, 49px);
     margin-top: 21px;
   }
-  .intro-description {
-    font-size: 13px;
-    margin-top: 17px;
-  }
   .intro-index {
     margin-top: 22px;
   }
@@ -1072,14 +1189,810 @@
   min-width: 0;
   min-height: 0;
 }
-.dataset-panel {
+/* Зүүн багана: "Өгөгдөл засах" карт + өгөгдлийн багц (хэрэглэгч 2026-10-20).
+   Наалдалт, өндрийн хязгаар нь БАГАНАД — багцын жагсаалт үлдсэн өндрийг авна. */
+.dataset-column {
   display: flex;
   flex-direction: column;
+  gap: 10px;
   align-self: start;
   position: sticky;
   top: calc(var(--head-h) + 12px);
   height: 100%;
   max-height: calc(100dvh - var(--head-h) - var(--workspace-gutter, 3rem));
+  min-height: 0;
+}
+.dataset-edit {
+  flex-shrink: 0;
+  border: 1px solid var(--line);
+  border-radius: 15px;
+  background: var(--paper-2);
+  padding-bottom: 10px;
+}
+.dataset-edit-button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: calc(100% - 20px);
+  margin: 0 10px;
+  padding: 8px 10px;
+  border: 1px solid color-mix(in oklab, var(--moss) 28%, transparent);
+  border-radius: 8px;
+  background: color-mix(in oklab, var(--moss) 8%, var(--paper-2));
+  color: var(--moss);
+  font-size: 11.5px;
+  font-weight: 600;
+  text-align: left;
+  transition: background 150ms;
+}
+.dataset-edit-button:hover:not(:disabled) {
+  background: color-mix(in oklab, var(--moss) 16%, var(--paper-2));
+}
+.dataset-edit-button:disabled {
+  border-color: var(--line);
+  background: transparent;
+  color: var(--ink-3);
+  font-weight: 500;
+  cursor: default;
+}
+.dataset-edit-count {
+  display: grid;
+  place-items: center;
+  height: 20px;
+  margin-left: auto;
+  padding: 0 7px;
+  border-radius: 6px;
+  background: color-mix(in oklab, var(--moss) 14%, transparent);
+  font-size: 10px;
+}
+/* Засварын цонх — бүтэн дэлгэц, толгой + зураг */
+.feature-editor {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  background: var(--paper);
+}
+.feature-editor-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 58px;
+  padding: 0 14px;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--line);
+  background: var(--paper-2);
+}
+.feature-editor-head h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  margin-top: 2px;
+  font-size: 14px;
+  font-weight: 600;
+}
+/* Өгөгдлийн багцын нэр — том үсгээр, хашилтад (хэрэглэгч 2026-10-21) */
+.feature-editor-title {
+  font-size: 12px;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+.feature-editor-title::before {
+  content: "\201C";
+}
+.feature-editor-title::after {
+  content: "\201D";
+}
+.feature-editor-symbol {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  border: 1px solid color-mix(in oklab, var(--tone, var(--moss)) 35%, transparent);
+  border-radius: 9px;
+  background: color-mix(in oklab, var(--tone, var(--moss)) 12%, transparent);
+  color: var(--tone, var(--moss));
+}
+.feature-editor-dept {
+  display: block;
+  color: var(--ink-3);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.feature-editor-note {
+  color: var(--ink-3);
+  font-size: 11.5px;
+}
+.feature-editor-error {
+  overflow: hidden;
+  max-width: 50%;
+  color: var(--clay);
+  font-size: 11.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* "Өгөгдөл засах" тэмдэг ба "Гарах" товч НЭГ хэлбэртэй (хэрэглэгч 2026-10-21:
+   "ui adilhan bolgo") — өндөр, булан, зай, үсэг ижил; өнгө нь л ялгаатай */
+.feature-editor-tag,
+.feature-editor-close {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid var(--line-2);
+  border-radius: 7px;
+  font-size: 11.5px;
+  font-weight: 500;
+  line-height: 1;
+}
+.feature-editor-tag {
+  margin-left: auto;
+  border-color: color-mix(in oklab, var(--tone, var(--moss)) 35%, transparent);
+  background: color-mix(in oklab, var(--tone, var(--moss)) 12%, transparent);
+  color: var(--tone, var(--moss));
+}
+.feature-editor-close {
+  color: var(--ink-2);
+}
+.feature-editor-close:hover {
+  background: var(--paper-3);
+  color: var(--ink);
+}
+.feature-editor-map {
+  flex: 1;
+  min-height: 0;
+}
+
+/* ӨГӨГДӨЛ ЗАСАХ ЦОНХ (src/components/edit/data-editor.tsx):
+   зүүн — зураг дээр, хүснэгт доор; баруун — 400px маягт */
+/* Олон давхаргатай багцын давхарга сонгох мөр */
+.pe-layers {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+  overflow-x: auto;
+  padding: 10px 10px 0;
+  background: var(--paper);
+  scrollbar-width: thin;
+}
+.pe-layers button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  flex-shrink: 0;
+  height: 30px;
+  padding: 0 12px;
+  border: 1px solid var(--line-2);
+  border-radius: 8px;
+  color: var(--ink-2);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.pe-layers button:hover:not(:disabled) {
+  background: var(--paper-3);
+  color: var(--ink);
+}
+.pe-layers button[aria-selected="true"] {
+  border-color: color-mix(in oklab, var(--moss) 45%, transparent);
+  background: color-mix(in oklab, var(--moss) 12%, transparent);
+  color: var(--moss);
+  font-weight: 600;
+}
+.pe-layers button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.pe-layers i {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+}
+/* ГУРВАН ХЭСЭГ ТУС ТУСДАА КАРТ (хэрэглэгч 2026-10-21: "zaag uusge, shuud
+   tsugtaa ym shig haragdaad bn") — canvas дэвсгэр дээр 10px завсартай,
+   хүрээтэй; харанхуйд зураг, хүснэгт, маягт нийлж харагдаж байв */
+.pe-body {
+  display: grid;
+  /* Дунд нь 10px чирэх бариул (`.pe-split`) — завсар нь өөрөө */
+  grid-template-columns: minmax(0, 1fr) 10px var(--pe-form-w, 400px);
+  flex: 1;
+  min-height: 0;
+  padding: 10px;
+  background: var(--paper);
+}
+.pe-main {
+  display: grid;
+  /* Хүснэгт өргөн тул баганыг ЗААВАЛ хязгаарлана — эс тэгвээс зураг
+     хүснэгтийн өргөнөөр сунаж маягтыг дарна */
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) 10px var(--pe-table-h, minmax(170px, 34%));
+  overflow: hidden;
+  min-width: 0;
+  min-height: 0;
+}
+.pe-map {
+  position: relative;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid var(--line-2);
+  border-radius: 12px;
+}
+.pe-map-host {
+  position: absolute;
+  inset: 0;
+}
+.pe-map-host .esri-view-surface--inset-outline:focus::after {
+  outline: none;
+}
+.pe-map-wait {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--ink-3);
+}
+.pe-measure {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  color: var(--ink-3);
+  font-size: 11px;
+}
+.pe-measure strong {
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 600;
+}
+.pe-tools {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: color-mix(in oklab, var(--paper-2) 94%, transparent);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(12px);
+}
+.pe-tools button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 11px;
+  border-radius: 7px;
+  color: var(--ink-2);
+  font-size: 12px;
+  font-weight: 500;
+}
+.pe-tools button:hover:not(:disabled) {
+  background: var(--paper-3);
+  color: var(--ink);
+}
+.pe-tools button[aria-pressed="true"] {
+  background: color-mix(in oklab, var(--moss) 14%, transparent);
+  color: var(--moss);
+}
+.pe-tools button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.pe-table {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid var(--line-2);
+  border-radius: 12px;
+  background: var(--paper-2);
+}
+.pe-table-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 38px;
+  padding: 0 12px;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--line-2);
+  background: var(--paper-3);
+}
+.pe-count {
+  color: var(--ink-3);
+  font-size: 11px;
+}
+.pe-search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 220px;
+  height: 26px;
+  margin-left: auto;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  color: var(--ink-3);
+}
+.pe-search input {
+  flex: 1;
+  min-width: 0;
+  background: none;
+  color: var(--ink);
+  font-size: 11.5px;
+  outline: none;
+}
+/* "Мөр нэмэх" — давхаргад шинэ талбар (add-field.tsx) */
+.pe-addfield {
+  position: relative;
+  margin-left: auto;
+}
+.pe-addfield + .pe-search {
+  margin-left: 0;
+}
+.pe-addfield-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid var(--line-2);
+  border-radius: 7px;
+  color: var(--ink-2);
+  font-size: 11.5px;
+  font-weight: 500;
+}
+.pe-addfield-btn:hover,
+.pe-addfield-btn.is-on {
+  border-color: color-mix(in oklab, var(--moss) 45%, transparent);
+  background: color-mix(in oklab, var(--moss) 12%, transparent);
+  color: var(--moss);
+}
+.pe-addfield-card {
+  position: fixed;
+  z-index: 230;
+  display: grid;
+  gap: 12px;
+  width: 320px;
+  padding: 14px;
+  border: 1px solid var(--line-2);
+  border-radius: 12px;
+  background: var(--paper-2);
+  box-shadow: var(--shadow);
+}
+.pe-addfield-card header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 13px;
+}
+.pe-addfield-card header button {
+  color: var(--ink-3);
+}
+.pe-addfield-card footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.pe-addfield-name {
+  margin-top: -6px;
+  color: var(--ink-3);
+  font-size: 11px;
+}
+.pe-addfield-name code {
+  margin-left: 4px;
+  padding: 1px 6px;
+  border-radius: 5px;
+  background: var(--paper-3);
+  color: var(--ink);
+  font-family: inherit;
+}
+.pe-addfield-kinds {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+.pe-addfield-kinds button {
+  height: 32px;
+  border: 1px solid var(--line-2);
+  border-radius: 7px;
+  color: var(--ink-2);
+  font-size: 12px;
+}
+.pe-addfield-kinds button[aria-checked="true"] {
+  border-color: var(--moss);
+  background: color-mix(in oklab, var(--moss) 14%, transparent);
+  color: var(--moss);
+  font-weight: 600;
+}
+.pe-table-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+.pe-table table {
+  min-width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 11.5px;
+}
+.pe-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--line-2);
+  background: var(--paper-2);
+  color: var(--ink-3);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-align: left;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.pe-table td {
+  overflow: hidden;
+  max-width: 280px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--line);
+  color: var(--ink-2);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pe-table td.num,
+.pe-table th.num {
+  text-align: right;
+}
+.pe-table td.is-empty {
+  color: var(--ink-3);
+}
+.pe-table tbody tr {
+  cursor: pointer;
+}
+/* Шар — зураг дээрх тодруулгатай нэг өнгө */
+.pe-table tbody tr.is-hot td {
+  background: rgb(255 230 0 / 0.14);
+  color: var(--ink);
+}
+.pe-table tbody tr.is-picked td {
+  background: color-mix(in oklab, var(--moss) 12%, transparent);
+  color: var(--ink);
+}
+.pe-table tbody tr.is-picked td:first-child {
+  box-shadow: inset 3px 0 0 var(--moss);
+}
+.pe-empty {
+  padding: 18px;
+  color: var(--ink-3);
+  font-size: 12px;
+  text-align: center;
+}
+
+.pe-form {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid var(--line-2);
+  border-radius: 12px;
+  background: var(--paper-2);
+}
+.pe-idle {
+  display: grid;
+  gap: 10px;
+  padding: 16px;
+}
+.pe-idle-box {
+  display: grid;
+  place-items: center;
+  gap: 8px;
+  padding: 34px 12px;
+  border: 1px dashed var(--line-2);
+  border-radius: 10px;
+  color: var(--ink-3);
+  font-size: 12px;
+}
+.pe-idle-box strong {
+  font-weight: 500;
+}
+.pe-form-head {
+  padding: 12px 16px 10px;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--line-2);
+  background: var(--paper-3);
+}
+.pe-form-head h3 {
+  margin-top: 3px;
+  font-size: 14px;
+  font-weight: 600;
+}
+.pe-form-scroll {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  margin: 0;
+  padding: 14px 16px 18px;
+  border: 0;
+}
+/* Хадгалсан бүртгэл ТҮГЖЭЭТЭЙ — зөвхөн харах */
+.pe-form-scroll:disabled input,
+.pe-form-scroll:disabled select {
+  border-color: var(--line);
+  background: transparent;
+  color: var(--ink);
+  cursor: default;
+  opacity: 1;
+}
+.pe-locked {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 12px;
+  color: var(--ink-3);
+  font-size: 11px;
+}
+.pe-warn {
+  display: grid;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in oklab, var(--ochre) 55%, transparent);
+  border-radius: 10px;
+  background: color-mix(in oklab, var(--ochre) 12%, transparent);
+}
+.pe-warn p {
+  display: flex;
+  gap: 8px;
+  color: var(--ink);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.pe-warn p svg {
+  flex-shrink: 0;
+  margin-top: 1px;
+  color: var(--ochre);
+}
+.pe-warn strong {
+  font-weight: 600;
+}
+.pe-loc {
+  display: grid;
+  gap: 9px;
+  margin: 0 0 16px;
+  padding: 10px 12px 12px;
+  border: 1px solid color-mix(in oklab, var(--moss) 30%, transparent);
+  border-radius: 10px;
+  background: color-mix(in oklab, var(--moss) 6%, transparent);
+}
+.pe-loc.is-bad {
+  border-color: var(--clay);
+}
+.pe-loc legend {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 5px;
+  color: var(--moss);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.pe-loc-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.pe-loc label,
+.pe-field {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+.pe-loc label > span,
+.pe-field > span {
+  color: var(--ink-3);
+  font-size: 10.5px;
+  font-weight: 500;
+}
+.pe-field > span b {
+  color: var(--clay);
+}
+.pe-loc input,
+.pe-field input,
+.pe-field select {
+  width: 100%;
+  height: 32px;
+  padding: 0 9px;
+  border: 1px solid var(--line-2);
+  border-radius: 7px;
+  background: var(--paper);
+  color: var(--ink);
+  font-size: 12.5px;
+  outline: none;
+}
+.pe-loc input:focus,
+.pe-field input:focus,
+.pe-field select:focus {
+  border-color: var(--moss);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--moss) 18%, transparent);
+}
+.pe-loc input[aria-invalid="true"],
+.pe-field.is-bad input,
+.pe-field.is-bad select {
+  border-color: var(--clay);
+}
+.pe-loc input.num,
+.pe-field input.num {
+  text-align: right;
+}
+.pe-pick {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 30px;
+  border: 1px solid var(--line-2);
+  border-radius: 7px;
+  color: var(--ink-2);
+  font-size: 11.5px;
+}
+.pe-pick:hover {
+  background: var(--paper-3);
+  color: var(--ink);
+}
+.pe-pick.is-on {
+  border-color: var(--moss);
+  background: color-mix(in oklab, var(--moss) 14%, transparent);
+  color: var(--moss);
+}
+.pe-place {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 16px;
+  color: var(--ink-2);
+  font-size: 11.5px;
+}
+.pe-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px 10px;
+}
+.pe-field.is-wide {
+  grid-column: 1 / -1;
+}
+.pe-err {
+  color: var(--clay);
+  font-size: 10.5px;
+  font-style: normal;
+}
+.pe-form-foot {
+  display: grid;
+  gap: 8px;
+  padding: 12px 16px;
+  flex-shrink: 0;
+  border-top: 1px solid var(--line);
+}
+.pe-actions,
+.pe-confirm {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.pe-actions .pe-primary {
+  margin-left: auto;
+}
+.pe-confirm span {
+  margin-right: auto;
+  color: var(--ink);
+  font-size: 12px;
+}
+.pe-primary,
+.pe-ghost,
+.pe-danger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 14px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.pe-primary {
+  background: var(--moss);
+  color: var(--paper);
+}
+.pe-primary:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.pe-ghost {
+  border: 1px solid var(--line-2);
+  color: var(--ink-2);
+  font-weight: 500;
+}
+.pe-ghost:hover {
+  background: var(--paper-3);
+  color: var(--ink);
+}
+.pe-del {
+  width: 32px;
+  padding: 0;
+  color: var(--clay);
+}
+.pe-danger {
+  background: var(--clay);
+  color: #fff;
+}
+.pe-notice {
+  font-size: 11.5px;
+}
+.pe-notice.is-ok {
+  color: var(--moss);
+}
+.pe-notice.is-bad {
+  color: var(--clay);
+}
+.pe-split {
+  position: relative;
+  touch-action: none;
+}
+.pe-split.is-col {
+  cursor: col-resize;
+}
+.pe-split.is-row {
+  cursor: row-resize;
+}
+.pe-split::after {
+  content: "";
+  position: absolute;
+  border-radius: 2px;
+  background: var(--line-2);
+  transition: background 0.15s;
+}
+.pe-split.is-col::after {
+  top: 50%;
+  left: 3px;
+  width: 4px;
+  height: 36px;
+  translate: 0 -50%;
+}
+.pe-split.is-row::after {
+  top: 3px;
+  left: 50%;
+  width: 36px;
+  height: 4px;
+  translate: -50% 0;
+}
+.pe-split:hover::after,
+.pe-split.is-drag::after {
+  background: var(--moss);
+}
+@media (max-width: 960px) {
+  .pe-body {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 10px;
+  }
+  .pe-split.is-col {
+    display: none;
+  }
+}
+.dataset-panel {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
   min-height: 0;
   overflow: hidden;
   border: 1px solid var(--line);
@@ -1098,9 +2011,12 @@
 }
 .dataset-panel-heading h2 {
   margin-top: 3px;
-  font-size: 14px;
+  font-size: 12px;
   font-weight: 600;
   line-height: 1.5;
+  /* ТОМ ҮСГЭЭР (хэрэглэгч 2026-10-16) — бүлгийн нэртэй нэг хэв */
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
 }
 .dataset-eyebrow {
   display: block;
@@ -1219,6 +2135,49 @@
   font-size: 9px;
   color: var(--ink-3);
 }
+/* Жагсаалт доторх задардаг бүлэг (`SourceTabs sections`) — мөр нь
+   сэдвийн мөртэй нэг хэмжээтэй, хүүхдүүд нь доор нь догол мөрөөр. */
+.dataset-panel-group {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  width: 100%;
+  padding: 8px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  text-align: left;
+  transition: background 150ms;
+}
+.dataset-panel-group:hover {
+  background: var(--paper-3);
+}
+/* Бүлгийн нэр ТОМ ҮСГЭЭР (хэрэглэгч 2026-10-16) — сэдвийн мөрөөс ялгарна.
+   Үгийн дундуур таслахгүй (`anywhere` нь урт том үсгийн үгийг хуваана). */
+.dataset-panel-group strong {
+  color: var(--ink);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  overflow-wrap: normal;
+}
+.dataset-panel-group.is-holding .dataset-panel-item-icon,
+.dataset-panel-group.is-holding strong {
+  color: var(--moss);
+}
+.dataset-panel-chevron {
+  flex-shrink: 0;
+  margin-top: 3px;
+  color: var(--ink-3);
+  transition: transform 150ms;
+}
+.dataset-panel-children {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 2px 0 4px 16px;
+  padding-left: 6px;
+  border-left: 1px solid var(--line);
+}
 .dataset-panel-check {
   flex-shrink: 0;
   margin-top: 3px;
@@ -1280,9 +2239,13 @@
     grid-template-columns: 1fr;
     height: auto;
   }
-  .dataset-panel {
+  .dataset-column {
     position: static;
     height: auto;
+    max-height: none;
+  }
+  .dataset-panel {
+    flex: none;
     max-height: 320px;
   }
   .dataset-panel-heading {
@@ -1400,6 +2363,28 @@
 .bar-chart-ticks .is-selected {
   color: var(--moss);
   font-weight: 600;
+}
+/*
+  НЯГТ БАГАНА — өдөр тутмын цуваа (баавгайн бүртгэл, 2026-10-14).
+  Анхдагч 8px зайтай үед 60 гаруй багана 300px картад багтахгүй, багана
+  бүрийн өргөн тэг болж диаграм хоосон харагдаж байв. Шошго сийрэг
+  (сарын 1, 15) тул нүднээсээ халин бичигдэнэ.
+*/
+.bar-chart-dense .bar-chart-columns,
+.bar-chart-dense .bar-chart-ticks {
+  gap: 1px;
+}
+.bar-chart-dense .bar-chart-column {
+  border-radius: 1px;
+}
+.bar-chart-dense .bar-chart-ticks span {
+  overflow: visible;
+  text-overflow: clip;
+}
+/* Шошго хөрш баганын зай руу хальж болно — тэр хөрш нь хоосон шошготой */
+.bar-chart-open-ticks .bar-chart-ticks span {
+  overflow: visible;
+  text-overflow: clip;
 }
 /*
   ОНООР ДАВХАРЛАСАН ЗУРВАС (`StackedBarChart`, ойн төлбөр, 2026-10-06).
@@ -1786,6 +2771,13 @@
 }
 .row-chart.is-inline .row-chart-track {
   grid-column: 2;
+  /* Утга (3-р багана) зурвасаас ӨМНӨ DOM-д байдаг тул автомат байрлал
+     зурвасыг ДАРААГИЙН мөр рүү түлхэж байв — мөрийг тогтооно */
+  grid-row: 1;
+}
+.row-chart.is-inline .row-chart-label i {
+  margin-right: 6px;
+  vertical-align: 1px;
 }
 .row-chart.is-inline .row-chart-track-inner {
   height: 3px;
@@ -2229,6 +3221,87 @@
   overflow: visible;
   max-height: none;
 }
+/* ⚠ Нэвчилтийн симуляцийн баруун багана ГҮЙЛГҮҮРГҮЙ (хэрэглэгч 2026-10-12:
+   "баруун панелийн scroll-ийг del"). Картууд нягт тул ихэнх дэлгэцэд багтана;
+   нам дэлгэц дээр хулганы дугуйгаар гүйсээр — зөвхөн зураас нь харагдахгүй. */
+.soil-side.is-sim {
+  scrollbar-width: none;
+}
+.soil-side.is-sim::-webkit-scrollbar {
+  display: none;
+}
+
+/* ⚠ Нэвчилтийн симуляцийн ГУЛСУУР — хэмжих хэрэгслийн хэлбэр (хэрэглэгч
+   2026-10-12: "гүйлгэж байгаа зүйлийн дизайн өөрчил"). Хөтчийн анхдагч зузаан
+   зам, том дугуй бариулын оронд: 3px нимгэн зам (утга хүртэл `--tone`, цааш нь
+   `--line-2`), доор нь 10%-ийн хуваарийн зураас, бариул нь 4 × 14px босоо ЗҮҮ
+   (дэвсгэрийн өнгөт хүрээтэй — замыг таслаж сууна). Дүүргэлтийн хувь `--pct`
+   нь inline-аар ирнэ. Булан хурц (`rounded-xs`), сүүдэргүй. */
+.sim-range {
+  --pct: 0%;
+  appearance: none;
+  -webkit-appearance: none;
+  display: block;
+  width: 100%;
+  height: 18px;
+  margin: 0;
+  cursor: pointer;
+  background:
+    linear-gradient(to right, var(--line-2) 1px, transparent 1px) left bottom / 10% 4px repeat-x,
+    linear-gradient(to left, var(--line-2) 1px, transparent 1px) right bottom / 10% 4px no-repeat;
+}
+.sim-range:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+.sim-range:focus {
+  outline: none;
+}
+.sim-range::-webkit-slider-runnable-track {
+  height: 3px;
+  border-radius: 1px;
+  background: linear-gradient(to right, var(--tone) var(--pct), var(--line-2) var(--pct));
+}
+.sim-range::-moz-range-track {
+  height: 3px;
+  border-radius: 1px;
+  background: var(--line-2);
+}
+.sim-range::-moz-range-progress {
+  height: 3px;
+  border-radius: 1px;
+  background: var(--tone);
+}
+.sim-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 5px;
+  height: 14px;
+  margin-top: -5.5px;
+  border: 0;
+  border-radius: 1px;
+  background: var(--tone);
+  box-shadow: 0 0 0 2px var(--paper-2);
+  transition: transform 0.12s;
+}
+.sim-range::-moz-range-thumb {
+  width: 5px;
+  height: 14px;
+  border: 0;
+  border-radius: 1px;
+  background: var(--tone);
+  box-shadow: 0 0 0 2px var(--paper-2);
+}
+.sim-range:hover::-webkit-slider-thumb,
+.sim-range:active::-webkit-slider-thumb {
+  transform: scaleY(1.2);
+}
+.sim-range:focus-visible::-webkit-slider-thumb {
+  box-shadow: 0 0 0 2px var(--paper-2), 0 0 0 3px var(--tone);
+}
+.sim-range:focus-visible::-moz-range-thumb {
+  box-shadow: 0 0 0 2px var(--paper-2), 0 0 0 3px var(--tone);
+}
 
 @media (max-width: 640px) {
   .analytics-overview {
@@ -2602,4 +3675,49 @@
 .soil-scene-view .is-drawing .esri-view-surface,
 .soil-scene-view .is-drawing canvas {
   cursor: crosshair;
+}
+
+/*
+  3D ХЭМЖИЛТИЙН ЦОНХ ({@link src/lib/scene-tools.ts}) — хэрэгсэл сонгох мөр,
+  доор нь Esri-ийн идэвхтэй хэрэгслийн самбар. Бүх 3D зурагт нэг загвар.
+*/
+.scene-measure {
+  width: 260px;
+  background: var(--paper-2);
+  color: var(--ink);
+}
+.scene-measure-bar {
+  display: flex;
+  gap: 4px;
+  padding: 8px;
+  border-bottom: 1px solid var(--line);
+}
+.scene-measure-bar button {
+  flex: 1 1 0;
+  padding: 5px 6px;
+  border: 1px solid var(--line-2);
+  border-radius: 2px;
+  font-size: 11.5px;
+  color: var(--ink-2);
+  white-space: nowrap;
+  transition: color 120ms, border-color 120ms, background 120ms;
+}
+.scene-measure-bar button:hover {
+  color: var(--ink);
+}
+.scene-measure-bar button.is-on {
+  color: var(--moss);
+  border-color: color-mix(in oklab, var(--moss) 60%, transparent);
+  background: color-mix(in oklab, var(--moss) 10%, transparent);
+}
+.scene-measure-bar button.is-clear {
+  flex: 0 0 auto;
+}
+.scene-measure .esri-measurement,
+.scene-measure .esri-widget {
+  background: transparent;
+}
+/* Esri-ийн англи заавар ("Start to measure by clicking …") — дэлгэцэд заавар бичихгүй дүрэм */
+.scene-measure [class*="hint"] {
+  display: none;
 }

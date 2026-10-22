@@ -45,6 +45,14 @@ import { pliColor, readableText } from "@/lib/soil";
 import { Bounds } from "@/lib/extent";
 import { cn, num } from "@/lib/utils";
 
+/*
+  Нүхэн жорлонгийн нягтралын өнгө — диаграмуудын PLI шатлалын дулаан
+  талаас (`PLI_RAMP`: шар #e0bd4f → улбар #df8146). Нэг өнгөний гэр бүлийн
+  тунгалагийн шатлал хэвээр; урьд нь платформын cyan байсан тул зураг,
+  диаграм хоёр өөр хэл ярьж байв (хэрэглэгч 2026-10-16).
+*/
+const PIT_FIRE = { glow: "#df8146", mid: "#e0bd4f", core: "#fff3d6" };
+
 const PointMap = dynamic(
   () => import("@/components/wells/map").then((m) => m.WellsMap),
   {
@@ -763,6 +771,7 @@ export function OrchinDashboard() {
                   focus={focus}
                   overlays={overlays}
                   cluster={false}
+                  firefly={PIT_FIRE}
                 />
               ) : (
                 <PointMap

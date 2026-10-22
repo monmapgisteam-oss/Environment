@@ -42,6 +42,7 @@ export const WILDLIFE: LayerSet = {
     "A08_minj_talbai",
     "A08_minj_marshrut",
     "A08_minj_ba_busad",
+    "A09_baawgai_burtgel",
   ],
 
   /*
@@ -81,6 +82,7 @@ export const WILDLIFE: LayerSet = {
     A08_minj_talbai: "Минжний талбай",
     A08_minj_marshrut: "Минжний маршрут",
     A08_minj_ba_busad: "Минж ба бусад",
+    A09_baawgai_burtgel: "Баавгай тохиолдлын бүртгэл",
   },
 
   /*
@@ -91,6 +93,8 @@ export const WILDLIFE: LayerSet = {
   */
   hues: [
     292, 285, 278, 271, 264, 257, 250, 243, 236, 229, 222, 215, 208, 201, 194,
+    /* A09 — шинэ давхарга жагсаалтын төгсгөлд, өнцөг нь дарааллаа дагана */
+    187,
   ],
 
   /*

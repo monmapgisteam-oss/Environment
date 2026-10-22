@@ -176,7 +176,7 @@ type Deps = {
   MeshMaterial: new (p?: object) => unknown;
   MeshTexture: new (p?: object) => unknown;
   Graphic: new (p?: object) => unknown;
-  layer: { removeAll: () => void; add: (g: unknown) => void };
+  layer: { removeAll: () => void; add: (g: unknown) => void; remove: (g: unknown) => void };
   zAt: (lon: number, lat: number) => number;
   valid: (lon: number, lat: number) => boolean;
   exs: () => number;
@@ -342,10 +342,37 @@ export function createPlumes(dep: Deps) {
     return q ? q[k] : 0;
   }
 
+  /*
+    ⚠⚠ ИЖИЛ ЗУРГИЙГ ДАХИН ТАВИХГҮЙ (хэрэглэгч 2026-10-12: "E.coli дээр
+    тавихаар анивчаад байна"). Зураг бүрд ШИНЭ canvas текстур хэрэгтэй
+    (SDK эх обьектоор кэшлэдэг) тул солих бүрд текстур GPU-д ачаалагдах
+    хооронд хоосон кадр гардаг. Азотын тархалт алхам бүрд ургадаг тул тэр
+    кадр далдлагддаг; E.coli хэдхэн хоногт тогтворждог тул 60 хоногийн
+    алхмууд ИЖИЛ зураг өгч, тоглуулахад зөвхөн асах-унтрах нь үлдэнэ.
+    Одоо атлас ба оройн гарын үсэг өмнөхтэй ижил бол mesh ХӨНДӨХГҮЙ.
+  */
+  let cur: unknown = null;
+  let lastSig = 0;
+  function show(g: unknown | null, sig: number) {
+    if (cur) dep.layer.remove(cur);
+    cur = g;
+    lastSig = g ? sig : 0;
+    if (g) dep.layer.add(g);
+  }
+  /** FNV-1a — атласын пиксел ба оройн байрлалаар */
+  function signature(px: Uint8ClampedArray, pos: number[], faces: number) {
+    let h = 0x811c9dc5 ^ faces;
+    for (let i = 0; i < px.length; i += 1) h = Math.imul(h ^ px[i], 0x01000193);
+    for (const v of pos) h = Math.imul(h ^ Math.round(v * 1e6), 0x01000193);
+    return h >>> 0 || 1;
+  }
+
   function paint() {
     last = performance.now();
-    dep.layer.removeAll();
-    if (!path || !data) return emit(null, null);
+    if (!path || !data) {
+      show(null, 0);
+      return emit(null, null);
+    }
     const ramp = species === "N" ? RN3 : RE3;
     const e = dep.exs();
     /* хэрчим бүрийн нэгж вектор (метр) ба хасагдсан тал руу шилжилт */
@@ -523,9 +550,11 @@ export function createPlumes(dep: Deps) {
       }
       faces.push(base, base + 1, base + 3, base, base + 3, base + 2);
     });
-    actx.putImageData(img, 0, 0);
     emit(grid, n ? deep : null);
-    if (!n) return;
+    if (!n || !faces.length) return show(null, 0);
+    const sig = signature(img.data, pos, faces.length);
+    if (cur && sig === lastSig) return;
+    actx.putImageData(img, 0, 0);
 
     /*
       ⚠⚠ ГЕОЛОГИЙН ХАНА (блокийн ёроолоос гүний ус хүртэлх, хадны бүтэцтэй
@@ -537,7 +566,6 @@ export function createPlumes(dep: Deps) {
       ХЭВЭЭР. Хана дахин хэрэгтэй бол git түүхээс (`localDepth`, `geoMat`).
     */
     /* Бохирдлын дөрвөлжингүүд — блокийн атлас */
-    if (!faces.length) return;
     const mesh = new dep.Mesh({
       spatialReference: dep.SR,
       vertexAttributes: { position: new Float64Array(pos), uv: new Float32Array(uv) },
@@ -552,8 +580,9 @@ export function createPlumes(dep: Deps) {
         }),
       ],
     });
-    dep.layer.add(
+    show(
       new dep.Graphic({ geometry: mesh, symbol: { type: "mesh-3d", symbolLayers: [{ type: "fill", material: { color: [255, 255, 255, 1] } }] } }),
+      sig,
     );
   }
 
@@ -611,6 +640,8 @@ export function createPlumes(dep: Deps) {
       gen++;
       path = null;
       dep.layer.removeAll();
+      cur = null;
+      lastSig = 0;
       emit(null, null);
     },
     steps,

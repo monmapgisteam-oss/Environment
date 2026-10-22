@@ -107,6 +107,8 @@ import {
   type LayerInfo,
 } from "@/lib/portal-layers";
 import { cn, num } from "@/lib/utils";
+import { NoAccess, useAccess } from "@/components/auth/access";
+import type { TabRule } from "@/lib/access";
 import {
   Composition,
   Matrix,
@@ -519,12 +521,72 @@ function labelFor(hit: Loaded, oid: number): string {
  * мегабайт дэмий явна. Нэг удаа татсаныг санах ойд үлдээнэ — дахин
  * асаахад шууд гарна.
  */
+/*
+  ЦЭСИЙН НАРИЙВЧИЛСАН ЭРХ ({@link src/lib/access.ts} `tabRule`, хэрэглэгч
+  2026-10-20). Давхарга, үзүүлэлт, диаграмыг бүрдлээс нь (`LayerSet`)
+  хасна — самбарын дотоод логик хөндөгдөхгүй; газрын зураг ба дэлгэрэнгүй
+  цонхыг туг дамжуулж нууна.
+  ⚠ Давхаргын ӨНГӨ ХЭВЭЭР: өнцөг нь жагсаалтын байрлалаас гардаг тул
+  үлдсэн давхарга бүр ӨӨРИЙН анхны өнцгөө авч явна.
+  ⚠ Дүрэм солигдоход самбар `key`-ээр дахин үүснэ (асаалттай давхарга,
+  шүүлт хуучин бүрдлээрээ үлдэхгүй).
+*/
+function restrict(set: LayerSet, rule: TabRule): LayerSet | null {
+  const layers = rule.layers ? set.layers.filter((id) => rule.layers!.includes(id)) : [...set.layers];
+  if (!layers.length) return null;
+  const views = rule.views;
+  const out: LayerSet = {
+    ...set,
+    layers,
+    hues: layers.map((id) => set.hues[set.layers.indexOf(id) % set.hues.length]),
+    open: set.open?.filter((id) => layers.includes(id)),
+    stats: set.stats?.filter((st) => layers.includes(st.layer)),
+  };
+  if (views && !views.includes("overview")) out.overview = false;
+  if (views && !views.includes("charts")) out.noCharts = true;
+  return out;
+}
+
 export function PortalLayersDashboard({
   set,
   presentation,
+  access,
 }: {
   set: LayerSet;
   presentation?: "environment";
+  /** Эрхийн хязгаарыг унших хэсэг ба цэс (өгөөгүй бол хязгааргүй) */
+  access?: { scope: string; tab: string };
+}) {
+  const { tabRule } = useAccess();
+  const scope = access?.scope;
+  const tab = access?.tab;
+  const { rule, shown } = React.useMemo(() => {
+    const r = scope && tab ? tabRule(scope, tab) : null;
+    return { rule: r, shown: r ? restrict(set, r) : set };
+  }, [set, tabRule, scope, tab]);
+  if (!shown) return <NoAccess text="Энэ цэсийн давхаргыг харах эрх байхгүй байна" />;
+  const views = rule?.views;
+  return (
+    <LayersBoard
+      key={rule ? JSON.stringify(rule) : ""}
+      set={shown}
+      presentation={presentation}
+      noMap={!!views && !views.includes("map")}
+      noRecord={!!views && !views.includes("record")}
+    />
+  );
+}
+
+function LayersBoard({
+  set,
+  presentation,
+  noMap = false,
+  noRecord = false,
+}: {
+  set: LayerSet;
+  presentation?: "environment";
+  noMap?: boolean;
+  noRecord?: boolean;
 }) {
   const environment = presentation === "environment";
   const [showCharts, setShowCharts] = React.useState(true);
@@ -1200,6 +1262,8 @@ export function PortalLayersDashboard({
       narrowed: boolean;
       /** Мөр шүүлтэд нийцэх эсэх; `skip` нь алгасах шүүлтийн түлхүүрүүд */
       passes: (row: Row, skip?: readonly string[]) => boolean;
+      /** Зөвхөн талбарын шүүлт ба хил — бичлэгийн сонголтыг үл тооно */
+      listPasses: (row: Row) => boolean;
       /** Шүүлтийн СУУРЬ мөрүүд — хилээс гадуурхгүй ({@link LayerSet.withinUB}) */
       inside: Row[];
     }[] = [];
@@ -1250,7 +1314,20 @@ export function PortalLayersDashboard({
         });
       }
 
-      const passes = (row: Row, skip: readonly string[] = []) =>
+      /* Улаанбаатараас гадуурх бүртгэл ({@link LayerSet.withinUB}) */
+      const outside = set.withinUB?.includes(id) ? outsideUB(hit) : null;
+      const outRows = outside?.size
+        ? new Set(
+            Object.entries(hit.data.rows)
+              .filter(([k]) => outside.has(Number(k)))
+              .map(([, r]) => r),
+          )
+        : null;
+
+      /* ЗӨВХӨН талбарын шүүлт ба хилийн хасалт — бичлэгийн сонголтыг
+         үл тоох жагсаалтад (газрын жагсаалт нь сонгогч тул) */
+      const fieldPasses = (row: Row, skip: readonly string[] = []) =>
+        !outRows?.has(row) &&
         fields.every((f) => {
           if (skip.includes(f)) return true;
           const keys = keyBy.get(f)?.(row);
@@ -1285,11 +1362,23 @@ export function PortalLayersDashboard({
       /* Өөр давхаргын бичлэг сонгогдсон бол энэ давхаргаас юу ч
          үлдэхгүй */
       const muted = chosen != null && only == null;
+      const onlyRow = only != null ? hit.data.rows[only] : undefined;
+
+      /*
+        ⚠⚠ ШҮҮЛТ + СОНГОЛТ НЭГ ДҮРЭМД (2026-10-20, хэрэглэгч: "map
+        deerees point songohod busad chartuud shuudehgui bn"). Урьд нь
+        `passes` нь ЗӨВХӨН талбарын шүүлтийг шалгадаг байсан тул түүгээр
+        өөрөө тоолдог картууд (хөндлөн хүснэгт, дүүргийн зурвас, байршлын
+        карт) зураг дээрх сонголтыг ҮЛ ТООДОГ байв. Одоо сонголт, хилийн
+        хасалт хоёр энд ороод бүх хэрэглэгчид нэг дор хүрнэ.
+      */
+      const passes = (row: Row, skip: readonly string[] = []) =>
+        !muted &&
+        (only == null || row === onlyRow) &&
+        fieldPasses(row, skip);
 
       const rows: Row[] = [];
       const oids = new Set<number>();
-      /* Улаанбаатараас гадуурх бүртгэл ({@link LayerSet.withinUB}) */
-      const outside = set.withinUB?.includes(id) ? outsideUB(hit) : null;
       if (!muted)
         for (const [oid, row] of Object.entries(hit.data.rows)) {
           if (outside?.has(Number(oid))) continue;
@@ -1345,6 +1434,7 @@ export function PortalLayersDashboard({
         charts,
         narrowed: muted || only != null || fields.length > 0,
         passes,
+        listPasses: (row: Row) => fieldPasses(row),
         inside,
       });
     }
@@ -1384,7 +1474,7 @@ export function PortalLayersDashboard({
     /* ⚠ `tidy` бүрдэлд давхаргын БҮХ задаргаа НЭГ картад нийлдэг
        ({@link AxisCard}) тул хуваах зүйл байхгүй. Хуваавал тэр карт
        хоёр багананд тасарч, хэрэглэгчийн хүссэн нэгтгэл алдагдана. */
-    if (picker || !showCharts || set.tidy) return null;
+    if (picker || !showCharts || set.tidy || set.noCharts) return null;
 
     const keys = new Set<string>();
 
@@ -1461,7 +1551,7 @@ export function PortalLayersDashboard({
       }
     }
     return keys;
-  }, [picker, showCharts, views, set.lead, set.tidy]);
+  }, [picker, showCharts, views, set.lead, set.tidy, set.noCharts]);
 
   /* Сонгосон УТГА бүрийг тоолно, талбарыг биш: "3 идэвхтэй" гэдэг нь
      гурван утга сонгосныг хэлэх ёстой */
@@ -2570,7 +2660,9 @@ export function PortalLayersDashboard({
         if (stats.ha > 0 && /(^|,\s*)га$/i.test(b.measure)) continue;
         if (seen.has(b.measure)) continue;
         seen.add(b.measure);
-        const total = b.values.reduce((sum, d) => sum + d.value, 0);
+        /* Диаграм ӨӨРИЙН талбарын шүүлтийг алгасдаг тул нийлбэрийг
+           шүүгдсэн мөрөөс дахин бодно — үзүүлэлт бүртгэлийн тоотой зөрөхгүй */
+        const total = b.recount(v.rows).values.reduce((sum, d) => sum + d.value, 0);
         if (!(total > 0)) continue;
         out.push({
           key: `${v.id}:${b.id}`,
@@ -2584,8 +2676,8 @@ export function PortalLayersDashboard({
       for (const b of v.charts) {
         if (b.kind !== "year") continue;
         /* Хоосон жил ч тэг утгаар цуваанд ордог тул муж нь БҮРТГЭЛТЭЙ
-           хоёр үзүүрээр тогтоно */
-        const filled = b.values.filter((d) => d.value > 0);
+           хоёр үзүүрээр тогтоно; шүүгдсэн мөрөөс (дээрхтэй нэг шалтгаан) */
+        const filled = b.recount(v.rows).values.filter((d) => d.value > 0);
         if (filled.length < 2) continue;
         const from = filled[0].label;
         const to = filled[filled.length - 1].label;
@@ -3306,7 +3398,7 @@ export function PortalLayersDashboard({
      */
     withCross = false,
   ) =>
-    views.map(({ id, hit, charts, rows, oids, passes }) => {
+    views.map(({ id, hit, charts, rows, oids, passes, listPasses }) => {
       /* ЗӨВХӨН ЗУРАГТ гарах давхарга ({@link LayerSet.mapOnly},
          {@link LayerSet.mapPicker}) */
       /* Заасан талбартай давхарга ({@link LayerSet.charts}) зурагт
@@ -4395,7 +4487,7 @@ export function PortalLayersDashboard({
               base={uidBase(id)}
               tone={tone}
               word={set.record}
-              passes={passes}
+              passes={listPasses}
               palette={palettes[id]}
               picked={picked}
               onPick={(uid) => {
@@ -5008,7 +5100,7 @@ export function PortalLayersDashboard({
            газрын зургийг 300px руу шахна — 440 нь нэгдсэн хүснэгтийн
            гарчгийг хоёр мөрөнд багтааж, зурагт зай үлдээнэ. */
         right={
-          chartsShown
+          chartsShown && !noMap
             ? set.tidy
               ? picker
                 ? 440
@@ -5169,7 +5261,9 @@ export function PortalLayersDashboard({
           </div>
         ) : null}
 
-        {/* ---- БАРУУН: зураг, доор нь диаграмын зурвас ---- */}
+        {/* ---- БАРУУН: зураг, доор нь диаграмын зурвас ----
+             Зураг хаалттай эрхэд диаграм төв баганыг эзэлнэ */}
+        {noMap ? (chartsBlock ?? <NoAccess text="Энэ цэсэд харах хэсэг сонгогдоогүй байна" />) : (
         <div className="flex min-h-0 flex-col gap-2">
           <Card className="relative min-h-[300px] flex-1 overflow-hidden">
             <div className="relative h-full w-full">
@@ -5187,6 +5281,7 @@ export function PortalLayersDashboard({
                 points={points.at.oid.length ? points.at : NO_POINTS}
                 colors={points.colors ?? undefined}
                 dots={dots}
+                pointScale={set.pointScale}
                 visible={points.at.oid.length ? visible : NO_INDEX}
                 shapes={{
                   data: shapes,
@@ -5252,9 +5347,30 @@ export function PortalLayersDashboard({
                 ⚠ Төлөвийн мэдэгдэл нь ҮЛДЭНЭ: давхцал тооцогдож
                 дуустал, хязгаарт хүрсэн эсэхийг хэлэх ёстой.
               */}
-              {/* Суурь зургийн тэмдгийн ЯГ ДООР (top-2.5 + 28px + 8px) */}
+              {/* Суурь зургийн тэмдгийн ЯГ ДООР (top-2.5 + 28px + 8px):
+                  шошгын унтраалга, түүний доор давхаргын сонголт (хэрэглэгч
+                  2026-10-16: "basemap iconii door bairluul") */}
+              <div className="absolute top-[46px] right-2.5 z-[15] flex flex-col items-end gap-1.5">
+                <button
+                  type="button"
+                  aria-pressed={showLabels}
+                  onClick={() => setShowLabels((v) => !v)}
+                  title={
+                    showLabels
+                      ? "Шошгыг унтраах"
+                      : `Шошгыг асаах (1:${num(LABEL_SCALE)}-аас ойртоход)`
+                  }
+                  className={cn(
+                    "elevated flex size-8 items-center justify-center rounded-xs border backdrop-blur-md transition-colors",
+                    showLabels
+                      ? "border-data/50 bg-data/15 text-ink"
+                      : "border-line bg-paper/85 text-ink-3 hover:text-ink",
+                  )}
+                >
+                  <Tag size={14} strokeWidth={1.75} />
+                </button>
               {mapIds.length ? (
-                <div className="absolute top-[46px] right-2.5 z-[15]">
+                <div>
                   <MapLayerPicker
                     items={mapIds.map((id) => {
                       const info = infos[id];
@@ -5275,6 +5391,7 @@ export function PortalLayersDashboard({
                   />
                 </div>
               ) : null}
+              </div>
               {/* ⚠ НЭГЖ ТАЛБАРЫН ТОВЧ үнэлгээний хэлтэст ГАРАХГҮЙ (хэрэглэгч,
                   2026-10-06: "тэр нэгж талбарыг del, хэлтсийн бүх
                   самбарын зураг дээр байхгүй") — бусад хэлтэст хэвээр */}
@@ -5430,23 +5547,6 @@ export function PortalLayersDashboard({
                 />
               ) : null}
 
-              {/* Шошгын унтраалга — суурь зургийн товчны хажууд */}
-              <button
-                onClick={() => setShowLabels((v) => !v)}
-                title={
-                  showLabels
-                    ? "Шошгыг унтраах"
-                    : `Шошгыг асаах (1:${num(LABEL_SCALE)}-аас ойртоход)`
-                }
-                className={cn(
-                  "elevated absolute top-2 right-11 z-10 rounded-xs border p-1.5 backdrop-blur-md transition-colors",
-                  showLabels
-                    ? "border-data/50 bg-data/15 text-ink"
-                    : "border-line bg-paper/85 text-ink-3 hover:text-ink",
-                )}
-              >
-                <Tag size={13} strokeWidth={1.75} />
-              </button>
 
               <MapTip state={tip} width={248}>
                 {hovered ? (
@@ -5490,7 +5590,7 @@ export function PortalLayersDashboard({
               байв. Платформын бусад ес самбартай ижил шийдэл: чирж
               зөөгддөг, хэмжээ нь солигддог хөвөгч самбар.
             */}
-              {active ? (
+              {active && !noRecord ? (
                 <RecordPanel
                   hit={active.hit}
                   row={active.row}
@@ -5563,9 +5663,10 @@ export function PortalLayersDashboard({
             ерөнхийлсөн
           </p>
         </div>
+        )}
 
         {/* ---- БАРУУН: ангиллын задаргаа ---- */}
-        {chartsBlock}
+        {noMap ? null : chartsBlock}
       </Columns>
     </div>
   );
