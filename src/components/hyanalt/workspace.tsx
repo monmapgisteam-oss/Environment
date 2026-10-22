@@ -64,7 +64,7 @@ const WasteDashboard = dynamic(
   { ssr: false, loading: spinner },
 );
 
-const TABS = [
+export const TABS = [
   {
     /*
       Хоёр жилийн бүртгэл НЭГ табанд: гэрчилгээний дугаар давхцахгүй ч
@@ -156,7 +156,7 @@ const CHECKABLE = new Set(
 export function HyanaltWorkspace() {
   /* Сонголт хадгалагдана — хэрэглэгч ажлаа тасалдуулаад буцаж ирэхэд
      хамгийн сүүлд харж байсан самбар нээгдэнэ */
-  const [tab, pick] = useStoredTab<TabId>("hyanalt.tab", IDS, "repair");
+  const [tab, pick] = useStoredTab<TabId>("hyanalt.tab", IDS, "repair", "hyanalt");
 
   /*
     Тэмдэглэгдсэн табууд. ХАДГАЛАХГҮЙ: загвар өгөгдөл нь дараагийн
@@ -187,6 +187,7 @@ export function HyanaltWorkspace() {
   return (
     <div className="department-workspace">
       <SourceTabs
+        scope="hyanalt"
         tabs={TABS}
         value={tab}
         onChange={pick}

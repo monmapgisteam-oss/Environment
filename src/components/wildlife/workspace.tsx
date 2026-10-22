@@ -4,6 +4,7 @@ import * as React from "react";
 import dynamic from "next/dynamic";
 import {
   ClipboardList,
+  Footprints,
   Leaf,
   LeafyGreen,
   Loader2,
@@ -22,6 +23,7 @@ import {
   TabGroups,
   useStoredTab,
 } from "@/components/ui/source-tabs";
+import { useAccess } from "@/components/auth/access";
 
 /*
   Хэлтсийн сэдвүүд. Самбар хооронд сольж харна.
@@ -124,6 +126,13 @@ const FloraDashboard = dynamic(
   { ssr: false, loading: spinner },
 );
 
+/* Баавгай тохиолдлын бүртгэл — ТОГТМОЛ бүтэцтэй энгийн самбар */
+const BearDashboard = dynamic(
+  () =>
+    import("@/components/wildlife/bear-dashboard").then((m) => m.BearDashboard),
+  { ssr: false, loading: spinner },
+);
+
 /*
   МОНИТОРИНГ СУДАЛГААНЫ САН — хоёр судалгааг өөр өөрийн самбараар
   нээнэ ([monitoring.tsx](src/components/wildlife/monitoring.tsx)).
@@ -157,8 +166,8 @@ const MonitoringWorkspace = dynamic(
   тэжээллэгт зориулсан арга хэмжээ, нэг нь шувууны хамгаалал. Ургамалд
   `A02` бүлгийн гурав л (хаг, хөвд, мөөг) орно.
 */
-const GROUPS = [
-  { id: "amitan", label: "Амьтан", note: "7 сэдэв", icon: PawPrint },
+export const GROUPS = [
+  { id: "amitan", label: "Амьтан", note: "8 сэдэв", icon: PawPrint },
   { id: "urgamal", label: "Ургамал", note: "3 сэдэв", icon: Leaf },
 ] as const;
 
@@ -172,7 +181,21 @@ type GroupId = (typeof GROUPS)[number]["id"];
   мэдэхэд хангалттай. Тоог эх сурвалжаас нь уншсан (2026-09-16);
   давхарга шинэчлэгдвэл энд ч дагаж засна.
 */
-const TABS = [
+export const TABS = [
+  /*
+    Баавгай тохиолдлын бүртгэл (хэрэглэгчийн шийдвэр, 2026-10-14:
+    "амьтан цэсний хамгийн дээр"). `A09_baawgai_burtgel`, өөрийн
+    энгийн самбартай ([bear-dashboard.tsx](src/components/wildlife/bear-dashboard.tsx)).
+    ⚠ Тайлбарт ТОО БИЧЭЭГҮЙ: бүртгэл нэмэгдсээр байгаа тул хуучирна.
+  */
+  {
+    id: "bear",
+    group: "amitan",
+    label: "Баавгай тохиолдлын бүртгэл",
+    note: "Дуудлага · баталгаажилт",
+    full: "Хүрэн баавгайн тохиолдлын бүртгэл",
+    icon: Footprints,
+  },
   {
     id: "rescues",
     group: "amitan",
@@ -293,7 +316,7 @@ const IDS = TABS.map((t) => t.id);
 export function WildlifeWorkspace() {
   /* Сонголт хадгалагдана — хэрэглэгч ажлаа тасалдуулаад буцаж ирэхэд
      хамгийн сүүлд харж байсан самбар нээгдэнэ */
-  const [tab, pick] = useStoredTab<TabId>("wildlife.tab", IDS, "rescues");
+  const [tab, pick] = useStoredTab<TabId>("wildlife.tab", IDS, "rescues", "amitan-urgamal");
 
   /* Бүлэг нь ТУСДАА төлөв БИШ — сонгосон сэдвээсээ гарна */
   const group: GroupId = TABS.find((t) => t.id === tab)?.group ?? GROUPS[0].id;
@@ -303,19 +326,23 @@ export function WildlifeWorkspace() {
     [group],
   );
 
-  /* Бүлэг товшиход түүний эхний сэдэв нээгдэнэ */
+  /* Эрхийн тохиргоо (`lib/access.ts`): нээлттэй цэсгүй бүлэг ГАРАХГҮЙ,
+     бүлэг товшиход түүний эхний НЭЭЛТТЭЙ сэдэв нээгдэнэ */
+  const { allowsTab } = useAccess();
+  const groups = GROUPS.filter((g) => TABS.some((t) => t.group === g.id && allowsTab("amitan-urgamal", t.id)));
   const pickGroup = React.useCallback(
     (id: GroupId) => {
-      const first = TABS.find((t) => t.group === id);
+      const first = TABS.find((t) => t.group === id && allowsTab("amitan-urgamal", t.id));
       if (first) pick(first.id);
     },
-    [pick],
+    [pick, allowsTab],
   );
 
   return (
     <div className="department-workspace">
       {/* Бүлэг болон өгөгдлийн багцын сонголт зүүн панельд байрлана. */}
-      <SourceTabs groupControl={<TabGroups groups={GROUPS} value={group} onChange={pickGroup} />} tabs={shown} value={tab} onChange={pick} label="Сэдэв" />
+      <SourceTabs
+        scope="amitan-urgamal" groupControl={<TabGroups groups={groups} value={group} onChange={pickGroup} />} tabs={shown} value={tab} onChange={pick} label="Сэдэв" />
 
       {/*
         ⚠ `key` нь ЗААВАЛ: доорх салаануудын зургаа нь НЭГ бүрэлдэхүүн
@@ -324,7 +351,9 @@ export function WildlifeWorkspace() {
         Бүрдлийн түлхүүрийг өгснөөр таб бүр цэвэр төлөвтэй нээгдэнэ.
       */}
       <div className="department-workspace-content">
-        {tab === "rescues" ? (
+        {tab === "bear" ? (
+          <BearDashboard />
+        ) : tab === "rescues" ? (
           <RescuesDashboard />
         ) : tab === "eco" ? (
           <EcoDashboard />

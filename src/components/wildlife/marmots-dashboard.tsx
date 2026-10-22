@@ -115,6 +115,17 @@ export function MarmotsDashboard() {
   const on = React.useMemo(() => new Set(shown.map((r) => r.oid)), [shown]);
 
   /*
+    Зураг, хүснэгтээс сонгосон шилжүүлэлт нь ШҮҮЛТ — диаграм, үзүүлэлт
+    түүгээр хумигдана; зураг, хүснэгт өөрөө хумигдахгүй. Шүүлтэд
+    үлдээгүй сонголт хүчингүй (дам гарна).
+  */
+  const sel = picked != null && on.has(picked) ? picked : null;
+  const kept = React.useMemo(
+    () => (sel == null ? shown : shown.filter((r) => r.oid === sel)),
+    [shown, sel],
+  );
+
+  /*
     Хоёр үзүүрийг НЭГ цэгэн эх сурвалжид нийлүүлнэ: газрын зураг ганц
     цэгийн багана авдаг тул барьсан ба тавьсан цэгийг хооронд нь
     `RELEASE` шилжилтээр ялгана.
@@ -222,9 +233,9 @@ export function MarmotsDashboard() {
       AGE_CLASSES.map((c) => ({
         key: c,
         label: c,
-        value: shown.reduce((s, r) => s + (r.ages[c] ?? 0), 0),
+        value: kept.reduce((s, r) => s + (r.ages[c] ?? 0), 0),
       })),
-    [shown],
+    [kept],
   );
 
   /*
@@ -241,7 +252,7 @@ export function MarmotsDashboard() {
   */
   const composition = React.useMemo(() => {
     const m = new Map<number, number[]>();
-    for (const r of shown) {
+    for (const r of kept) {
       const acc = m.get(r.year) ?? AGE_CLASSES.map(() => 0);
       AGE_CLASSES.forEach((c, i) => (acc[i] += r.ages[c] ?? 0));
       m.set(r.year, acc);
@@ -253,44 +264,43 @@ export function MarmotsDashboard() {
         parts,
         total: parts.reduce((s, v) => s + v, 0),
       }));
-  }, [shown]);
+  }, [kept]);
 
   const stats = React.useMemo(() => {
-    const total = shown.reduce((s, r) => s + r.total, 0);
-    const km = shown.reduce((s, r) => s + r.km, 0);
+    const total = kept.reduce((s, r) => s + r.total, 0);
+    const km = kept.reduce((s, r) => s + r.km, 0);
     return {
-      moves: shown.length,
+      moves: kept.length,
       total,
-      avgKm: shown.length ? km / shown.length : 0,
-      years: new Set(shown.map((r) => r.year)).size,
+      avgKm: kept.length ? km / kept.length : 0,
+      years: new Set(kept.map((r) => r.year)).size,
     };
-  }, [shown]);
+  }, [kept]);
 
   /* ---------------- Сонголтын хүрээ (zoom action) ---------------- */
   const focus = React.useMemo<Extent | null>(() => {
-    if (picked == null && !year && !fromSoum && !toSoum) return null;
+    if (sel == null && !year && !fromSoum && !toSoum) return null;
     const b = new Bounds();
-    for (const r of picked != null ? shown.filter((x) => x.oid === picked) : shown) {
+    for (const r of kept) {
       b.add(r.from.lon, r.from.lat);
       b.add(r.to.lon, r.to.lat);
     }
     return b.get(0.02);
-  }, [shown, picked, year, fromSoum, toSoum]);
+  }, [kept, sel, year, fromSoum, toSoum]);
 
   /** ТОВШСОН шилжүүлэлт — hover-оос ҮЛ ХАМААРНА */
   const chosen = React.useMemo(() => {
-    if (picked == null) return null;
-    const id = picked >= RELEASE ? picked - RELEASE : picked;
-    return rows?.find((x) => x.oid === id) ?? null;
-  }, [rows, picked]);
+    if (sel == null) return null;
+    return rows?.find((x) => x.oid === sel) ?? null;
+  }, [rows, sel]);
 
   const active = React.useMemo(() => {
-    const raw = hover ?? picked;
+    const raw = hover ?? sel;
     if (raw == null) return null;
     const id = raw >= RELEASE ? raw - RELEASE : raw;
     const r = rows?.find((x) => x.oid === id);
     return r ? ({ r, end: raw >= RELEASE ? ("to" as const) : ("from" as const) }) : null;
-  }, [rows, hover, picked]);
+  }, [rows, hover, sel]);
 
   function reset() {
     setYear(null);
@@ -317,7 +327,8 @@ export function MarmotsDashboard() {
     );
   }
 
-  const activeCount = (year ? 1 : 0) + (fromSoum ? 1 : 0) + (toSoum ? 1 : 0);
+  const activeCount =
+    (year ? 1 : 0) + (fromSoum ? 1 : 0) + (toSoum ? 1 : 0) + (sel != null ? 1 : 0);
   /* Хүснэгтийн зурвасын хуваарь — БҮХ зөөврийн дээд утга */
   const maxTotal = Math.max(...data.rows.map((r) => r.total), 1);
 
@@ -414,11 +425,11 @@ export function MarmotsDashboard() {
               labels={labels}
               /* `flow` нь шугамын дундад чиглэлийн сум тавина — барих
                  цэгээс тавих цэг рүү гэдэг нь зурган дээр шууд уншигдана */
-              shapes={{ data: links, selected: picked, flow: true }}
+              shapes={{ data: links, selected: sel, flow: true }}
               basemap={basemap}
               onSelect={(oid) => {
                 const id = oid >= RELEASE ? oid - RELEASE : oid;
-                setPicked(picked === id ? null : id);
+                setPicked(sel === id ? null : id);
               }}
               onHover={setHover}
               focus={focus}
@@ -647,12 +658,12 @@ export function MarmotsDashboard() {
               {shown.map((r) => (
                 <tr
                   key={r.oid}
-                  onClick={() => setPicked(picked === r.oid ? null : r.oid)}
+                  onClick={() => setPicked(sel === r.oid ? null : r.oid)}
                   onMouseEnter={() => setHover(r.oid)}
                   onMouseLeave={() => setHover(null)}
                   className={cn(
                     "cursor-pointer transition-colors hover:bg-paper-hi",
-                    picked === r.oid && "bg-paper-hi",
+                    sel === r.oid && "bg-paper-hi",
                   )}
                 >
                   <td className="num px-2.5 py-1.5 align-top text-[11.5px] text-ink-2">

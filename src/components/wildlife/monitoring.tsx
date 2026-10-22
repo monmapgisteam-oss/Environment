@@ -139,6 +139,7 @@ export function MonitoringWorkspace() {
           <PortalLayers
             key={WILDLIFE_SOLO.songino.key}
             set={WILDLIFE_SOLO.songino}
+            access={{ scope: "amitan-urgamal", tab: "monitoring" }}
           />
         ) : (
           /*

@@ -8,21 +8,26 @@ import {
   Database,
   LayoutGrid,
   Leaf,
+  ShieldCheck,
 } from "lucide-react";
-import { DEPARTMENTS, SHORT_NAMES } from "@/lib/departments";
+import { useAccess } from "@/components/auth/access";
+import { SHORT_NAMES } from "@/lib/departments";
 import { cn, isActivePath } from "@/lib/utils";
 
 export function Sidebar() {
   const path = usePathname();
+  /* Хэлтсийн бүртгэл зөвхөн өөрийн хэлтсээ харна (`lib/access.ts`) */
+  const { departments, admin, analysis, blocked } = useAccess();
   return (
     <aside className="workspace-dock">
       <Link href="/" className="dock-brand" aria-label="Ерөнхий самбар"><Leaf size={26} strokeWidth={1.5} /></Link>
-      <nav aria-label="Үндсэн цэс" className="dock-nav">
+      {/* Хаагдсан бүртгэлд цэс огт гарахгүй — очих хуудас байхгүй */}
+      {!blocked && <nav aria-label="Үндсэн цэс" className="dock-nav">
         <Link href="/" className={cn("dock-link", isActivePath(path, "/", true) && "active")} aria-current={isActivePath(path, "/", true) ? "page" : undefined}>
           <LayoutGrid size={20} /><span>Самбар</span>
         </Link>
         <div className="dock-divider" />
-        {DEPARTMENTS.map((d) => {
+        {departments.map((d) => {
           const href = `/departments/${d.slug}`;
           const active = isActivePath(path, href);
           return (
@@ -38,13 +43,19 @@ export function Sidebar() {
           дээрх бүлэг нь нэг хэлтсийн ажлын талбар бол эдгээр хоёр нь
           хэлтсээс ҮЛ ХАМААРАХ, бүх системийн хэмжээний хуудсууд.
         */}
-        <Link href="/analysis" title="Дүн шинжилгээ" className={cn("dock-link", isActivePath(path, "/analysis", true) && "active")} aria-current={isActivePath(path, "/analysis", true) ? "page" : undefined}>
+        {analysis && <Link href="/analysis" title="Дүн шинжилгээ" className={cn("dock-link", isActivePath(path, "/analysis", true) && "active")} aria-current={isActivePath(path, "/analysis", true) ? "page" : undefined}>
           <ChartNoAxesCombined size={20} /><span>Дүн шинжилгээ</span>
-        </Link>
-        <Link href="/sources" title="Дата эх сурвалж" className={cn("dock-link", isActivePath(path, "/sources", true) && "active")} aria-current={isActivePath(path, "/sources", true) ? "page" : undefined}>
+        </Link>}
+        {/* Эх сурвалж, Эрх хоёр ЗӨВХӨН порталын админд (хэрэглэгч 2026-10-20) */}
+        {admin && <Link href="/sources" title="Дата эх сурвалж" className={cn("dock-link", isActivePath(path, "/sources", true) && "active")} aria-current={isActivePath(path, "/sources", true) ? "page" : undefined}>
           <Database size={20} /><span>Эх сурвалж</span>
-        </Link>
-      </nav>
+        </Link>}
+        {/* ЭРХИЙН ЗОХИЦУУЛАЛТ — эх сурвалжийн ДООР (хэрэглэгч 2026-10-16);
+            ЗӨВХӨН порталын админд (`org_admin`) */}
+        {admin && <Link href="/access" title="Эрхийн зохицуулалт" className={cn("dock-link", isActivePath(path, "/access", true) && "active")} aria-current={isActivePath(path, "/access", true) ? "page" : undefined}>
+          <ShieldCheck size={20} /><span>Эрх</span>
+        </Link>}
+      </nav>}
       <span className="dock-end" aria-hidden="true"><ArrowUpRight size={18} /></span>
     </aside>
   );

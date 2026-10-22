@@ -143,6 +143,17 @@ export function WeatherArchive() {
     return data.rows.filter((r) => r.t >= last - days * 86_400_000);
   }, [data, days]);
 
+  /*
+    Зургийн станц бүрийн заалтын тоо СОНГОСОН мужаас — диаграмтай нэг
+    хугацааг хэлнэ. Архивын бүтэн цонхны тоо (`s.n`) хугацааны товчийг
+    дагадаггүй байв.
+  */
+  const mapStations = React.useMemo(() => {
+    const c = new Map<number, number>();
+    for (const r of rows) c.set(r.sid, (c.get(r.sid) ?? 0) + 1);
+    return (data?.stations ?? []).map((s) => ({ ...s, n: c.get(s.sid) ?? 0 }));
+  }, [data, rows]);
+
   /** Станцын сонголт — эхэнд нь бүх станц */
   const stationTabs = React.useMemo(
     () => [
@@ -309,7 +320,7 @@ export function WeatherArchive() {
         </div>
 
         <ArchiveMap
-          stations={data.stations}
+          stations={mapStations}
           station={station}
           onPick={setStation}
         />

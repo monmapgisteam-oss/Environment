@@ -78,9 +78,11 @@ export type Datum = {
 
 export function BarChart({
   data, height = 130, tone = "var(--data)", selected, onSelect, formatTick, labels, unit, format = num,
-  fill = false, sub,
+  fill = false, sub, colorOf,
 }: {
   data: Datum[]; height?: number; tone?: string; selected?: Selection;
+  /** Багана бүрийн өнгө — газрын зургийн палитр (ойн хэсэглэл, 2026-10-07) */
+  colorOf?: (d: Datum) => string;
   onSelect?: (key: string | null) => void; formatTick?: (d: Datum, i: number) => string;
   labels?: boolean; unit?: string; format?: (v: number) => string;
   /**
@@ -115,7 +117,7 @@ export function BarChart({
               {data.map((d) => {
                 const active = nothingPicked(selected) || picked(selected, d.key);
                 return <button key={d.key} type="button" disabled={!interactive} aria-label={`${d.label}: ${format(d.value)}${unit ? ` ${unit}` : ""}`} aria-pressed={interactive ? picked(selected, d.key) : undefined} title={`${d.label} · ${format(d.value)}${unit ? ` ${unit}` : ""}`} onClick={() => onSelect?.(clickValue(selected, d.key))} className="bar-chart-column">
-                  <span className="bar-chart-fill" style={{ height: `${scale(d.value)}%`, background: tone, opacity: active ? .88 : .18 }} />
+                  <span className="bar-chart-fill" style={{ height: `${scale(d.value)}%`, background: colorOf?.(d) ?? tone, opacity: active ? .88 : .18 }} />
                   {showValues && <span className="bar-chart-value" style={{ bottom: `calc(${scale(d.value)}% + 5px)`, opacity: active ? 1 : .35 }}>{format(d.value)}</span>}
                 </button>;
               })}
@@ -609,7 +611,16 @@ export function AreaChart({
     налж, ямар ч ашиггүйгээр 28px өндөр иднэ. Зөвхөн уртаар шийдвэл
     цөөхөн жилийн цуваа дэмий налах байв.
   */
-  const tilt = data.length > 8 && ticks.some((t) => t.length >= 4);
+  /*
+    ⚠ ШОШГО НЬ СИЙРЭГ бол ХЭВТЭЭ (хэрэглэгч, 2026-10-07: "үүнийг
+    хэвтүүл"). Оны тэнхлэг одоо бүтэн дөрвөн оронтой ч зөвхөн тав, хоёр
+    тутамд бичигддэг (`tickOf`) — найм ба түүнээс цөөн шошгын хооронд
+    хоосон нүд үлддэг тул давхцахгүй, налуулах шаардлагагүй.
+  */
+  const tilt =
+    data.length > 8 &&
+    ticks.some((t) => t.length >= 4) &&
+    ticks.filter(Boolean).length > 8;
 
   return (
     <div className={cn(fill && "flex h-full flex-col")}>

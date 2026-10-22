@@ -4,6 +4,7 @@ import * as React from "react";
 import { Loader2 } from "lucide-react";
 import { esriModules } from "@/lib/arcgis-sdk";
 import { MESHES } from "@/lib/scene";
+import { addSceneTools } from "@/lib/scene-tools";
 
 /* --------------------------------------------------------------------------
    3D ХАРАГДАЦ — нэгдсэн торон загвар (integrated mesh, I3S)
@@ -75,6 +76,8 @@ export function SceneOverlay() {
                     ui: { components: [] },
                     environment: { atmosphereEnabled: true, lighting: { directShadowsEnabled: false } },
                   });
+                  /* Баруун дээд буланд: суурь зураг · давхарга · хэмжилт */
+                  void addSceneTools(view, { group: "scene-tools" });
 
                   Promise.all(layers.map((l) => l.when()))
                     .then(() => view!.when())

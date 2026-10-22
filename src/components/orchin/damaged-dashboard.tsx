@@ -11,7 +11,7 @@ import {
   Ruler,
   Shovel,
 } from "lucide-react";
-import { PieChart, RowChart } from "@/components/charts";
+import { PieChart, RowChart, type Datum } from "@/components/charts";
 import { BasemapGallery } from "@/components/map/basemap-gallery";
 import { MapTip, MapTipRow, useMapTip } from "@/components/map/hover-tip";
 import { OverlayControl } from "@/components/map/overlay-control";
@@ -102,6 +102,23 @@ export function DamagedDashboard() {
   }, [sites, keep]);
 
   /*
+    Зураг дээр сонгосон талбай нь диаграм, үзүүлэлтийн ШҮҮЛТ (хөндлөн
+    шүүлт хоёр тийш). Бусад шүүлтэд тохирохгүй бол сонголт ДАМ цуцлагдана.
+    Газрын зураг, жагсаалт сонголтоор хумигдахгүй — өөр талбай сонгох зам.
+  */
+  const sel = React.useMemo(
+    () => (picked != null && shown.some((i) => sites![i].oid === picked) ? picked : null),
+    [sites, shown, picked],
+  );
+
+  /** Диаграм, үзүүлэлтийн шүүлт — сонгосон талбайтай хамт */
+  const keepSel = React.useCallback(
+    (i: number, skip?: "place" | "size") =>
+      keep(i, skip) && (sel == null || sites![i].oid === sel),
+    [sites, keep, sel],
+  );
+
+  /*
     Шүүлтүүр нь газрын зурагт ч үйлчилнэ — таарсан талбай л үлдэнэ.
 
     Шошго (`properties.t`) нь ХЭМЖЭЭ. Газрын нэрийг бичих нь утгагүй:
@@ -144,7 +161,7 @@ export function DamagedDashboard() {
   const byPlace = React.useMemo(() => {
     const m = new Map<string, { ha: number; n: number; soum: boolean }>();
     for (let i = 0; i < (sites?.length ?? 0); i++) {
-      if (!keep(i, "place")) continue;
+      if (!keepSel(i, "place")) continue;
       const s = sites![i];
       const hit = m.get(s.place) ?? { ha: 0, n: 0, soum: s.aimag !== "Улаанбаатар" };
       hit.ha += s.ha;
@@ -160,7 +177,7 @@ export function DamagedDashboard() {
          засаг захиргааны төрөл нь биш */
       counts: rows.map(([k, v]) => ({ key: k, label: k, value: v.n })),
     };
-  }, [sites, keep]);
+  }, [sites, keepSel]);
 
   /*
     Хэмжээний ангилалд ХОЁР тоо зэрэгцэнэ: талбайн тоо ба нийт га.
@@ -184,18 +201,37 @@ export function DamagedDashboard() {
     }));
   }, [sites, keep]);
 
+  /* Шүүлтүүрийн цэс сонголтоор хумигдахгүй — шүүгдээгүй жагсаалтаас */
+  const placeMenu = React.useMemo<Datum[]>(() => {
+    const m = new Map<string, { ha: number; n: number }>();
+    for (let i = 0; i < (sites?.length ?? 0); i++) {
+      if (!keep(i, "place")) continue;
+      const s = sites![i];
+      const hit = m.get(s.place) ?? { ha: 0, n: 0 };
+      hit.ha += s.ha;
+      hit.n++;
+      m.set(s.place, hit);
+    }
+    return [...m]
+      .sort((a, b) => b[1].ha - a[1].ha)
+      .map(([k, v]) => ({ key: k, label: k, value: v.n }));
+  }, [sites, keep]);
+
   const stats = React.useMemo(() => {
     let ha = 0;
     let biggest = 0;
     const places = new Set<string>();
+    let n = 0;
     for (const i of shown) {
       const s = sites![i];
+      if (sel != null && s.oid !== sel) continue;
+      n++;
       ha += s.ha;
       if (s.ha > biggest) biggest = s.ha;
       places.add(s.place);
     }
-    return { n: shown.length, ha, biggest, places: places.size };
-  }, [sites, shown]);
+    return { n, ha, biggest, places: places.size };
+  }, [sites, shown, sel]);
 
   /* ---------------- Сонголтын хүрээ (zoom action) ----------------
      Сонгосон талбай руу, эс бөгөөс шүүлтүүрт таарсан бүх талбай руу
@@ -204,17 +240,17 @@ export function DamagedDashboard() {
      Талбай маш жижиг байж болно — хамгийн багадаа ~70м хүрээ өгнө. */
   const focus = React.useMemo<Extent | null>(() => {
     if (!data) return null;
-    if (picked == null && !place && !size) return null;
+    if (sel == null && !place && !size) return null;
     const b = new Bounds();
-    if (picked != null) {
-      const f = data.shapes.features.find((x) => Number(x.id) === picked);
+    if (sel != null) {
+      const f = data.shapes.features.find((x) => Number(x.id) === sel);
       b.addGeometry(f?.geometry);
     } else {
       /* `shapes` нь аль хэдийн шүүгдсэн — дахин шүүх шаардлагагүй */
       for (const f of shapes.features) b.addGeometry(f.geometry);
     }
     return b.get(0.0006);
-  }, [data, shapes, picked, place, size]);
+  }, [data, shapes, sel, place, size]);
 
   /** Хулгана дээр очсон талбай — газрын зурагнаас */
   const hovered = React.useMemo(
@@ -228,9 +264,9 @@ export function DamagedDashboard() {
     тэнд утгагүй — зөвхөн газрын зураг дээр хөвнө.
   */
   const active = React.useMemo(() => {
-    const id = hover ?? picked;
+    const id = hover ?? sel;
     return id == null ? null : (sites?.find((s) => s.oid === id) ?? null);
-  }, [sites, hover, picked]);
+  }, [sites, hover, sel]);
 
   function reset() {
     setPlace(null);
@@ -256,7 +292,7 @@ export function DamagedDashboard() {
     );
   }
 
-  const activeCount = (place ? 1 : 0) + (size ? 1 : 0);
+  const activeCount = (place ? 1 : 0) + (size ? 1 : 0) + (sel != null ? 1 : 0);
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-2.5">
@@ -270,7 +306,7 @@ export function DamagedDashboard() {
           width={230}
         >
           {/* Жагсаалтад ТООГ харуулна — сонголтын хэмжээг хэлнэ */}
-          <PickList items={byPlace.counts} selected={place} onPick={setPlace} />
+          <PickList items={placeMenu} selected={place} onPick={setPlace} />
         </FilterMenu>
 
         <FilterMenu
@@ -326,9 +362,9 @@ export function DamagedDashboard() {
                     visible={NO_INDEX}
                     /* Талбай маш жижиг (дунджаар 37м) тул шошго нь хамгийн
                        ойрын түвшинд л гарна */
-                    shapes={{ data: shapes, selected: picked, labelZoom: 14 }}
+                    shapes={{ data: shapes, selected: sel, labelZoom: 14, edge: "hair" }}
                     basemap={basemap}
-                    onSelect={setPicked}
+                    onSelect={(oid) => setPicked(sel === oid ? null : oid)}
                     onHover={tip.onHover}
                     focus={focus}
                     overlays={overlays}
@@ -388,7 +424,8 @@ export function DamagedDashboard() {
           </p>
         </div>
 
-        <div className="flex min-h-0 flex-col gap-2.5">
+        {/* Карт бүр агуулгынхаа өндөртэй; нам дэлгэцэд л БАГАНА гүйнэ */}
+        <div className="flex min-h-0 flex-col gap-2.5 overflow-y-auto">
           {/*
             БАЙРШЛЫН ЗАДАРГАА БАРУУН БАГАНАД (хэрэглэгчийн шийдвэр,
             2026-09-17: "зүүн панелийн 2 chart-ийг баруун панел руу").
@@ -419,36 +456,48 @@ export function DamagedDashboard() {
             </Card>
           ) : null}
 
-          <Card className="shrink-0">
+          {/* ⚠ `grow` (басис = агуулга), `flex-1` БИШ: "Дүүргээр" хэтэрхий
+              өндөрсөж байв (хэрэглэгч 2026-10-15). Хоёр карт агуулгынхаа
+              өндрөөс эхэлж, үлдсэн зайг ТЭНЦҮҮ хуваана */}
+          <Card className="grow">
             <Head title="Дүүргээр">
               <span className="text-[10.5px] text-ink-3">га</span>
             </Head>
-            <div className="max-h-[260px] overflow-y-auto p-3">
+            {/* Гүйлгүүргүй (хэрэглэгч 2026-10-15): нэг эгнээний мөр — нэр ·
+                зурвас · утга, урьдын 260px-ийн таглаа хасагдсан. Карт
+                өндөр нь өсөхөд мөрүүд ЖИГД тарна (мөн өдөр: "Дүүргээр
+                chartiin undriig nemeed") */}
+            <div
+              className="flex flex-1 flex-col px-3 py-2 [&>.row-chart]:flex-1 [&>.row-chart]:justify-around"
+              style={{ "--row-name": "108px", "--row-value": "52px" } as React.CSSProperties}
+            >
               <RowChart
                 data={byPlace.districts}
                 selected={place}
                 onSelect={setPlace}
                 format={(v) => (v >= 10 ? num(Math.round(v)) : v.toFixed(2))}
+                inline
               />
             </div>
           </Card>
 
           {/* Баганын СҮҮЛД нь уян карт — үлдсэн зайг энэ эзэлнэ */}
-          <Card className="min-h-[120px] flex-1">
+          <Card className="grow">
             <Head title="Эвдрэлд хамгийн их өртсөн 8 газар" />
-            <div className="min-h-0 flex-1 divide-y divide-line overflow-y-auto">
+            {/* Гүйлгүүргүй; үлдсэн зайн хагасыг авч мөрүүд тэнцүү өндөрсөнө */}
+            <div className="flex flex-1 flex-col divide-y divide-line">
               {shown
                 .slice(0, 8)
                 .map((i) => sites![i])
                 .map((s) => (
                   <button
                     key={s.oid}
-                    onClick={() => setPicked(picked === s.oid ? null : s.oid)}
+                    onClick={() => setPicked(sel === s.oid ? null : s.oid)}
                     onMouseEnter={() => setHover(s.oid)}
                     onMouseLeave={() => setHover(null)}
                     className={cn(
-                      "flex w-full items-baseline justify-between gap-2 px-3 py-1.5 text-left transition-colors hover:bg-paper-hi",
-                      picked === s.oid && "bg-paper-hi",
+                      "flex w-full flex-1 items-center justify-between gap-2 px-3 py-1 text-left transition-colors hover:bg-paper-hi",
+                      sel === s.oid && "bg-paper-hi",
                     )}
                   >
                     <span className="min-w-0 truncate text-[12px] text-ink-2">{s.place}</span>

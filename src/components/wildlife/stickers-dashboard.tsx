@@ -92,6 +92,19 @@ export function StickersDashboard() {
 
   const visible = React.useMemo(() => Uint32Array.from(shown), [shown]);
 
+  /*
+    Зураг, жагсаалтаас сонгосон барилга нь ШҮҮЛТ — диаграм, үзүүлэлт
+    түүгээр хумигдана; зураг, жагсаалт өөрөө хумигдахгүй (өөр барилга
+    сонгох зам). Шүүлтэд үлдээгүй сонголт хүчингүй — дам гарна.
+  */
+  const sel = React.useMemo(() => {
+    if (!data || picked == null) return null;
+    return shown.some((i) => data.rows[i].oid === picked) ? picked : null;
+  }, [data, shown, picked]);
+
+  /** Хайлтын үг — диаграмд ч үйлчилнэ */
+  const q = query.trim().toLowerCase();
+
   /* Зураг дээрх шошго — барилгын нэр */
   const labels = React.useMemo(() => {
     if (!data) return undefined;
@@ -118,6 +131,8 @@ export function StickersDashboard() {
     (
       of: (i: number) => string,
       skip: "district" | "khoroo" | "state",
+      /* Цэс сонголтоор хумигдахгүй — өөр утга руу шилжих зам */
+      withSel = true,
     ): Datum[] => {
       if (!data) return [];
       const counts = new Map<string, number>();
@@ -125,6 +140,8 @@ export function StickersDashboard() {
         if (skip !== "district" && district && r.district !== district) return;
         if (skip !== "khoroo" && khoroo && r.khoroo !== khoroo) return;
         if (skip !== "state" && state && stateOf(r.sticker) !== state) return;
+        if (q && !`${r.name} ${r.address}`.toLowerCase().includes(q)) return;
+        if (withSel && sel != null && r.oid !== sel) return;
         const key = of(i);
         if (!key) return;
         counts.set(key, (counts.get(key) ?? 0) + 1);
@@ -133,11 +150,11 @@ export function StickersDashboard() {
         .sort((a, b) => b[1] - a[1])
         .map(([key, value]) => ({ key, label: key, value }));
     },
-    [data, district, khoroo, state],
+    [data, district, khoroo, state, q, sel],
   );
 
   const byDistrict = React.useMemo(
-    () => tally((i) => data?.rows[i].district ?? "", "district"),
+    () => tally((i) => data?.rows[i].district ?? "", "district", false),
     [tally, data],
   );
   const byKhoroo = React.useMemo(
@@ -146,6 +163,14 @@ export function StickersDashboard() {
   );
   const byState = React.useMemo(
     () => tally((i) => stateOf(data?.rows[i].sticker ?? null), "state"),
+    [tally, data],
+  );
+  const menuKhoroo = React.useMemo(
+    () => tally((i) => data?.rows[i].khoroo ?? "", "khoroo", false),
+    [tally, data],
+  );
+  const menuState = React.useMemo(
+    () => tally((i) => stateOf(data?.rows[i].sticker ?? null), "state", false),
     [tally, data],
   );
 
@@ -174,6 +199,8 @@ export function StickersDashboard() {
         Хороо нь харин үлдэнэ — тэр нь өөр тэнхлэг.
       */
       if (khoroo && r.khoroo !== khoroo) continue;
+      if (q && !`${r.name} ${r.address}`.toLowerCase().includes(q)) continue;
+      if (sel != null && r.oid !== sel) continue;
       total.set(r.district, (total.get(r.district) ?? 0) + 1);
       if (r.sticker === true)
         done.set(r.district, (done.get(r.district) ?? 0) + 1);
@@ -185,30 +212,32 @@ export function StickersDashboard() {
         label: `${key} · ${num(done.get(key) ?? 0)} / ${num(n)}`,
         value: done.get(key) ?? 0,
       }));
-  }, [data, khoroo]);
+  }, [data, khoroo, q, sel]);
 
   const stats = React.useMemo(() => {
     if (!data) return null;
     let stickered = 0;
     const districts = new Set<string>();
+    let n = 0;
     for (const i of shown) {
       const r = data.rows[i];
+      if (sel != null && r.oid !== sel) continue;
+      n++;
       if (r.sticker === true) stickered++;
       districts.add(r.district);
     }
-    const n = shown.length;
     return {
       n,
       stickered,
       districts: districts.size,
       share: n > 0 ? Math.round((stickered / n) * 100) : 0,
     };
-  }, [data, shown]);
+  }, [data, shown, sel]);
 
   const detail = React.useMemo(() => {
-    if (!data || picked == null) return null;
-    return data.rows.find((r) => r.oid === picked) ?? null;
-  }, [data, picked]);
+    if (!data || sel == null) return null;
+    return data.rows.find((r) => r.oid === sel) ?? null;
+  }, [data, sel]);
 
   /*
     ОЙРТОХ ҮЙЛДЭЛ (zoom action).
@@ -268,7 +297,11 @@ export function StickersDashboard() {
   }
 
   const activeCount =
-    (district ? 1 : 0) + (khoroo ? 1 : 0) + (state ? 1 : 0) + (query ? 1 : 0);
+    (district ? 1 : 0) +
+    (khoroo ? 1 : 0) +
+    (state ? 1 : 0) +
+    (query ? 1 : 0) +
+    (sel != null ? 1 : 0);
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-2.5">
@@ -293,7 +326,7 @@ export function StickersDashboard() {
           onClear={() => setState(null)}
           width={230}
         >
-          <PickList items={byState} selected={state} onPick={setState} />
+          <PickList items={menuState} selected={state} onPick={setState} />
         </FilterMenu>
 
         <FilterMenu
@@ -320,7 +353,7 @@ export function StickersDashboard() {
           width={200}
         >
           <PickList
-            items={byKhoroo}
+            items={menuKhoroo}
             selected={khoroo}
             onPick={setKhoroo}
             searchable
@@ -379,7 +412,7 @@ export function StickersDashboard() {
           <div className="min-h-0 flex-1 divide-y divide-line overflow-y-auto">
             {shown.map((i) => {
               const r = data.rows[i];
-              const on = picked === r.oid;
+              const on = sel === r.oid;
               return (
                 <button
                   key={r.oid}
@@ -456,10 +489,10 @@ export function StickersDashboard() {
                   дарагдана. Хоёуланг өгсөн нь санаатай — цагираг нь
                   ойртолтын үед зайнаас ч анзаарагдана.
                 */
-                pickedMark={picked}
+                pickedMark={sel}
                 highlight={detail ? [detail.lon, detail.lat] : null}
                 basemap={basemap}
-                onSelect={(oid) => setPicked(picked === oid ? null : oid)}
+                onSelect={(oid) => setPicked(sel === oid ? null : oid)}
                 focus={focus}
               />
               <BasemapGallery value={basemap} onChange={setBasemap} />

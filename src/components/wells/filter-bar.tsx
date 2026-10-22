@@ -9,16 +9,42 @@ import { cn } from "@/lib/utils";
    Хяналт бүр нь товч — товшиход доогуураа хөвөгч самбар нээгдэнэ.
    -------------------------------------------------------------------------- */
 
+/**
+ * Идэвхтэй шүүлтийн ШОШГО — "Дүүрэг: Баянзүрх ✕".
+ *
+ * ⚠⚠ ТООНЫ ОРОНД НЭР (хэрэглэгч, 2026-10-07: "шүүлтүүрийг хүнд
+ * ойлгомжтой, ажилладаг хялбар болгоорой"). Шүүлт олон газраас
+ * тавигддаг — диаграм, хөндлөн хүснэгт, бүсийн мөр, газрын зургийн
+ * дүрс, нэгж талбарын диаграм — тэгсэн хэрнээ мөрөнд зөвхөн "2
+ * идэвхтэй" гэж бичигддэг байсан тул ЮУГААР шүүсэн, нэгийг нь яаж
+ * авахыг хэрэглэгч мэдэх аргагүй байв. Одоо шүүлт бүр нэрээрээ, тус
+ * тусдаа ✕-тэй.
+ */
+export type FilterChip = {
+  key: string;
+  /** Юугаар — "Дүүрэг", "Сав газар", "Нэгж талбар" */
+  label: string;
+  /** Ямар утга — "Баянзүрх дүүрэг" */
+  value: string;
+  onRemove: () => void;
+};
+
 export function FilterBar({
   title,
   activeCount,
   onReset,
   leading,
+  chips,
   children,
 }: {
   title: string;
   activeCount: number;
   onReset: () => void;
+  /**
+   * Өгсөн бол "N идэвхтэй" тоолуурын ОРОНД шүүлт бүр нэрлэгдэнэ
+   * ({@link FilterChip}). Өгөөгүй самбарууд хуучнаараа.
+   */
+  chips?: FilterChip[];
   /**
    * Гарчгийн ХАЖУУД суух агуулга. `children` нь баруун тийш шахагддаг
    * шүүлтүүрийн бүлэг тул эх сурвалж сонгох мэт "юуг харах вэ" гэсэн
@@ -51,7 +77,44 @@ export function FilterBar({
           <span className="mx-1 h-4 w-px shrink-0 bg-line" aria-hidden />
         ) : null}
 
-        {activeCount > 0 ? (
+        {chips ? (
+          chips.length ? (
+            <>
+              {chips.map((c) => (
+                <button
+                  key={c.key}
+                  type="button"
+                  onClick={c.onRemove}
+                  title={`${c.label}: ${c.value} — шүүлтийг авах`}
+                  aria-label={`${c.label}: ${c.value} шүүлтийг авах`}
+                  className="group flex max-w-[280px] items-center gap-1.5 rounded-xs border border-data/40 bg-data/10 py-[3px] pr-1 pl-2 text-[11px] transition-colors hover:border-data/70"
+                >
+                  <span className="shrink-0 text-ink-3">{c.label}:</span>
+                  <span className="min-w-0 truncate font-medium text-ink">
+                    {c.value}
+                  </span>
+                  <X
+                    size={11}
+                    className="shrink-0 text-ink-3 transition-colors group-hover:text-ink"
+                  />
+                </button>
+              ))}
+              {/* Нэгээс олон үед л — ганц шошгыг өөрийн ✕ авна */}
+              {chips.length > 1 ? (
+                <button
+                  type="button"
+                  onClick={onReset}
+                  className="flex items-center gap-1 text-[11.5px] text-ink-3 transition-colors hover:text-ink"
+                >
+                  <RotateCcw size={10} />
+                  Бүгдийг цэвэрлэх
+                </button>
+              ) : null}
+            </>
+          ) : (
+            <span className="text-[11px] text-ink-3">Шүүлтүүр хэрэглээгүй</span>
+          )
+        ) : activeCount > 0 ? (
           <>
             <span className="num rounded-xs border border-data/40 bg-data/12 px-1.5 py-[3px] text-[11px] text-data">
               {activeCount} идэвхтэй

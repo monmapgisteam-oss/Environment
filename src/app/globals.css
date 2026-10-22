@@ -629,6 +629,23 @@ body {
 .pulse-pin:hover {
   background: var(--ink);
 }
+/* ШАР ТОДРУУЛГА — засварын цонхны хүснэгтийн мөр дээр хулгана очиход
+   (ArcGIS Online-ийн вэб зургийн тодруулга шиг; горимоос үл хамаарна) */
+.species-pin.is-hot {
+  z-index: 3;
+  outline: 3px solid #ffe600;
+  outline-offset: 1px;
+  box-shadow: 0 0 16px 5px rgb(255 230 0 / 0.7);
+}
+.pulse-pin.is-hot {
+  --pin: #ffe600;
+  width: 13px;
+  height: 13px;
+  z-index: 3;
+  box-shadow:
+    0 0 0 2px rgb(8 14 20 / 0.7),
+    0 0 16px 5px rgb(255 230 0 / 0.75);
+}
 
 /*
   ДОХИОЛЛЫН өнгөт тэмдэглэгээ.
@@ -687,41 +704,27 @@ body {
 }
 
 /* --------------------------------------------------------------------------
-   MapLibre — өөрийн загварт нийцүүлэх
+   2D газрын зураг — Esri MapView ({@link src/components/wells/map.tsx})
    -------------------------------------------------------------------------- */
-.maplibregl-ctrl-group {
-  background: var(--paper-2) !important;
-  border: 1px solid var(--line-2) !important;
-  border-radius: 2px !important;
-  box-shadow: none !important;
+/* SDK-ийн фокусын цэнхэр хүрээ — зураг дээр товшиход гарч, сонголт мэт харагдана */
+.wells-esri .esri-view {
+  --esri-view-outline-color: transparent;
 }
-.maplibregl-ctrl-group button + button {
-  border-top: 1px solid var(--line) !important;
+.wells-esri .esri-view .esri-view-surface--inset-outline:focus::after {
+  outline: none;
 }
-.maplibregl-ctrl-group button .maplibregl-ctrl-icon {
-  filter: invert(var(--map-icon-invert, 1));
-  opacity: 0.75;
+/* Тэмдэглэгээ: зүүн дээд буланд суугаад `transform`-оор цэг рүүгээ
+   шилжинэ; төв нь цэг дээр */
+.wells-mark {
+  position: absolute;
+  left: 0;
+  top: 0;
+  pointer-events: none;
 }
-.maplibregl-ctrl-attrib {
-  background: color-mix(in oklab, var(--paper) 80%, transparent) !important;
-  color: var(--ink-3) !important;
-  font-size: 9.5px !important;
-  border-radius: 2px 0 0 0;
-}
-.maplibregl-ctrl-attrib a {
-  color: var(--ink-3) !important;
-}
-/* Масштаб — газрын зураг дээр дэвсгэргүй, зөвхөн зураас, тоо */
-.maplibregl-ctrl-scale {
-  background: transparent !important;
-  border-color: rgba(255, 255, 255, 0.55) !important;
-  color: #fff !important;
-  font-size: 9.5px !important;
-  font-variant-numeric: tabular-nums;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.75);
-}
-:root[data-theme="light"] {
-  --map-icon-invert: 0;
+.wells-mark > * {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  pointer-events: auto;
 }
 
 /* ==========================================================================

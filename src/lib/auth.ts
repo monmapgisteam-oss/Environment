@@ -40,6 +40,12 @@ export type Session = {
   fullName: string;
   /** Профайлын зураг (порталын `thumbnail`), байхгүй бол `null` */
   avatar: string | null;
+  /**
+   * Порталын үүрэг (`org_admin`, `org_publisher`, `org_user`). Эрхийн
+   * зохицуулалтын хуудсыг ЗӨВХӨН `org_admin` харна (`auth/access.tsx`).
+   * Хуучин сесс үүнгүй байж болно — тэр үед порталаас асууна.
+   */
+  role?: string;
   /** Сунгах түлхүүр — үүнгүй бол хугацаа дуусмагц дахин нэвтэрнэ */
   refresh: string | null;
   /** Сунгах түлхүүрийн дуусах мөч */
@@ -363,6 +369,7 @@ async function adopt(body: TokenBody, keepRefresh?: string): Promise<Session> {
     username: profile.username || username,
     fullName: profile.fullName || profile.username || username,
     avatar: profile.avatar,
+    role: profile.role,
     refresh: body.refresh_token ?? keepRefresh ?? null,
     refreshExpires:
       Date.now() + (body.refresh_token_expires_in ?? 14 * 24 * 3600) * 1000,
@@ -371,7 +378,7 @@ async function adopt(body: TokenBody, keepRefresh?: string): Promise<Session> {
   return s;
 }
 
-type Profile = { username: string; fullName: string; avatar: string | null };
+type Profile = { username: string; fullName: string; avatar: string | null; role?: string };
 
 /**
  * Хэрэглэгчийн нэр, зургийг порталаас асууна.
@@ -392,12 +399,14 @@ async function fetchProfile(token: string, username: string): Promise<Profile> {
       username?: string;
       fullName?: string;
       thumbnail?: string;
+      role?: string;
       error?: unknown;
     };
     if (j.error) return blank;
     return {
       username: j.username ?? username,
       fullName: j.fullName ?? "",
+      role: j.role,
       avatar: j.thumbnail
         ? `${SHARING}/community/users/${encodeURIComponent(username)}/info/${j.thumbnail}?token=${encodeURIComponent(token)}`
         : null,

@@ -142,18 +142,22 @@ export function RepairMap() {
     [data],
   );
 
-  const shown = React.useMemo(() => {
+  /* Хайлтад тохирох цэгүүд — дүүргийн шүүлтээс ӨМНӨХ. Дүүргийн
+     задаргаа үүнээс тоологдоно (өөрийн хэмжээсийг алгасна) */
+  const found = React.useMemo(() => {
     const q = query.trim().toLowerCase();
-    return (data?.shops ?? []).filter((sh) => {
-      if (district != null && sh.district !== district) return false;
-      if (!q) return true;
-      /* Нэр ба байршлын бичвэр хоёуланд нь хайна — хороо, тоот нь
-         байршлын талбарт бичигдсэн байдаг */
-      return (
-        sh.name.toLowerCase().includes(q) || sh.place.toLowerCase().includes(q)
-      );
-    });
-  }, [data, district, query]);
+    if (!q) return data?.shops ?? [];
+    /* Нэр ба байршлын бичвэр хоёуланд нь хайна — хороо, тоот нь
+       байршлын талбарт бичигдсэн байдаг */
+    return (data?.shops ?? []).filter(
+      (sh) => sh.name.toLowerCase().includes(q) || sh.place.toLowerCase().includes(q),
+    );
+  }, [data, query]);
+
+  const shown = React.useMemo(
+    () => (district == null ? found : found.filter((sh) => sh.district === district)),
+    [found, district],
+  );
 
   const visible = React.useMemo(() => {
     if (district == null && !query.trim()) {
@@ -171,20 +175,27 @@ export function RepairMap() {
 
     Дүүрэг тэмдэглэгдээгүй бичлэгүүд ТУСДАА мөр болно: нуувал жагсаалтын
     нийлбэр нийт тоотой таарахгүй байгаа нь тайлбаргүй үлдэнэ.
+
+    ⚠ Тоо нь ХАЙЛТЫГ дагана (`found`) — урьд нь шүүгдээгүй эх
+    тооллоос уншдаг тул хайлт тавьсан ч цэсний тоо хөдөлдөггүй байв.
+    ⚠ Жагсаалт нь ШҮҮГДЭЭГҮЙ бүх дүүргээс — тэг болсон дүүрэг ч 0-ээр
+    үлдэнэ: цэс өөрийгөө хумивал сонголтоо солих арга алга болно.
   */
   const districtData = React.useMemo<Datum[]>(() => {
     if (!data) return [];
-    /* Товчлолыг БҮТЭН нэрээр — албан бичигт товчлол гарахгүй */
-    const rows: Datum[] = data.byDistrict.map((d) => ({
-      key: d.district,
-      label: districtName(d.district),
-      value: d.n,
-    }));
-    if (data.noDistrict) {
-      rows.push({ key: "", label: "Бүртгэгдээгүй", value: data.noDistrict });
-    }
-    return rows;
-  }, [data]);
+    const counts = new Map<string, number>();
+    for (const sh of data.shops) counts.set(sh.district, 0);
+    for (const sh of found) counts.set(sh.district, (counts.get(sh.district) ?? 0) + 1);
+    /* Товчлолыг БҮТЭН нэрээр — албан бичигт товчлол гарахгүй.
+       Дүүрэггүй мөр ("") эцэст сууна */
+    return [...counts]
+      .map(([key, value]) => ({
+        key,
+        label: key ? districtName(key) : "Бүртгэгдээгүй",
+        value,
+      }))
+      .sort((a, b) => (a.key ? 0 : 1) - (b.key ? 0 : 1) || b.value - a.value);
+  }, [data, found]);
 
   /* Дүүрэг сонгоход зураг тийш нь ойртоно; цуцлахад бүх цэг рүү буцна */
   const focus = React.useMemo<Extent | null>(() => {
@@ -206,11 +217,15 @@ export function RepairMap() {
     return i === undefined ? null : data.shops[i];
   }, [data, byOid, tip.oid]);
 
+  /* Шүүлтээс гарсан цэгийн бичилт ДАМ хаагдана — зураг дээр
+     харагдахгүй цэгийн цонх үлдэхгүй (эффектээр биш) */
   const selected = React.useMemo(() => {
     if (!data || picked == null) return null;
     const i = byOid.get(picked);
-    return i === undefined ? null : data.shops[i];
-  }, [data, byOid, picked]);
+    if (i === undefined) return null;
+    const sh = data.shops[i];
+    return shown.includes(sh) ? sh : null;
+  }, [data, byOid, picked, shown]);
 
   const highlight = React.useMemo<[number, number] | null>(
     () => (hovered ? [hovered.lon, hovered.lat] : null),

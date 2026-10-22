@@ -236,7 +236,26 @@ export function ChemicalsDashboard() {
 
   const shown = React.useMemo(() => (rows ?? []).filter((w) => keep(w)), [rows, keep]);
 
-  const activeCount =
+  const byOid = React.useMemo(() => {
+    const m = new Map<number, Warehouse>();
+    for (const w of rows ?? []) m.set(w.oid, w);
+    return m;
+  }, [rows]);
+
+  /*
+    ЗУРАГ ДЭЭРХ СОНГОЛТ нь ШҮҮЛТ: диаграм, товьёог, нийлбэр бүгд тэр
+    агуулахаар хумигдана (диаграмын товшилттой нэг зан төлөв). Бусад
+    шүүлтээс гарсан бол ДАМ цуцлагдана — эффектээр биш.
+    ⚠ Газрын зургийн `visible`-ийг ХУМИХГҮЙ: өөр цэг товших боломж үлдэнэ.
+  */
+  const sel = React.useMemo(() => {
+    const w = picked == null ? null : byOid.get(picked);
+    return w && keep(w) ? w.oid : null;
+  }, [picked, byOid, keep]);
+  const has = React.useCallback((w: Warehouse) => sel == null || w.oid === sel, [sel]);
+
+  /** Шүүлтийн тоо — сонголтгүй. Зургийн `visible`, ойртолт үүнийг дагана */
+  const filterCount =
     (group ? 1 : 0) +
     (substance ? 1 : 0) +
     (district ? 1 : 0) +
@@ -244,6 +263,13 @@ export function ChemicalsDashboard() {
     (storage ? 1 : 0) +
     (status ? 1 : 0) +
     (wholeRange ? 0 : 1);
+  const activeCount = filterCount + (sel != null ? 1 : 0);
+
+  /** Сонголтоор хумигдсан агуулахууд — индикаторт */
+  const picks = React.useMemo(
+    () => (sel == null ? shown : shown.filter((w) => w.oid === sel)),
+    [shown, sel],
+  );
 
   /* ---------------- Индикатор ---------------- */
 
@@ -252,7 +278,7 @@ export function ChemicalsDashboard() {
     let unmeasured = 0;
     let expired = 0;
     const names = new Set<string>();
-    for (const w of shown) {
+    for (const w of picks) {
       /* `null` нь ХЭМЖИГДЭЭГҮЙ, тэг БИШ — нийлбэрт оруулахгүй, тусад нь
          тоолж дэлгэц дээр тэмдэглэнэ */
       if (w.tons == null) unmeasured++;
@@ -261,7 +287,7 @@ export function ChemicalsDashboard() {
       for (const s of w.substances) names.add(s);
     }
     return { tons, unmeasured, expired, names: names.size };
-  }, [shown, todayKey]);
+  }, [picks, todayKey]);
 
   /* ---------------- Бодисын товьёог ----------------
 
@@ -274,7 +300,7 @@ export function ChemicalsDashboard() {
        бодистой байсан нэг л удаа тоологдоно */
     const m = new Map<string, number>();
     for (const w of rows ?? []) {
-      if (!keep(w, "group", "substance")) continue;
+      if (!keep(w, "group", "substance") || !has(w)) continue;
       for (const g of w.groups) m.set(g, (m.get(g) ?? 0) + 1);
     }
     return SUBSTANCE_GROUPS.filter((g) => m.has(g.id))
@@ -286,13 +312,13 @@ export function ChemicalsDashboard() {
         const bu = UNGROUPED.includes(b.id) ? 1 : 0;
         return au - bu || b.n - a.n;
       });
-  }, [rows, keep]);
+  }, [rows, keep, has]);
 
   /** Нэрсийн жагсаалт — бүлгийн шүүлт үйлчилнэ, нэрийнх нь алгасагдана */
   const substanceList = React.useMemo(() => {
     const m = new Map<string, { group: string; n: number }>();
     for (const w of rows ?? []) {
-      if (!keep(w, "substance")) continue;
+      if (!keep(w, "substance") || !has(w)) continue;
       for (const s of w.substances) {
         const cur = m.get(s);
         if (cur) cur.n++;
@@ -302,7 +328,7 @@ export function ChemicalsDashboard() {
     return [...m]
       .map(([name, v]) => ({ name, group: v.group, n: v.n }))
       .sort((a, b) => b.n - a.n || a.name.localeCompare(b.name, "mn"));
-  }, [rows, keep]);
+  }, [rows, keep, has]);
 
   /*
     Бүлэг сонгоход НЭРИЙН сонголт цэвэрлэгдэнэ — өмнөх нэр шинэ бүлэгт
@@ -315,16 +341,24 @@ export function ChemicalsDashboard() {
 
   /* ---------------- Задаргаа ---------------- */
 
-  const byDistrict = React.useMemo<Datum[]>(() => {
-    const m = new Map<string, number>();
+  /*
+    Диаграм нь зургийн сонголтоор хумигдана, ШҮҮЛТҮҮРИЙН ЦЭС харин үгүй
+    (`menu`): цэс өөрийгөө хумивал сонголтоо солих арга үлдэхгүй.
+  */
+  const [byDistrict, districtMenu] = React.useMemo(() => {
+    const all = new Map<string, number>();
+    const cut = new Map<string, number>();
     for (const w of rows ?? []) {
       if (!keep(w, "district")) continue;
-      m.set(w.district, (m.get(w.district) ?? 0) + 1);
+      all.set(w.district, (all.get(w.district) ?? 0) + 1);
+      if (has(w)) cut.set(w.district, (cut.get(w.district) ?? 0) + 1);
     }
-    return [...m]
-      .map(([key, value]) => ({ key, label: districtName(key), value }))
-      .sort((a, b) => b.value - a.value);
-  }, [rows, keep]);
+    const out = (m: Map<string, number>): Datum[] =>
+      [...m]
+        .map(([key, value]) => ({ key, label: districtName(key), value }))
+        .sort((a, b) => b.value - a.value);
+    return [out(cut), out(all)] as const;
+  }, [rows, keep, has]);
 
   /*
     Нэг агуулах хэд хэдэн эрхтэй тул мөрүүдийн нийлбэр агуулахын тооноос
@@ -332,29 +366,39 @@ export function ChemicalsDashboard() {
     албан ёсны бүртгэлийн дэлгэцэд орох зүйл биш; `CLAUDE.md`-д
     баримтжуулав.
   */
-  const byRight = React.useMemo<Datum[]>(() => {
-    const m = new Map<string, number>();
+  const [byRight, rightMenu] = React.useMemo(() => {
+    const all = new Map<string, number>();
+    const cut = new Map<string, number>();
     for (const w of rows ?? []) {
       if (!keep(w, "right")) continue;
-      for (const r of w.rights) m.set(r, (m.get(r) ?? 0) + 1);
+      for (const r of w.rights) {
+        all.set(r, (all.get(r) ?? 0) + 1);
+        if (has(w)) cut.set(r, (cut.get(r) ?? 0) + 1);
+      }
     }
-    return RIGHTS.filter((r) => m.has(r.id)).map((r) => ({
-      key: r.id,
-      label: r.label,
-      value: m.get(r.id) ?? 0,
-    }));
-  }, [rows, keep]);
+    const out = (m: Map<string, number>): Datum[] =>
+      RIGHTS.filter((r) => m.has(r.id)).map((r) => ({
+        key: r.id,
+        label: r.label,
+        value: m.get(r.id) ?? 0,
+      }));
+    return [out(cut), out(all)] as const;
+  }, [rows, keep, has]);
 
-  const byStorage = React.useMemo<Datum[]>(() => {
-    const m = new Map<string, number>();
+  const [byStorage, storageMenu] = React.useMemo(() => {
+    const all = new Map<string, number>();
+    const cut = new Map<string, number>();
     for (const w of rows ?? []) {
       if (!keep(w, "storage")) continue;
-      m.set(w.storage, (m.get(w.storage) ?? 0) + 1);
+      all.set(w.storage, (all.get(w.storage) ?? 0) + 1);
+      if (has(w)) cut.set(w.storage, (cut.get(w.storage) ?? 0) + 1);
     }
-    return [...m]
-      .map(([key, value]) => ({ key, label: key, value }))
-      .sort((a, b) => b.value - a.value);
-  }, [rows, keep]);
+    const out = (m: Map<string, number>): Datum[] =>
+      [...m]
+        .map(([key, value]) => ({ key, label: key, value }))
+        .sort((a, b) => b.value - a.value);
+    return [out(cut), out(all)] as const;
+  }, [rows, keep, has]);
 
   /* Гэрчилгээ дуусах он. Задраагүй огноог ТУСДАА мөр болгоно — нуувал
      жагсаалтын нийлбэр нийт тоотой таарахгүй нь тайлбаргүй үлдэнэ */
@@ -372,7 +416,7 @@ export function ChemicalsDashboard() {
   const byExpiry = React.useMemo<Datum[]>(() => {
     const m = new Map<number, number>();
     for (const w of rows ?? []) {
-      if (!keep(w, "expiry")) continue;
+      if (!keep(w, "expiry") || !has(w)) continue;
       const y = Number(w.validTo?.slice(0, 4));
       if (!Number.isFinite(y)) continue;
       m.set(y, (m.get(y) ?? 0) + 1);
@@ -385,7 +429,7 @@ export function ChemicalsDashboard() {
       out.push({ key: String(y), label: String(y), value: m.get(y) ?? 0 });
     }
     return out;
-  }, [rows, keep]);
+  }, [rows, keep, has]);
 
   /* ---------------- Газрын зураг ---------------- */
 
@@ -393,12 +437,12 @@ export function ChemicalsDashboard() {
 
   const visible = React.useMemo(() => {
     if (!rows) return NO_INDEX;
-    if (!activeCount) return Uint32Array.from(rows, (_, i) => i);
+    if (!filterCount) return Uint32Array.from(rows, (_, i) => i);
     const on = new Set(shown.map((w) => w.oid));
     const out: number[] = [];
     points.oid.forEach((o, i) => on.has(o) && out.push(i));
     return Uint32Array.from(out);
-  }, [rows, activeCount, shown, points]);
+  }, [rows, filterCount, shown, points]);
 
   /*
     Цэгийн ХЭМЖЭЭ = тоо хэмжээ, ЛОГАРИФМ хуваарьтай. Тонн нь 0.007-оос
@@ -438,20 +482,14 @@ export function ChemicalsDashboard() {
   }, [rows, todayKey]);
 
   const focus = React.useMemo<Extent | null>(() => {
-    if (!activeCount || !shown.length) return null;
+    if (!filterCount || !shown.length) return null;
     const b = new Bounds();
     for (const w of shown) b.add(w.lon, w.lat);
     return b.get(0.008);
-  }, [activeCount, shown]);
-
-  const byOid = React.useMemo(() => {
-    const m = new Map<number, Warehouse>();
-    for (const w of rows ?? []) m.set(w.oid, w);
-    return m;
-  }, [rows]);
+  }, [filterCount, shown]);
 
   const hovered = tip.oid == null ? null : (byOid.get(tip.oid) ?? null);
-  const selected = picked == null ? null : (byOid.get(picked) ?? null);
+  const selected = sel == null ? null : (byOid.get(sel) ?? null);
 
   const highlight = React.useMemo<[number, number] | null>(
     () => (hovered ? [hovered.lon, hovered.lat] : null),
@@ -512,7 +550,7 @@ export function ChemicalsDashboard() {
           onClear={() => setDistrict(null)}
         >
           <PickList
-            items={byDistrict.map((d) => ({
+            items={districtMenu.map((d) => ({
               key: d.key,
               label: d.label,
               value: d.value,
@@ -530,7 +568,7 @@ export function ChemicalsDashboard() {
           onClear={() => setRight(null)}
         >
           <PickList
-            items={byRight.map((d) => ({ key: d.key, label: d.label, value: d.value }))}
+            items={rightMenu.map((d) => ({ key: d.key, label: d.label, value: d.value }))}
             selected={right}
             onPick={setRight}
           />
@@ -544,7 +582,7 @@ export function ChemicalsDashboard() {
           onClear={() => setStorage(null)}
         >
           <PickList
-            items={byStorage.map((d) => ({ key: d.key, label: d.label, value: d.value }))}
+            items={storageMenu.map((d) => ({ key: d.key, label: d.label, value: d.value }))}
             selected={storage}
             onPick={setStorage}
           />
@@ -586,7 +624,8 @@ export function ChemicalsDashboard() {
               key: s.id,
               label: s.label,
               value: (rows ?? []).filter(
-                (w) => keep(w, "status") && expiryState(w, todayKey) === s.id,
+                (w) =>
+                  keep(w, "status") && expiryState(w, todayKey) === s.id,
               ).length,
             }))}
             selected={status}
@@ -643,7 +682,7 @@ export function ChemicalsDashboard() {
         {/* ---- ТӨВ: индикатор + газрын зураг ---- */}
         <div className="flex min-h-0 min-w-0 flex-col gap-2.5">
           <div className="grid shrink-0 grid-cols-2 divide-x divide-line rounded-xs border border-line bg-paper-2 sm:grid-cols-4">
-            <Cell label="Агуулах" value={num(shown.length)} />
+            <Cell label="Агуулах" value={num(picks.length)} />
             <Cell label="Нийт тоо хэмжээ" value={num(totals.tons)} unit="тонн" />
             <Cell label="Бодисын нэр төрөл" value={num(totals.names)} />
             <Cell

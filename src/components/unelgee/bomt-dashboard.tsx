@@ -143,7 +143,36 @@ export function BomtDashboard() {
 
   const shown = React.useMemo(() => (rows ?? []).filter((r) => passes(r)), [rows, passes]);
 
+  /*
+    Зураг дээр сонгосон нэгж талбар нь диаграм, хүснэгт, үзүүлэлтийн ШҮҮЛТ
+    (хөндлөн шүүлт хоёр тийш). Бусад шүүлтэд тохирохгүй бол сонголт ДАМ
+    цуцлагдана. Газрын зураг сонголтоор хумигдахгүй — өөр талбар товших зам.
+  */
+  const sel = React.useMemo(
+    () => (picked != null && shown.some((r) => r.oid === picked) ? picked : null),
+    [shown, picked],
+  );
+
+  /** Диаграмын шүүлт — сонгосон нэгж талбартай хамт */
+  const passesSel = React.useCallback(
+    (r: BomtRow, ...skips: Dim[]) => passes(r, ...skips) && (sel == null || r.oid === sel),
+    [passes, sel],
+  );
+
   const count = React.useCallback(
+    (d: Dim, ...skips: Dim[]) => {
+      const m = new Map<string, number>();
+      for (const r of rows ?? []) {
+        if (!passesSel(r, ...skips)) continue;
+        const k = dimOf(r, d);
+        m.set(k, (m.get(k) ?? 0) + 1);
+      }
+      return m;
+    },
+    [rows, passesSel, dimOf],
+  );
+  /* Шүүлтүүрийн цэс сонголтоор хумигдахгүй — шүүгдээгүй жагсаалтаас */
+  const countAll = React.useCallback(
     (d: Dim, ...skips: Dim[]) => {
       const m = new Map<string, number>();
       for (const r of rows ?? []) {
@@ -164,6 +193,14 @@ export function BomtDashboard() {
       value: m.get(p.id) ?? 0,
     }));
   }, [count]);
+  const plantingPick = React.useMemo<Datum[]>(() => {
+    const m = countAll("planting", "planting");
+    return PLANTING.filter((p) => m.has(p.id)).map((p) => ({
+      key: p.id,
+      label: p.label,
+      value: m.get(p.id) ?? 0,
+    }));
+  }, [countAll]);
 
   const menu = React.useCallback(
     (d: Dim): Datum[] => {
@@ -177,16 +214,31 @@ export function BomtDashboard() {
     },
     [count, labelOf],
   );
+  const menuAll = React.useCallback(
+    (d: Dim): Datum[] => {
+      const m = countAll(d, d);
+      const out = [...m].map(([k, v]) => ({ key: k, label: labelOf(d, k), value: v }));
+      if (d === "activity") {
+        const order = new Map<string, number>(ACTIVITIES.map((a, i) => [a.id, i]));
+        return out.sort((a, b) => (order.get(a.key) ?? 99) - (order.get(b.key) ?? 99));
+      }
+      return out.sort((a, b) => b.value - a.value);
+    },
+    [countAll, labelOf],
+  );
   const activityMenu = React.useMemo(() => menu("activity"), [menu]);
   const districtMenu = React.useMemo(() => menu("district"), [menu]);
   const landuseMenu = React.useMemo(() => menu("landuse"), [menu]);
-  const implementerMenu = React.useMemo(() => menu("implementer"), [menu]);
+  const activityPick = React.useMemo(() => menuAll("activity"), [menuAll]);
+  const districtPick = React.useMemo(() => menuAll("district"), [menuAll]);
+  const landusePick = React.useMemo(() => menuAll("landuse"), [menuAll]);
+  const implementerPick = React.useMemo(() => menuAll("implementer"), [menuAll]);
 
   /* ---------------- Төсөл хэрэгжүүлэгчийн хүснэгт ---------------- */
   const implementers = React.useMemo<ImplementerRow[]>(() => {
     const m = new Map<string, ImplementerRow>();
     for (const r of rows ?? []) {
-      if (!passes(r, "implementer")) continue;
+      if (!passesSel(r, "implementer")) continue;
       const hit = m.get(r.implementer) ?? { name: r.implementer, n: 0, ha: 0, site: 0, nbog: 0 };
       hit.n += 1;
       hit.ha += r.m2 / 10_000;
@@ -195,7 +247,7 @@ export function BomtDashboard() {
       m.set(r.implementer, hit);
     }
     return [...m.values()].sort((a, b) => b.n - a.n || b.ha - a.ha);
-  }, [rows, passes]);
+  }, [rows, passesSel]);
 
   const columns = React.useMemo<Column<ImplementerRow>[]>(
     () => [
@@ -233,31 +285,32 @@ export function BomtDashboard() {
   );
 
   const stats = React.useMemo(() => {
-    const m2 = shown.reduce((s, r) => s + r.m2, 0);
-    const site = shown.filter((r) => r.planting === "site").length;
-    const nbog = shown.filter((r) => r.planting === "nbog").length;
+    const own = sel == null ? shown : shown.filter((r) => r.oid === sel);
+    const m2 = own.reduce((s, r) => s + r.m2, 0);
+    const site = own.filter((r) => r.planting === "site").length;
+    const nbog = own.filter((r) => r.planting === "nbog").length;
     return {
-      n: shown.length,
-      implementers: new Set(shown.map((r) => r.implementer)).size,
+      n: own.length,
+      implementers: new Set(own.map((r) => r.implementer)).size,
       ha: m2 / 10_000,
       site,
       nbog,
     };
-  }, [shown]);
+  }, [shown, sel]);
 
   const anyFilter = Boolean(planting || activity || district || landuse || implementer);
   const focus = React.useMemo<Extent | null>(() => {
     if (!data) return null;
-    if (picked == null && !anyFilter) return null;
-    const on = picked != null ? new Set([picked]) : new Set(shown.map((r) => r.oid));
+    if (sel == null && !anyFilter) return null;
+    const on = sel != null ? new Set([sel]) : new Set(shown.map((r) => r.oid));
     const b = new Bounds();
     for (const f of data.shapes.features) if (on.has(Number(f.id))) b.addGeometry(f.geometry);
     return b.get(0.0022);
-  }, [data, shown, picked, anyFilter]);
+  }, [data, shown, sel, anyFilter]);
 
   const selected = React.useMemo(
-    () => (picked == null ? null : (rows?.find((r) => r.oid === picked) ?? null)),
-    [rows, picked],
+    () => (sel == null ? null : (rows?.find((r) => r.oid === sel) ?? null)),
+    [rows, sel],
   );
   const hovered = React.useMemo(
     () => (tip.oid == null ? null : (rows?.find((r) => r.oid === tip.oid) ?? null)),
@@ -278,7 +331,12 @@ export function BomtDashboard() {
   }
 
   const activeCount =
-    (planting ? 1 : 0) + (activity ? 1 : 0) + (district ? 1 : 0) + (landuse ? 1 : 0) + (implementer ? 1 : 0);
+    (planting ? 1 : 0) +
+    (activity ? 1 : 0) +
+    (district ? 1 : 0) +
+    (landuse ? 1 : 0) +
+    (implementer ? 1 : 0) +
+    (sel != null ? 1 : 0);
   const pct = (v: number) => (stats.n ? `${((v / stats.n) * 100).toFixed(0)}%` : "—");
 
   return (
@@ -295,7 +353,7 @@ export function BomtDashboard() {
           onClear={() => setPlanting(null)}
           width={236}
         >
-          <PickList items={plantingData} selected={planting} onPick={setPlanting} />
+          <PickList items={plantingPick} selected={planting} onPick={setPlanting} />
         </FilterMenu>
         <FilterMenu
           label="Үйл ажиллагааны чиглэл"
@@ -305,7 +363,7 @@ export function BomtDashboard() {
           onClear={() => setActivity(null)}
           width={246}
         >
-          <PickList items={activityMenu} selected={activity} onPick={setActivity} />
+          <PickList items={activityPick} selected={activity} onPick={setActivity} />
         </FilterMenu>
         <FilterMenu
           label="Дүүрэг"
@@ -315,7 +373,7 @@ export function BomtDashboard() {
           onClear={() => setDistrict(null)}
           width={230}
         >
-          <PickList items={districtMenu} selected={district} onPick={setDistrict} />
+          <PickList items={districtPick} selected={district} onPick={setDistrict} />
         </FilterMenu>
         <FilterMenu
           label="Газрын зориулалт"
@@ -325,7 +383,7 @@ export function BomtDashboard() {
           onClear={() => setLanduse(null)}
           width={300}
         >
-          <PickList items={landuseMenu} selected={landuse} onPick={setLanduse} />
+          <PickList items={landusePick} selected={landuse} onPick={setLanduse} />
         </FilterMenu>
         <FilterMenu
           label="Төсөл хэрэгжүүлэгч"
@@ -335,7 +393,7 @@ export function BomtDashboard() {
           onClear={() => setImplementer(null)}
           width={300}
         >
-          <PickList items={implementerMenu} selected={implementer} onPick={setImplementer} searchable />
+          <PickList items={implementerPick} selected={implementer} onPick={setImplementer} searchable />
         </FilterMenu>
       </FilterBar>
 
@@ -395,9 +453,9 @@ export function BomtDashboard() {
             <PolygonMap
               points={NO_POINTS}
               visible={NO_INDEX}
-              shapes={{ data: shapes, selected: picked, crisp: true }}
+              shapes={{ data: shapes, selected: sel, crisp: true }}
               basemap={basemap}
-              onSelect={(oid) => setPicked(picked === oid ? null : oid)}
+              onSelect={(oid) => setPicked(sel === oid ? null : oid)}
               onHover={tip.onHover}
               focus={focus}
               cluster={false}

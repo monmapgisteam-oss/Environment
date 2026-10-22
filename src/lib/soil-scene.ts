@@ -47,6 +47,8 @@ import type { Species } from "@/lib/latrine-sim-3d";
 import { createPlumes, type PlumeState } from "@/lib/soil-plumes";
 import { fetchLayerFeatures, fetchLayerInfo } from "@/lib/portal-layers";
 import { NOGOON_TABS } from "@/lib/nogoon-layers";
+import { ulaanbaatarRings } from "@/lib/ub-boundary";
+import { addSceneTools } from "@/lib/scene-tools";
 
 const TILE_ASPECT = TILE_W / TILE_H;
 const RAD = Math.PI / 180;
@@ -66,6 +68,10 @@ export type PickInfo = {
   elevation: number;
   /** Товшсон цэгийн гүн, см — гадаргууг товшвол `null` */
   depthCm: number | null;
+  /** Монолитын үеүүд (см, ангилал) — газрын доорх баганад дахин хэрэглэнэ */
+  hz: { n: string; t: number; b: number; c: string }[];
+  /** Гүний усны гүн, см */
+  gwCm: number;
 };
 
 /** Зүсэлтийн шугамын дагуух хөндлөн огтлол */
@@ -99,15 +105,34 @@ export type SoilScene = {
   setPlumeSpecies: (s: Species) => void;
   /** Үе давхаргын хуулга — хавтанцрын зураг data URL-ээр */
   legend: () => { key: string; label: string; swatch: string }[];
-  /** Хөрсний хэв шинжийн хуулга */
-  soils: () => { key: string; name: string; wrb: string; color: string }[];
+  /**
+   * Блокийн геометр — дуудагчийн нэмэлт давхарга (`layers`) блок дээр яг
+   * суухад: `zAt` дээд гадаргын өндөр (м), `validAt` хөрстэй цэг эсэх,
+   * `exs` см → м-ийн өсгөлт (×8), `mLon`/`mLat` градус → метр.
+   */
+  /** SceneView өөрөө — дуудагчийн RenderNode ("Үер ба нэвчилт"-ийн ус) түүн дээр зурна */
+  view: unknown;
+  geom: {
+    zAt: (lon: number, lat: number) => number;
+    validAt: (lon: number, lat: number) => boolean;
+    exs: () => number;
+    mLon: number;
+    mLat: number;
+    SR: object;
+  };
 };
 
 /* SDK нь энд төрөлгүй (CDN-ээс AMD-ээр ачаалагддаг) тул зөвхөн
    хэрэглэдэг гишүүдийг нь бүтцээрээ тодорхойлно */
 type Obj = Record<string, unknown>;
 type C<T = Obj> = new (p?: object) => T;
-type GLayer = { removeAll: () => void; add: (g: unknown) => void; addMany: (g: unknown[]) => void };
+type GLayer = {
+  removeAll: () => void;
+  add: (g: unknown) => void;
+  remove: (g: unknown) => void;
+  addMany: (g: unknown[]) => void;
+  opacity: number;
+};
 type Reactive = { watch: (get: () => unknown, cb: () => void) => { remove: () => void } };
 type Analysis = { shape: Obj | null; excludedLayers: unknown[]; excludeGroundSurface: boolean };
 type Widget = { destroy: () => void };
@@ -155,8 +180,49 @@ export async function createSoilScene(opts: {
    * ИНДЕКС (`latrine-sim.bin`-ийн дараалал; давхаргын `oid` = индекс + 1)
    */
   onLatrine: (i: number) => void;
+  /**
+   * Зүсэлт дээрх жорлонгийн бохирдол ({@link createPlumes}) тооцогдох эсэх —
+   * анхдагч `true`. "Үер ба нэвчилт" харагдац `false` өгнө: тэнд зүсэлтийн
+   * нүүрэнд ҮЕРИЙН усаар зөөгдсөн бохирдол зурагдах тул 10 жилийн
+   * жорлонгийн тархалт давхарлавал хоёр өөр хугацааны зураг холилдоно.
+   */
+  plumes?: boolean;
+  /**
+   * Шулуун зүсэлт тогтох, хөдлөх, тал нь солигдох, арилах бүрд: `a`, `b`
+   * шугамын үзүүр, `rem` — хасагдсан (харагч) талын азимут. Зурсан талбайд `null`.
+   */
+  onCut?: (c: { a: [number, number]; b: [number, number]; rem: number } | null) => void;
+  /**
+   * Дуудагчийн нэмэлт давхаргууд — газрын зурагт орж, огтлолтоос
+   * ЧӨЛӨӨЛӨГДӨНӨ (таглаатай адил). Үерийн ус, бохирдлын хөшиг энд.
+   */
+  layers?: unknown[];
+  /**
+   * Дээд гадарга ҮРГЭЛЖ хиймэл дагуулын зураг, "Дээд гадарга" сонголт
+   * харагдахгүй — "Үер ба нэвчилт" харагдац (хэрэглэгч 2026-10-12: "дээд
+   * гадарга үргэлж хиймэл дагуулын зураг … хөрсний хэв шинж байх хэрэггүй").
+   * Зураг татагдаагүй бол хавтгай зураглал хэвээр.
+   */
+  imageryOnly?: boolean;
 }): Promise<SoilScene> {
   const { container, data, onPick, onNote, onSection, onPlumes, onLatrine, onScale } = opts;
+  const PLUMES = opts.plumes !== false;
+  /*
+    ⚠⚠ `imageryOnly` — ДЭЭД ГАДАРГА нь ОЙРТОХОД ТОДРОХ ХИЙМЭЛ ДАГУУЛ
+    (`createImageryTop`; хэрэглэгч 2026-10-12: "хөрсний блок диаграмыг
+    сонгохоор ийм чанаргүй … satellite шиг" → дараа нь "хөрсний блок
+    Улаанбаатарын хилээр clip байх ёстой").
+    ⚠ Эхний шийдэл нь Esri-ийн ГАЗРЫГ (opacity 1) харуулж дээд мешийг
+    хассан — тод боловч газар хаа сайгүй үргэлжилж, блокийн хана газар
+    доор далдарч блок огт харагдахгүй байв. Esri-ийн газрыг олон өнцөгтөөр
+    тайрах арга SDK 4.33-д БАЙХГҮЙ (`clippingArea` нь зөвхөн тэгш өнцөгт).
+    Тиймээс газар дахин нуугдаж, дээд гадарга нь өөрсдийн меш — гэхдээ НЭГ
+    бүдэг текстур биш, дөрвөн түвшний квадрат модны хэсэг бүр камерын
+    зайгаар z12…z17 хавтангаар будагдана (Esri-ийн газар шиг).
+  */
+  const IMAGERY_ONLY = opts.imageryOnly === true;
+  const onCut = opts.onCut ?? (() => {});
+  const extraL = opts.layers ?? [];
   /* Фото хавтанцар (жишиг зургийн бүтэц) — байхгүй бол бүтэц бүхэлдээ датаас */
   const photos = await loadSoilTiles();
   const [EsriMap, SceneView, GraphicsLayer, Graphic, Mesh, MeshComponent, MeshMaterial, MeshTexture,
@@ -182,6 +248,55 @@ export async function createSoilScene(opts: {
   const px = fg.getImageData(0, 0, NXF, NYF);
   const FINEIDX = new Uint8Array(NXF * NYF);
   for (let i = 0; i < FINEIDX.length; i++) FINEIDX[i] = px.data[i * 4];
+
+  /*
+    ⚠⚠ БЛОК УЛААНБААТАРЫН ХИЛЭЭР ТАСЛАГДАНА (хэрэглэгч 2026-10-12: "хөрсний
+    блок Улаанбаатарын хилээр clip байх ёстой"). Хөрсний зураглал нь хотын
+    хилтэй бараг давхцдаг ч бүдүүн нүдээр (~300 м) шатлан тасардаг, 35 нүд нь
+    хилээс гадна, 672 нь хил дайрдаг байв.
+    · ГЕОМЕТР (дээд гадарга, хана, ёроол) — хилийн олон өнцөгтөөр ЯГ
+      тасална (`BASE` → `clipPieces`, `buildClipBody`), зурсан талбайтай нэг зам.
+    · ЦЭГЭН шалгалт (`validAt` — таглаа, хөндлөн огтлол, профайл, катена,
+      бохирдол) — хилийн маскаар нарийн торын (≈75 м) нарийвчлалтай.
+    ⚠ Хил нь ~200 м-ээр ерөнхийлсөн ({@link ulaanbaatarRings}); блокийн
+    хүрээнд зөвхөн үндсэн нутаг орно (Багануур, Багахангай хүрээнээс гадна).
+  */
+  const BASE: [number, number][] = (() => {
+    const L = x0, R = x0 + nx * dx, B = y0, T = y0 + ny * dy;
+    let best: [number, number][] = [];
+    let bestA = 0;
+    for (const ring of ulaanbaatarRings()) {
+      let w = Infinity, e = -Infinity, s = Infinity, n = -Infinity;
+      for (const [x, y] of ring) {
+        w = Math.min(w, x); e = Math.max(e, x);
+        s = Math.min(s, y); n = Math.max(n, y);
+      }
+      const a = Math.max(0, Math.min(e, R) - Math.max(w, L)) * Math.max(0, Math.min(n, T) - Math.max(s, B));
+      if (a > bestA) {
+        bestA = a;
+        best = ring;
+      }
+    }
+    return best;
+  })();
+  const UBMASK = new Uint8Array(NXF * NYF);
+  if (BASE.length >= 3) {
+    const mc = document.createElement("canvas");
+    mc.width = NXF;
+    mc.height = NYF;
+    const mg = mc.getContext("2d", { willReadFrequently: true })!;
+    mg.beginPath();
+    BASE.forEach(([x, y], i) => {
+      const X = ((x - x0) / (nx * dx)) * NXF;
+      const Y = (1 - (y - y0) / (ny * dy)) * NYF;
+      if (i) mg.lineTo(X, Y);
+      else mg.moveTo(X, Y);
+    });
+    mg.closePath();
+    mg.fill();
+    const md = mg.getImageData(0, 0, NXF, NYF).data;
+    for (let i = 0; i < UBMASK.length; i++) UBMASK[i] = md[i * 4 + 3] >= 128 ? 1 : 0;
+  } else UBMASK.fill(1);
 
   /* Дээд гадаргын зураглал: хөрсний хэв шинжийн өнгө + хилийн шугам.
      ⚠ Индексийн PNG-г ДАРЖ бичнэ — тэр canvas нь дараа нь бүтэц болж
@@ -269,10 +384,19 @@ export async function createSoilScene(opts: {
     const r = Math.floor((lat - y0) / dy);
     return c < 0 || r < 0 || c >= nx || r >= ny ? -1 : r * nx + c;
   };
-  const validAt = (lon: number, lat: number) => {
+  /** Хөрсний зураглалтай нүд эсэх — хилийн маскгүй (хилийн дагуух хананд) */
+  const soilOk = (lon: number, lat: number) => {
     const i = cellAt(lon, lat);
     return i >= 0 && cells[i] !== 255;
   };
+  /** Хөрстэй БӨГӨӨД хотын хил дотор — бусад бүх цэгэн шалгалт үүгээр */
+  const inUB = (lon: number, lat: number) => {
+    const fcx = Math.floor(((lon - x0) / dx) * fine);
+    const fry = Math.floor(((lat - y0) / dy) * fine);
+    if (fcx < 0 || fry < 0 || fcx >= NXF || fry >= NYF) return false;
+    return UBMASK[(NYF - 1 - fry) * NXF + fcx] === 1;
+  };
+  const validAt = (lon: number, lat: number) => soilOk(lon, lat) && inUB(lon, lat);
   const soilAt = (lon: number, lat: number) => {
     const i = cellAt(lon, lat);
     if (i < 0) return 255;
@@ -312,7 +436,7 @@ export async function createSoilScene(opts: {
   */
   const TRANS: number = 150;
   /** Катенагийн холилдол — тухайн цэг дэх зузааны вектор ба гүний ус */
-  function profAt(lon: number, lat: number): Blend {
+  function catenaAt(lon: number, lat: number): Blend {
     const w = new Float32Array(profiles.length);
     let W = 0;
     if (TRANS > 0) {
@@ -345,6 +469,85 @@ export async function createSoilScene(opts: {
       for (let k = 0; k < T.length; k++) T[k] += f * thick[p][k];
     });
     return { T, gw, w };
+  }
+
+  /*
+    ⚠⚠ ЖОРЛОНГИЙН БЭХЭЛГЭЭ (хэрэглэгч 2026-10-07: нэг жорлон дээр дарж
+    харсан хөрс ба зүсэлтийн хөрсний үеийн өндөр зөрдөг — "hursnii uyiin
+    undriig zuw haruulah ystoi"). Хоёр харагдац НЭГ 20 профайлтай ч
+    зүсэлт нь (1) хөрсний хилийн 150 м дотор хөрш хөрсний зузааныг
+    хольдог (катена — жорлонгийн 11%), (2) профайлыг 75 м-ийн тороос
+    уншдаг (0.8%-д нь өөр хөрс), (3) үеийн хилийг ±8 см долгиолуулдаг.
+    Порталын 145,462 жорлонгоор хэмжиж тогтоосон.
+    ✅ Жорлонгоос `A_IN` дотор цэг нь тэр жорлонгийн ӨӨРИЙН профайл
+    (`latrine-sim.bin`-ийн `soil` — нэг жорлонгийн харагдац яг түүнийг
+    зурдаг) бөгөөд хил долгиолохгүй; `A_OUT` хүртэл катена руу зөөлөн
+    шилжинэ. Бохирдол бүр нэг жорлонгийн харагдацтай ИЖИЛ үе дотор сууна.
+    ⚠ Жорлонгүй газарт (хот гадна, ой) юу ч өөрчлөгдөхгүй.
+    ⚠ Багц порталаас ирэх хүртэл бэхэлгээгүй; ирмэгц блок, таглаа дахин
+    баригдана (`anchorReady`).
+    ⚠ Профайлын дугаар хоёр багцад ижил дараалалтай (20/20 нэр, түлхүүр
+    таарсан) — гэхдээ ДАРААЛАЛД НАЙДАХГҮЙ, түлхүүр + нэрээр холбоно.
+  */
+  const A_IN = 6;
+  const A_OUT = 24;
+  const AG = 25;
+  let anchor: { lon: Float32Array; lat: Float32Array; prof: Int16Array; cell: Map<number, number[]> } | null = null;
+  const agKey = (cx: number, cy: number) => cx * 1_000_003 + cy;
+  function buildAnchor(d: { n: number; lon: Float32Array; lat: Float32Array; soil: Uint8Array; profiles: { key: string; name: string }[] }) {
+    const idx = d.profiles.map((sp) => profiles.findIndex((p) => p.key === sp.key && p.name === sp.name));
+    const prof = new Int16Array(d.n).fill(-1);
+    const cell = new Map<number, number[]>();
+    for (let i = 0; i < d.n; i++) {
+      const p = idx[d.soil[i]] ?? -1;
+      if (p < 0 || !Number.isFinite(d.lon[i]) || !Number.isFinite(d.lat[i])) continue;
+      prof[i] = p;
+      const k = agKey(Math.floor((d.lon[i] * mLon) / AG), Math.floor((d.lat[i] * mLat) / AG));
+      const list = cell.get(k);
+      if (list) list.push(i);
+      else cell.set(k, [i]);
+    }
+    anchor = { lon: d.lon, lat: d.lat, prof, cell };
+  }
+  /** Хамгийн ойр жорлон `A_OUT` дотор: [дугаар, зай м] */
+  function nearLatrine(lon: number, lat: number): [number, number] | null {
+    if (!anchor) return null;
+    const X = lon * mLon;
+    const Y = lat * mLat;
+    const cx = Math.floor(X / AG);
+    const cy = Math.floor(Y / AG);
+    let best = -1;
+    let bd = A_OUT * A_OUT;
+    for (let i = -1; i <= 1; i++)
+      for (let j = -1; j <= 1; j++) {
+        const list = anchor.cell.get(agKey(cx + i, cy + j));
+        if (!list) continue;
+        for (const k of list) {
+          const ddx = anchor.lon[k] * mLon - X;
+          const ddy = anchor.lat[k] * mLat - Y;
+          const d2 = ddx * ddx + ddy * ddy;
+          if (d2 < bd) {
+            bd = d2;
+            best = k;
+          }
+        }
+      }
+    return best < 0 ? null : [best, Math.sqrt(bd)];
+  }
+  function profAt(lon: number, lat: number): Blend {
+    const cat = catenaAt(lon, lat);
+    const near = nearLatrine(lon, lat);
+    if (!near) return cat;
+    const [k, dist] = near;
+    const p = anchor!.prof[k];
+    const u = Math.max(0, Math.min(1, (A_OUT - dist) / (A_OUT - A_IN)));
+    /* smoothstep — хил дээр гэнэт үсрэхгүй */
+    const a = u * u * (3 - 2 * u);
+    if (a <= 0) return cat;
+    const w = cat.w.map((v) => v * (1 - a));
+    w[p] += a;
+    const T = cat.T.map((v, i) => v * (1 - a) + a * thick[p][i]);
+    return { T, gw: cat.gw * (1 - a) + a * gwcm[p], w, calm: a };
   }
 
   /* ── Mesh бүтээгч ──────────────────────────────────────────────── */
@@ -397,10 +600,12 @@ export async function createSoilScene(opts: {
     const y = lat * mLat;
     return 3 * Math.sin(x / 41 + 0.7 * Math.sin(y / 53)) + 2 * Math.sin((x - y) / 29);
   };
-  const wav = (t: number, ph: number, ph2: number) =>
-    t <= 0 || t >= R_BOTTOM
+  /* `amp` — жорлонгийн ойролцоо (`Blend.calm`) долгион унтарна: тэнд үеийн
+     хил нэг жорлонгийн харагдацтай ЯГ ижил гүнд байх ёстой */
+  const wav = (t: number, ph: number, ph2: number, amp = 1) =>
+    t <= 0 || t >= R_BOTTOM || amp <= 0
       ? t
-      : t + 8 * Math.sin((Math.PI * t) / R_BOTTOM) * (0.7 * Math.sin(0.07 * t + ph) + 0.3 * Math.sin(0.13 * t + ph2));
+      : t + 8 * amp * Math.sin((Math.PI * t) / R_BOTTOM) * (0.7 * Math.sin(0.07 * t + ph) + 0.3 * Math.sin(0.13 * t + ph2));
 
   /** Шилжилтийн бүсийн ХАГАС өргөн, см — ДЭЭД давхаргын хилийн тодролоор
       (FAO: abrupt < 2 · clear 2–5 · gradual 5–15 см). Хархүрэн хөрсний
@@ -414,9 +619,10 @@ export async function createSoilScene(opts: {
   /** Нэг үзүүрийн харагдах давхаргууд (тэг зузаантайг хасна) */
   function segsAt(pr: Blend, ph: number, ph2: number, top: number, lv: number): Seg[] {
     const out: Seg[] = [];
+    const amp = 1 - (pr.calm ?? 0);
     for (const b of bandsOf(pr, keys)) {
-      const t = Math.max(wav(b.t, ph, ph2), top);
-      const d = Math.max(wav(b.b, ph, ph2), t);
+      const t = Math.max(wav(b.t, ph, ph2, amp), top);
+      const d = Math.max(wav(b.b, ph, ph2, amp), t);
       if (d - t < 0.01) continue;
       out.push({ k: keyOf(b.c, b.sat, lv), c: b.c, t, d });
     }
@@ -486,10 +692,12 @@ export async function createSoilScene(opts: {
     const bA = bandsOf(prA, keys);
     const bB = bandsOf(prB, keys);
     for (let i = 0; i < bA.length; i++) {
-      const tA = Math.max(wav(bA[i].t, pA, qA), topA);
-      const tB = Math.max(wav(bB[i].t, pB, qB), topB);
-      const dA = Math.max(wav(bA[i].b, pA, qA), tA);
-      const dB = Math.max(wav(bB[i].b, pB, qB), tB);
+      const aA = 1 - (prA.calm ?? 0);
+      const aB = 1 - (prB.calm ?? 0);
+      const tA = Math.max(wav(bA[i].t, pA, qA, aA), topA);
+      const tB = Math.max(wav(bB[i].t, pB, qB, aB), topB);
+      const dA = Math.max(wav(bA[i].b, pA, qA, aA), tA);
+      const dB = Math.max(wav(bB[i].b, pB, qB, aB), tB);
       if (dA - tA < 0.01 && dB - tB < 0.01) continue; // энэ хэсэгт байхгүй / хуулагдсан давхарга
       put(keyOf(bA[i].c, bA[i].sat, lv), tA, tB, dA, dB, depthV);
     }
@@ -497,6 +705,8 @@ export async function createSoilScene(opts: {
 
   /* ── Давхаргууд, харагдац ──────────────────────────────────────── */
   const blockL = new GraphicsLayer({ title: "Хөрсний блок", elevationInfo: { mode: "absolute-height" } });
+  /** `imageryOnly` үеийн дээд гадарга — квадрат модны хэсгүүд ({@link createImageryTop}) */
+  const topL = new GraphicsLayer({ title: "Дээд гадарга", elevationInfo: { mode: "absolute-height" } });
   const capL = new GraphicsLayer({ title: "Зүсэлтийн таглаа", elevationInfo: { mode: "absolute-height" } });
   const markL = new GraphicsLayer({ title: "Сонгосон цэг", elevationInfo: { mode: "absolute-height" } });
   /** Зурж буй зүсэлтийн шугам — огтлолтоос чөлөөлөгдөнө */
@@ -506,7 +716,9 @@ export async function createSoilScene(opts: {
   const floorL = new GraphicsLayer({ title: "Шуудууны ёроол", elevationInfo: { mode: "absolute-height" } });
   /** Зүсэлт дээрх жорлонгийн бохирдол — огтлолтоос чөлөөлөгдөнө ({@link createPlumes}) */
   const plumeL = new GraphicsLayer({ title: "Бохирдол", elevationInfo: { mode: "absolute-height" } });
-  const map = new EsriMap({ basemap: "satellite", ground: "world-elevation", layers: [blockL, floorL, capL, plumeL, markL, lineL] }) as {
+  /** Зурсан талбайн бохирдлыг харуулах үеийн блокийн тунгалаг (`onState`) */
+  const GHOST = 0.42;
+  const map = new EsriMap({ basemap: "satellite", ground: "world-elevation", layers: [blockL, topL, floorL, capL, plumeL, ...extraL, markL, lineL] }) as {
     ground: { opacity: number; navigationConstraint: { type: string } };
     add: (l: unknown) => void;
     remove: (l: unknown) => void;
@@ -739,9 +951,10 @@ export async function createSoilScene(opts: {
     ⚠ `ctx.filter` (бүдгэрүүлэлт, гэрэлтүүлэлт) Safari-д байхгүй — тэнд
     хил хурц, зураг арай бараан гарна; эвдрэлгүй.
   */
-  const geoCv = imgCv ? geologyCanvas(imgCv) : null;
+  /* `imageryOnly` үед хөрсний гадарга ХЭЗЭЭ Ч зурагдахгүй тул бэлтгэхгүй */
+  const geoCv = imgCv && !IMAGERY_ONLY ? geologyCanvas(imgCv) : null;
   type Surface = "geology" | "imagery";
-  let SURF: Surface = "geology";
+  let SURF: Surface = IMAGERY_ONLY && imgCv ? "imagery" : "geology";
   const tops: Partial<Record<Surface, unknown>> = {};
   const texOf = () => (SURF === "imagery" && imgCv ? imgCv : (geoCv ?? fc));
   const topOf = () => (tops[SURF] ??= buildTop(texOf()));
@@ -816,18 +1029,25 @@ export async function createSoilScene(opts: {
        шуудуу ёроолгүй хар нүх болж харагдаж байв (хөтөч дээр). Ёроол
        нь суурь чулуулгийн (R) давхарга, ОГТЛОЛТООС ЧӨЛӨӨЛӨГДСӨН тул
        газар бүтэн газарт түүнийг бүрхэж, зөвхөн ухсан хэсэгт ил гарна. */
+    /* Зурсан талбай байхгүй бол хотын хил (`BASE`) — блок үргэлж хилээр
+       тасарна; хил олдоогүй (хүрээнээс гадуур) бол хуучин бүтэн блок */
+    const P = clip ?? (BASE.length >= 3 ? BASE : null);
     if (REAL) {
-      floorL.add(bottom());
+      imgTop.clear();
+      floorL.add(P ? (clipBody ??= buildClipBody(P))[1] : bottom());
       return;
     }
-    if (clip) {
-      const P = clip;
+    if (P) {
       clipBody ??= buildClipBody(P);
-      const top = (clipTops[SURF] ??= buildClipTop(P));
+      /* `imageryOnly` үед дээд гадарга нь квадрат модны меш (`imgTop`) */
+      if (IMAGERY_ONLY) imgTop.set(P);
+      const top = IMAGERY_ONLY ? null : (clipTops[SURF] ??= buildClipTop(P));
       blockL.addMany([top, ...clipBody].filter(Boolean));
       return;
     }
-    blockL.addMany([PEEL > 0 ? buildSheet(PEEL) : topOf(), buildWalls(), bottom()]);
+    if (IMAGERY_ONLY) imgTop.set(null);
+    const top = PEEL > 0 ? buildSheet(PEEL) : IMAGERY_ONLY ? null : topOf();
+    blockL.addMany([top, buildWalls(), bottom()].filter(Boolean));
   };
 
   /*
@@ -975,6 +1195,8 @@ export async function createSoilScene(opts: {
           if (piece.length < 3 || Math.abs(area2(piece)) < sx * sy * 1e-4) continue;
           tris = triangulate(piece);
         }
+        /* Зурсан талбай хотын хилээс хальсан бол тэр хэсэг үлдэхгүй */
+        if (P !== BASE && !validAt(xa + sx / 2, ya + sy / 2)) continue;
         pieces.push({ piece, tris, cx: xa + sx / 2, cy: ya + sy / 2 });
       }
     }
@@ -1025,6 +1247,8 @@ export async function createSoilScene(opts: {
     }
     /* Хана — зурсан ирмэгийн дагуу; бүтэц нь периметрийн дагуу тасралтгүй */
     const wall = new MB();
+    /* Хотын хилийн дагуух хана — хил нь өөрөө хөрсний ирмэг тул маскгүй шалгана */
+    const onP = P === BASE ? soilOk : validAt;
     const step = Math.min(sx * mLon, sy * mLat);
     let s = 0;
     for (let i = 0; i < P.length; i++) {
@@ -1033,13 +1257,13 @@ export async function createSoilScene(opts: {
       const L = Math.hypot((b[0] - a[0]) * mLon, (b[1] - a[1]) * mLat);
       const n = Math.max(1, Math.ceil(L / step));
       let A: [number, number] = a;
-      let pA = validAt(A[0], A[1]) ? profAt(A[0], A[1]) : null;
+      let pA = onP(A[0], A[1]) ? profAt(A[0], A[1]) : null;
       for (let j = 1; j <= n; j++) {
         const Bp: [number, number] = [a[0] + ((b[0] - a[0]) * j) / n, a[1] + ((b[1] - a[1]) * j) / n];
-        const pB = validAt(Bp[0], Bp[1]) ? profAt(Bp[0], Bp[1]) : null;
+        const pB = onP(Bp[0], Bp[1]) ? profAt(Bp[0], Bp[1]) : null;
         const s1 = s + (L * j) / n;
         const s0 = s + (L * (j - 1)) / n;
-        if (validAt((A[0] + Bp[0]) / 2, (A[1] + Bp[1]) / 2)) {
+        if (onP((A[0] + Bp[0]) / 2, (A[1] + Bp[1]) / 2)) {
           const prA = pA ?? profAt((A[0] + Bp[0]) / 2, (A[1] + Bp[1]) / 2);
           const prB = pB ?? prA;
           strip(wall, A, Bp, zAt(A[0], A[1]), zAt(Bp[0], Bp[1]), s0 / tu, s1 / tu, prA, prB);
@@ -1060,6 +1284,7 @@ export async function createSoilScene(opts: {
         const a: [number, number] = [A[0] + ((B[0] - A[0]) * j) / k, A[1] + ((B[1] - A[1]) * j) / k];
         const b: [number, number] = [A[0] + ((B[0] - A[0]) * (j + 1)) / k, A[1] + ((B[1] - A[1]) * (j + 1)) / k];
         if (!inPoly(P, (a[0] + b[0]) / 2, (a[1] + b[1]) / 2)) continue;
+        if (P !== BASE && !inUB((a[0] + b[0]) / 2, (a[1] + b[1]) / 2)) continue;
         const uA = (alongLon ? a[0] * mLon : a[1] * mLat) / tu;
         const uB = (alongLon ? b[0] * mLon : b[1] * mLat) / tu;
         strip(wall, a, b, zAt(a[0], a[1]), zAt(b[0], b[1]), uA, uB, profAt(a[0], a[1]), profAt(b[0], b[1]));
@@ -1078,6 +1303,274 @@ export async function createSoilScene(opts: {
     }
     return [wall.mesh(), bot.mesh()].map((m) => (m ? new Graphic({ geometry: m, symbol: sym }) : null));
   }
+  /*
+    ⚠⚠ ДЭЭД ГАДАРГА — КВАДРАТ МОД, ХАВТАН НЬ КАМЕРЫН ЗАЙГААР (`imageryOnly`,
+    хэрэглэгч 2026-10-12: блок диаграмын гадарга "satellite шиг сайн
+    чанартай"). Нэг z12 текстур (~26 м/пиксел) ойроос бүдэг байв; Esri-ийн
+    газрыг харуулах нь хананы дээгүүр бүрхэж, хилээр тасрахгүй байв.
+    · Үндэс нь 32 × 32 бүдүүн нүд (~9.6 км), дөрвөн түвшин (32 · 16 · 8 · 4).
+      Хэсэг бүр өөрийн хүрээний canvas-тай, түүний хавтангийн түвшин нь
+      ТЭР хэсгийн камерт хамгийн ойр цэгийн дэлгэцийн м/пиксел-ээс
+      (`toScreen`, 100 м-ийн хоёр алхам) — z12…z17.
+    · Текстур 2048 пикселээс хэтрэхгүй: түвшин тэрнээс давбал хэсэг задарна
+      (үндэс z14, навч z17 хүртэл).
+    · Шинэ хэсэг ӨВГИЙНХӨӨ (эсвэл ерөнхий z12) текстурыг тайрч шууд
+      зурагдана — хурц хавтан ирэхэд солигдоно; хоосон завсар гарахгүй.
+    · Харагдахгүй хэсэг (дөрвөн булан нь дэлгэцийн нэг талаас гадна) z12.
+    ⚠ Геометр нь бүдүүн нүдний (~300 м) өндрөөр — рельеф нь өөрөө тийм
+      нарийвчлалтай; нарийсгах нь шинэ мэдээлэл өгөхгүй.
+    ⚠ Огтлолтоос ЧӨЛӨӨЛӨГДӨХГҮЙ — блоктой хамт зүсэгдэнэ.
+  */
+  function createImageryTop() {
+    type Piece = { piece: [number, number][]; tris: number[]; cx: number; cy: number };
+    type Node = {
+      c0: number; c1: number; r0: number; r1: number;
+      lvl: number;
+      pieces: Piece[];
+      kids: Node[] | null;
+      parent: Node | null;
+      g: unknown;
+      tex: HTMLCanvasElement | null;
+      texZ: number;
+      want: number;
+      job: number;
+    };
+    const ROOT = 32;
+    const LEAF = 3;
+    const MAXPX = 2048;
+    const RES0 = 156543.03392804097 * Math.cos(((y0 + (ny * dy) / 2) * Math.PI) / 180);
+    let roots: Node[] = [];
+    let shown = new Set<Node>();
+    let seq = 0;
+    let alive = true;
+    const bounds = (n: Node) => ({
+      L: x0 + n.c0 * dx, R: x0 + Math.min(n.c1, nx) * dx,
+      B: y0 + n.r0 * dy, T: y0 + Math.min(n.r1, ny) * dy,
+    });
+    const maxZ = (n: Node) => {
+      const { L, R, B, T } = bounds(n);
+      const S = Math.max((R - L) * mLon, (T - B) * mLat);
+      return Math.max(12, Math.min(17, Math.floor(Math.log2((RES0 * MAXPX) / S))));
+    };
+    const make = (c0: number, c1: number, r0: number, r1: number, lvl: number, pieces: Piece[], parent: Node | null): Node => ({
+      c0, c1, r0, r1, lvl, pieces, kids: null, parent, g: null, tex: null, texZ: 0, want: 12, job: 0,
+    });
+    const kidsOf = (n: Node) => {
+      if (n.kids) return n.kids;
+      const cm = (n.c0 + n.c1) >> 1;
+      const rm = (n.r0 + n.r1) >> 1;
+      const out: Node[] = [];
+      for (const [a, b, c, d] of [[n.c0, cm, n.r0, rm], [cm, n.c1, n.r0, rm], [n.c0, cm, rm, n.r1], [cm, n.c1, rm, n.r1]]) {
+        const ps = n.pieces.filter((p) => {
+          const pc = Math.floor((p.cx - x0) / dx);
+          const pr = Math.floor((p.cy - y0) / dy);
+          return pc >= a && pc < b && pr >= c && pr < d;
+        });
+        if (ps.length) out.push(make(a, b, c, d, n.lvl + 1, ps, n));
+      }
+      return (n.kids = out);
+    };
+    /* Эх текстураас хэсгийн хүрээг тайрна — эх нь блок даяарх z12 эсвэл
+       өвөг хэсгийн хурц canvas */
+    const crop = (n: Node): [HTMLCanvasElement, number] => {
+      const { L, R, B, T } = bounds(n);
+      let src: HTMLCanvasElement = imgCv ?? fc;
+      let z = 12;
+      let sb = { L: x0, R: x0 + nx * dx, B: y0, T: y0 + ny * dy };
+      for (let a = n.parent; a; a = a.parent)
+        if (a.tex && a.texZ > z) {
+          src = a.tex;
+          z = a.texZ;
+          sb = bounds(a);
+          break;
+        }
+      const fx = src.width / (sb.R - sb.L);
+      const fy = src.height / (sb.T - sb.B);
+      const sw = Math.max(1, (R - L) * fx);
+      const sh = Math.max(1, (T - B) * fy);
+      const out = document.createElement("canvas");
+      out.width = Math.max(2, Math.min(MAXPX, Math.round(sw)));
+      out.height = Math.max(2, Math.min(MAXPX, Math.round(sh)));
+      out.getContext("2d")!.drawImage(src, (L - sb.L) * fx, (sb.T - T) * fy, sw, sh, 0, 0, out.width, out.height);
+      return [out, z];
+    };
+    const graphic = (n: Node, tex: HTMLCanvasElement) => {
+      const { L, R, B, T } = bounds(n);
+      const pos: number[] = [];
+      const uv: number[] = [];
+      const f: number[] = [];
+      for (const { piece, tris } of n.pieces) {
+        const base = pos.length / 3;
+        for (const [x, y] of piece) {
+          pos.push(x, y, zAt(x, y));
+          uv.push((x - L) / (R - L), 1 - (y - B) / (T - B));
+        }
+        for (const t of tris) f.push(base + t);
+      }
+      return new Graphic({
+        geometry: new Mesh({
+          spatialReference: SR,
+          vertexAttributes: { position: new Float64Array(pos), uv: new Float32Array(uv) },
+          components: [
+            new MeshComponent({
+              faces: new Uint32Array(f),
+              material: new MeshMaterial({ colorTexture: new MeshTexture({ data: tex }), doubleSided: true }),
+            }),
+          ],
+        }),
+        symbol: sym,
+      });
+    };
+    const scr = (lon: number, lat: number) => view.toScreen(new Point({ longitude: lon, latitude: lat, z: zAt(lon, lat) }));
+    /** Хэсгийн хүрээ дэлгэцэд орж буй эсэх — тодорхойгүй бол харагдана гэж үзнэ */
+    const visible = (n: Node) => {
+      const { L, R, B, T } = bounds(n);
+      const W = container.clientWidth;
+      const H = container.clientHeight;
+      const ps = [scr(L, B), scr(R, B), scr(L, T), scr(R, T)];
+      if (ps.some((p) => !p || !Number.isFinite(p.x) || !Number.isFinite(p.y))) return true;
+      const q = ps as { x: number; y: number }[];
+      return !(q.every((p) => p.x < 0) || q.every((p) => p.x > W) || q.every((p) => p.y < 0) || q.every((p) => p.y > H));
+    };
+    /** Камерт хамгийн ойр цэгийн шаардлагатай хавтангийн түвшин */
+    const wantZ = (n: Node) => {
+      const cam = (view.camera as Partial<typeof view.camera> | undefined)?.position;
+      if (!cam) return 12;
+      const { L, R, B, T } = bounds(n);
+      const lon = Math.max(L, Math.min(R, cam.longitude));
+      const lat = Math.max(B, Math.min(T, cam.latitude));
+      const p0 = scr(lon, lat);
+      const p1 = scr(lon + 100 / mLon, lat);
+      const p2 = scr(lon, lat + 100 / mLat);
+      if (!p0 || !p1 || !p2) return 12;
+      const ppm = Math.max(Math.hypot(p1.x - p0.x, p1.y - p0.y), Math.hypot(p2.x - p0.x, p2.y - p0.y)) / 100;
+      if (!(ppm > 0) || !Number.isFinite(ppm)) return 12;
+      return Math.max(12, Math.min(17, Math.ceil(Math.log2(RES0 * ppm) - 0.3)));
+    };
+    const select = (n: Node, out: Node[]) => {
+      const z = visible(n) ? wantZ(n) : 12;
+      const mz = maxZ(n);
+      if (z <= mz || n.lvl >= LEAF) {
+        n.want = Math.min(z, mz);
+        out.push(n);
+        return;
+      }
+      const kids = kidsOf(n);
+      if (!kids.length) {
+        n.want = mz;
+        out.push(n);
+        return;
+      }
+      for (const k of kids) select(k, out);
+    };
+    const load = (n: Node) => {
+      if (n.want <= n.texZ || !imgCv) return;
+      const job = ++seq;
+      n.job = job;
+      const z = n.want;
+      const { L, R, B, T } = bounds(n);
+      imageryCanvas(L, B, R, T, mLon, mLat, z, MAXPX)
+        .then((cv) => {
+          if (!alive || n.job !== job || !shown.has(n)) return;
+          n.tex = cv;
+          n.texZ = z;
+          const old = n.g;
+          n.g = graphic(n, cv);
+          topL.add(n.g);
+          if (old) topL.remove(old);
+        })
+        .catch(() => {});
+    };
+    /* Харагдахгүй болсон хэсгийн текстурыг чөлөөлнө — харагдаж буй хэсгийн
+       өвөг нь тайралтын эх тул үлдэнэ */
+    const prune = (n: Node, keep: Set<Node>): boolean => {
+      let any = keep.has(n);
+      for (const k of n.kids ?? []) any = prune(k, keep) || any;
+      if (!any) {
+        n.tex = null;
+        n.texZ = 0;
+        n.job = 0;
+      }
+      return any;
+    };
+    const update = () => {
+      if (!alive || !roots.length) return;
+      const next: Node[] = [];
+      for (const r of roots) select(r, next);
+      const nextSet = new Set(next);
+      const add: unknown[] = [];
+      for (const n of next)
+        if (!shown.has(n)) {
+          const [cv, z] = crop(n);
+          n.tex = cv;
+          n.texZ = z;
+          n.g = graphic(n, cv);
+          add.push(n.g);
+        }
+      const gone = [...shown].filter((n) => !nextSet.has(n));
+      topL.addMany(add);
+      for (const n of gone) {
+        if (n.g) topL.remove(n.g);
+        n.g = null;
+        n.job = 0;
+      }
+      shown = nextSet;
+      const keep = new Set<Node>();
+      for (const n of next) for (let a: Node | null = n; a; a = a.parent) keep.add(a);
+      for (const r of roots) prune(r, keep);
+      /* Хамгийн хурц шаардлагатай (ойрын) хэсгээс эхэлж гуйна */
+      next.filter((n) => n.want > n.texZ).sort((a, b) => b.want - a.want).forEach(load);
+    };
+    let timer = 0;
+    const later = () => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(update, 120);
+    };
+    const stop = reactiveUtils.watch(
+      () => view.stationary,
+      () => {
+        if (view.stationary) later();
+      },
+    );
+    const reset = () => {
+      topL.removeAll();
+      shown = new Set();
+      roots = [];
+      seq++;
+    };
+    return {
+      /** Хэсгүүдийг шинээр угсарна; `null` — блокийн тэгш өнцөгт бүтнээрээ */
+      set(P: [number, number][] | null) {
+        reset();
+        const Q: [number, number][] = P ?? [[x0, y0], [x0 + nx * dx, y0], [x0 + nx * dx, y0 + ny * dy], [x0, y0 + ny * dy]];
+        const { pieces } = clipPieces(Q);
+        const bucket = new Map<number, Piece[]>();
+        const RW = Math.ceil(nx / ROOT);
+        for (const p of pieces) {
+          const c = Math.floor((p.cx - x0) / dx / ROOT);
+          const r = Math.floor((p.cy - y0) / dy / ROOT);
+          const key = r * RW + c;
+          const list = bucket.get(key);
+          if (list) list.push(p);
+          else bucket.set(key, [p]);
+        }
+        for (const [key, ps] of bucket) {
+          const c = key % RW;
+          const r = Math.floor(key / RW);
+          roots.push(make(c * ROOT, (c + 1) * ROOT, r * ROOT, (r + 1) * ROOT, 0, ps, null));
+        }
+        update();
+      },
+      clear: reset,
+      destroy() {
+        alive = false;
+        window.clearTimeout(timer);
+        stop.remove();
+        reset();
+      },
+    };
+  }
+  const imgTop = createImageryTop();
   rebuild();
 
   /* ── Зүсэлт ба таглаа ──────────────────────────────────────────── */
@@ -1198,6 +1691,7 @@ export async function createSoilScene(opts: {
     cutLine = null;
     onSection(null);
     plumes.clear();
+    onCut(null);
     updateCap();
   }
   function setClip(P: Pt[] | null) {
@@ -1210,7 +1704,7 @@ export async function createSoilScene(opts: {
     applyClip();
     /* ⚠ Зурсан талбайн хана бүр зүсэлт шиг — ханын дагуух жорлонгийн
        бохирдол нүүрэнд, гүний ус хүртэл доор нь ({@link createPlumes}) */
-    if (P) plumes.setRing(P);
+    if (P && PLUMES) plumes.setRing(P);
     else plumes.clear();
     sync();
   }
@@ -1240,6 +1734,7 @@ export async function createSoilScene(opts: {
     n.heading = (sh.heading + 180) % 360;
     slice.shape = n as unknown as Obj;
     plumes.setSide((n.heading + 180) % 360);
+    if (cutLine) onCut({ a: cutLine.a, b: cutLine.b, rem: (n.heading + 180) % 360 });
   });
   clearBtn.addEventListener("click", () => {
     clearCut();
@@ -1329,17 +1824,22 @@ export async function createSoilScene(opts: {
     return { id: o.id, b };
   });
   /* ── Дээд гадарга — хиймэл дагуул эсвэл хөрсний хэв шинж ── */
-  const surfHead = document.createElement("div");
-  surfHead.className = "soil-env-head";
-  surfHead.textContent = "Дээд гадарга";
-  envBox.append(surfHead);
-  const surfOpts: { id: Surface; label: string; note: string }[] = [
-    /* Нэр ХЭВЭЭР (хэрэглэгч 2026-10-06: "ene 2 huuchin nereere"), зөвхөн
-       тайлбар хасагдсан. Тэмдэглэл нь ЗӨВХӨН зураг татагдаагүй үед —
-       тэр нь тайлбар биш төлөв */
-    { id: "geology", label: "Хөрсний хэв шинж", note: "" },
-    { id: "imagery", label: "Хиймэл дагуулын зураг", note: imgCv ? "" : "Уншигдсангүй" },
-  ];
+  /* ⚠ `imageryOnly` үед гарчиг ч, сонголт ч ГАРАХГҮЙ — гадарга тогтмол */
+  if (!IMAGERY_ONLY) {
+    const surfHead = document.createElement("div");
+    surfHead.className = "soil-env-head";
+    surfHead.textContent = "Дээд гадарга";
+    envBox.append(surfHead);
+  }
+  const surfOpts: { id: Surface; label: string; note: string }[] = IMAGERY_ONLY
+    ? []
+    : [
+        /* Нэр ХЭВЭЭР (хэрэглэгч 2026-10-06: "ene 2 huuchin nereere"), зөвхөн
+           тайлбар хасагдсан. Тэмдэглэл нь ЗӨВХӨН зураг татагдаагүй үед —
+           тэр нь тайлбар биш төлөв */
+        { id: "geology", label: "Хөрсний хэв шинж", note: "" },
+        { id: "imagery", label: "Хиймэл дагуулын зураг", note: imgCv ? "" : "Уншигдсангүй" },
+      ];
   const surfBtns = surfOpts.map((o) => {
     const b = document.createElement("button");
     b.type = "button";
@@ -1775,7 +2275,9 @@ export async function createSoilScene(opts: {
     mode: "floating",
     group: "soil-tools",
   }) as unknown as Widget;
-  view.ui.add(layersExpand, "top-right");
+  /* Баруун дээд буланд ДЭЭРЭЭС ДООШ: суурь зураг · ЭНЭ давхаргын цонх ·
+     хэмжилт, тэдний доор харагдац, зүсэлт ({@link addSceneTools}) */
+  void addSceneTools(view, { group: "soil-tools", layers: layersExpand });
   const analysisOf = (): Analysis | null => slice;
   const shapeOf = <T,>(): T | null => (analysisOf()?.shape ?? null) as T | null;
   let excluded: Analysis | null = null;
@@ -1786,7 +2288,7 @@ export async function createSoilScene(opts: {
     const a = analysisOf();
     if (!a || a === excluded) return a;
     excluded = a;
-    a.excludedLayers = [capL, markL, lineL, floorL, plumeL];
+    a.excludedLayers = [capL, markL, lineL, floorL, plumeL, ...extraL];
     return a;
   };
   keepCap();
@@ -1975,6 +2477,20 @@ export async function createSoilScene(opts: {
     ⚠ Хасагдсан тал = heading + 180 (tilt 90) — таглаа нь тэр тал руу
     харна, бохирдол мөн тийшээ 0.8 м урагшилна.
   */
+  /* Жорлонгийн бэхэлгээ ({@link profAt}) — багц порталаас ирмэгц блок,
+     таглааг дахин барина. Ирэхээс өмнө зурсан хэсэг катенаар үлдэнэ. */
+  let gone = false;
+  void fetchLatrineSim().then(
+    (d) => {
+      if (gone) return;
+      buildAnchor(d);
+      clipBody = null;
+      rebuild();
+      updateCap();
+    },
+    () => {},
+  );
+
   const plumes = createPlumes({
     Mesh, MeshComponent, MeshMaterial, MeshTexture, Graphic,
     layer: plumeL,
@@ -1984,11 +2500,24 @@ export async function createSoilScene(opts: {
     mLon,
     mLat,
     SR,
-    onState: onPlumes,
+    onState: (st) => {
+      /* ⚠⚠ ХӨРС ТУНГАЛАГ (хэрэглэгч 2026-10-07: "хөрсийг тунгалаг болгоно") —
+         зурсан талбайд жорлон байвал блок хагас тунгалаг болж ДОТОРХ
+         жорлон бүрийн бохирдол харагдана ({@link createPlumes}). Ханын
+         үе давхарга бүдэг ч уншигдана. Шулуун зүсэлтэд блок хэвээр. */
+      blockL.opacity = clip && st.count > 0 ? GHOST : 1;
+      topL.opacity = blockL.opacity;
+      onPlumes(st);
+    },
   });
   function plumeCut() {
     const heading = (slice.shape as { heading: number } | null)?.heading;
-    if (!cutLine || heading == null) return plumes.clear();
+    if (!cutLine || heading == null) {
+      onCut(null);
+      return plumes.clear();
+    }
+    onCut({ a: cutLine.a, b: cutLine.b, rem: (heading + 180) % 360 });
+    if (!PLUMES) return plumes.clear();
     plumes.setCut(cutLine.a, cutLine.b, (heading + 180) % 360);
   }
 
@@ -2524,6 +3053,8 @@ export async function createSoilScene(opts: {
       lat,
       elevation: zt - LIFT,
       depthCm: dcm,
+      hz,
+      gwCm: pr.gw,
     });
     markL.removeAll();
     markL.add(
@@ -2589,32 +3120,34 @@ export async function createSoilScene(opts: {
     const bnd = [...new Set(hz.map((h) => h.t).concat(hz.map((h) => h.b)))];
     bnd.forEach((d) => {
       const y = T + d * sc;
-      s += `<line x1="4" x2="${X - 6}" y1="${y}" y2="${y}" stroke="#6b5a48" stroke-dasharray="3 3"/>`;
+      s += `<line x1="4" x2="${X - 6}" y1="${y}" y2="${y}" style="stroke:var(--ink-3)" stroke-opacity="0.6" stroke-dasharray="3 3"/>`;
     });
     hz.forEach((h) => {
       const y1 = T + h.t * sc, y2 = T + h.b * sc, hh = y2 - y1, m = (y1 + y2) / 2;
-      const col = h.c === "Bw" || h.c === "Bf" ? "#a4502a" : "#2c2620";
-      /* ⚠ ХОЁР МӨРТ ШОШГО 38px-ЭЭС НИМГЭН ҮЕД БАГТАХГҮЙ: нэр нь үеийн
-         дунд, гүний муж түүнээс 15px доош суудаг тул 20 см (33px) үе
-         дээр муж нь дараагийн үеийн нэр рүү халж байв. Нимгэн үе
-         нэг мөрт хэлбэрээ авна ("A 0–20"). */
-      if (hh >= 38) {
-        const fs = h.n.length > 3 ? 13 : 20;
-        s += `<text x="${(X - 6) / 2}" y="${m + 2}" text-anchor="middle" font-size="${fs}" font-weight="700" fill="${col}">${h.n}</text>`;
-        s += `<text x="${(X - 6) / 2}" y="${m + 15}" text-anchor="middle" font-size="10" fill="#5f6a6e">(${h.t}–${h.b} см)</text>`;
-      } else if (hh >= 11) {
-        s += `<text x="${(X - 6) / 2}" y="${m + 4}" text-anchor="middle" font-size="11" font-weight="700" fill="${col}">${h.n} <tspan font-weight="400" fill="#5f6a6e" font-size="9">${h.t}–${h.b}</tspan></text>`;
+      /* ⚠ Шошго горимыг ДАГАНА (хэрэглэгч 2026-10-12: харанхуйд A, C, гүн
+         харагдахгүй байв — хатуу #2c2620, #5f6a6e бараан дэвсгэр дээр уусдаг).
+         Монолит нь `bg-paper-3` дээр шигтгэгдсэн SVG тул CSS хувьсагч уншина.
+         Bw, Bf-ийн улбар нь `--value-l`-ээр (дизайны 4-р дүрэм); хөтөч
+         `oklch(from …)`-г танихгүй бол эхний `fill` (`--ink`) үлдэнэ. */
+      const col = h.c === "Bw" || h.c === "Bf"
+        ? "fill:var(--ink);fill:oklch(from #a4502a var(--value-l) calc(c * var(--value-c)) h)"
+        : "fill:var(--ink)";
+      /* ⚠ Бүх үеийн тэмдэглэгээ НЭГ хэмжээтэй, нэг мөрт ("A 0–20"; хэрэглэгч
+         2026-10-12: "латин кодууд ижил хэмжээтэй, A шиг"). Урьд нь зузаан
+         үе 20px, урт нэр 13px, хоёр мөрт байсан. */
+      if (hh >= 11) {
+        s += `<text x="${(X - 6) / 2}" y="${m + 4}" text-anchor="middle" font-size="11" font-weight="700" style="${col}">${h.n} <tspan font-weight="400" style="fill:var(--ink-3)" font-size="9">${h.t}–${h.b}</tspan></text>`;
       }
     });
-    s += `<text x="${(X - 6) / 2}" y="${T - 10}" text-anchor="middle" font-size="10" fill="#5f6a6e">гадарга</text>`;
+    s += `<text x="${(X - 6) / 2}" y="${T - 10}" text-anchor="middle" font-size="10" style="fill:var(--ink-3)">гадарга</text>`;
     if (gwCm < R_BOTTOM) {
       const y = T + gwCm * sc;
       s += `<path d="M${X} ${y} H${X + CW} l${SX} ${SY}" stroke="#2f7fc0" stroke-width="2" stroke-dasharray="6 3" fill="none"/>`;
-      s += `<text x="${X + CW + SX + 2}" y="${y + SY - 4}" text-anchor="end" font-size="10" fill="#2f7fc0">гүний ус ~${(gwCm / 100).toFixed(1)} м</text>`;
+      s += `<text x="${X + CW + SX + 2}" y="${y + SY - 4}" text-anchor="end" font-size="10" style="fill:var(--water)">гүний ус ~${(gwCm / 100).toFixed(1)} м</text>`;
     }
     if (depthCm != null) {
       const y = T + depthCm * sc;
-      s += `<path d="M${X - 9} ${y - 5} l8 5 l-8 5z" fill="#c0392b"/><text x="${W - 2}" y="${y + SY + 14}" text-anchor="end" font-size="10" fill="#c0392b">${Math.round(depthCm)} см</text>`;
+      s += `<path d="M${X - 9} ${y - 5} l8 5 l-8 5z" fill="#c0392b"/><text x="${W - 2}" y="${y + SY + 14}" text-anchor="end" font-size="10" style="fill:var(--clay)">${Math.round(depthCm)} см</text>`;
     }
     return s + `</svg>`;
   }
@@ -2640,7 +3173,7 @@ export async function createSoilScene(opts: {
        хасагдсан — жорлонгийн цэг, хайрцаг хоёул энд товшигдоно.
        Зүсэлт зурж байх үед товшилт нь цэг тавина, жорлон сонгохгүй. */
     const pitLayers = drawing ? [] : (overlays.find((o) => o.id === "pit")?.layers ?? []).filter((l) => l.visible);
-    const h = await view.hitTest(e, { include: [blockL, capL, ...pitLayers] });
+    const h = await view.hitTest(e, { include: [blockL, topL, capL, ...pitLayers] });
     const pit = h.results.find((r) => r.graphic?.layer && pitLayers.includes(r.graphic.layer as FLayer));
     const oid = Number(pit?.graphic?.attributes?.oid);
     if (pit && oid > 0) {
@@ -2696,12 +3229,14 @@ export async function createSoilScene(opts: {
      алга болсон байдалтай нээгддэг байв — хэрэглэгч өөрөө юу ч
      хийгээгүй атлаа. Зүсэлт нь ЗӨВХӨН хэрэгслийн товчоор (эсвэл
      Alt + товшилтоор) эхэлнэ. */
-  /* ⚠ ЖОРЛОН АНХНААСАА АСААЛТТАЙ (хэрэглэгч 2026-09-30: "end buh jorlon
-     haragdana") — бохирдлын эх үүсвэр нь юу болох нь зүсэхээс өмнө харагдана */
-  void toggleOverlay(overlays[0]);
+  /* ⚠⚠ ЖОРЛОН АНХНААСАА УНТРААЛТТАЙ (хэрэглэгч 2026-10-12: "map deer jorlon
+     layeraas songohoos naash haragdahgui baimaar bn"). 2026-09-30-ны
+     "анхнаасаа асаалттай" шийдвэрийг орлосон — давхаргын цонхноос асаана.
+     Зүсэлтийн бохирдол давхаргаас ҮЛ ХАМААРНА (`fetchLatrineSim`-ээс). */
 
   return {
     destroy() {
+      gone = true;
       clickH.remove();
       dblH.remove();
       moveH.remove();
@@ -2712,22 +3247,60 @@ export async function createSoilScene(opts: {
       watcher.remove();
       themeObs.disconnect();
       stopWatchers.forEach((w) => w.remove());
+      imgTop.destroy();
       layersExpand.destroy();
       envExpand.destroy();
       expand.destroy();
       view.destroy();
     },
     pickAt: (lon, lat) => showProfile(lon, lat, null),
+    view,
+    geom: { zAt, validAt, exs, mLon, mLat, SR },
     setPlumeTime: (i) => plumes.setTime(i),
     setPlumeSpecies: (s) => plumes.setSpecies(s),
     legend: () => keys.map((k) => ({ key: k, label: HCLS[k].label, swatch: TEXCV[k].toDataURL() })),
-    soils() {
-      const seen = new Set<string>();
-      return profiles
-        .filter((p) => !seen.has(p.key) && seen.add(p.key))
-        .map((p) => ({ key: p.key, name: p.name, wrb: p.wrb, color: SOILCOL[p.key] || "#999999" }));
-    },
   };
+}
+
+/**
+ * Хиймэл дагуулын нэг хавтан — кэштэй, ЗЭРЭГЦЭЭ 12-оос ихгүй. Дээд
+ * гадаргын квадрат мод ({@link createSoilScene}-ийн `imgTop`) ойртох бүрд
+ * хэдэн зуун хавтан гуйдаг тул хязгааргүй бол хөтөч, сервер хоёул
+ * хахна. Унасан хавтан кэшид үлдэхгүй (дараа дахин оролдоно).
+ * ⚠ Кэш нь 400 зургаар хязгаартай (~100 МБ задарсан) — хуучнаас нь хасна.
+ */
+const TILE_CACHE = new Map<string, Promise<HTMLImageElement | null>>();
+const TILE_QUEUE: (() => void)[] = [];
+let tileActive = 0;
+function tileImage(Z: number, y: number, x: number): Promise<HTMLImageElement | null> {
+  const key = `${Z}/${y}/${x}`;
+  const hit = TILE_CACHE.get(key);
+  if (hit) {
+    TILE_CACHE.delete(key);
+    TILE_CACHE.set(key, hit);
+    return hit;
+  }
+  const p = new Promise<HTMLImageElement | null>((done) => {
+    const run = () => {
+      tileActive++;
+      const im = new Image();
+      im.crossOrigin = "anonymous";
+      const fin = (v: HTMLImageElement | null) => {
+        tileActive--;
+        if (!v) TILE_CACHE.delete(key);
+        TILE_QUEUE.shift()?.();
+        done(v);
+      };
+      im.onload = () => fin(im);
+      im.onerror = () => fin(null);
+      im.src = `https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${key}`;
+    };
+    if (tileActive < 12) run();
+    else TILE_QUEUE.push(run);
+  });
+  TILE_CACHE.set(key, p);
+  while (TILE_CACHE.size > 400) TILE_CACHE.delete(TILE_CACHE.keys().next().value!);
+  return p;
 }
 
 /**
@@ -2745,8 +3318,8 @@ export async function createSoilScene(opts: {
  */
 async function imageryCanvas(
   lon0: number, lat0: number, lon1: number, lat1: number, mLon: number, mLat: number,
+  Z = 12, maxW = 4096,
 ): Promise<HTMLCanvasElement> {
-  const Z = 12;
   const T = 256;
   const N = 2 ** Z;
   const tx = (lon: number) => ((lon + 180) / 360) * N;
@@ -2767,24 +3340,18 @@ async function imageryCanvas(
   for (let y = Y0; y <= Y1; y++)
     for (let x = X0; x <= X1; x++)
       jobs.push(
-        new Promise((done) => {
-          const im = new Image();
-          im.crossOrigin = "anonymous";
-          im.onload = () => {
-            mg.drawImage(im, (x - X0) * T, (y - Y0) * T);
-            ok++;
-            done();
-          };
-          im.onerror = () => done();
-          im.src = `https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${Z}/${y}/${x}`;
+        tileImage(Z, y, x).then((im) => {
+          if (!im) return;
+          mg.drawImage(im, (x - X0) * T, (y - Y0) * T);
+          ok++;
         }),
       );
   await Promise.all(jobs);
   if (!ok) throw new Error("imagery");
   const sx = (tx(lon0) - X0) * T;
   const sw = (tx(lon1) - tx(lon0)) * T;
-  const W = Math.min(4096, Math.round(sw));
-  const H = Math.min(4096, Math.round((W * ((lat1 - lat0) * mLat)) / ((lon1 - lon0) * mLon)));
+  const W = Math.max(2, Math.min(maxW, Math.round(sw)));
+  const H = Math.max(2, Math.min(maxW, Math.round((W * ((lat1 - lat0) * mLat)) / ((lon1 - lon0) * mLon))));
   const out = document.createElement("canvas");
   out.width = W;
   out.height = H;

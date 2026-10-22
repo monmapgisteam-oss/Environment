@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { ArrowUpRight, LayoutGrid, List, Search, X } from "lucide-react";
-import { DEPARTMENTS } from "@/lib/departments";
+import { useAccess } from "@/components/auth/access";
 import { cn } from "@/lib/utils";
 
 const filters = [{ value: "all", label: "Бүх хэлтэс" }, { value: "live", label: "Дата холбогдсон" }, { value: "waiting", label: "Хүлээгдэж буй" }] as const;
@@ -12,6 +12,7 @@ export function DepartmentDirectory({ sourceCounts }: { sourceCounts: Record<str
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<(typeof filters)[number]["value"]>("all");
   const [view, setView] = useState<"list" | "grid">("list");
+  const { departments: DEPARTMENTS } = useAccess();
   const normalized = query.trim().toLocaleLowerCase("mn");
   const departments = DEPARTMENTS.filter((d) => d.name.toLocaleLowerCase("mn").includes(normalized) && (filter === "all" || (filter === "live" ? d.status === "live" : d.status !== "live")));
   return (

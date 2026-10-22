@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { Archive, ChevronRight, Database, Globe, Layers, Search, Webhook, X } from "lucide-react";
-import { DEPARTMENTS } from "@/lib/departments";
+import { DEPARTMENTS as ALL_DEPARTMENTS } from "@/lib/departments";
+import { useAccess } from "@/components/auth/access";
 import { SOURCES, type Source } from "@/lib/sources";
 import "./source-directory.css";
 
@@ -30,12 +31,12 @@ function sourceType(source: Source): Exclude<SourceType, "all"> {
   return source.kind.includes("Enterprise") ? "portal" : "service";
 }
 
-const entries = SOURCES.map((source, index) => ({
+const allEntries = SOURCES.map((source, index) => ({
   ...source,
   id: `source-${index}`,
   type: sourceType(source),
   host: new URL(source.url).host,
-  department: DEPARTMENTS.find((d) => d.slug === source.slug),
+  department: ALL_DEPARTMENTS.find((d) => d.slug === source.slug),
 }));
 
 export function SourceDirectory() {
@@ -43,6 +44,9 @@ export function SourceDirectory() {
   const [department, setDepartment] = useState("");
   const [type, setType] = useState<SourceType>("all");
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  /* Хэлтсийн бүртгэл зөвхөн өөрийн хэлтсийн эх сурвалжийг харна */
+  const { departments: DEPARTMENTS, allows } = useAccess();
+  const entries = allEntries.filter((source) => allows(source.slug));
   const normalized = query.trim().toLocaleLowerCase("mn");
   const candidates = entries.filter((source) =>
     (!department || source.slug === department) &&

@@ -144,16 +144,36 @@ export function RescuesDashboard() {
     [rows, species, rarity, outcome, stage, range, month],
   );
 
+  /*
+    Зураг дээр сонгосон бүртгэл нь ШҮҮЛТ — диаграм, үзүүлэлт түүгээр
+    хумигдана; зураг өөрөө хумигдахгүй (өөр цэг сонгох зам). Шүүлтэд
+    үлдээгүй сонголт хүчингүй — дам гарна.
+  */
+  const sel = React.useMemo(() => {
+    if (selected == null || !rows) return null;
+    const idx = selectBase();
+    for (let k = 0; k < idx.length; k++) {
+      if (rows[idx[k]].oid === selected) return selected;
+    }
+    return null;
+  }, [rows, selectBase, selected]);
+
   const select = React.useCallback(
-    (skip?: Skip) => {
+    (skip?: Skip, withSel = true) => {
       const idx = selectBase(skip);
-      if (!extent || !rows) return idx;
-      const [w, s, e, n] = extent;
+      const one = withSel ? sel : null;
+      if ((!extent && one == null) || !rows) return idx;
+      const [w, s, e, n] = extent ?? [-180, -90, 180, 90];
       const wide = e - w >= 360;
       const out = new Uint32Array(idx.length);
       let k = 0;
       for (let j = 0; j < idx.length; j++) {
         const r = rows[idx[j]];
+        if (one != null && r.oid !== one) continue;
+        if (!extent) {
+          out[k++] = idx[j];
+          continue;
+        }
         /* Байршилгүй бичлэг ямар ч хүрээнд багтахгүй */
         if (r.lon == null || r.lat == null) continue;
         if (r.lat < s || r.lat > n) continue;
@@ -162,7 +182,7 @@ export function RescuesDashboard() {
       }
       return out.subarray(0, k);
     },
-    [selectBase, extent, rows],
+    [selectBase, extent, rows, sel],
   );
 
   /*
@@ -214,9 +234,9 @@ export function RescuesDashboard() {
   }, [rows]);
 
   const tally = React.useCallback(
-    (of: (r: Rescue) => string | null, skip: Skip): Datum[] => {
+    (of: (r: Rescue) => string | null, skip: Skip, withSel = true): Datum[] => {
       if (!rows) return [];
-      const idx = select(skip);
+      const idx = select(skip, withSel);
       const counts = new Map<string, number>();
       for (let k = 0; k < idx.length; k++) {
         const key = of(rows[idx[k]]);
@@ -233,27 +253,36 @@ export function RescuesDashboard() {
   const speciesData = React.useMemo(() => tally((r) => r.species, "species"), [tally]);
   const rarityData = React.useMemo(() => tally((r) => r.rarity, "rarity"), [tally]);
   const outcomeData = React.useMemo(() => tally((r) => r.outcome, "outcome"), [tally]);
-  const stageData = React.useMemo(() => tally((r) => r.stage, "stage"), [tally]);
+  /* Цэс сонголтоор хумигдахгүй — өөр утга руу шилжих зам */
+  const stageData = React.useMemo(() => tally((r) => r.stage, "stage", false), [tally]);
+  const menuSpecies = React.useMemo(() => tally((r) => r.species, "species", false), [tally]);
+  const menuRarity = React.useMemo(() => tally((r) => r.rarity, "rarity", false), [tally]);
+  const menuOutcome = React.useMemo(() => tally((r) => r.outcome, "outcome", false), [tally]);
 
   /** Оны зурвас — цоорхой жилийг ч харуулна (тэг утга нь ч мэдээлэл) */
-  const yearData = React.useMemo<Datum[]>(() => {
-    if (!rows || !span) return [];
-    const idx = select("year");
-    const counts = new Map<number, number>();
-    for (let k = 0; k < idx.length; k++) {
-      const y = rows[idx[k]].year;
-      if (y) counts.set(y, (counts.get(y) ?? 0) + 1);
-    }
-    const out: Datum[] = [];
-    for (let y = span[0]; y <= span[1]; y++) {
-      out.push({ key: String(y), label: String(y), value: counts.get(y) ?? 0 });
-    }
-    return out;
-  }, [rows, span, select]);
+  const yearOf = React.useCallback(
+    (withSel: boolean): Datum[] => {
+      if (!rows || !span) return [];
+      const idx = select("year", withSel);
+      const counts = new Map<number, number>();
+      for (let k = 0; k < idx.length; k++) {
+        const y = rows[idx[k]].year;
+        if (y) counts.set(y, (counts.get(y) ?? 0) + 1);
+      }
+      const out: Datum[] = [];
+      for (let y = span[0]; y <= span[1]; y++) {
+        out.push({ key: String(y), label: String(y), value: counts.get(y) ?? 0 });
+      }
+      return out;
+    },
+    [rows, span, select],
+  );
+  const yearData = React.useMemo(() => yearOf(true), [yearOf]);
+  const menuYear = React.useMemo(() => yearOf(false), [yearOf]);
 
   const monthData = React.useMemo<Datum[]>(() => {
     if (!rows) return [];
-    const idx = select("month");
+    const idx = select("month", false);
     const counts = new Array(12).fill(0);
     for (let k = 0; k < idx.length; k++) {
       const m = rows[idx[k]].month;
@@ -280,7 +309,10 @@ export function RescuesDashboard() {
 
   const focus = React.useMemo<Extent | null>(() => {
     /* ЯМАР Ч шүүлтүүр тавихад тэр сонголт руугаа ойртоно */
-    if (!rows || (!stage && !species && !rarity && !outcome && !month)) return null;
+    const ranged =
+      span != null && range != null && (range[0] !== span[0] || range[1] !== span[1]);
+    if (!rows || (!stage && !species && !rarity && !outcome && !month && !ranged))
+      return null;
     const idx = selectBase();
     if (idx.length === 0) return null;
     /* `Bounds` нь бөглөгдөөгүй, хүрээнээс гадуурх координатыг өөрөө
@@ -291,7 +323,7 @@ export function RescuesDashboard() {
       if (r.lon != null && r.lat != null) b.add(r.lon, r.lat);
     }
     return b.get();
-  }, [rows, selectBase, stage, species, rarity, outcome, month]);
+  }, [rows, selectBase, stage, species, rarity, outcome, month, range, span]);
 
   /** Хулгана дагасан хөвөгч тайлбар — байрлалыг өөрөө удирдана */
   const tip = useMapTip();
@@ -310,20 +342,18 @@ export function RescuesDashboard() {
   );
 
   /** Тодруулах цэгийн байрлал — зураг дээрх цагираг */
-  const highlight = React.useMemo<[number, number] | null>(
-    () =>
-      hovered && hovered.lon != null && hovered.lat != null
-        ? [hovered.lon, hovered.lat]
-        : null,
-    [hovered],
-  );
-
   const detail = React.useMemo(() => {
-    if (selected == null) return null;
-    const r = rows?.find((x) => x.oid === selected);
+    if (sel == null) return null;
+    const r = rows?.find((x) => x.oid === sel);
     if (!r) return null;
     return { ...r, photo: speciesPhoto(r.species, r.latin, "lg") };
-  }, [rows, selected]);
+  }, [rows, sel]);
+
+  /* Хулганы доорх, эс бөгөөс сонгосон бүртгэл тодорно */
+  const highlight = React.useMemo<[number, number] | null>(() => {
+    const r = hovered ?? detail;
+    return r && r.lon != null && r.lat != null ? [r.lon, r.lat] : null;
+  }, [hovered, detail]);
 
   /** Муж нь бүтэн хамрах хугацаагаа эзэлж байвал шүүлтүүр тавиагүйтэй адил */
   const wholeRange =
@@ -338,7 +368,8 @@ export function RescuesDashboard() {
     (stage ? 1 : 0) +
     (wholeRange ? 0 : 1) +
     (month ? 1 : 0) +
-    (extentOn ? 1 : 0);
+    (extentOn ? 1 : 0) +
+    (sel != null ? 1 : 0);
 
   function clearRange() {
     setRange(span);
@@ -353,6 +384,7 @@ export function RescuesDashboard() {
     setMonth(null);
     setExtentOn(false);
     setExtent(null);
+    setSelected(null);
   }
 
   if (error || !rows || !stats || !span || !range) {
@@ -408,7 +440,7 @@ export function RescuesDashboard() {
           onClear={() => setSpecies(null)}
           width={300}
         >
-          <PickList items={speciesData} selected={species} onPick={setSpecies} searchable />
+          <PickList items={menuSpecies} selected={species} onPick={setSpecies} searchable />
         </FilterMenu>
 
         <FilterMenu
@@ -419,7 +451,7 @@ export function RescuesDashboard() {
           onClear={() => setRarity(null)}
           width={190}
         >
-          <PickList items={rarityData} selected={rarity} onPick={setRarity} />
+          <PickList items={menuRarity} selected={rarity} onPick={setRarity} />
         </FilterMenu>
 
         <FilterMenu
@@ -430,7 +462,7 @@ export function RescuesDashboard() {
           onClear={() => setOutcome(null)}
           width={260}
         >
-          <PickList items={outcomeData} selected={outcome} onPick={setOutcome} />
+          <PickList items={menuOutcome} selected={outcome} onPick={setOutcome} />
         </FilterMenu>
 
         <FilterMenu
@@ -452,7 +484,7 @@ export function RescuesDashboard() {
           width={170}
         >
           <PickList
-            items={yearData}
+            items={menuYear}
             selected={singleYear}
             onPick={(k) => setRange(k ? [Number(k), Number(k)] : span)}
           />
@@ -522,7 +554,7 @@ export function RescuesDashboard() {
                     labels={labels}
                     visible={mapIdx}
                     basemap={basemap}
-                    onSelect={setSelected}
+                    onSelect={(oid) => setSelected(sel === oid ? null : oid)}
                     onHover={tip.onHover}
                     highlight={highlight}
                     extent={extentOn}
