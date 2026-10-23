@@ -14,14 +14,12 @@ import {
   X,
 } from "lucide-react";
 import {
-  RowChart,
   type Datum,
 } from "@/components/charts";
 import { BasemapGallery } from "@/components/map/basemap-gallery";
 import { MapTip, MapTipRow, useMapTip } from "@/components/map/hover-tip";
 import { OverlayControl } from "@/components/map/overlay-control";
 import { FilterBar, FilterMenu, PickList } from "@/components/wells/filter-bar";
-import { DATA_COLOR } from "@/components/wells/colors";
 import { Columns } from "@/components/ui/resizable-columns";
 import {
   defaultBasemap,
@@ -29,11 +27,14 @@ import {
   type Extent,
   type MapOverlay,
   type MapPoints,
+  zoomForScale,
 } from "@/components/wells/map";
 import { fetchEcoCorridors, type EcoData } from "@/lib/eco-corridors";
 import { Bounds } from "@/lib/extent";
 import { spreadRamp } from "@/lib/tone-ramp";
 import { cn, num } from "@/lib/utils";
+import { SheetBars, SheetSection, SheetStats, catMeta } from "./sheet";
+import { MapLegend } from "./map-legend";
 
 const PolygonMap = dynamic(
   () => import("@/components/wells/map").then((m) => m.WellsMap),
@@ -56,6 +57,23 @@ const NO_INDEX = new Uint32Array(0);
  * мөргөлдөхгүй байх ёстой. Нэгж талбарын дугаарыг энэ хэмжээгээр
  * шилжүүлнэ — коридор 1..3, нэгж талбар 1,000,001-ээс дээш.
  */
+/*
+  Давхцсан нэгж талбарын өнгө — платформын суурь нэгж талбарын цайвар саарал
+  (`#c3cad3`, ногоон бүсийн сонголт). Тогтмол hex — газрын зураг хоёр горимд
+  ижил. ⚠ Буцаагдсан (хэрэглэгч 2026-10-23): cyan (коридорын cyan-номин
+  шатлалд уусч байв), шар `#e5b75a` ("шар биш").
+  ДҮҮРГЭЛТГҮЙ, нарийн хүрээтэй (`hollow`) — коридор, хиймэл дагуул харагдсаар.
+*/
+const PARCEL_COLOR = "#c3cad3";
+const PARCEL_HOLLOW = [PARCEL_COLOR];
+/*
+  Нэгж талбар ЗӨВХӨН 1:30 000-аас ойртоход зурагдана ("ойртохоор л харагдана",
+  хэрэглэгч 2026-10-23) — ногоон бүсийн давхцсан нэгж талбарын хязгаартай нэг.
+  Холоос 1,022 жижиг дүрс коридорыг бүрхэж зөвхөн шуугиан болдог. Тоо,
+  диаграм нь ойртолтоос ҮЛ ХАМААРНА; сонгосон нэгж талбар үргэлж харагдана.
+*/
+const PARCEL_NEAR = zoomForScale(30_000);
+
 const PARCEL_BASE = 1_000_000;
 
 /**
@@ -83,6 +101,8 @@ export function EcoDashboard() {
   const [zone, setZone] = React.useState<string | null>(null);
   const [landuse, setLanduse] = React.useState<string | null>(null);
   const [picked, setPicked] = React.useState<number | null>(null);
+  /** Нэгж талбар зурагдах хэмжээнд ойртсон эсэх (`PARCEL_NEAR`) */
+  const [near, setNear] = React.useState(false);
   /** Хулгана дагасан хөвөгч тайлбар — байрлалыг өөрөө удирдана */
   const tip = useMapTip();
   /* Нэгж талбарын давхаргыг унтраах боломж: коридорын өөрийн хүрээ,
@@ -222,17 +242,19 @@ export function EcoDashboard() {
       });
 
     const parcels = (showParcels ? data.parcelShapes.features : [])
-      .filter((f) => parcelOn.has(Number(f.id)))
+      .filter(
+        (f) => parcelOn.has(Number(f.id)) && (near || PARCEL_BASE + Number(f.id) === picked),
+      )
       .map((f) => ({
         ...f,
         id: PARCEL_BASE + Number(f.id),
         /* Нэгж талбар ГАНЦ өнгөтэй — 18 зориулалтыг өнгөөр ялгавал
            газрын зураг утгагүй солонго болно */
-        properties: { oid: PARCEL_BASE + Number(f.id), c: DATA_COLOR },
+        properties: { oid: PARCEL_BASE + Number(f.id), c: PARCEL_COLOR },
       }));
 
     return { type: "FeatureCollection", features: [...corridors, ...parcels] };
-  }, [data, corridorOn, shownParcels, colorOf, showParcels]);
+  }, [data, corridorOn, shownParcels, colorOf, showParcels, near, picked]);
 
   /* ---------------- Задаргаа ---------------- */
   const byDistrict = React.useMemo<Datum[]>(() => {
@@ -537,20 +559,6 @@ export function EcoDashboard() {
         талбай үлдээх байв. Индикатор нь зургийн ДЭЭР бүтэн өргөнтэй
         зурвас болов (порталын самбартай ижил шийдэл).
       */}
-      <Card className="shrink-0">
-        <div className="grid grid-cols-2 divide-x divide-y divide-line sm:grid-cols-4 sm:divide-y-0">
-          <Stat icon={Waypoints} label="Коридор" value={num(stats.n)} />
-          <Stat
-            icon={Ruler}
-            label="Коридорын талбай, га"
-            value={num(Math.round(stats.ha))}
-          />
-          {/* Энэ самбарын гол тоо — төлөвлөлтөд зохицуулах шаардлагатай
-              нэгж талбарын хэмжээ */}
-          <Stat icon={LandPlot} label="Давхцсан нэгж талбар" value={num(stats.parcels)} />
-          <Stat icon={Layers3} label="Зориулалтын төрөл" value={num(stats.landuses)} />
-        </div>
-      </Card>
 
       <Columns layout="flex" id="eco" right={300} className="min-h-0 flex-1">
         {/* ---- ГОЛ: газрын зураг ---- */}
@@ -563,13 +571,14 @@ export function EcoDashboard() {
                 /* `glow` УНТРААЛТТАЙ: гэрэл нь цөөн том талбайд
                    зориулагдсан бөгөөд мянга гаруй жижиг нэгж талбар
                    дээр хоорондоо нийлж, зураг манантана */
-                shapes={{ data: shapes, selected: sel, labelZoom: 9 }}
+                shapes={{ data: shapes, selected: sel, labelZoom: 9, hollow: PARCEL_HOLLOW }}
                 basemap={basemap}
                 onSelect={(oid) => setPicked(sel === oid ? null : oid)}
                 onHover={tip.onHover}
                 focus={focus}
                 overlays={overlays}
                 cluster={false}
+                onZoom={(z) => setNear(z >= PARCEL_NEAR)}
               />
               <BasemapGallery value={basemap} onChange={setBasemap} />
               <OverlayControl value={overlays} onChange={setOverlays} />
@@ -580,38 +589,33 @@ export function EcoDashboard() {
 
                 Хөвөгч гадаргуу тул `.elevated` сүүдэр зөвшөөрөгдөнө.
               */}
-              <div className="elevated absolute bottom-2.5 left-2.5 z-10 rounded-xs border border-line bg-paper/92 px-2.5 py-2 backdrop-blur-md">
-                <div className="eyebrow mb-1.5">Давхарга</div>
-                <div className="flex items-center gap-1.5 text-[11.5px] text-ink-2">
-                  <span
-                    aria-hidden
-                    className="size-1.5 shrink-0 rounded-full"
-                    style={{ background: colorOf(shownCorridors[0]?.oid ?? 0) }}
-                  />
-                  Экологийн коридор
-                  <span className="num ml-auto pl-2 text-ink-3">
-                    {num(shownCorridors.length)}
-                  </span>
-                </div>
-                <button
-                  onClick={() => setShowParcels((v) => !v)}
-                  aria-pressed={showParcels}
-                  className={cn(
-                    "mt-1 flex w-full items-center gap-1.5 text-[11.5px] transition-colors hover:text-ink",
-                    showParcels ? "text-ink-2" : "text-ink-3",
-                  )}
-                >
-                  <span
-                    aria-hidden
-                    className="size-1.5 shrink-0 rounded-full transition-opacity"
-                    style={{ background: DATA_COLOR, opacity: showParcels ? 1 : 0.25 }}
-                  />
-                  <span className={cn(!showParcels && "line-through")}>Нэгж талбар</span>
-                  <span className="num ml-auto pl-2 text-ink-3">
-                    {num(shownParcels.length)}
-                  </span>
-                </button>
-              </div>
+              <MapLegend
+                groups={[
+                  {
+                    key: "corridor",
+                    title: "Экологийн коридор",
+                    items: shownCorridors.map((r) => ({
+                      key: String(r.oid),
+                      label: r.zone,
+                      color: colorOf(r.oid),
+                      shape: "area" as const,
+                    })),
+                  },
+                  {
+                    key: "parcel",
+                    items: [
+                      {
+                        key: "parcel",
+                        label: "Давхцсан нэгж талбар",
+                        color: PARCEL_COLOR,
+                        shape: "area" as const,
+                        on: showParcels,
+                        onToggle: () => setShowParcels((v) => !v),
+                      },
+                    ],
+                  },
+                ]}
+              />
 
               {/*
                 ХӨВӨГЧ ТАЙЛБАР. Хоёр өөр төрөл нэг зураг дээр байгаа тул
@@ -752,83 +756,46 @@ export function EcoDashboard() {
         </div>
 
         {/* ---- БАРУУН: нэгж талбарын задаргаа ---- */}
-        <div className="flex min-h-0 flex-col gap-2.5 xl:w-(--col-r) xl:shrink-0">
-          {/*
-            Коридор тус бүрийн нэгж талбар — ердөө гурван мөр тул
-            тогтмол өндөртэй, дээд талд.
-
-            ⚠ Эрхийн задаргаа нь толгойд ТООГООРОО гарна: 1,022-оос
-            1,021 нь "эзэмших" тул түүнийг зурвас болговол үл үзэгдэх
-            зураас нэмэхээс өөр юу ч хэлэхгүй. Баримт нь хэвээр.
-          */}
-          <Card className="shrink-0">
-            {/*
-              ⚠ Гарчиг нь ЮУГ тоолж байгааг бүтнээр хэлнэ (хэлтсийн
-              өгсөн нэр, 2026-09-17). Урьд нь "Коридороор" байсан нь
-              задаргааны ТЭНХЛЭГИЙГ нэрлэдэг ч ХЭМЖИГДЭХҮҮНИЙГ нь
-              хэлдэггүй байв — 411 гэдэг юуны тоо болох нь гарчигнаас
-              уншигдахгүй.
-
-              ⚠ Эрхийн задаргаа толгойгоос ДООШ шилжив: урт гарчигтай
-              зэрэгцүүлбэл 300px-ийн картад хоёул багтахгүй, гарчиг нь
-              шахагдана.
-            */}
-            <Head title="ЭК-д давхцаж буй нэгж талбар" />
-            <div className="p-3">
-              <RowChart
-                data={byCorridor}
-                selected={zone}
-                onSelect={setZone}
-                dense
-                /* Талбай нь нэрийн ард, бүдэг өнгөөр — зурвас нь нэгж
-                   талбарын тоог хэмжсэн хэвээр */
-                note={(d) => {
-                  const ha = haOfZone.get(d.key);
-                  return ha == null ? "" : `${num(Math.round(ha))} га`;
-                }}
-              />
-              {/* Эрхийн задаргаа — 1,022-оос 1,021 нь "эзэмших" тул
-                  зурвас болгох нь утгагүй, харин баримт нь хэвээр */}
-              <p className="num mt-2 text-[10.5px] leading-none text-ink-3">
-                {rightNote}
-              </p>
-            </div>
-          </Card>
-
-          {/*
-            Мөрийн СҮҮЛД нь уян карт — 18 зориулалт.
-
-            ⚠ ШАХСАН мөр: 18-аас 12 нь дөрвөөс цөөн талбартай бөгөөд
-            нийлээд ердөө 2% эзэлнэ. Тэр сүүл нь картыг гүйлгүүртэй
-            болгодог тул мөрийг шахав — ГЭХДЭЭ ХАСААГҮЙ: мөр бүр
-            шүүлтүүр тул хаяхад тэр зориулалтаар шүүх арга алга болно
-            (нарийн сонголт нь шүүлтүүрийн мөрийн хайлттай цэсэнд ч
-            бий).
-          */}
-          <Card className="min-h-[140px] flex-1">
-            {/*
-              ⚠ Гарчиг нь ЮУНЫ зориулалт болохыг хэлнэ (хэлтсийн өгсөн
-              нэр, 2026-09-17): "Зориулалтаар" гэдэг нь коридорын ч,
-              нэгж талбарын ч зориулалт байж болно.
-            */}
-            <Head title="Давхцаж буй нэгж талбарын зориулалт" />
-            <div className="min-h-0 flex-1 overflow-y-auto p-3">
-              <RowChart
-                data={byLanduse}
-                selected={landuse}
-                onSelect={setLanduse}
-                dense
-                /*
-                  ⚠ НЭГ ЭГНЭЭНД: арван найман зориулалтын долоо нь хоёр
-                  эгнээ болж, карт 763px хүрч гүйлгүүртэй болдог байв.
-                  Нэг эгнээнд барихад 654px — гүйлгэхгүйгээр багтана.
-                  Бүтэн нэр нь мөрийн `title`-д, шүүлтүүрийн хайлттай
-                  цэсэнд хэвээр.
-                */
-                clamp
-              />
-            </div>
-          </Card>
+        {/*
+          ⚠ NBAHH-ЫН ХУУДАС (хэрэглэгч 2026-10-23, ногоон бүсийн зургаар):
+          Тойм → коридор → зориулалт. Үзүүлэлтийн зурвас зургийн дээрээс энд.
+        */}
+        <div className="flex min-h-0 flex-col gap-2 overflow-y-auto xl:w-(--col-r) xl:shrink-0">
+          <SheetStats
+            stats={[
+              { label: "Коридор", value: stats.n },
+              { label: "Коридорын талбай", value: Math.round(stats.ha), unit: "га" },
+              { label: "Давхцсан нэгж талбар", value: stats.parcels },
+              { label: "Зориулалтын төрөл", value: stats.landuses },
+            ]}
+          />
+          <SheetSection title="ЭК-д давхцаж буй нэгж талбар" meta={catMeta(byCorridor.length)}>
+            <SheetBars
+              data={byCorridor}
+              measure="Нэгж талбарын тоо"
+              selected={zone}
+              onSelect={setZone}
+              /* Талбай нь нэрийн ард, бүдэг — зурвас нь нэгж талбарын тоо */
+              note={(d) => {
+                const ha = haOfZone.get(d.key);
+                return ha == null ? "" : `${num(Math.round(ha))} га`;
+              }}
+            />
+            {/* Эрхийн задаргаа — 1,022-оос 1,021 нь "эзэмших" тул зурвас
+                болгох нь утгагүй, харин баримт нь хэвээр */}
+            <p className="num mt-1.5 px-1.5 text-[10.5px] leading-none text-ink-3">{rightNote}</p>
+          </SheetSection>
+          <SheetSection
+            title="Давхцаж буй нэгж талбарын зориулалт"
+            meta={catMeta(byLanduse.length)}
+          >
+            <SheetBars
+              data={byLanduse}
+              measure="Нэгж талбарын тоо"
+              selected={landuse}
+              onSelect={setLanduse}
+            />
+          </SheetSection>
         </div>
       </Columns>
     </div>
@@ -841,39 +808,6 @@ function Card({ className, children }: { className?: string; children: React.Rea
   return (
     <div className={cn("flex flex-col rounded-xs border border-line bg-paper-2", className)}>
       {children}
-    </div>
-  );
-}
-
-function Head({ title, children }: { title: string; children?: React.ReactNode }) {
-  return (
-    <div className="flex shrink-0 items-center justify-between gap-2 border-b border-line px-3 py-2">
-      <h2 className="display text-[13.5px] leading-none tracking-[0.06em] uppercase">
-        {title}
-      </h2>
-      {children}
-    </div>
-  );
-}
-
-function Stat({
-  label,
-  value,
-  icon: Icon,
-}: {
-  label: string;
-  value: string;
-  icon: typeof Waypoints;
-}) {
-  return (
-    <div className="px-3 py-2.5">
-      <span className="eyebrow block min-h-[28px] leading-[1.25]">{label}</span>
-      <span className="mt-1.5 flex items-center gap-1.5">
-        <Icon size={20} strokeWidth={1.6} className="shrink-0 text-ink-3" />
-        <span className="num truncate text-[16px] leading-none font-medium text-ink">
-          {value}
-        </span>
-      </span>
     </div>
   );
 }

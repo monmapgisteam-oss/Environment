@@ -15,7 +15,6 @@ import {
 } from "lucide-react";
 import {
   GroupedRowChart,
-  RowChart,
   type Datum,
   type DatumGroup,
 } from "@/components/charts";
@@ -28,6 +27,8 @@ import {
   type Extent,
 } from "@/components/wells/map";
 import { Columns } from "@/components/ui/resizable-columns";
+import { SheetBars, SheetSection, SheetStats, catMeta } from "./sheet";
+import { MapLegend } from "./map-legend";
 import { MapPanel, useMapPanel } from "@/components/map/panel";
 import { Bounds } from "@/lib/extent";
 import {
@@ -467,7 +468,7 @@ export function LichensDashboard() {
       .filter((k) => m.has(k))
       .map((k) => ({
         key: k,
-        label: IUCN_LABEL[k] ?? k,
+        label: k === "—" ? "Бүртгэгдээгүй" : (IUCN_LABEL[k] ?? k),
         value: m.get(k) ?? 0,
       }));
   }, [rows, keep]);
@@ -562,12 +563,6 @@ export function LichensDashboard() {
     );
     return data.sites.filter((s) => codes.has(s.code));
   }, [data, rows, keep, species]);
-
-  /** Судлагдсан боловч зүйл хавсрагдаагүй цэгийн тоо */
-  const emptySites = React.useMemo(
-    () => (data?.sites ?? []).filter((s) => s.species === 0).length,
-    [data],
-  );
 
   const activeSite = React.useMemo(() => {
     if (hover == null || !data) return null;
@@ -754,12 +749,12 @@ export function LichensDashboard() {
         className="min-h-0 flex-1"
       >
         {/* ---- ЗҮҮН: овог → зүйл, нэг шатлалт диаграм ---- */}
-        <Card className="min-h-[180px] flex-1 xl:w-(--col-l) xl:flex-none">
-          <Head title="Овог, зүйл">
-            <span className="num text-[11.5px] text-ink-3">
-              {num(familyTree.length)} овог · {num(listed.length)} зүйл
-            </span>
-          </Head>
+        <SheetSection
+          title="Овог, зүйл"
+          meta={`${num(familyTree.length)} овог · ${num(listed.length)} зүйл`}
+          className="min-h-[180px] flex-1 xl:w-(--col-l) xl:flex-none"
+          bodyClassName="flex min-h-0 flex-1 flex-col px-0 pt-0 pb-0"
+        >
           <div className="shrink-0 border-b border-line p-2">
             {/* Хайлт нь ЗҮЙЛИЙГ шүүнэ — овог нь зүйлээ алдвал өөрөө
                 жагсаалтаас унана */}
@@ -789,7 +784,7 @@ export function LichensDashboard() {
               </p>
             )}
           </div>
-        </Card>
+        </SheetSection>
 
         {/* ---- ГОЛ: газрын зураг ---- */}
         <div className="flex min-h-0 flex-1 flex-col gap-2.5">
@@ -801,10 +796,8 @@ export function LichensDashboard() {
                 visible={visible}
                 labels={labels}
                 grades={grades}
-                /* Цэгүүд стикерийн самбар шиг ДОХИОЛЛЫН тэмдэглэгээтэй:
-                   41 бүртгэлийн цэг хиймэл дагуулын өнгө өтгөн зурган
-                   дээр жижиг цэгээр төдийлөн ялгарахгүй байв */
-                pulse
+                /* ⚠ Цохилтын тэмдэглэгээ (`pulse`) ХАСАГДСАН (2026-10-23) —
+                   амьтны зургуудтай ижил firefly цэг; хэмжээ нь зүйлийн тоо */
                 basemap={basemap}
                 /* Цэг товшиход зүүн талын жагсаалт ТЭР ЦЭГИЙН зүйлээр
                    хумигдана — "энэ уулан дээр юу ургадаг вэ" гэдэг нь
@@ -818,6 +811,14 @@ export function LichensDashboard() {
                 cluster={false}
               />
               <BasemapGallery value={basemap} onChange={setBasemap} />
+              <MapLegend
+                groups={[
+                  {
+                    key: "site",
+                    items: [{ key: "site", label: "Судалгааны цэг", color: DATA_COLOR }],
+                  },
+                ]}
+              />
 
               {activeSite ? (
                 <div className="pointer-events-none absolute top-2.5 left-2.5 z-10 max-w-[260px] rounded-xs border border-line bg-paper/92 px-2.5 py-2 backdrop-blur-md">
@@ -1064,36 +1065,22 @@ export function LichensDashboard() {
           </Card>
 
           <p className="shrink-0 px-0.5 text-[10.5px] leading-none text-ink-3">
-            Суурь зураг: Esri · Дата: ArcGIS · {num(data.sites.length)}{" "}
-            бүртгэлийн цэг · зүйлийн тоо нь цэг дээр хулгана аваачихад
-            {emptySites > 0
-              ? ` · ${num(emptySites)} цэгт зүйл хавсрагдаагүй`
-              : ""}
-            {data.noDistrib > 0
-              ? ` · ${num(data.noDistrib)} зүйл координатгүй тул зурагт ороогүй`
-              : ""}
+            Суурь зураг: Esri · Дата: ArcGIS Enterprise
           </p>
         </div>
 
         {/* ---- БАРУУН: индикатор + ангиллын задаргаа ---- */}
-        <div className="flex min-h-0 flex-col gap-2.5 xl:w-(--col-r) xl:shrink-0">
-          <Card className="shrink-0">
-            <div className="grid grid-cols-2 divide-x divide-y divide-line">
-              <Stat icon={Leaf} label="Зүйл" value={num(stats.species)} />
-              <Stat
-                icon={MapPin}
-                label="Бүртгэлийн цэг"
-                value={num(stats.sites)}
-              />
-              <Stat icon={Sprout} label="Овог" value={num(stats.families)} />
-              {/* Ховордсон зэрэгтэй зүйл — үйлдэл шаардах цорын ганц тоо */}
-              <Stat
-                icon={ShieldAlert}
-                label="VU · EN · CR зүйл"
-                value={num(stats.rare)}
-              />
-            </div>
-          </Card>
+        <div className="flex min-h-0 flex-col gap-2 overflow-y-auto xl:w-(--col-r) xl:shrink-0">
+          {/* ТОЙМ — амьтны цэсүүдтэй ижил (2026-10-23). Ховордсон зэрэгтэй
+              (VU · EN · CR) зүйл — үйлдэл шаардах цорын ганц тоо */}
+          <SheetStats
+            stats={[
+              { label: "Зүйл", value: stats.species },
+              { label: "Судалгааны цэг", value: stats.sites },
+              { label: "Овог", value: stats.families },
+              { label: "Ховордсон зүйл", value: stats.rare },
+            ]}
+          />
 
           {/*
             Зургийн эгнээ — үзүүлэлтийн доор, диаграмуудын дээр.
@@ -1102,13 +1089,12 @@ export function LichensDashboard() {
             баруун баганаас зай эзлэхээс өөр юу ч хэлэхгүй.
           */}
           {gallery.length > 0 ? (
-            <Card className="max-h-[300px] shrink-0">
-              <Head title="Зүйлийн зураг">
-                <span className="num text-[11.5px] text-ink-3">
-                  {num(gallery.length)}
-                </span>
-              </Head>
-              <div className="min-h-0 flex-1 overflow-y-auto p-2">
+            <SheetSection
+              title="Зүйлийн зураг"
+              meta={`${num(gallery.length)} зүйл`}
+              bodyClassName="max-h-[260px] overflow-y-auto px-2"
+            >
+              <div>
                 <div className="grid grid-cols-2 gap-1.5">
                   {gallery.map((g) => (
                     <Thumb
@@ -1136,17 +1122,12 @@ export function LichensDashboard() {
                   ))}
                 </div>
               </div>
-            </Card>
+            </SheetSection>
           ) : null}
 
-          <Card className="shrink-0">
-            <Head title="Ховордлын зэргээр">
-              <span className="text-[10.5px] text-ink-3">бүртгэл</span>
-            </Head>
-            <div className="p-3">
-              <RowChart data={byIucn} selected={iucn} onSelect={setIucn} />
-            </div>
-          </Card>
+          <SheetSection title="Ховордлын зэргээр" meta={catMeta(byIucn.length)}>
+            <SheetBars data={byIucn} measure="Бүртгэлийн тоо" selected={iucn} onSelect={setIucn} />
+          </SheetSection>
 
           {/*
             Мөрийн СҮҮЛД нь уян карт — экологийн бүлэг.
@@ -1157,18 +1138,14 @@ export function LichensDashboard() {
             заадаг бөгөөд ангилал зүйн бус ЭКОЛОГИЙН тэнхлэг тул овогтой
             огт өөр асуултад хариулна.
           */}
-          <Card className="min-h-[120px] flex-1">
-            <Head title="Экологийн бүлгээр">
-              <span className="text-[10.5px] text-ink-3">бүртгэл</span>
-            </Head>
-            <div className="min-h-0 flex-1 overflow-y-auto p-3">
-              <RowChart
-                data={byEcogroup}
-                selected={ecogroup}
-                onSelect={setEcogroup}
-              />
-            </div>
-          </Card>
+          <SheetSection title="Экологийн бүлгээр" meta={catMeta(byEcogroup.length)}>
+            <SheetBars
+              data={byEcogroup}
+              measure="Бүртгэлийн тоо"
+              selected={ecogroup}
+              onSelect={setEcogroup}
+            />
+          </SheetSection>
         </div>
       </Columns>
     </div>
@@ -1299,41 +1276,3 @@ function Card({
   );
 }
 
-function Head({
-  title,
-  children,
-}: {
-  title: string;
-  children?: React.ReactNode;
-}) {
-  return (
-    <div className="flex shrink-0 items-center justify-between gap-2 border-b border-line px-3 py-2">
-      <h2 className="display text-[13.5px] leading-none tracking-[0.06em] uppercase">
-        {title}
-      </h2>
-      {children}
-    </div>
-  );
-}
-
-function Stat({
-  label,
-  value,
-  icon: Icon,
-}: {
-  label: string;
-  value: string;
-  icon: typeof Leaf;
-}) {
-  return (
-    <div className="px-3 py-2.5">
-      <span className="eyebrow block min-h-[28px] leading-[1.25]">{label}</span>
-      <span className="mt-1.5 flex items-center gap-1.5">
-        <Icon size={20} strokeWidth={1.6} className="shrink-0 text-ink-3" />
-        <span className="num truncate text-[16px] leading-none font-medium text-ink">
-          {value}
-        </span>
-      </span>
-    </div>
-  );
-}

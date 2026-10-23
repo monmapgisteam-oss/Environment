@@ -7,11 +7,9 @@ import {
   CalendarRange,
   Loader2,
   MapPin,
-  Rat,
-  Ruler,
   X,
 } from "lucide-react";
-import { RowChart, type Datum } from "@/components/charts";
+import type { Datum } from "@/components/charts";
 import { BasemapGallery } from "@/components/map/basemap-gallery";
 import { FilterBar, FilterMenu, PickList } from "@/components/wells/filter-bar";
 import { defaultBasemap, type Basemap, type Extent } from "@/components/wells/map";
@@ -24,6 +22,9 @@ import {
   type MarmotData,
 } from "@/lib/marmots";
 import { cn, num } from "@/lib/utils";
+import { SheetBars, SheetSection, SheetStats, catMeta } from "./sheet";
+import { MapLegend } from "./map-legend";
+import { FIREFLY } from "@/components/wells/colors";
 
 const PointMap = dynamic(
   () => import("@/components/wells/map").then((m) => m.WellsMap),
@@ -396,18 +397,6 @@ export function MarmotsDashboard() {
         Цахилгааны шон, экологийн коридортой НЭГ хэв: үзүүлэлт
         дээрээ, зураг голдоо, задаргаа баруун талдаа.
       */}
-      <Card className="shrink-0">
-        <div className="grid grid-cols-2 divide-x divide-y divide-line sm:grid-cols-4 sm:divide-y-0">
-          <Stat icon={ArrowRight} label="Шилжүүлэлт" value={num(stats.moves)} />
-          <Stat icon={Rat} label="Нийт тарвага" value={num(stats.total)} />
-          <Stat icon={CalendarRange} label="Хамрах он" value={num(stats.years)} />
-          <Stat
-            icon={Ruler}
-            label="Дундаж зай, км"
-            value={stats.avgKm.toFixed(1)}
-          />
-        </div>
-      </Card>
 
       {/* ---- ДЭЭД МӨР: газрын зураг + задаргаа ---- */}
       <Columns layout="flex" id="marmots" right={300} className="min-h-0 flex-1">
@@ -443,23 +432,20 @@ export function MarmotsDashboard() {
               хэрэглэгч тааварлана. Хөвөгч гадаргуу тул `.elevated`
               сүүдэр зөвшөөрөгдөнө.
             */}
-            <div className="elevated absolute bottom-2.5 left-2.5 z-10 rounded-xs border border-line bg-paper/92 px-2.5 py-2 backdrop-blur-md">
-              <div className="eyebrow mb-1.5">Тэмдэглэгээ</div>
-              <div className="flex items-center gap-1.5 text-[11.5px] text-ink-2">
-                <span
-                  aria-hidden
-                  className="size-2 shrink-0 rounded-full bg-ochre"
-                />
-                Барьсан газар
-              </div>
-              <div className="mt-1 flex items-center gap-1.5 text-[11.5px] text-ink-2">
-                <span
-                  aria-hidden
-                  className="size-2 shrink-0 rounded-full border-2 border-moss"
-                />
-                Тавьсан газар
-              </div>
-            </div>
+            <MapLegend
+              groups={[
+                {
+                  key: "marmot",
+                  title: "Нутагшуулсан тарвага",
+                  items: [
+                    /* Тэмдэглэгээний өнгө нь зургийн DOM тэмдэгтэй НЭГ (`--ochre`, `--moss`) */
+                    { key: "from", label: "Барьсан газар", color: "var(--ochre)" },
+                    { key: "to", label: "Тавьсан газар", color: "var(--moss)" },
+                    { key: "move", label: "Шилжүүлэлт", color: FIREFLY.glow, shape: "line" },
+                  ],
+                },
+              ]}
+            />
 
               {/*
                 ТОВШИЛТЫН ЦОНХ — hover картаас ТУСДАА.
@@ -527,16 +513,29 @@ export function MarmotsDashboard() {
           </div>
         </Card>
 
-        <div className="flex min-h-0 flex-col gap-2.5 xl:w-(--col-r) xl:shrink-0">
+        {/*
+          ⚠ NBAHH-ЫН ХУУДАС (хэрэглэгч 2026-10-23, ногоон бүсийн зургаар):
+          Тойм → насны бүрэлдэхүүн → насны ангилал.
+        */}
+        <div className="flex min-h-0 flex-col gap-2 overflow-y-auto xl:w-(--col-r) xl:shrink-0">
+          <SheetStats
+            stats={[
+              { label: "Шилжүүлэлт", value: stats.moves },
+              { label: "Нийт тарвага", value: stats.total },
+              { label: "Хамрах он", value: stats.years },
+              { label: "Дундаж зай", value: stats.avgKm.toFixed(1), unit: "км" },
+            ]}
+          />
           {/*
             Он бүрийн насны бүрэлдэхүүн. Зурвас бүр 100% — жилүүд өөр
             өөр хэмжээтэй тул шууд харьцуулбал зөвхөн том жил нь
             харагдана. Хажууд нь бодит тоог бичнэ.
           */}
-          <Card className="shrink-0">
-            <Head title="Оны насны бүрэлдэхүүн">
-              <span className="text-[10.5px] text-ink-3">хувиар</span>
-            </Head>
+          <SheetSection
+            title="Оны насны бүрэлдэхүүн"
+            meta={`${num(composition.length)} он`}
+            bodyClassName="px-0 pt-0 pb-0"
+          >
             {/*
               ⚠⚠ ӨНГӨНИЙ ТАЙЛБАР ЗААВАЛ.
 
@@ -603,31 +602,22 @@ export function MarmotsDashboard() {
                 </button>
               ))}
               {composition.length === 0 ? (
-                <p className="py-3 text-center text-[12px] text-ink-3">Утга алга</p>
+                <p className="py-3 text-center text-[12px] text-ink-3">
+                  Мэдээлэл бүртгэгдээгүй байна
+                </p>
               ) : null}
             </div>
-          </Card>
+          </SheetSection>
 
           {/* Мөрийн СҮҮЛД нь уян карт — тайлбарын хамт */}
-          <Card className="min-h-[120px] flex-1">
-            <Head title="Насны ангиллаар">
-              <span className="text-[10.5px] text-ink-3">тарвага</span>
-            </Head>
-            <div className="min-h-0 flex-1 overflow-y-auto p-3">
-              {/* Ангиллын нэр нь эх сурвалжийнх — тайлбарыг эх сурвалж
-                  өгөөгүй тул орчуулж таагаагүй. Дээрх бүрэлдэхүүний
-                  зурвасын өнгөний шатлалтай ижил дараалалтай. */}
-              {/* ⚠ ШАХСАН мөр: таван ангилал ердийн өндрөөр 347px болж
-                  картаа халин гүйлгүүр гаргадаг байсныг 225px болгов */}
-              <RowChart
-                data={byAge}
-                dense
-                /* ⚠ Дээрх бүрэлдэхүүний зурвастай ИЖИЛ шатлал: нэг
-                   ангилал хоёр картад өөр өнгөтэй харагдах ёсгүй */
-                colorOf={(d) => ageTone(AGE_CLASSES.indexOf(d.key as never))}
-              />
-            </div>
-          </Card>
+          <SheetSection title="Насны ангиллаар" meta={catMeta(byAge.length)}>
+            <SheetBars
+              data={byAge}
+              measure="Тарвагын тоо"
+              /* ⚠ Дээрх бүрэлдэхүүний зурвастай ИЖИЛ шатлал */
+              colorOf={(d) => ageTone(AGE_CLASSES.indexOf(d.key as never))}
+            />
+          </SheetSection>
         </div>
       </Columns>
 
@@ -785,28 +775,6 @@ function Head({ title, children }: { title: string; children?: React.ReactNode }
         {title}
       </h2>
       {children}
-    </div>
-  );
-}
-
-function Stat({
-  label,
-  value,
-  icon: Icon,
-}: {
-  label: string;
-  value: string;
-  icon: typeof Rat;
-}) {
-  return (
-    <div className="px-3 py-2.5">
-      <span className="eyebrow block min-h-[28px] leading-[1.25]">{label}</span>
-      <span className="mt-1.5 flex items-center gap-1.5">
-        <Icon size={20} strokeWidth={1.6} className="shrink-0 text-ink-3" />
-        <span className="num truncate text-[16px] leading-none font-medium text-ink">
-          {value}
-        </span>
-      </span>
     </div>
   );
 }

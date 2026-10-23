@@ -2,15 +2,17 @@
 
 import * as React from "react";
 import dynamic from "next/dynamic";
-import { Building2, Loader2, Ruler, X, Zap } from "lucide-react";
+import { Building2, Loader2, X } from "lucide-react";
 import { BasemapGallery } from "@/components/map/basemap-gallery";
 import { FilterBar, FilterMenu, PickList } from "@/components/wells/filter-bar";
-import { PieChart } from "@/components/charts";
 import { defaultBasemap, type Basemap, type Extent } from "@/components/wells/map";
 import { Columns } from "@/components/ui/resizable-columns";
 import { Bounds } from "@/lib/extent";
 import { fetchPoles, type PoleData } from "@/lib/poles";
 import { cn, num } from "@/lib/utils";
+import { SheetBars, SheetSection, SheetStats, catMeta } from "./sheet";
+import { MapLegend } from "./map-legend";
+import { FIREFLY } from "@/components/wells/colors";
 
 /** Шугамын дүрсийн дугаар — цэгийн `oid`-той мөргөлдөхгүй сөрөг утга */
 const LINE_ID = -1;
@@ -251,22 +253,6 @@ export function PolesDashboard() {
         Хэлтсийн бусад самбартай НЭГ хэв болов: үзүүлэлт дээрээ,
         зураг голдоо, задаргаа баруун талдаа.
       */}
-      <Card className="shrink-0">
-        <div className="grid grid-cols-2 divide-x divide-y divide-line sm:grid-cols-4 sm:divide-y-0">
-          <Stat icon={Zap} label="Шонгийн тоо" value={num(stats.n)} />
-          <Stat
-            icon={Ruler}
-            label="Шугамын урт, м"
-            value={num(Math.round(stats.length))}
-          />
-          <Stat icon={Ruler} label="Дундаж зай, м" value={num(Math.round(stats.avg))} />
-          <Stat
-            icon={Ruler}
-            label="Хамгийн урт зай, м"
-            value={num(Math.round(stats.max))}
-          />
-        </div>
-      </Card>
 
       <Columns layout="flex" id="poles" right={300} className="min-h-0 flex-1">
         {/* ---- ГОЛ: газрын зураг ---- */}
@@ -301,6 +287,18 @@ export function PolesDashboard() {
                 cluster={false}
               />
               <BasemapGallery value={basemap} onChange={setBasemap} />
+              <MapLegend
+                groups={[
+                  {
+                    key: "poles",
+                    items: [
+                      { key: "pole", label: "Цахилгааны шон", color: FIREFLY.mid },
+                      /* Хэрчмийн өнгө нь зургийн дүрсийн анхдагч (`FIREFLY.glow`) */
+                      { key: "gap", label: "Шон хоорондын зай, м", color: FIREFLY.glow, shape: "line" },
+                    ],
+                  },
+                ]}
+              />
 
               {active ? (
                 <div className="pointer-events-none absolute top-2.5 left-2.5 z-10 max-w-[250px] rounded-xs border border-line bg-paper/92 px-2.5 py-2 backdrop-blur-md">
@@ -364,27 +362,27 @@ export function PolesDashboard() {
           2026-09-17: "chart mapiin baruun tald busad shig n").
           Платформын бусад самбар бүгд ийм эрэмбэтэй.
         */}
-        <div className="flex min-h-0 flex-col gap-2.5 xl:w-(--col-r) xl:shrink-0">
-          {/*
-            Байршил бүрийн шонгийн тоо — бөгжөөр.
-
-            Зай өөрөө газрын зураг дээр хэрчим бүр дээрээ бичигдэж
-            байгаа тул энд давтах шаардлагагүй. Үлдэх асуулт нь хоёр
-            шугам тус бүр хэдэн шонтой вэ гэдэг энгийн тоолол.
-          */}
-          <Card className="min-h-[110px] flex-1">
-            <Head title="Байршлаар">
-              <span className="text-[10.5px] text-ink-3">шон</span>
-            </Head>
-            <div className="min-h-0 flex-1 overflow-y-auto p-3">
-              <PieChart
-                data={byPlace}
-                size={96}
-                selected={place}
-                onSelect={setPlace}
-              />
-            </div>
-          </Card>
+        {/*
+          ⚠ NBAHH-ЫН ХУУДАС (хэрэглэгч 2026-10-23, ногоон бүсийн зургаар):
+          Тойм → байршил. Үзүүлэлтийн зурвас зургийн дээрээс энд шилжив.
+        */}
+        <div className="flex min-h-0 flex-col gap-2 overflow-y-auto xl:w-(--col-r) xl:shrink-0">
+          <SheetStats
+            stats={[
+              { label: "Шонгийн тоо", value: stats.n },
+              { label: "Шугамын урт", value: Math.round(stats.length), unit: "м" },
+              { label: "Дундаж зай", value: Math.round(stats.avg), unit: "м" },
+              { label: "Хамгийн урт зай", value: Math.round(stats.max), unit: "м" },
+            ]}
+          />
+          <SheetSection title="Байршил" meta={catMeta(byPlace.length)}>
+            <SheetBars
+              data={byPlace}
+              measure="Шонгийн тоо"
+              selected={place}
+              onSelect={setPlace}
+            />
+          </SheetSection>
         </div>
       </Columns>
     </div>
@@ -397,39 +395,6 @@ function Card({ className, children }: { className?: string; children: React.Rea
   return (
     <div className={cn("flex flex-col rounded-xs border border-line bg-paper-2", className)}>
       {children}
-    </div>
-  );
-}
-
-function Head({ title, children }: { title: string; children?: React.ReactNode }) {
-  return (
-    <div className="flex shrink-0 items-center justify-between gap-2 border-b border-line px-3 py-2">
-      <h2 className="display text-[13.5px] leading-none tracking-[0.06em] uppercase">
-        {title}
-      </h2>
-      {children}
-    </div>
-  );
-}
-
-function Stat({
-  label,
-  value,
-  icon: Icon,
-}: {
-  label: string;
-  value: string;
-  icon: typeof Ruler;
-}) {
-  return (
-    <div className="px-3 py-2.5">
-      <span className="eyebrow block min-h-[28px] leading-[1.25]">{label}</span>
-      <span className="mt-1.5 flex items-center gap-1.5">
-        <Icon size={20} strokeWidth={1.6} className="shrink-0 text-ink-3" />
-        <span className="num truncate text-[16px] leading-none font-medium text-ink">
-          {value}
-        </span>
-      </span>
     </div>
   );
 }

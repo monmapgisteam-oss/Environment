@@ -8,8 +8,6 @@ import {
   ChevronUp,
   Loader2,
   MapPin,
-  Route,
-  Sprout,
   X,
 } from "lucide-react";
 import { BasemapGallery } from "@/components/map/basemap-gallery";
@@ -23,6 +21,9 @@ import {
 import { Bounds } from "@/lib/extent";
 import { fetchBiotech, type BiotechSite } from "@/lib/biotech";
 import { cn, num } from "@/lib/utils";
+import { SheetStats } from "./sheet";
+import { MapLegend } from "./map-legend";
+import { oklchHex } from "@/components/wells/colors";
 
 const PointMap = dynamic(
   () => import("@/components/wells/map").then((m) => m.WellsMap),
@@ -193,6 +194,22 @@ export function BiotechDashboard() {
     return new Map(names.map((name, i) => [name, i]));
   }, [rows]);
 
+  /*
+    Цэгийн өнгө — ДҮҮРГЭЭР, хүснэгтийн мөрийн ирмэгийн зураастай ЯГ ИЖИЛ
+    өнцөг (2026-10-23, "мапуудыг янзлая"): зураг, хүснэгт, тайлбар гурав НЭГ
+    эх сурвалжаас. Тогтмол hex — газрын зураг хоёр горимд ижил. Урьд нь
+    цохилтын DOM тэмдэглэгээ (`pulse`, нэг өнгө) байв.
+  */
+  const districtHex = React.useCallback(
+    (d: string) =>
+      oklchHex(0.75, 0.16, DISTRICT_HUES[(districtIndex.get(d) ?? 0) % DISTRICT_HUES.length]),
+    [districtIndex],
+  );
+  const colors = React.useMemo(
+    () => (rows ?? []).map((r) => districtHex(r.district)),
+    [rows, districtHex],
+  );
+
   /** Товшсон байршил — хүснэгтийн мөр ба зургийн цэг хоёулаа тавина */
   /*
     Товшсон байршил — хүснэгтийн мөр ба зургийн цэг хоёулаа тавьна.
@@ -298,18 +315,12 @@ export function BiotechDashboard() {
       </FilterBar>
 
       {/*
-        ИНДИКАТОРЫН ЗУРВАС — бүтэн өргөнтэй, хүснэгтийн дээр.
+        ИНДИКАТОР — баруун баганын "Тойм" руу шилжсэн (2026-10-23).
 
         ⚠ Давс нь УЛИРАЛ ТУС БҮРИЙН хэмжээ (хавар, намар ижил тул
         нэмэхгүй), өвс нь хоёр улирлын НИЙЛБЭР. Хоёр өөр аргаар
         нэгтгэж байгаа нь санаатай — эх сурвалжийн бичилт тийм.
       */}
-      <div className="grid shrink-0 grid-cols-2 divide-x divide-y divide-line rounded-xs border border-line bg-paper-2 sm:grid-cols-4 sm:divide-y-0">
-        <Stat icon={MapPin} label="Байршил" value={num(stats.sites)} />
-        <Stat icon={Sprout} label="Давс, кг" value={num(stats.salt)} />
-        <Stat icon={Sprout} label="Өвс, боодол" value={num(stats.hay)} />
-        <Stat icon={Route} label="Явсан зам, км" value={num(stats.km)} />
-      </div>
 
       {/*
         ЗУРАГ ЗҮҮН ТАЛД, ХҮСНЭГТ БАРУУН ТАЛД (хэрэглэгчийн
@@ -336,16 +347,29 @@ export function BiotechDashboard() {
                 points={points}
                 visible={visible}
                 labels={labels}
-                /* Цэг ердөө 14 тул бөөгнөрүүлэхгүй; дохиоллын
-                   тэмдэглэгээ нь хиймэл дагуулын өнгөн дээр ялгарна */
+                /* Цэг ердөө 14 тул бөөгнөрүүлэхгүй */
                 cluster={false}
-                pulse
+                colors={colors}
                 focus={focus}
                 highlight={chosen ? [chosen.lon, chosen.lat] : null}
                 basemap={basemap}
                 onSelect={(oid) => setPicked(sel === oid ? null : oid)}
               />
               <BasemapGallery value={basemap} onChange={setBasemap} />
+              <MapLegend
+                groups={[
+                  {
+                    key: "district",
+                    title: "Биотехникийн байршил",
+                    field: "Дүүрэг",
+                    items: [...districtIndex.keys()].map((d) => ({
+                      key: d,
+                      label: d,
+                      color: districtHex(d),
+                    })),
+                  },
+                ]}
+              />
 
               {/*
                 ТОВШИЛТЫН ЦОНХ — hover картаас ТУСДАА.
@@ -412,6 +436,17 @@ export function BiotechDashboard() {
           өөрөө харагдахгүй.
         */}
         <div className="flex min-h-0 flex-col gap-2.5 overflow-y-auto xl:w-(--col-r) xl:shrink-0">
+          {/* ТОЙМ — бусад амьтны цэс шиг (хэрэглэгч 2026-10-23); урьд нь
+              зургийн дээрх бүтэн өргөнтэй зурвас байв. Давс нь улирал тус
+              бүрийн хэмжээ, өвс нь хоёр улирлын нийлбэр (дээрх тайлбар) */}
+          <SheetStats
+            stats={[
+              { label: "Байршил", value: stats.sites },
+              { label: "Давс", value: stats.salt, unit: "кг" },
+              { label: "Өвс", value: stats.hay, unit: "боодол" },
+              { label: "Явсан зам", value: stats.km, unit: "км" },
+            ]}
+          />
           <div className="shrink-0 rounded-xs border border-line bg-paper-2">
             <div className="flex shrink-0 items-center justify-between gap-2 border-b border-line px-3 py-1.5">
               <h2 className="display text-[13.5px] leading-none tracking-[0.06em] uppercase">
@@ -735,28 +770,6 @@ function Cell({ value }: { value: number | null }) {
     <td className="px-2 py-1.5 text-right whitespace-nowrap">
       <span className="num text-ink">{num(value)}</span>
     </td>
-  );
-}
-
-function Stat({
-  label,
-  value,
-  icon: Icon,
-}: {
-  label: string;
-  value: string;
-  icon: typeof MapPin;
-}) {
-  return (
-    <div className="px-3 py-2.5">
-      <span className="eyebrow block">{label}</span>
-      <span className="mt-1.5 flex items-center gap-1.5">
-        <Icon size={20} strokeWidth={1.6} className="shrink-0 text-ink-3" />
-        <span className="num truncate text-[16px] leading-none font-medium text-ink">
-          {value}
-        </span>
-      </span>
-    </div>
   );
 }
 
