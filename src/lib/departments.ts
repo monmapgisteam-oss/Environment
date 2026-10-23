@@ -36,7 +36,7 @@ export const DEPARTMENTS: Department[] = [
     name: "Захиргаа удирдлагын хэлтэс",
     icon: Building2,
     tone: "--d-zahirgaa",
-    status: "pending",
+    status: "partial",
   },
   {
     slug: "sanhuu-monitoring",
@@ -88,6 +88,30 @@ export const DEPARTMENTS: Department[] = [
     status: "live",
   },
 ];
+
+/*
+  Хэлтсийн АЛБАН ТОВЧЛОЛ — нарийн зурвас (хажуугийн dock 104px) ба
+  ЗУХ-ийн хэлтсээрх диаграмын тэнхлэгт (хэрэглэгчийн шийдвэр,
+  2026-09-17: "захиргаа → ЗУХ"). Бүтэн нэр `title`/`aria-label`-д
+  үлдэнэ — "товчлол задална" дүрмийн үл хамаарах газар нь эдгээр
+  нарийн зай.
+
+  ⚠ Дөрөв нь БАТАЛГААТАЙ: ЗУХ (хэрэглэгч), СААМХ (санхүүгийн
+  дэвтрийн `Хариуцах нэгж` багана), АУХХ ба ХХ (хэлтсээс ирсэн эх
+  сурвалжийн хавтасны нэр). Үлдсэн дөрвийг албан нэрийн үгийн эхний
+  үсгээр ижил дүрмээр гаргасан — хэлтэс өөр товчлол хэрэглэдэг бол
+  ЭНД л засна.
+*/
+export const SHORT_NAMES: Record<string, string> = {
+  zahirgaa: "ЗУХ",
+  "sanhuu-monitoring": "СААМХ",
+  orchin: "ХБОАХХ",
+  oi: "ОХ",
+  "amitan-urgamal": "АУХХ",
+  "nogoon-bus": "НБАХХ",
+  "unelgee-uur-amisgal": "БОҮУАӨХ",
+  hyanalt: "ХХ",
+};
 
 export function getDepartment(slug: string) {
   return DEPARTMENTS.find((d) => d.slug === slug);
