@@ -78,7 +78,7 @@ import {
   type Extent,
   type MapPoints,
 } from "@/components/wells/map";
-import { FIREFLY, oklchHex } from "@/components/wells/colors";
+import { categoryHex, FIREFLY, oklchHex } from "@/components/wells/colors";
 import { Bounds, pointOf } from "@/lib/extent";
 import { inUlaanbaatar } from "@/lib/ub-boundary";
 import { districtsOf, placeNamesOf } from "@/lib/places";
@@ -92,14 +92,17 @@ const DISTRICT_KEY = "__district";
 import {
   breakdowns,
   categoryKey,
+  dateAxes,
   isSystemField,
   labelParts,
   layerName,
+  splitsZones,
   fetchLayerFeatures,
   fetchLayerInfo,
   unitOf,
   type Breakdown,
   type ChartKind,
+  type DateAxis,
   type LayerLabels,
   type LayerFeatures,
   type LayerSet,
@@ -474,11 +477,16 @@ function labelFor(hit: Loaded, oid: number): string {
   if (!row) return "";
 
   const lines: string[] = [];
+  /* Цэгийн шошгын тусдаа талбар ({@link LayerSet.pointLabel}) */
+  const own = hit.info.set.pointLabel;
 
-  if (hit.labels.name) {
+  if (own) {
+    const v = categoryKey(row[own]);
+    if (v !== "Бүртгэгдээгүй") lines.push(v);
+  } else if (hit.labels.name) {
     const v = categoryKey(row[hit.labels.name]);
     if (v !== "Бүртгэгдээгүй") lines.push(v);
-  } else if (hit.info.set.splitZones) {
+  } else if (splitsZones(hit.info.set, hit.info.id)) {
     /*
       ⚠ НЭРГҮЙ ДҮРС БҮСИЙНХЭЭ НЭРЭЭР (хэрэглэгч, 2026-10-06: "label
       асаа"). Голын татмын 37 дүрс нэрийн баганагүй тул шошго огт
@@ -913,6 +921,8 @@ function LayersBoard({
     зурагт үлдэхгүй (эффектээс `set*(null)` дуудахгүй, ДАМ шалгана).
   */
   const [parcelPick, setParcelPick] = React.useState<ParcelPick | null>(null);
+  /* Огнооны мөрийн сонгосон талбар, давхарга бүрээр ({@link dateBar}) */
+  const [dateWant, setDateWant] = React.useState<Record<string, string>>({});
   const [pickTile, setPickTile] = React.useState<{
     id: string;
     tile: ParcelTile;
@@ -1248,6 +1258,23 @@ function LayersBoard({
     (`recount`) — эс тэгвээс шүүлт тавих бүрд диаграмууд өөрсдөө
     гарч, алга болж, самбар тогтворгүй болно.
   */
+  /*
+    ОГНООГООР ШҮҮХ ТЭНХЛЭГҮҮД ({@link LayerSet.dateBar}) — давхарга бүрийн
+    огноо агуулсан талбар. Утгын товчтой ({@link LayerSet.pickBar})
+    бүрдэлд гарахгүй: тэнд он аль хэдийн товчоор шүүгддэг.
+  */
+  const dateBars = React.useMemo(() => {
+    const out: Record<string, DateAxis[]> = {};
+    if (!set.dateBar || set.pickBar) return out;
+    for (const id of set.layers) {
+      const hit = loaded[id];
+      if (!hit) continue;
+      const list = dateAxes(hit.info, hit.data);
+      if (list.length) out[id] = list;
+    }
+    return out;
+  }, [set.dateBar, set.pickBar, set.layers, loaded]);
+
   const views = React.useMemo(() => {
     const out: {
       id: string;
@@ -1300,6 +1327,23 @@ function LayersBoard({
       const bar = set.pickBar;
       if (bar?.layer === id && !keyBy.has(bar.field))
         keyBy.set(bar.field, (row) => [categoryKey(row[bar.field])]);
+      /* Огнооны мөрийн он, сар — диаграм нь нуугдсан байж болно
+         ({@link dateAxes}); байгаа бол диаграмын дүрэм эрх мэдэлтэй */
+      for (const a of dateBars[id] ?? []) {
+        const yk = `${a.field} year`;
+        if (!keyBy.has(yk))
+          keyBy.set(yk, (row) => {
+            const y = a.yearOf(row);
+            return y == null ? [] : [String(y)];
+          });
+        const monthOf = a.monthOf;
+        const mk = `${a.field} month`;
+        if (monthOf && !keyBy.has(mk))
+          keyBy.set(mk, (row) => {
+            const m = monthOf(row);
+            return m == null ? [] : [String(m)];
+          });
+      }
       /* Тооцоолсон дүүрэг ({@link DISTRICT_KEY}) — мөрөөс дугаараар нь */
       const dist = districts[id];
       if (dist) {
@@ -1451,6 +1495,7 @@ function LayersBoard({
     set.charts,
     set.withinUB,
     set.pickBar,
+    dateBars,
   ]);
 
   /**
@@ -1599,6 +1644,17 @@ function LayersBoard({
     }
     return [...seen].sort((a, b) => a.localeCompare(b, "mn"));
   }, [set.pickBar, loaded]);
+
+  /*
+    ОГНООГООР ШҮҮХ МӨР ({@link LayerSet.dateBar}; хэрэглэгч 2026-10-22:
+    "ontoi datanuud deer deed hsgt n ognoogoor shuuh hsg"). Асаалттай
+    давхаргуудын ЭХНИЙ огноотой нь. Онууд нь ШҮҮГДЭЭГҮЙ мөрөөс; жилийн
+    диаграм байгаа бол түүний түлхүүр (таван жилийн бүлэг ч байж болно).
+  */
+  const dateBar = React.useMemo(
+    () => dateBarOf(on, dateBars, loaded, dateWant),
+    [on, dateBars, loaded, dateWant],
+  );
 
   const pick = React.useCallback(
     (id: string, field: string, key: string | null) => {
@@ -1792,6 +1848,9 @@ function LayersBoard({
     Ангилал хэт олон бол өнгө ялгагдахаа болих тул тэр үед ганц өнгөнд
     үлдэнэ — хэрэглэгч гараар өөр талбар сонгож болно.
   */
+  /* Шошго асах ойртолт — бүртгэлийн харьцаа ({@link LayerSet.labelScale}) */
+  const labelZoom = set.labelScale ? zoomForScale(set.labelScale) : LABEL_ZOOM;
+
   const colorField = React.useCallback(
     (id: string): string | null => {
       if (id in colorBy) return colorBy[id];
@@ -1811,7 +1870,9 @@ function LayersBoard({
             (c) =>
               c.kind === "count" &&
               !c.multi &&
-              (c.field === wanted || c.label === wanted),
+              (c.field === wanted ||
+                c.label.toLocaleLowerCase("mn") ===
+                  wanted.toLocaleLowerCase("mn")),
           )
         : undefined;
       if (hit) return hit.field;
@@ -1882,12 +1943,21 @@ function LayersBoard({
       const exact = set.valueColors?.[id];
       /* Бүтэн OKLCH ({@link LayerSet.valueTones}) өнцгөөс ч давуу */
       const tones = set.valueTones?.[id];
+      /* Тод ялгаатай палитр ({@link LayerSet.categorical}) — дугаар нь
+         "Бүртгэгдээгүй"-г алгасна, эс тэгвээс нэг өнгө үрэгдэнэ */
+      const vivid = set.categorical?.includes(id);
+      let slot = 0;
       out[id] = {
         keyOf: b.keyOf,
         colors: new Map(
           b.values.map((v, i) => {
             const hex = exact?.[v.key];
             if (hex) return [v.key, hex];
+            if (vivid)
+              return [
+                v.key,
+                categoryHex(v.key, v.key === "Бүртгэгдээгүй" ? -1 : slot++),
+              ];
             const tone = tones?.[v.key];
             if (tone) return [v.key, oklchHex(tone[0], tone[1], tone[2])];
             const hue = fixed?.[v.key];
@@ -1906,6 +1976,7 @@ function LayersBoard({
     set.valueTones,
     set.valueColors,
     set.hueSpan,
+    set.categorical,
   ]);
 
   /*
@@ -2184,11 +2255,16 @@ function LayersBoard({
       if (!hit) continue;
       for (const [field, keys] of Object.entries(filters[id] ?? {})) {
         const b = hit.charts.find((c) => filterKey(c) === field);
+        /* Диаграмгүй огнооны түлхүүр ({@link dateBars}) — нэр нь талбарынх */
+        const [base, kind] = field.split("\u0000");
+        const axis = (dateBars[id] ?? []).find((a) => a.field === base);
         for (const k of keys)
           out.push({
             key: `f:${id}:${field}:${k}`,
-            label: b?.label ?? field,
-            value: b?.values.find((d) => d.key === k)?.label ?? k,
+            label: b?.label ?? axis?.label ?? field,
+            value:
+              b?.values.find((d) => d.key === k)?.label ??
+              (axis && kind === "month" ? `${k}-р сар` : k),
             onRemove: () => pick(id, field, k),
           });
       }
@@ -2258,6 +2334,7 @@ function LayersBoard({
     on,
     infos,
     parcelPick,
+    dateBars,
   ]);
 
   /*
@@ -2385,20 +2462,92 @@ function LayersBoard({
     дээр зурагдалт бүрд дахин бодуулбал самбар хөлдөнө.
   */
   const crosses = React.useMemo(() => {
-    const out = new Map<
-      string,
-      {
-        row: Breakdown;
-        col: Breakdown;
-        cell: Map<string, number>;
-        /** Давхардалгүй баганын нийт — мөр олон утгат үед л */
-        colTotal?: Map<string, number>;
-        total?: number;
-      }
-    >();
+    type Cross = {
+      row: Breakdown;
+      col: Breakdown;
+      cell: Map<string, number>;
+      /** Давхардалгүй баганын нийт — мөр олон утгат үед л */
+      colTotal?: Map<string, number>;
+      total?: number;
+    };
+    const out = new Map<string, Cross[]>();
     if (!set.tidy) return out;
+    /* Нүднүүд нь ХОЁР ХЭМЖЭЭСЭЭ АЛГАСЧ тоологдоно (доорх тайлбарыг үз) */
+    const tally = (v: (typeof views)[number], row: Breakdown, col: Breakdown): Cross => {
+      const cell = new Map<string, number>();
+      const colTotal = row.multi ? new Map<string, number>() : undefined;
+      let total = 0;
+      const skip = [filterKey(row), filterKey(col)];
+      for (const r of v.inside) {
+        if (!v.passes(r, skip)) continue;
+        total += 1;
+        for (const ck of col.keyOf(r)) {
+          if (colTotal) colTotal.set(ck, (colTotal.get(ck) ?? 0) + 1);
+          for (const rk of row.keyOf(r)) {
+            const k = `${rk}\u0000${ck}`;
+            cell.set(k, (cell.get(k) ?? 0) + 1);
+          }
+        }
+      }
+      return colTotal ? { row, col, cell, colTotal, total } : { row, col, cell };
+    };
     for (const v of views) {
       if (set.noCross?.includes(v.id)) continue;
+      /*
+        БАГАНА ТОГТМОЛ ({@link LayerSet.crossBy}, гадаргын ус "… × Он"):
+        НЭГ утгат тоолол бүр мөр болж, хүснэгт бүр ижил баганатай.
+        Багана нь диаграмгүй талбар байж болох тул утгыг мөрөөс шууд.
+      */
+      const by = set.crossBy?.[v.id];
+      if (by) {
+        const keyOf = (r: Row) => [categoryKey(r[by])];
+        const seen = new Map<string, number>();
+        for (const r of v.inside) {
+          const k = keyOf(r)[0];
+          seen.set(k, (seen.get(k) ?? 0) + 1);
+        }
+        /* Он өсөхөөр; "Он тодорхойгүй" зэрэг бичвэр нь сүүлд */
+        const isYear = (k: string) => /^\d{4}$/.test(k);
+        const values = [...seen]
+          .sort(([a], [b]) =>
+            isYear(a) === isYear(b) ? a.localeCompare(b) : isYear(a) ? -1 : 1,
+          )
+          .map(([key, value]) => ({ key, label: key, value }));
+        const label =
+          set.pickBar?.field === by
+            ? set.pickBar.label
+            : (v.hit.info.fields.find((f) => f.name === by)?.alias ?? by);
+        const col: Breakdown = {
+          id: `crossby:${by}`,
+          field: by,
+          label,
+          kind: "count",
+          values,
+          keyOf,
+          recount: () => ({ values }),
+        };
+        const list = v.charts
+          .filter(
+            (b) =>
+              b.kind === "count" &&
+              !b.multi &&
+              !b.top &&
+              !isTime(b) &&
+              b.field !== by,
+          )
+          .map((row) => tally(v, row, col));
+        /* Бүртгэлийн тэргүүлэх тэнхлэг ЭХЭНД ({@link LayerSet.lead};
+           хэрэглэгч, 2026-10-22: "usnii urul hamgiin deeree") — бусад нь
+           оноогоороо (`sort` тогтвортой) */
+        const lead = set.lead ?? [];
+        const rank = (b: Breakdown) => {
+          const i = lead.indexOf(b.field);
+          return i < 0 ? lead.length : i;
+        };
+        list.sort((a, b) => rank(a.row) - rank(b.row));
+        if (list.length) out.set(v.id, list);
+        continue;
+      }
       let row: Breakdown | undefined;
       let col: Breakdown | undefined;
       const pair = set.cross?.[v.id];
@@ -2420,9 +2569,6 @@ function LayersBoard({
         if (fit.length < 2) continue;
         [col, row] = fit;
       }
-      const cell = new Map<string, number>();
-      const colTotal = row.multi ? new Map<string, number>() : undefined;
-      let total = 0;
       /*
         ⚠⚠ НҮДНҮҮД нь ХОЁР ХЭМЖЭЭСЭЭ АЛГАСЧ тоологдоно (2026-09-29).
         Урьд нь ШҮҮГДСЭН мөрөөс (`v.rows`) тоолдог байсан тул мөр
@@ -2434,26 +2580,10 @@ function LayersBoard({
         ⚠ Бусад талбарын шүүлт ХЭВЭЭР үйлчилнэ: дүүргээр шүүсний дараа
         хүснэгт тэр дүүргийн дотор задарна.
       */
-      const skip = [filterKey(row), filterKey(col)];
-      for (const r of v.inside) {
-        if (!v.passes(r, skip)) continue;
-        total += 1;
-        for (const ck of col.keyOf(r)) {
-          /* Бүртгэл бүр баганадаа НЭГ удаа — мөр хэд ч байсан */
-          if (colTotal) colTotal.set(ck, (colTotal.get(ck) ?? 0) + 1);
-          for (const rk of row.keyOf(r)) {
-            const k = `${rk}\u0000${ck}`;
-            cell.set(k, (cell.get(k) ?? 0) + 1);
-          }
-        }
-      }
-      out.set(
-        v.id,
-        colTotal ? { row, col, cell, colTotal, total } : { row, col, cell },
-      );
+      out.set(v.id, [tally(v, row, col)]);
     }
     return out;
-  }, [views, set.tidy, set.cross, set.noCross]);
+  }, [views, set.tidy, set.cross, set.noCross, set.crossBy, set.pickBar, set.lead]);
 
   /*
     БҮС БҮРД ХЭДЭН НЭГЖ ТАЛБАР ДАВХЦАЖ БАЙНА (хэрэглэгч, 2026-09-25:
@@ -2842,7 +2972,7 @@ function LayersBoard({
             });
           continue;
         }
-        const field = set.splitZones ? leadGroup(hit) : undefined;
+        const field = splitsZones(set, id) ? leadGroup(hit) : undefined;
         const b = field
           ? hit.charts.find((c) => c.field === field && c.kind === "count")
           : undefined;
@@ -2884,10 +3014,7 @@ function LayersBoard({
     }
     return out;
   }, [
-    set.zones,
-    set.zonesOnly,
-    set.splitZones,
-    set.splitShapes,
+    set,
     on,
     loaded,
     views,
@@ -2953,17 +3080,25 @@ function LayersBoard({
       };
     });
     /* Хуваасан бүсүүд том нь эхэндээ; давхаргын бүсүүд бүртгэлийн
-       дарааллаараа (тэжээгдэл → хязгаарлалт → хориглолт) */
-    return set.splitZones || set.splitShapes
-      ? out.sort((a, b) => b.ha - a.ha)
-      : out;
+       дарааллаараа (тэжээгдэл → хязгаарлалт → хориглолт). Нэг цэст хоёул
+       байвал (хамгаалалтын бүс + голын татам) давхаргын дараалал хэвээр,
+       зөвхөн тэр давхаргын ДОТОР эрэмбэлнэ */
+    if (set.splitShapes) return out.sort((a, b) => b.ha - a.ha);
+    const byLayer = new Map<string, typeof out>();
+    for (const z of out) {
+      const g = byLayer.get(z.layer) ?? [];
+      g.push(z);
+      byLayer.set(z.layer, g);
+    }
+    return [...byLayer.entries()].flatMap(([layer, g]) =>
+      splitsZones(set, layer) ? g.sort((a, b) => b.ha - a.ha) : g,
+    );
   }, [
     zoneParts,
     overlap,
     areaRowsOf,
     zoneShapes,
-    set.splitZones,
-    set.splitShapes,
+    set,
   ]);
 
   /*
@@ -3138,22 +3273,13 @@ function LayersBoard({
         ))
     : null;
 
-  const zoneCard = zoneMode ? (
-    <CutCard
-      key="zones"
-      title={set.title ?? "Давхаргаар"}
-      tone={zones[0].tone}
-      first
-      meta={`${num(Math.round(zones.reduce((n, z) => n + z.ha, 0)))} га`}
-      weight={Math.max(4, zones.length * 2)}
-      /* Цэсийн тойм — доорх нэгж талбарын карттай өндөр хуваалцаж
-           тасрахгүй (хэрэглэгч, 2026-10-06: "бүтэн харагддаг болго") */
-      full
-      action={
-        /* Хуваасан бүс задрахгүй — товч хэрэггүй */
-        set.splitZones || set.splitShapes ? undefined : (
-          /* Бүгдийг НЭГ товшилтоор — гурвыг зэрэг харах нь энэ картын
-             гол хэрэглээ тул гурван удаа товшуулахгүй */
+  /* Бүгдийг НЭГ товшилтоор — гурвыг зэрэг харах нь энэ картын гол
+     хэрэглээ тул гурван удаа товшуулахгүй. Хуваасан бүс задрахгүй —
+     товч хэрэггүй */
+  const zoneAction =
+    !zoneMode || set.splitShapes || zones.every((z) => z.axis)
+      ? undefined
+      : (
           <button
             type="button"
             onClick={() =>
@@ -3169,9 +3295,9 @@ function LayersBoard({
               ? "Бүгдийг хураах"
               : "Бүгдийг задлах"}
           </button>
-        )
-      }
-    >
+    );
+
+  const zoneList = zoneMode ? (
       <div className="divide-y divide-line">
         {zones.map((z) => {
           /*
@@ -3228,7 +3354,7 @@ function LayersBoard({
               </button>
             );
           }
-          if (set.splitZones && z.axis && z.key) {
+          if (z.axis && z.key) {
             const axis = z.axis;
             const key = z.key;
             const on = (filters[z.layer]?.[axis] ?? []).includes(key);
@@ -3381,8 +3507,339 @@ function LayersBoard({
           );
         })}
       </div>
-    </CutCard>
   ) : null;
+
+  /*
+    ⚠⚠ ХУУДАСНЫ ХАРАГДАЦ ({@link LayerSet.sheet}; хэрэглэгч 2026-10-22:
+    "goliin tatam, hamgaalaltiin bus ygd zasagdaagui we"). Бүсийн карт
+    ба нэгж талбарын карт нь Ус ашиглалтын хуудастай НЭГ хэвд —
+    хураагддаг хэсгүүд: Тойм → бүс (сав газар) → давхцаж буй нэгж
+    талбар. Мөрийн агуулга, товшилтын зан төлөв ХЭВЭЭР (2026-10-06-ны
+    шийдвэрүүд: га-ийн зурвасгүй, сав газар задрахгүй, бүсүүд зэрэг
+    задарна).
+    ⚠ Тоймд талбай, нэгж талбарын НИЙЛБЭР зөвхөн хуваасан бүсэд
+    (`splitZones` — сав газрууд давхцахгүй). Хамгаалалтын гурван бүс
+    бие биеэ агуулдаг тул нийлбэр нь нэг газрыг хоёр, гурав тоолно —
+    тэнд дүрсийн тоо л гарна.
+  */
+  const zoneStats: { label: string; value: string; unit: string }[] = [];
+  if (zoneMode && set.sheet) {
+    zoneStats.push({
+      /* Хуваасан бүсэд тэнхлэгийн нэр ("Сав газар") — ялгалыг
+         кодоор угсрахгүй */
+      label: zones.length && zones.every((z) => z.axis)
+        ? (() => {
+            const hit = loaded[zones[0].layer];
+            const field = hit ? leadGroup(hit) : undefined;
+            return (
+              hit?.charts.find((c) => c.field === field && c.kind === "count")
+                ?.label ?? "Ангилал"
+            );
+          })()
+        : `${set.layerLabel ?? "Бүс"}ийн тоо`,
+      value: num(zones.length),
+      unit: "",
+    });
+    zoneStats.push({
+      label: "Дүрсийн тоо",
+      value: num(zones.reduce((n, z) => n + z.rows.length, 0)),
+      unit: "",
+    });
+    if (set.splitShapes || (zones.length && zones.every((z) => z.axis))) {
+      zoneStats.push({
+        label: "Нийт талбай",
+        value: num(Math.round(zones.reduce((n, z) => n + z.ha, 0))),
+        unit: "га",
+      });
+      zoneStats.push({
+        label: "Давхцаж буй нэгж талбар",
+        value: zones.some((z) => z.parcels == null)
+          ? "…"
+          : num(zones.reduce((n, z) => n + (z.parcels ?? 0), 0)),
+        unit: "",
+      });
+    }
+  }
+
+  /*
+    ⚠⚠ БҮСИЙН ХУУДАС — ХАРЬЦУУЛАХ ХҮСНЭГТ, БҮЛЭГ (хэрэглэгч 2026-10-23:
+    "chartiig n ynzlah sanaa" → "uurchluud uzdee"). Хамгаалалтын бүс, голын
+    татам нэг цэст нийлэхэд Тоймын доор долоон хэсэг цуварч харьцуулахад
+    хэцүү байв. Одоо: Тойм → ХАРЬЦУУЛАЛТ (бүс бүр нэг мөр: талбай · давхцах
+    нэгж талбар · км² тутамд) → бүлэг тус бүрийн хэсгүүд, анхдагчаар
+    ХУРААГДСАН. Хүснэгтийн мөр дарахад тэр хэсэг нээгдэж, гүйлгэгдэж,
+    газрын зураг тэр бүсээр шүүгдэнэ/ойртоно (хэсгийн толгойн `MapPin`-тэй
+    ижил үйлдэл).
+    ⚠ Нягтрал нь байгаа хоёр тооноос (нэгж талбар ÷ км²) — шинэ мэдээлэл
+    биш. Хуваасан бүлгийн (сав газрууд давхцахгүй) нийлбэр бүлгийн мөрөнд;
+    хамгаалалтын бүсүүд бие биеэ агуулдаг тул тэнд нийлбэр ГАРАХГҮЙ.
+  */
+  const zoneHead = (z: (typeof zones)[number]) => {
+    const base = uidBase(z.layer);
+    /* Дүрс сонгох бүс: дүрсийн бүс, эсвэл ганц дүрстэй давхарга */
+    const uid =
+      z.shape != null
+        ? base + z.shape
+        : !z.axis && z.rows.length === 1
+          ? base + Number(z.rows[0].key)
+          : null;
+    const axis = z.axis;
+    const key = z.key;
+    const active =
+      uid != null
+        ? picked === uid
+        : axis && key
+          ? (filters[z.layer]?.[axis] ?? []).includes(key)
+          : false;
+    const onHead =
+      uid != null
+        ? () => {
+            setPicked(active ? null : uid);
+            setRowPick(active ? null : uid);
+            setParcelPick(null);
+          }
+        : axis && key
+          ? () => {
+              pickOnly(z.layer, [[axis, key]]);
+              setParcelPick(null);
+            }
+          : undefined;
+    return { active, onHead };
+  };
+  const zoneAnchor = (id: string) =>
+    `zone-${set.key}-${zones.findIndex((z) => z.id === id)}`;
+  const zoneGroups: {
+    key: string;
+    label: string;
+    split: boolean;
+    zones: typeof zones;
+  }[] = [];
+  for (const z of zones) {
+    const split = Boolean(z.axis);
+    const key = split ? z.layer : "\u0000whole";
+    let g = zoneGroups.find((x) => x.key === key);
+    if (!g) {
+      g = {
+        key,
+        label: split
+          ? (loaded[z.layer]?.info.name ?? z.layer)
+          : (set.zoneGroup ?? set.layerLabel ?? "Бүс"),
+        split,
+        zones: [],
+      };
+      zoneGroups.push(g);
+    }
+    g.zones.push(z);
+  }
+  const density = (z: { ha: number; parcels?: number }) =>
+    z.parcels == null || z.ha <= 0 ? null : z.parcels / (z.ha / 100);
+  const densityText = (d: number | null) =>
+    d == null ? "…" : d >= 10 ? num(Math.round(d)) : num(d, 1);
+  const densest = Math.max(0, ...zones.map((z) => density(z) ?? 0));
+  const compareCols = "minmax(0,1fr) 5.5rem 6rem 5rem";
+  const zoneCompare =
+    zoneMode && set.sheet && zones.length > 1 ? (
+      <SheetSection title="Харьцуулалт" meta={`${num(zones.length)} бүс`}>
+        <div className="flex flex-col">
+          <div
+            style={{ gridTemplateColumns: compareCols }}
+            className="grid gap-2 border-b border-line px-1.5 pb-1 text-[10px] uppercase tracking-[0.06em] text-ink-3"
+          >
+            <span />
+            <span className="text-right">Талбай, га</span>
+            <span className="text-right">Нэгж талбар</span>
+            <span className="text-right">км² тутамд</span>
+          </div>
+          {zoneGroups.map((g) => {
+            const known = g.zones.every((z) => z.parcels != null);
+            return (
+              <React.Fragment key={g.key}>
+                {zoneGroups.length > 1 ? (
+                  <div
+                    style={{ gridTemplateColumns: compareCols }}
+                    className="grid items-baseline gap-2 px-1.5 pt-2 pb-0.5 text-[10.5px] font-semibold uppercase tracking-[0.06em] text-ink-2"
+                  >
+                    <span className="truncate">{g.label}</span>
+                    {g.split ? (
+                      <>
+                        <span className="num text-right normal-case tracking-normal">
+                          {num(Math.round(g.zones.reduce((n, z) => n + z.ha, 0)))}
+                        </span>
+                        <span className="num text-right normal-case tracking-normal">
+                          {known
+                            ? num(g.zones.reduce((n, z) => n + (z.parcels ?? 0), 0))
+                            : "…"}
+                        </span>
+                        <span />
+                      </>
+                    ) : null}
+                  </div>
+                ) : null}
+                {g.zones.map((z) => {
+                  const { active, onHead } = zoneHead(z);
+                  const d = density(z);
+                  return (
+                    <button
+                      key={z.id}
+                      type="button"
+                      aria-pressed={active}
+                      title={z.label}
+                      onClick={() => {
+                        setZoneOpen((o) => (o.includes(z.id) ? o : [...o, z.id]));
+                        if (onHead && !active) onHead();
+                        const at = zoneAnchor(z.id);
+                        requestAnimationFrame(() =>
+                          document
+                            .getElementById(at)
+                            ?.scrollIntoView({ block: "nearest", behavior: "smooth" }),
+                        );
+                      }}
+                      style={{ gridTemplateColumns: compareCols }}
+                      className={cn(
+                        "grid w-full items-center gap-2 rounded-xs px-1.5 py-[5px] text-left text-[12px] transition-colors hover:bg-paper-hi",
+                        active && "bg-paper-hi",
+                      )}
+                    >
+                      <span className="flex min-w-0 items-center gap-1.5">
+                        <span
+                          aria-hidden
+                          className="size-2.5 shrink-0 rounded-[1px]"
+                          style={{ background: z.tone }}
+                        />
+                        <span className="truncate text-ink">{z.label}</span>
+                      </span>
+                      <span className="num text-right text-ink">
+                        {num(Math.round(z.ha))}
+                      </span>
+                      <span className="num text-right text-ink-2">
+                        {z.parcels == null ? "…" : num(z.parcels)}
+                      </span>
+                      <span
+                        className={cn(
+                          "num text-right",
+                          d != null && d === densest && densest > 0
+                            ? "font-semibold text-ink"
+                            : "text-ink-2",
+                        )}
+                      >
+                        {densityText(d)}
+                      </span>
+                    </button>
+                  );
+                })}
+              </React.Fragment>
+            );
+          })}
+        </div>
+      </SheetSection>
+    ) : null;
+
+  const zoneCard = !zoneMode ? null : set.sheet ? (
+    <React.Fragment key="zones">
+      <SheetSection title="Тойм">
+        <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+          {zoneStats.map((s) => (
+            <div key={s.label} className="min-w-0">
+              <p className="num text-[18px] font-semibold leading-tight text-ink">
+                {s.value}
+                {s.unit ? (
+                  <span className="ml-1 text-[11px] font-normal text-ink-3">
+                    {s.unit}
+                  </span>
+                ) : null}
+              </p>
+              <p className="mt-0.5 text-[11px] leading-snug text-ink-3">
+                {s.label}
+              </p>
+            </div>
+          ))}
+        </div>
+      </SheetSection>
+      {zoneCompare}
+      {/* Бүс бүр өөрийн хэсэг ({@link ZoneSheet}) — бүлгээрээ, анхдагчаар
+          хураагдсан; харьцуулах хүснэгтийн мөр дарахад нээгдэнэ */}
+      {zoneGroups.map((g) => (
+        <React.Fragment key={g.key}>
+          {zoneGroups.length > 1 ? (
+            <p className="eyebrow mt-1 flex items-baseline justify-between gap-2 px-1">
+              <span>{g.label}</span>
+              <span className="num normal-case tracking-normal">
+                {num(g.zones.length)}
+              </span>
+            </p>
+          ) : null}
+          {g.zones.map((z) => {
+            const { active, onHead } = zoneHead(z);
+            const base = uidBase(z.layer);
+            /* Зураг дээр сонгосон дүрсийн бүс ӨӨРӨӨ нээгдэнэ */
+            const holds =
+              picked != null &&
+              z.rows.some((r) => base + Number(r.key) === picked);
+            /* Ганц бүстэй цэс хоосон харагдахгүй — тэнд анхдагчаар нээлттэй */
+            const open =
+              zones.length === 1
+                ? !zoneOpen.includes(z.id)
+                : zoneOpen.includes(z.id) || active || holds;
+            return (
+              <ZoneSheet
+                key={z.id}
+                zone={z}
+                active={active}
+                onHead={onHead}
+                open={open}
+                onToggle={() =>
+                  setZoneOpen((o) =>
+                    o.includes(z.id) ? o.filter((x) => x !== z.id) : [...o, z.id],
+                  )
+                }
+                anchor={zoneAnchor(z.id)}
+                shapes={
+                  z.shape == null && !z.axis && z.rows.length > 1 ? (
+                    <ZoneShapes
+                      rows={z.rows}
+                      tone={z.tone}
+                      base={base}
+                      picked={picked}
+                      onPick={(id) => {
+                        setPicked(id);
+                        setRowPick(id);
+                      }}
+                    />
+                  ) : undefined
+                }
+                pickedId={parcelPick?.id ?? null}
+                pickInfo={
+                  parcelPick
+                    ? {
+                        busy: !shownPick,
+                        count: shownPick ? shownPick.data.features.length : null,
+                        capped: Boolean(shownPick?.capped),
+                      }
+                    : null
+                }
+                onPick={setParcelPick}
+              />
+            );
+          })}
+        </React.Fragment>
+      ))}
+    </React.Fragment>
+  ) : (
+    <CutCard
+      key="zones"
+      title={set.title ?? "Давхаргаар"}
+      tone={zones[0].tone}
+      first
+      meta={`${num(Math.round(zones.reduce((n, z) => n + z.ha, 0)))} га`}
+      weight={Math.max(4, zones.length * 2)}
+      /* Цэсийн тойм — доорх нэгж талбарын карттай өндөр хуваалцаж
+           тасрахгүй (хэрэглэгч, 2026-10-06: "бүтэн харагддаг болго") */
+      full
+      action={zoneAction}
+    >
+      {zoneList}
+    </CutCard>
+  );
 
   const chartCards = (
     keep: (id: string, b: Breakdown) => boolean,
@@ -3420,8 +3877,16 @@ function LayersBoard({
         дарааллаараа эхэнд эгнэнэ; бусад нь өөрсдийн оноогоор
         эрэмбэлэгдсэн хэвээр (`sort` нь тогтвортой).
       */
+      /* Талбарын нэр ЭСВЭЛ харагдах нэрээр (`label`) — талбарын нэр нь
+         токенгүйгээр шалгагдаагүй давхаргад (Хөв, цөөрөм, далан) нэрээр нь
+         заана (хэрэглэгч, 2026-10-22: "ene 2-iin bairiig soliy") */
       const leadAt = (b: Breakdown) => {
-        const at = set.lead?.indexOf(b.field) ?? -1;
+        const lead = set.lead ?? [];
+        let at = lead.indexOf(b.field);
+        if (at < 0) {
+          const name = b.label.trim().toLowerCase();
+          at = lead.findIndex((x) => x.trim().toLowerCase() === name);
+        }
         return at < 0 ? Number.MAX_SAFE_INTEGER : at;
       };
       const cuts = charts
@@ -3588,13 +4053,13 @@ function LayersBoard({
         давтагдана: хүснэгт нь "хаана хэр олон", зурвас нь "нийтдээ
         хэр олон" гэсэн ӨӨР асуултад хариулна.
       */
-      const cross = withCross ? crosses.get(id) : undefined;
-      const crossCard = cross ? (
+      const crossList = withCross ? (crosses.get(id) ?? []) : [];
+      const crossCard = crossList.length ? crossList.map((cross, ci) => (
         <CutCard
-          key={`${id}:cross`}
+          key={`${id}:cross:${cross.row.id}`}
           title={`${cross.row.label} × ${cross.col.label}`}
           tone={tone}
-          first
+          first={ci === 0}
           meta={`${num(rows.length)} ${set.record?.one ?? "бүртгэл"}`}
           weight={Math.max(4, cross.row.values.length + 2)}
           /* Агуулгынхаа өндөртэй — доор нь хоосон зай үлдээхгүй
@@ -3635,7 +4100,7 @@ function LayersBoard({
             }
           />
         </CutCard>
-      ) : null;
+      )) : null;
 
       /*
         ⚠⚠ ДАВХАРДАХГҮЙ (хэрэглэгч, 2026-09-25, зургаар: хязгаарлалтын
@@ -3741,6 +4206,91 @@ function LayersBoard({
 
       if (!cuts.length && !areaCard && !crossCard) return null;
 
+      /* Хуудасны харагдац ({@link LayerSet.sheet}) — хүснэгт, картын оронд */
+      if (set.sheet) {
+        const cf = colorField(id);
+        const cb = cf
+          ? charts.find((c) => c.field === cf && c.kind === "count")
+          : undefined;
+        return (
+          <React.Fragment key={id}>
+            {/*
+              ⚠ ХАРИЛЦАН ҮГҮЙСГЭХ ДАВХАРГЫН СЭЛГЭГЧ ХУУДАСНЫ ДЭЭД ТАЛД
+              (хэрэглэгч, 2026-10-22: "ter 3iig switch hiihiig ene deer
+              hiiy" — Ус ашиглалтын Гэрээ · Зөвшөөрөл · Дүгнэлт). Шүүлтүүрийн
+              мөрөөс энд шилжсэн: хуудас нь сонгосон баримт бичгийнх тул
+              сэлгэгч нь Тоймын яг дээр уншигдана. Шинжилгээ нуусан үед
+              шүүлтүүрийн мөрөнд буцна.
+            */}
+            {set.exclusive ? (
+              <div
+                className="grid shrink-0 gap-1"
+                style={{ gridTemplateColumns: `repeat(${set.layers.length}, minmax(0, 1fr))` }}
+                role="group"
+                aria-label="Давхарга"
+              >
+                {set.layers.map((lid) => {
+                  const isOn = on.includes(lid);
+                  return (
+                    <button
+                      key={lid}
+                      type="button"
+                      aria-pressed={isOn}
+                      onClick={() => (isOn ? undefined : toggle(lid))}
+                      className={cn(
+                        "flex min-w-0 items-center justify-center gap-1.5 rounded-xs border px-2 py-1.5 text-[12px] transition-colors",
+                        isOn
+                          ? "border-data/45 bg-data/12 font-semibold text-ink"
+                          : "border-line bg-paper-2 text-ink-2 hover:border-line-2 hover:text-ink",
+                      )}
+                    >
+                      <span
+                        aria-hidden
+                        className="size-2 shrink-0 rounded-full"
+                        style={{ background: toneOf(lid) }}
+                      />
+                      <span className="truncate">
+                        {set.names[lid] ?? infos[lid]?.name ?? lid}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            ) : (
+              band
+            )}
+            <SheetPanel
+              cuts={cuts}
+              tone={tone}
+              records={rows.length}
+              word={set.record}
+              colors={palettes[id]?.colors}
+              colorAxis={cb ? filterKey(cb) : null}
+              selectedOf={(axis) => (sel[axis] ?? [])[0] ?? null}
+              onPick={(axis, key) =>
+                key == null ? pick(id, axis, null) : pickOnly(id, [[axis, key]])
+              }
+              rowsSkipping={(skip) =>
+                Object.values(hit.data.rows).filter((r) => passes(r, skip))
+              }
+              onPickAdmin={(dAxis, kAxis, d, k) => {
+                setFilters((f) => {
+                  const layer = { ...(f[id] ?? {}) };
+                  if (d == null) delete layer[dAxis];
+                  else layer[dAxis] = [d];
+                  if (k == null) delete layer[kAxis];
+                  else layer[kAxis] = [k];
+                  return Object.keys(layer).length
+                    ? { ...f, [id]: layer }
+                    : Object.fromEntries(Object.entries(f).filter(([x]) => x !== id));
+                });
+                setPicked(null);
+              }}
+            />
+          </React.Fragment>
+        );
+      }
+
       /*
         ⚠⚠ **ДАВХАРГЫН БҮХ ЗАДАРГАА НЭГ КАРТАД** ({@link AxisCard}).
         Тэнхлэг бүр өөрийн карттай байсан тул нэг давхаргын мэдээлэл
@@ -3769,8 +4319,8 @@ function LayersBoard({
         ⚠ ЗӨВХӨН тоолол: тэр тэнхлэгээр задарсан ХЭМЖИЛТ (жишээ нь
         дүүргээр талбай) хүснэгтэд байхгүй тул үлдэнэ.
       */
-      const crossKeys = cross
-        ? new Set([filterKey(cross.row), filterKey(cross.col)])
+      const crossKeys = crossList.length
+        ? new Set(crossList.flatMap((c) => [filterKey(c.row), filterKey(c.col)]))
         : null;
       const crossed = (b: Breakdown) =>
         !!crossKeys &&
@@ -4547,8 +5097,9 @@ function LayersBoard({
           2026-10-06). Зөвхөн бүсийн карт ганцаараа зогсдог цэсэд
           ({@link LayerSet.zonesOnly}); бусад олон давхаргат цэсэд
           давхаргууд нь бүс биш тул асуулт утгагүй */}
-      {parcelZones ? (
+      {parcelZones && !set.sheet ? (
         <ParcelCard
+          sheet={set.sheet}
           zones={parcelZones}
           onPick={setParcelPick}
           pickInfo={
@@ -4717,7 +5268,8 @@ function LayersBoard({
             {/*
               УТГЫН ТОВЧ — "Бүгд · 2021 · … · 2026" ({@link LayerSet.pickBar};
               гадаргын ус, хэрэглэгч 2026-10-22: "onoor n l shuuyaa").
-              Нэг утга сонгоно, дахин товшиход "Бүгд" рүү буцна.
+              ОЛОН СОНГОЛТТОЙ (хэрэглэгч мөн өдөр: "multiple bas songono"):
+              товшилт нэмнэ/хасна, "Бүгд" цэвэрлэнэ.
             */}
             {set.pickBar && barValues.length > 1 ? (
               <div
@@ -4734,11 +5286,7 @@ function LayersBoard({
                       key={v ?? ""}
                       type="button"
                       aria-pressed={isOn}
-                      onClick={() =>
-                        v == null || isOn
-                          ? pick(bar.layer, bar.field, null)
-                          : pickOnly(bar.layer, [[bar.field, v]])
-                      }
+                      onClick={() => pick(bar.layer, bar.field, v)}
                       className={cn(
                         "num rounded-xs border px-2 py-1 text-[12px] transition-colors",
                         isOn
@@ -4753,7 +5301,128 @@ function LayersBoard({
               </div>
             ) : null}
 
-            {set.exclusive ? (
+            {/*
+              ОГНООГООР ШҮҮХ МӨР ({@link LayerSet.dateBar}) — огнооны талбар
+              (олон бол сонгогч) · он · `Date` талбарт сар. Он 12-оос олон
+              бол товчны оронд цэс — мөр хэт урт болно. Он, сар ОЛОН
+              СОНГОЛТТОЙ (хэрэглэгч 2026-10-22: "multiple bas songono"):
+              товшилт нэмнэ/хасна, "Бүх он" цэвэрлэнэ.
+            */}
+            {dateBar && dateBar.years.length > 1
+              ? (() => {
+                  const { id, list, axis, yk, mk, years, months } = dateBar;
+                  const curY = filters[id]?.[yk] ?? [];
+                  const curM = filters[id]?.[mk] ?? [];
+                  return (
+                    <div
+                      className="flex flex-wrap items-center gap-1"
+                      role="group"
+                      aria-label="Огноогоор шүүх"
+                    >
+                      {list.length > 1 ? (
+                        <BarSelect
+                          label="Огнооны талбар"
+                          value={axis.field}
+                          options={list.map((a) => ({
+                            value: a.field,
+                            label: a.label,
+                          }))}
+                          onChange={(f) => {
+                            pick(id, yk, null);
+                            pick(id, mk, null);
+                            setDateWant((w) => ({ ...w, [id]: f }));
+                          }}
+                        />
+                      ) : (
+                        <span className="mr-0.5 text-[11.5px] text-ink-3">
+                          {axis.label}
+                        </span>
+                      )}
+                      {years.length <= 12 ? (
+                        [null, ...years].map((y) => {
+                          const isOn =
+                            y == null ? curY.length === 0 : curY.includes(y.key);
+                          return (
+                            <button
+                              key={y?.key ?? ""}
+                              type="button"
+                              aria-pressed={isOn}
+                              onClick={() =>
+                                pick(id, yk, y?.key ?? null)
+                              }
+                              className={cn(
+                                "num rounded-xs border px-2 py-1 text-[12px] transition-colors",
+                                isOn
+                                  ? "border-data/45 bg-data/12 font-medium text-ink"
+                                  : "border-line text-ink-2 hover:border-line-2 hover:text-ink",
+                              )}
+                            >
+                              {y?.label ?? "Бүх он"}
+                            </button>
+                          );
+                        })
+                      ) : (
+                        <FilterMenu
+                          label="Он"
+                          icon={CalendarRange}
+                          value={
+                            curY.length === 1
+                              ? (years.find((y) => y.key === curY[0])?.label ??
+                                curY[0])
+                              : curY.length
+                                ? `${curY.length} он`
+                                : undefined
+                          }
+                          active={curY.length > 0}
+                          width={180}
+                          onClear={() => pick(id, yk, null)}
+                        >
+                          <PickList
+                            items={years.map((y) => ({
+                              key: y.key,
+                              label: y.label,
+                              value: 0,
+                            }))}
+                            selected={curY}
+                            onPick={(key) => pick(id, yk, key)}
+                            format={() => ""}
+                          />
+                        </FilterMenu>
+                      )}
+                      {months.length > 1 ? (
+                        <FilterMenu
+                          label="Сар"
+                          icon={CalendarRange}
+                          value={
+                            curM.length === 1
+                              ? `${curM[0]}-р сар`
+                              : curM.length
+                                ? `${curM.length} сар`
+                                : undefined
+                          }
+                          active={curM.length > 0}
+                          width={160}
+                          onClear={() => pick(id, mk, null)}
+                        >
+                          <PickList
+                            items={months.map((m) => ({
+                              key: String(m),
+                              label: `${m}-р сар`,
+                              value: 0,
+                            }))}
+                            selected={curM}
+                            onPick={(key) => pick(id, mk, key)}
+                            format={() => ""}
+                          />
+                        </FilterMenu>
+                      ) : null}
+                    </div>
+                  );
+                })()
+              : null}
+
+            {/* Хуудасны горимд сэлгэгч баруун баганын дээд талд сууна */}
+            {set.exclusive && !(set.sheet && chartable && showCharts) ? (
               <div
                 className="flex items-center gap-1"
                 role="group"
@@ -5281,6 +5950,7 @@ function LayersBoard({
                 points={points.at.oid.length ? points.at : NO_POINTS}
                 colors={points.colors ?? undefined}
                 dots={dots}
+                esriFirefly={Boolean(set.fireflyPoints)}
                 pointScale={set.pointScale}
                 visible={points.at.oid.length ? visible : NO_INDEX}
                 shapes={{
@@ -5288,7 +5958,7 @@ function LayersBoard({
                   selected: picked,
                   /* Хязгаар нь амьд тул унтраахад хүрэшгүй ойртолт
                      өгөхөд л хангалттай */
-                  labelZoom: showLabels ? LABEL_ZOOM : OFF_ZOOM,
+                  labelZoom: showLabels ? labelZoom : OFF_ZOOM,
                   /* Нарийн дүрстэй давхаргад нимгэн хүрээ
                      ({@link LayerSet.thinEdge}) */
                   edge: set.thinEdge ? "thin" : undefined,
@@ -5308,7 +5978,7 @@ function LayersBoard({
                  бөгөөд дараа нь асаах боломжгүй */
                 labels={{
                   text: points.text,
-                  minzoom: showLabels ? LABEL_ZOOM : OFF_ZOOM,
+                  minzoom: showLabels ? labelZoom : OFF_ZOOM,
                 }}
                 basemap={basemap}
                 onSelect={(uid) => {
@@ -5322,6 +5992,7 @@ function LayersBoard({
                 /* Бөөгнөрөл бүрдлийн сонголт ({@link LayerSet.cluster}) */
                 cluster={Boolean(set.cluster)}
                 clusterMaxZoom={set.clusterMaxZoom}
+                clusterRadius={set.clusterRadius}
                 overlays={overlays}
                 onView={onView}
               />
@@ -6576,6 +7247,1146 @@ function tickOf(
 }
 
 /**
+ * ⚠⚠ **ХУУДАСНЫ ХАРАГДАЦ** ({@link LayerSet.sheet}; хэрэглэгч 2026-10-22,
+ * Archimap-ийн ANALYSIS самбарын зургаар: "эндээс санаа аваад хий,
+ * цэвэрхэн, ойлгомжтой, энгийн").
+ *
+ * Хүснэгтийн оронд дээрээс доош уншигдах ХЭСГҮҮД — тус бүр хураагддаг:
+ * 1. **ТОЙМ** — хоёр баганат тоо: бүртгэлийн тоо, хэмжилт бүрийн нийт
+ *    дүн (нэгжтэй), хугацааны муж. Том тоо, доор нь жижиг шошго.
+ * 2. **Тэнхлэг бүр** (салбар, дүүрэг …) — НЭГ ЭГНЭЭНИЙ мөр: нэр · 8px
+ *    зурвас · тод тоо (~29px). Утгын багана хамгийн урт тоогоороо (`ch`)
+ *    тул бүх зурвас нэг цэгт дуусна. Хэмжилт нэгээс олон бол толгойн
+ *    товчоор сэлгэнэ. Өнгөт дөрвөлжин ЗӨВХӨН зургийн палитртай тэнхлэгт.
+ * 3. **Хугацаа** — багана бүр утгаа дээрээ бичнэ (≤ 12 багана үед).
+ *
+ * ⚠⚠ Эхний хувилбар (мөр ~38px, доор нь 3px зурвас, мөр бүрд өнгөт
+ * дөрвөлжин, тэнхлэгийн нэр дэд толгойд давтагдана, хугацааны доор
+ * "Хамгийн их · Хугацаа") "маш болхи" гэж буцаагдсан (2026-10-22).
+ *
+ * ⚠ Тайлбар өгүүлбэр, хувь БАЙХГҮЙ (Archimap-ийн дүгнэлт бичвэрийг
+ * ХУУЛААГҮЙ — арга зүйн тайлбарын дүрэм). Мөр, багана дарахад шүүнэ
+ * (`pickOnly`), дахин дарахад цуцлагдана.
+ * ⚠ Олон утгат, хураасан задаргааны нийлбэр Тоймд ОРОХГҮЙ — бүтэн дүн биш.
+ */
+function SheetPanel({
+  cuts,
+  tone,
+  records,
+  word,
+  colors,
+  colorAxis,
+  selectedOf,
+  onPick,
+  rowsSkipping,
+  onPickAdmin,
+}: {
+  cuts: Breakdown[];
+  tone: string;
+  records: number;
+  word?: { one: string; count: string };
+  /** Газрын зургийн палитр — зургийг будаж буй тэнхлэгт л */
+  colors?: Map<string, string>;
+  colorAxis?: string | null;
+  selectedOf: (axis: string) => string | null;
+  onPick: (axis: string, key: string | null) => void;
+  /** Заасан тэнхлэгүүдийг АЛГАССАН шүүлттэй мөрүүд ({@link SheetAdmin}) */
+  rowsSkipping?: (skip: string[]) => Row[];
+  /** Дүүрэг, хороо хоёрыг ЗЭРЭГ тогтооно (`null` — цуцлах) */
+  onPickAdmin?: (
+    dAxis: string,
+    kAxis: string,
+    d: string | null,
+    k: string | null,
+  ) => void;
+}) {
+  const countLabel = word?.count ?? "Бүртгэлийн тоо";
+
+  /* ---- ТОЙМ ---- */
+  const stats: { label: string; value: string; unit: string }[] = [
+    { label: countLabel, value: num(records), unit: "" },
+  ];
+  const seen = new Set<string>();
+  const addTotal = (label: string, by: Iterable<number>) => {
+    if (seen.has(label) || stats.length >= 6) return;
+    seen.add(label);
+    const cut = unitOf(label);
+    const total = [...by].reduce((s, v) => s + v, 0);
+    stats.push({
+      label: cut.unit ? cut.name : label,
+      value: sheetNum(total),
+      unit: cut.unit,
+    });
+  };
+  for (const b of cuts) {
+    if (b.multi || b.top != null) continue;
+    if (b.kind === "sum" && b.measure)
+      addTotal(b.measure, b.values.map((d) => d.value));
+    if (b.kind === "count" && b.notes && b.note)
+      addTotal(b.note.label, b.notes.values());
+  }
+  for (const b of cuts) {
+    if (b.kind !== "year" || stats.length >= 6) continue;
+    const span = timeSpan(b);
+    if (span) stats.push({ label: b.label, value: span, unit: "" });
+  }
+
+  /* ---- ТЭНХЛЭГҮҮД ---- */
+  const axes: { key: string; label: string; list: Breakdown[] }[] = [];
+  const times: Breakdown[] = [];
+  for (const b of cuts) {
+    if (b.kind === "compare") continue;
+    if (isTime(b)) {
+      times.push(b);
+      continue;
+    }
+    const k = filterKey(b);
+    const at = axes.find((x) => x.key === k);
+    if (at) at.list.push(b);
+    else axes.push({ key: k, label: b.label, list: [b] });
+  }
+
+  /*
+    ⚠⚠ ДҮҮРЭГ, ХОРОО НЭГ ХЭСЭГТ ({@link SheetAdmin}; хэрэглэгч 2026-10-22:
+    "дүүрэг хорооны чартуудыг нэгтгэ"). Хороо нь дүүрэг дотроо л утгатай
+    — өөр дүүргийн ижил дугаартай хороо тусдаа тэнхлэгт нийлж байв.
+  */
+  const hasCount = (a: { list: Breakdown[] }) =>
+    a.list.some((b) => b.kind === "count");
+  const dAxis = rowsSkipping
+    ? axes.find((a) => adminRank(a.label) === 1 && hasCount(a))
+    : undefined;
+  const kAxis = dAxis
+    ? axes.find((a) => adminRank(a.label) === 2 && hasCount(a))
+    : undefined;
+
+  return (
+    <>
+      <SheetSection title="Тойм">
+        <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+          {stats.map((s) => (
+            <div key={s.label} className="min-w-0">
+              <p className="num text-[18px] font-semibold leading-tight text-ink">
+                {s.value}
+                {s.unit ? (
+                  <span className="ml-1 text-[11px] font-normal text-ink-3">
+                    {s.unit}
+                  </span>
+                ) : null}
+              </p>
+              <p className="mt-0.5 text-[11px] leading-snug text-ink-3">
+                {s.label}
+              </p>
+            </div>
+          ))}
+        </div>
+      </SheetSection>
+      {axes.map((a) =>
+        dAxis && kAxis && a === kAxis ? null : dAxis && kAxis && a === dAxis ? (
+          <SheetAdmin
+            key={a.key}
+            dAxis={dAxis}
+            kAxis={kAxis}
+            rows={rowsSkipping!([dAxis.key, kAxis.key])}
+            tone={tone}
+            word={word}
+            colors={dAxis.key === colorAxis ? colors : undefined}
+            selD={selectedOf(dAxis.key)}
+            selK={selectedOf(kAxis.key)}
+            onPick={(d, k) => onPickAdmin?.(dAxis.key, kAxis.key, d, k)}
+          />
+        ) : (
+        <SheetAxis
+          key={a.key}
+          axis={a}
+          tone={tone}
+          word={word}
+          colors={a.key === colorAxis ? colors : undefined}
+          selected={selectedOf(a.key)}
+          onPick={(k) => onPick(a.key, k)}
+        />
+        ),
+      )}
+      {/* ⚠ Нэг талбарын он, сар НЭГ КАРТАД сэлгэгдэнэ ({@link SheetTimes}) */}
+      {times.length ? (
+        <div className="grid gap-2">
+          {timeGroups(times).map((list) => (
+            <SheetTimes
+              key={list[0].id}
+              list={list}
+              tone={tone}
+              selectedOf={(b) => selectedOf(filterKey(b))}
+              onPick={(b, k) => onPick(filterKey(b), k)}
+            />
+          ))}
+        </div>
+      ) : null}
+    </>
+  );
+}
+
+/**
+ * Хуудасны зурвас, баганын дүүргэлт УУССАН, ТУНГАЛАГ ({@link SheetPanel};
+ * хэрэглэгч 2026-10-22: "чартын өнгө уусан transparent"). Тоо, нэр бүтэн
+ * тод хэвээр. `color-mix` — өнгө нь hex, `oklch`, CSS хувьсагч аль нь ч
+ * байж болно (`soft` зөвхөн hex-д ажилладаг).
+ */
+function sheetFade(color: string): string {
+  return `color-mix(in srgb, ${color} 35%, transparent)`;
+}
+
+/** Том тоо — 100-аас доош бол нэг аравтын оронтой */
+function sheetNum(v: number): string {
+  return Math.abs(v) >= 100 ? num(Math.round(v)) : num(v, 1);
+}
+
+/** Бүртгэлтэй эхний ба сүүлийн хугацаа ("2019–2026"), эс бөгөөс `null` */
+function timeSpan(b: Breakdown): string | null {
+  const on = b.values.filter((d) => d.value > 0);
+  if (!on.length) return null;
+  const a = on[0].label.split("–")[0];
+  const z = on[on.length - 1].label.split("–").pop() ?? a;
+  return a === z ? a : `${a}–${z}`;
+}
+
+/** Хураагддаг хэсэг — "˅ ГАРЧИГ" толгойтой ({@link SheetPanel}) */
+function SheetSection({
+  title,
+  meta,
+  dot,
+  action,
+  open: held,
+  onToggle,
+  anchor,
+  children,
+}: {
+  title: string;
+  meta?: string;
+  /** Гарчгийн өмнөх өнгөт дөрвөлжин — зургийн өнгө ({@link ZoneSheet}) */
+  dot?: string;
+  /** Толгойн баруун талын товч — хураах товчны ГАДНА */
+  action?: React.ReactNode;
+  /** Эцэг удирдвал (бүсийн хэсэг — харьцуулах хүснэгтээс нээгдэнэ) */
+  open?: boolean;
+  onToggle?: () => void;
+  /** Гүйлгэж хүрэх элементийн `id` */
+  anchor?: string;
+  children: React.ReactNode;
+}) {
+  const [own, setOwn] = React.useState(true);
+  const open = held ?? own;
+  return (
+    <section
+      id={anchor}
+      className="shrink-0 scroll-mt-2 rounded-xs border border-line bg-paper-2"
+    >
+      <div className="flex items-center pr-2">
+      <button
+        type="button"
+        onClick={() => (onToggle ? onToggle() : setOwn((o) => !o))}
+        aria-expanded={open}
+        className="flex min-w-0 flex-1 items-center gap-1.5 px-3 py-1.5 text-left"
+      >
+        <ChevronDown
+          size={13}
+          className={cn(
+            "shrink-0 text-ink-3 transition-transform",
+            !open && "-rotate-90",
+          )}
+        />
+        {dot ? (
+          <span
+            aria-hidden
+            className="size-2.5 shrink-0 rounded-[1px]"
+            style={{ background: dot }}
+          />
+        ) : null}
+        <span className="min-w-0 flex-1 truncate text-[11px] font-semibold uppercase tracking-[0.06em] text-ink">
+          {title}
+        </span>
+        {meta ? (
+          <span className="num shrink-0 text-[10.5px] text-ink-3">{meta}</span>
+        ) : null}
+      </button>
+      {action}
+      </div>
+      {open ? (
+        <div className="border-t border-line px-3 pb-2 pt-2">{children}</div>
+      ) : null}
+    </section>
+  );
+}
+
+/** Жагсаалт энэ тооноос урт бол "Бүгдийг харах" товчоор дэлгэнэ */
+const SHEET_ROWS = 10;
+
+/**
+ * Хэмжилт сонгох унждаг цэс ({@link SheetAxis}). Товчны эгнээ (`Segments`)
+ * гэрээний давхаргын есөн урт нэрийг дөрвөн мөр болгож бөөгнөрүүлдэг байв
+ * (хэрэглэгч 2026-10-22: "өөрөөр хийх санаа"). Нэгжгүй хэмжилт (тоо) эхэнд,
+ * бусад нь НЭГЖЭЭРЭЭ бүлэглэгдэнэ — нэг бүлгийнх л хооронд харьцуулагдана.
+ * Хөтчийн өөрийн `<select>`: жагсаалтад нэр бүтнээрээ, `color-scheme`-ээр
+ * горимоо дагана.
+ */
+function MetricSelect({
+  metrics,
+  value,
+  onChange,
+}: {
+  metrics: { id: string; name: string; unit: string }[];
+  value: string;
+  onChange: (id: string) => void;
+}) {
+  const plain = metrics.filter((m) => !m.unit);
+  const groups = new Map<string, typeof metrics>();
+  for (const m of metrics) {
+    if (!m.unit) continue;
+    const list = groups.get(m.unit) ?? [];
+    list.push(m);
+    groups.set(m.unit, list);
+  }
+  const current = metrics.find((m) => m.id === value);
+  return (
+    <label className="relative mb-1.5 block">
+      <span className="sr-only">Хэмжилт</span>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        title={current?.name}
+        className="h-7 w-full cursor-pointer appearance-none truncate rounded-xs border border-line-2 bg-paper py-0 pl-2.5 pr-8 text-[12px] font-medium text-ink outline-none transition-colors hover:border-ink-3 focus-visible:border-ink-3"
+      >
+        {plain.map((m) => (
+          <option key={m.id} value={m.id}>
+            {m.name}
+          </option>
+        ))}
+        {[...groups].map(([unit, list]) => (
+          <optgroup key={unit} label={unit}>
+            {list.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.name}
+              </option>
+            ))}
+          </optgroup>
+        ))}
+      </select>
+      <ChevronDown
+        size={14}
+        aria-hidden
+        className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-ink-3"
+      />
+    </label>
+  );
+}
+
+/**
+ * Огноогоор шүүх мөрийн өгөгдөл ({@link LayerSet.dateBar}) — асаалттай
+ * давхаргуудын ЭХНИЙ огноотой нь.
+ * ⚠ МОДУЛИЙН түвшинд: давталт, эрт буцалттай мемо нь React Compiler-ийн
+ * мемоизацийг тасалдаг (`parcelAxisOf`-тэй нэг шалтгаан).
+ */
+function dateBarOf(
+  on: readonly string[],
+  dateBars: Record<string, DateAxis[]>,
+  loaded: Record<string, Loaded>,
+  dateWant: Record<string, string>,
+) {
+  for (const id of on) {
+    const list = dateBars[id];
+    const hit = loaded[id];
+    if (!list || !hit) continue;
+    const axis = list.find((a) => a.field === dateWant[id]) ?? list[0];
+    const yk = `${axis.field}\u0000year`;
+    const mk = `${axis.field}\u0000month`;
+    const chart = hit.charts.find((c) => filterKey(c) === yk);
+    const years = chart
+      ? chart.values
+          .filter((d) => d.value > 0)
+          .map((d) => ({ key: d.key, label: d.label }))
+      : axis.years.map((y) => ({ key: String(y), label: String(y) }));
+    const monthOf = axis.monthOf;
+    const months = monthOf
+      ? [
+          ...new Set(
+            Object.values(hit.data.rows)
+              .map((r) => monthOf(r))
+              .filter((m): m is number => m != null),
+          ),
+        ].sort((a, b) => a - b)
+      : [];
+    return { id, list, axis, yk, mk, years, months };
+  }
+  return null;
+}
+
+/** Шүүлтүүрийн мөрийн нягт сонгогч (огноогоор шүүх мөр) */
+function BarSelect({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  options: { value: string; label: string }[];
+  onChange: (value: string) => void;
+}) {
+  return (
+    <label className="relative block">
+      <span className="sr-only">{label}</span>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className={cn(
+          "h-[27px] max-w-[16rem] cursor-pointer appearance-none truncate rounded-xs border bg-paper py-0 pl-2 pr-7 text-[12px] outline-none transition-colors hover:border-line-2 focus-visible:border-ink-3",
+          value ? "border-data/45 font-medium text-ink" : "border-line text-ink-2",
+        )}
+      >
+        {options.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+      <ChevronDown
+        size={13}
+        aria-hidden
+        className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-ink-3"
+      />
+    </label>
+  );
+}
+
+/**
+ * ⚠⚠ **ДҮҮРЭГ, ХОРОО — НЭГ ШАТАЛСАН ХЭСЭГ** ({@link SheetPanel};
+ * хэрэглэгч 2026-10-22: "дүүрэг хорооны чартуудыг нэгтгэ").
+ *
+ * Дүүргийн мөр бүр сумаар задарч, тэр дүүргийн хороод доор нь догол
+ * мөрөөр гарна. Тусдаа "Хороо" тэнхлэг нь өөр дүүргийн ИЖИЛ дугаартай
+ * хороог (Баянзүрхийн 5, Хан-Уулын 5) нэг мөр болгож нийлүүлдэг байв.
+ *
+ * ⚠ Бүх тоо `rows`-оос (дүүрэг, хороо ХОЁУЛАНГ алгассан шүүлттэй) дахин
+ * тоологдоно (`recount`) — хороо сонгосон ч бусад дүүрэг тэгээр
+ * хумигдахгүй. Хорооны утга нь хорооны тэнхлэгийн ИЖИЛ хэмжилтийн
+ * задаргаагаар, тэр дүүргийн мөрүүд дээр.
+ * ⚠ Дүүрэг дарахад дүүргээр шүүж задарна; хороо дарахад дүүрэг, хороо
+ * хоёуланг ЗЭРЭГ тогтооно. Дахин дарахад нэг шат буцна.
+ * ⚠ Хороо нь дүүрэгтээ л харьцуулагдана — зурвасын хуваарь дүүрэг бүрд.
+ */
+function SheetAdmin({
+  dAxis,
+  kAxis,
+  rows,
+  tone,
+  word,
+  colors,
+  selD,
+  selK,
+  onPick,
+}: {
+  dAxis: { key: string; label: string; list: Breakdown[] };
+  kAxis: { key: string; label: string; list: Breakdown[] };
+  rows: Row[];
+  tone: string;
+  word?: { one: string; count: string };
+  colors?: Map<string, string>;
+  selD: string | null;
+  selK: string | null;
+  onPick: (d: string | null, k: string | null) => void;
+}) {
+  const [want, setWant] = React.useState("");
+  const [open, setOpen] = React.useState<Set<string>>(() => new Set());
+  const [all, setAll] = React.useState<Set<string>>(() => new Set());
+  const [allD, setAllD] = React.useState(false);
+
+  /* Хэмжилт — дүүргийн тэнхлэгийнх, хорооных нь ижил төрөл, нэрээр */
+  type Metric = {
+    id: string;
+    name: string;
+    unit: string;
+    d: Breakdown;
+    k?: Breakdown;
+    note: boolean;
+  };
+  const same = (a: Breakdown, b: Breakdown) =>
+    a.kind === b.kind && (a.measure ?? "") === (b.measure ?? "");
+  const metrics: Metric[] = [];
+  for (const b of dAxis.list) {
+    const k = kAxis.list.find((x) => same(x, b));
+    if (b.kind === "count") {
+      metrics.push({
+        id: b.id,
+        name: word?.count ?? "Бүртгэлийн тоо",
+        unit: "",
+        d: b,
+        k,
+        note: false,
+      });
+      if (b.notes && b.note) {
+        const cut = unitOf(b.note.label);
+        metrics.push({
+          id: `${b.id}:note`,
+          name: cut.unit ? cut.name : b.note.label,
+          unit: cut.unit,
+          d: b,
+          k: k?.note?.label === b.note.label ? k : undefined,
+          note: true,
+        });
+      }
+    } else if (b.measure) {
+      const cut = unitOf(b.measure);
+      metrics.push({
+        id: b.id,
+        name: cut.unit ? cut.name : b.measure,
+        unit: [cut.unit, b.kind === "mean" ? "дундаж" : ""]
+          .filter(Boolean)
+          .join(" · "),
+        d: b,
+        k,
+        note: false,
+      });
+    }
+  }
+  const metric = metrics.find((m) => m.id === want) ?? metrics[0];
+  if (!metric) return null;
+
+  const valuesOf = (b: Breakdown, list: Row[], note: boolean) => {
+    const c = b.recount(list);
+    return note
+      ? (c.notes ?? new Map<string, number>())
+      : new Map(c.values.map((d) => [d.key, d.value]));
+  };
+  const dLabel = new Map<string, string>();
+  for (const b of dAxis.list) for (const d of b.values) dLabel.set(d.key, d.label);
+  const kLabel = new Map<string, string>();
+  for (const b of kAxis.list) for (const d of b.values) kLabel.set(d.key, d.label);
+
+  const blank = (k: string) => (k === "Бүртгэгдээгүй" ? 1 : 0);
+  const dRows = [...valuesOf(metric.d, rows, metric.note)]
+    .map(([key, v]) => ({ key, label: dLabel.get(key) ?? key, v }))
+    .filter((r) => r.v > 0 || r.key === selD)
+    .sort((a, b) => blank(a.key) - blank(b.key) || b.v - a.v);
+  const dMax = Math.max(0, ...dRows.map((r) => r.v));
+  const dShown = allD
+    ? dRows
+    : dRows.filter((r, i) => i < SHEET_ROWS || r.key === selD);
+
+  /* Задарсан дүүрэг — хэрэглэгч нээсэн эсвэл сонгосон */
+  const isOpen = (d: string) => open.has(d) || d === selD;
+  const kids = (d: string) => {
+    if (!metric.k) return [];
+    const sub = rows.filter((r) => metric.d.keyOf(r).includes(d));
+    return [...valuesOf(metric.k, sub, metric.note)]
+      .map(([key, v]) => ({ key, label: kLabel.get(key) ?? key, v }))
+      .filter((r) => r.v > 0 || (d === selD && r.key === selK))
+      .sort((a, b) => blank(a.key) - blank(b.key) || b.v - a.v);
+  };
+
+  const flip = (set: Set<string>, k: string) => {
+    const next = new Set(set);
+    if (next.has(k)) next.delete(k);
+    else next.add(k);
+    return next;
+  };
+
+  const digits = Math.max(3, ...dRows.map((r) => sheetNum(r.v).length));
+  const cols = `minmax(0,10rem) minmax(0,1fr) calc(${digits}ch + 2px)`;
+  const comma = dAxis.label.includes(",") || kAxis.label.includes(",");
+  const title = `${dAxis.label}${comma ? " · " : ", "}${kAxis.label.toLocaleLowerCase("mn")}`;
+
+  const bar = (v: number, max: number, color: string) => (
+    <span className="block h-2 rounded-[1px] bg-line">
+      <span
+        className="block h-full rounded-[1px]"
+        style={{
+          width: `${max > 0 && v ? Math.max(1.5, (v / max) * 100) : 0}%`,
+          background: sheetFade(color),
+        }}
+      />
+    </span>
+  );
+
+  return (
+    <SheetSection title={title} meta={`${num(dRows.length)} ангилал`}>
+      {metrics.length > 1 ? (
+        <MetricSelect metrics={metrics} value={metric.id} onChange={setWant} />
+      ) : null}
+      {metrics.length === 1 || metric.unit ? (
+        <p className="mb-1 text-right text-[10.5px] text-ink-3">
+          {metrics.length === 1 ? metric.name : null}
+          {metrics.length === 1 && metric.unit ? ", " : null}
+          {metric.unit}
+        </p>
+      ) : null}
+      <div className="flex flex-col">
+        {dShown.map((r) => {
+          const on = selD === r.key && selK == null;
+          const color = colors?.get(r.key) ?? tone;
+          const expanded = metric.k ? isOpen(r.key) : false;
+          const list = expanded ? kids(r.key) : [];
+          const kMax = Math.max(0, ...list.map((x) => x.v));
+          const many = all.has(r.key);
+          const kShown = many
+            ? list
+            : list.filter((x, i) => i < SHEET_ROWS || x.key === selK);
+          return (
+            <div key={r.key} className="flex flex-col">
+              <div
+                className={cn(
+                  "flex items-center rounded-xs transition-colors hover:bg-paper-hi",
+                  on && "bg-paper-hi",
+                  selD != null && selD !== r.key && "opacity-45",
+                )}
+              >
+                {metric.k ? (
+                  <button
+                    type="button"
+                    aria-expanded={expanded}
+                    aria-label={expanded ? "Хураах" : "Задлах"}
+                    onClick={() => setOpen((s) => flip(s, r.key))}
+                    className="flex h-[22px] w-5 shrink-0 items-center justify-center text-ink-3 hover:text-ink"
+                  >
+                    <ChevronDown
+                      size={12}
+                      className={cn(
+                        "transition-transform",
+                        !expanded && "-rotate-90",
+                      )}
+                    />
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={() => {
+                    onPick(on ? null : r.key, null);
+                    if (!on) setOpen((s) => new Set(s).add(r.key));
+                  }}
+                  aria-pressed={on}
+                  title={r.label}
+                  style={{ gridTemplateColumns: cols }}
+                  className="grid min-w-0 flex-1 items-center gap-2.5 py-[3px] pr-1.5 text-left text-[12.5px]"
+                >
+                  <span className="flex min-w-0 items-center gap-1.5">
+                    {colors ? (
+                      <span
+                        aria-hidden
+                        className="h-2 w-2 shrink-0 rounded-[1px]"
+                        style={{ background: sheetFade(color) }}
+                      />
+                    ) : null}
+                    <span className="min-w-0 truncate text-[12px] font-medium text-ink">
+                      {r.label}
+                    </span>
+                  </span>
+                  {bar(r.v, dMax, color)}
+                  <span className="num text-right text-[12.5px] font-semibold text-ink">
+                    {sheetNum(r.v)}
+                  </span>
+                </button>
+              </div>
+              {expanded ? (
+                <div className="mb-1 ml-[9px] flex flex-col border-l border-line pl-1.5">
+                  {kShown.length ? (
+                    kShown.map((x) => {
+                      const kon = selD === r.key && selK === x.key;
+                      return (
+                        <button
+                          key={x.key}
+                          type="button"
+                          onClick={() => onPick(r.key, kon ? null : x.key)}
+                          aria-pressed={kon}
+                          title={`${r.label} · ${x.label}`}
+                          style={{ gridTemplateColumns: cols }}
+                          className={cn(
+                            "grid w-full items-center gap-2.5 rounded-xs px-1.5 py-[2px] text-left text-[11.5px] transition-colors hover:bg-paper-hi",
+                            kon && "bg-paper-hi",
+                            selK != null && selD === r.key && !kon && "opacity-45",
+                          )}
+                        >
+                          <span className="min-w-0 truncate text-[11.5px] text-ink-2">
+                            {x.label}
+                          </span>
+                          {bar(x.v, kMax, color)}
+                          <span className="num text-right text-[11.5px] text-ink">
+                            {sheetNum(x.v)}
+                          </span>
+                        </button>
+                      );
+                    })
+                  ) : (
+                    <p className="px-1.5 py-[2px] text-[11px] text-ink-3">—</p>
+                  )}
+                  {list.length > SHEET_ROWS ? (
+                    <button
+                      type="button"
+                      onClick={() => setAll((s) => flip(s, r.key))}
+                      className="mt-0.5 px-1.5 text-left text-[11px] text-ink-3 hover:text-ink"
+                    >
+                      {many ? "Хураах" : `Бүгдийг харах · ${num(list.length)}`}
+                    </button>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+          );
+        })}
+      </div>
+      {dRows.length > SHEET_ROWS ? (
+        <button
+          type="button"
+          onClick={() => setAllD((s) => !s)}
+          className="mt-1 px-1.5 text-[11px] text-ink-3 hover:text-ink"
+        >
+          {allD ? "Хураах" : `Бүгдийг харах · ${num(dRows.length)}`}
+        </button>
+      ) : null}
+    </SheetSection>
+  );
+}
+
+/** Нэг тэнхлэгийн хэсэг ({@link SheetPanel}) */
+function SheetAxis({
+  axis,
+  tone,
+  word,
+  colors,
+  selected,
+  onPick,
+}: {
+  axis: { key: string; label: string; list: Breakdown[] };
+  tone: string;
+  word?: { one: string; count: string };
+  colors?: Map<string, string>;
+  selected: string | null;
+  onPick: (key: string | null) => void;
+}) {
+  const [want, setWant] = React.useState("");
+  const [all, setAll] = React.useState(false);
+
+  type Metric = {
+    id: string;
+    name: string;
+    unit: string;
+    by: Map<string, number>;
+  };
+  const metrics: Metric[] = [];
+  for (const b of axis.list) {
+    const by = new Map(b.values.map((d) => [d.key, d.value]));
+    if (b.kind === "count") {
+      metrics.push({
+        id: b.id,
+        name: word?.count ?? "Бүртгэлийн тоо",
+        unit: "",
+        by,
+      });
+      if (b.notes && b.note) {
+        const cut = unitOf(b.note.label);
+        metrics.push({
+          id: `${b.id}:note`,
+          name: cut.unit ? cut.name : b.note.label,
+          unit: cut.unit,
+          by: b.notes,
+        });
+      }
+    } else if (b.measure) {
+      const cut = unitOf(b.measure);
+      metrics.push({
+        id: b.id,
+        name: cut.unit ? cut.name : b.measure,
+        unit: [cut.unit, b.kind === "mean" ? "дундаж" : ""]
+          .filter(Boolean)
+          .join(" · "),
+        by,
+      });
+    }
+  }
+  const metric = metrics.find((m) => m.id === want) ?? metrics[0];
+  if (!metric) return null;
+
+  const labels = new Map<string, string>();
+  for (const b of axis.list)
+    for (const d of b.values) labels.set(d.key, d.label);
+  const blank = (k: string) => (k === "Бүртгэгдээгүй" ? 1 : 0);
+  const rows = [...labels.keys()]
+    .map((key) => ({
+      key,
+      label: labels.get(key) ?? key,
+      v: metric.by.get(key),
+    }))
+    .sort((a, b) => blank(a.key) - blank(b.key) || (b.v ?? -1) - (a.v ?? -1));
+  const max = Math.max(0, ...rows.map((r) => r.v ?? 0));
+  /* Сонгосон мөр хураасан хэсэгт байсан ч харагдана */
+  const shown = all
+    ? rows
+    : rows.filter((r, i) => i < SHEET_ROWS || r.key === selected);
+  const top = axis.list[0]?.top;
+  /* Утгын багана хамгийн урт тоогоороо — бүх мөрийн зурвас нэг цэгт дуусна */
+  const digits = Math.max(
+    3,
+    ...shown.map((r) => (r.v == null ? 1 : sheetNum(r.v).length)),
+  );
+  const cols = `minmax(0,10rem) minmax(0,1fr) calc(${digits}ch + 2px)`;
+
+  return (
+    <SheetSection
+      title={axis.label}
+      meta={top ? `эхний ${top}` : `${num(rows.length)} ангилал`}
+    >
+      {metrics.length > 1 ? (
+        <MetricSelect metrics={metrics} value={metric.id} onChange={setWant} />
+      ) : null}
+      {metrics.length === 1 || metric.unit ? (
+        <p className="mb-1 text-right text-[10.5px] text-ink-3">
+          {metrics.length === 1 ? metric.name : null}
+          {metrics.length === 1 && metric.unit ? ", " : null}
+          {metric.unit}
+        </p>
+      ) : null}
+      <div className="flex flex-col">
+        {shown.map((r) => {
+          const on = selected === r.key;
+          const color = colors?.get(r.key) ?? tone;
+          const w = max > 0 && r.v ? Math.max(1.5, (r.v / max) * 100) : 0;
+          return (
+            <button
+              key={r.key}
+              type="button"
+              onClick={() => onPick(on ? null : r.key)}
+              aria-pressed={on}
+              title={r.label}
+              style={{ gridTemplateColumns: cols }}
+              className={cn(
+                "grid w-full items-center gap-2.5 text-[12.5px] rounded-xs px-1.5 py-[3px] text-left transition-colors hover:bg-paper-hi",
+                on && "bg-paper-hi",
+                selected != null && !on && "opacity-45",
+              )}
+            >
+              <span className="flex min-w-0 items-center gap-1.5">
+                {colors ? (
+                  <span
+                    aria-hidden
+                    className="h-2 w-2 shrink-0 rounded-[1px]"
+                    style={{ background: sheetFade(color) }}
+                  />
+                ) : null}
+                <span className="min-w-0 truncate text-[12px] text-ink">
+                  {r.label}
+                </span>
+              </span>
+              <span className="block h-2 rounded-[1px] bg-line">
+                <span
+                  className="block h-full rounded-[1px]"
+                  style={{ width: `${w}%`, background: sheetFade(color) }}
+                />
+              </span>
+              <span className="num text-right text-[12.5px] font-semibold text-ink">
+                {r.v == null ? (
+                  <span className="font-normal text-ink-3">—</span>
+                ) : (
+                  sheetNum(r.v)
+                )}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+      {rows.length > SHEET_ROWS ? (
+        <button
+          type="button"
+          onClick={() => setAll((s) => !s)}
+          className="mt-1 px-1.5 text-[11px] text-ink-3 hover:text-ink"
+        >
+          {all ? "Хураах" : `Бүгдийг харах · ${num(rows.length)}`}
+        </button>
+      ) : null}
+    </SheetSection>
+  );
+}
+
+/**
+ * Цэгүүдийг дайрсан ЗӨӨЛӨН муруй (хэрэглэгч 2026-10-22: "smooth line") —
+ * монотон куб (Fritsch–Carlson): хөрш хоёр цэгийн хооронд хэтэрч
+ * (overshoot) тэгээс доош, оргилоос дээш гарахгүй тул утгыг худал
+ * зурахгүй. Catmull-Rom нь тэг утгын өмнө сөрөг рүү унжиж байв.
+ */
+function smoothPath(pts: readonly (readonly [number, number])[]): string {
+  const n = pts.length;
+  if (!n) return "";
+  if (n < 3) return pts.map(([px, py], i) => `${i ? "L" : "M"}${px},${py}`).join(" ");
+  const dx: number[] = [];
+  const m: number[] = [];
+  for (let i = 0; i < n - 1; i++) {
+    dx.push(pts[i + 1][0] - pts[i][0]);
+    m.push((pts[i + 1][1] - pts[i][1]) / dx[i]);
+  }
+  const t: number[] = [m[0]];
+  for (let i = 1; i < n - 1; i++)
+    t.push(m[i - 1] * m[i] <= 0 ? 0 : (m[i - 1] + m[i]) / 2);
+  t.push(m[n - 2]);
+  for (let i = 0; i < n - 1; i++) {
+    if (m[i] === 0) {
+      t[i] = 0;
+      t[i + 1] = 0;
+      continue;
+    }
+    const a = t[i] / m[i];
+    const b = t[i + 1] / m[i];
+    const h = a * a + b * b;
+    if (h > 9) {
+      const k = 3 / Math.sqrt(h);
+      t[i] = k * a * m[i];
+      t[i + 1] = k * b * m[i];
+    }
+  }
+  let d = `M${pts[0][0]},${pts[0][1]}`;
+  for (let i = 0; i < n - 1; i++) {
+    const h = dx[i] / 3;
+    d += ` C${pts[i][0] + h},${pts[i][1] + t[i] * h} ${pts[i + 1][0] - h},${pts[i + 1][1] - t[i + 1] * h} ${pts[i + 1][0]},${pts[i + 1][1]}`;
+  }
+  return d;
+}
+
+/**
+ * Хугацааны хэсэг — ХЭВТЭЭ ШУГАМАН ДИАГРАМ, доор нь 50%-ийн дүүргэлт
+ * (хэрэглэгч 2026-10-22: "hundlun line chart ch ymuu dotroo fill 50 tai";
+ * урьд нь багана байсан). Цэг бүр утгаа дээрээ бичнэ (≤ 12 цэг үед).
+ * Багана бүрийн бүтэн өндрийн тунгалаг товч нь шүүлт хэвээр.
+ * ⚠ SVG нь `preserveAspectRatio="none"`-оор сунана — шугамын зузааныг
+ * `non-scaling-stroke` барина; цэг, тоо нь HTML (хувиар байрлана) тул
+ * сунахгүй.
+ */
+/**
+ * ⚠⚠ ОН, САР НЭГ КАРТАД ДАВХАРЛАНА (хэрэглэгч 2026-10-22: "eswel on sar
+ * 2-iin chartaa dawhralchih"). Зэрэгцүүлэхэд хагас өргөнд тэнхлэг, утга
+ * шахагдаж байв. НЭГ талбарын жил, сарын цуваа бүтэн өргөнтэй НЭГ карт
+ * болж, дээрх "Жилээр · Сараар" товчоор сэлгэгдэнэ (`timeView`-тэй нэг
+ * санаа). Шүүлт тус бүр өөрийн түлхүүрээр (`filterKey`) хэвээр.
+ */
+/** Хугацааны задаргааг ТАЛБАРААР бүлэглэнэ — он, сар нь нэг талбараас */
+function timeGroups(times: Breakdown[]): Breakdown[][] {
+  const by = new Map<string, Breakdown[]>();
+  for (const b of times) {
+    const k = b.field ?? b.id;
+    by.set(k, [...(by.get(k) ?? []), b]);
+  }
+  return [...by.values()].map((g) =>
+    [...g].sort((a, c) => (a.kind === "year" ? 0 : 1) - (c.kind === "year" ? 0 : 1)),
+  );
+}
+
+function SheetTimes({
+  list,
+  tone,
+  selectedOf,
+  onPick,
+}: {
+  list: Breakdown[];
+  tone: string;
+  selectedOf: (b: Breakdown) => string | null;
+  onPick: (b: Breakdown, k: string | null) => void;
+}) {
+  const [at, setAt] = React.useState(0);
+  const b = list[Math.min(at, list.length - 1)];
+  const labels = [...new Set(list.map((x) => x.label))];
+  const title = labels.length === 1 ? labels[0] : labels.join(", ");
+  const head = (
+    <div className="mb-1.5 flex gap-1">
+      {list.map((x, i) => (
+        <button
+          key={x.id}
+          type="button"
+          onClick={() => setAt(i)}
+          aria-pressed={x === b}
+          className={cn(
+            "rounded-xs border px-2 py-0.5 text-[10.5px] transition-colors",
+            x === b
+              ? "border-(--tone) text-ink"
+              : "border-line text-ink-3 hover:text-ink",
+          )}
+        >
+          {x.kind === "month" ? "Сараар" : "Жилээр"}
+        </button>
+      ))}
+    </div>
+  );
+  return (
+    <SheetTime
+      b={b}
+      tone={tone}
+      title={title}
+      head={head}
+      selected={selectedOf(b)}
+      onPick={(k) => onPick(b, k)}
+    />
+  );
+}
+
+/** 10px `num` тоо, тэмдэгт тутмын ойролцоо өргөн (px) */
+const TICK_CH = 6.2;
+
+function SheetTime({
+  b,
+  tone,
+  selected,
+  onPick,
+  title,
+  head,
+}: {
+  b: Breakdown;
+  tone: string;
+  selected: string | null;
+  onPick: (key: string | null) => void;
+  /** Нэгтгэсэн картын гарчиг ({@link SheetTimes}) */
+  title?: string;
+  /** Диаграмын дээрх сэлгэгч ({@link SheetTimes}) */
+  head?: React.ReactNode;
+}) {
+  /* Градиентийн id хуудсан дээр давтагдахгүй байх ёстой */
+  const gid = React.useId().replace(/:/g, "");
+  /* Өргөнийг хэмжинэ — он, сар зэрэгцэх үед хагас өргөнд утгын шошго
+     багтах эсэхийг шийднэ (`ResizeObserver`-ын дуудлагад төлөв). */
+  const [w, setW] = React.useState(0);
+  const watch = React.useCallback((el: HTMLDivElement | null) => {
+    if (!el) return;
+    const ro = new ResizeObserver(([e]) => setW(e.contentRect.width));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  const vals = b.values;
+  const span = timeSpan(b);
+  if (!span) return null;
+  const n = vals.length;
+  const max = Math.max(0, ...vals.map((d) => d.value));
+  /* Утга цэгийн дээр — цөөн цэг үед, багтах үед л (давхцвал бичвэр
+     уншигдахгүй; утга нь `title`-д үлдэнэ). Тоо ~6px/тэмдэгт (11px). */
+  const longest = Math.max(1, ...vals.map((d) => sheetNum(d.value).length));
+  const labelled = n <= 12 && (w === 0 || longest * 6.2 + 4 <= w / n);
+  const unit = b.measure ? unitOf(b.measure).unit : "";
+  /* Тэнхлэгийн шошго богино: "11-р сар" → "11" (гарчиг нь "Сар") */
+  const tick = (label: string) => label.replace(/-р сар$/, "");
+  /* Шошго багтах тоогоор сийрэгжинэ — эхний ба сүүлийнх үргэлж; сүүлийнх
+     нь өмнөхтэйгээ хэт ойр бол өмнөхийг нь орхино (давхцахгүй). */
+  const tickLen = Math.max(1, ...vals.map((d) => tick(d.label).length));
+  const fit = w > 0 ? Math.max(1, Math.floor(w / (tickLen * TICK_CH + 8))) : 8;
+  const step = Math.max(1, Math.ceil(n / fit));
+  const ticks: number[] = [];
+  for (let i = 0; i < n; i += step) ticks.push(i);
+  if (ticks[ticks.length - 1] !== n - 1) {
+    if (n - 1 - ticks[ticks.length - 1] < step && ticks.length > 1) ticks.pop();
+    ticks.push(n - 1);
+  }
+  /* Хэвтээ байрлал — багана бүрийн голд; босоо нь дээд 22%-ийг шошгонд */
+  const x = (i: number) => ((i + 0.5) / n) * 100;
+  const top = labelled ? 22 : 6;
+  const y = (v: number) =>
+    100 - (max > 0 ? (v / max) * (100 - top) : 0);
+  const pts = vals.map((d, i) => [x(i), y(d.value)] as const);
+  const line = smoothPath(pts);
+  const area = `${line} L${x(n - 1)},100 L${x(0)},100 Z`;
+
+  return (
+    <SheetSection title={title ?? b.label} meta={unit || undefined}>
+      {head}
+      <div ref={watch} className="relative h-[84px] w-full">
+        <svg
+          viewBox="0 0 100 100"
+          preserveAspectRatio="none"
+          className="absolute inset-0 h-full w-full overflow-visible"
+          aria-hidden
+        >
+          {/* Дүүргэлт ДЭЭРЭЭС ДООШ уусна (хэрэглэгч, 2026-10-22: "iim
+              uusalt" — хуваалцсан `AreaChart`-ын градиенттай нэг) */}
+          <defs>
+            <linearGradient id={`st-${gid}`} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={tone} stopOpacity={0.3} />
+              <stop offset="100%" stopColor={tone} stopOpacity={0.02} />
+            </linearGradient>
+          </defs>
+          <path d={area} fill={`url(#st-${gid})`} />
+          <path
+            d={line}
+            fill="none"
+            stroke={tone}
+            strokeWidth={1.5}
+            strokeLinejoin="round"
+            vectorEffect="non-scaling-stroke"
+          />
+        </svg>
+        {vals.map((d, i) => {
+          const sel = selected === d.key;
+          const dim = selected != null && !sel;
+          return (
+            <React.Fragment key={d.key}>
+              <span
+                aria-hidden
+                className={cn(
+                  "pointer-events-none absolute -translate-x-1/2 -translate-y-1/2 rounded-full border-2 transition-opacity",
+                  sel ? "size-2.5" : "size-2",
+                  dim && "opacity-40",
+                )}
+                style={{
+                  left: `${x(i)}%`,
+                  top: `${y(d.value)}%`,
+                  background: tone,
+                  borderColor: "var(--paper-2)",
+                }}
+              />
+              {labelled && d.value > 0 ? (
+                <span
+                  aria-hidden
+                  className={cn(
+                    "num pointer-events-none absolute -translate-x-1/2 -translate-y-full pb-1 text-[11px] font-semibold text-ink transition-opacity",
+                    dim && "opacity-40",
+                  )}
+                  style={{ left: `${x(i)}%`, top: `${y(d.value)}%` }}
+                >
+                  {sheetNum(d.value)}
+                </span>
+              ) : null}
+              <button
+                type="button"
+                title={`${d.label} · ${sheetNum(d.value)}`}
+                onClick={() => onPick(sel ? null : d.key)}
+                aria-pressed={sel}
+                className={cn(
+                  "absolute inset-y-0 rounded-xs transition-colors hover:bg-paper-hi/40",
+                  sel && "bg-paper-hi/50",
+                )}
+                style={{ left: `${(i / n) * 100}%`, width: `${100 / n}%` }}
+              />
+            </React.Fragment>
+          );
+        })}
+      </div>
+      {/* ⚠ Тэнхлэгийн шошго ХЭЗЭЭ Ч ТАСРАХГҮЙ (хэрэглэгч 2026-10-22, хагас
+          өргөнд "2…" болж байв): нэг баганад шахахын оронд өргөнд багтах
+          тоогоор сийрэгжиж, бүтнээрээ, ирмэгт хавчигдаж бичигдэнэ. */}
+      <div className="relative mt-1 h-4 border-t border-line">
+        {ticks.map((i) => {
+          const text = tick(vals[i].label);
+          const tw = text.length * TICK_CH;
+          const at = w > 0
+            ? Math.min(Math.max((x(i) / 100) * w - tw / 2, 0), w - tw)
+            : null;
+          return (
+            <span
+              key={vals[i].key}
+              className={cn(
+                "num absolute top-0.5 whitespace-nowrap text-[10px] leading-none text-ink-3",
+                at == null && "-translate-x-1/2",
+              )}
+              style={{ left: at == null ? `${x(i)}%` : at }}
+            >
+              {text}
+            </span>
+          );
+        })}
+      </div>
+    </SheetSection>
+  );
+}
+
+/**
  * ДАВХАРГЫН БҮХ ЗАДАРГАА — НЭГ КАРТ.
  *
  * ⚠⚠ Хэрэглэгч (2026-09-30): "одоо байгаа 2 чартыг нийлүүлээд маш
@@ -7558,15 +9369,310 @@ type ParcelPick = {
   tone: string;
 };
 
+/** Бүсийн хуудасны газрын зориулалт — эхний мөрийн тоо ({@link ZoneSheet}) */
+const ZONE_TOP = 5;
+
+/**
+ * ⚠⚠ БҮС БҮР ӨӨРИЙН ХЭСЭГ (хэрэглэгч 2026-10-22: "goliin tatam,
+ * hamgaalaltiin bus 2 tsonhiig chi shineer hiidee" → "Бүс бүр өөрийн
+ * карт"). Голын татам, хамгаалалтын бүсийн хуудасны горимд ({@link
+ * LayerSet.sheet}) бүс (сав газар) бүр тусдаа хураагддаг хэсэг: дээр нь
+ * талбай ба давхцаж буй нэгж талбар ТОМ тоогоор, доор нь тэр бүсийн
+ * газрын зориулалт эхний {@link ZONE_TOP}, "Бусад N ангилал" дэлгэгдэнэ.
+ * Урьдын хувилбар нь бүсийн жагсаалт + бүс, тэнхлэг сэлгэдэг ганц нэгж
+ * талбарын карт байсан — БҮХ бүс зэрэг харагдахгүй байв.
+ *
+ * ⚠ Бүс, тэнхлэг сонгох товч БАЙХГҮЙ. Тэнхлэг нь газрын зориулалт
+ * (олдохгүй бол эхнийх — эрхийн хэлбэр).
+ * ⚠ Толгойн {@link MapPin} — газрын зургийг тэр бүсээр шүүнэ / дүрсийг
+ * сонгоно (урьдын бүсийн мөрийн товшилттой ижил үйлдэл).
+ * ⚠ Мөр товшиход тэр бүсийн тэр ангиллын нэгж талбар зурагт тодорно
+ * ({@link ParcelPick}, дугаарын хэлбэр {@link ParcelCard}-тай ижил).
+ * ⚠ ЗУРВАС НЬ НЭГЖ ТАЛБАРЫН ТООГ хэмжинэ — га-ийн дүүргэлтийн зурвас
+ * БИШ (2026-10-06-нд буцаагдсан).
+ */
+function ZoneSheet({
+  zone,
+  shapes,
+  active,
+  onHead,
+  open,
+  onToggle,
+  anchor,
+  pickedId,
+  pickInfo,
+  onPick,
+}: {
+  zone: {
+    id: string;
+    label: string;
+    tone: string;
+    ha: number;
+    parcels?: number;
+    features: GeoJSON.Feature[];
+  };
+  /** Олон дүрстэй бүсийн дүрсүүдийн жагсаалт (хамгаалалтын бүс) */
+  shapes?: React.ReactNode;
+  /** Газрын зураг энэ бүсээр шүүгдсэн / дүрс сонгогдсон эсэх */
+  active: boolean;
+  onHead?: () => void;
+  /** Хэсэг нээлттэй эсэх — эцэг удирдана (анхдагчаар хураагдсан) */
+  open: boolean;
+  onToggle: () => void;
+  anchor: string;
+  /** Одоо тодруулсан нэгж талбарын ангиллын дугаар ({@link ParcelPick.id}) */
+  pickedId: string | null;
+  pickInfo: { busy: boolean; count: number | null; capped: boolean } | null;
+  onPick: (pick: ParcelPick | null) => void;
+}) {
+  const [axes, setAxes] = React.useState<ParcelAxis[] | null>(null);
+  const [axesError, setAxesError] = React.useState<string | null>(null);
+  const [result, setResult] = React.useState<{
+    key: string;
+    rows?: ParcelCount[];
+    error?: string;
+  } | null>(null);
+  const [all, setAll] = React.useState(false);
+  const [shapesOpen, setShapesOpen] = React.useState(false);
+
+  React.useEffect(() => {
+    let live = true;
+    parcelAxes()
+      .then((a) => live && setAxes(a))
+      .catch((e: Error) => live && setAxesError(e.message));
+    return () => {
+      live = false;
+    };
+  }, []);
+
+  const axis =
+    axes?.find((a) => /зориулалт/i.test(a.label)) ?? axes?.[0] ?? null;
+  const rings = React.useMemo(() => ringsOf(zone.features), [zone.features]);
+  const key = axis ? `${zone.id}\u0000${axis.field}` : null;
+
+  React.useEffect(() => {
+    if (!axis || !key || !rings.length) return;
+    let live = true;
+    parcelCountsIn(zone.id, rings, axis.field)
+      .then((rows) => live && setResult({ key, rows }))
+      .catch((e: Error) => live && setResult({ key, error: e.message }));
+    return () => {
+      live = false;
+    };
+  }, [zone.id, axis, key, rings]);
+
+  const current = result?.key === key ? result : null;
+  const rows = current?.rows ?? null;
+  const prefix = key ? `${key} ` : null;
+  const selected =
+    prefix && pickedId?.startsWith(prefix)
+      ? pickedId.slice(prefix.length)
+      : null;
+
+  const choose = (r: ParcelCount) => {
+    if (!axis || !key) return;
+    if (selected === r.key) {
+      onPick(null);
+      return;
+    }
+    onPick({
+      id: `${key} ${r.key}`,
+      rings,
+      where: parcelWhere(axis.field, r.raws),
+      label: r.label,
+      tone: zone.tone,
+    });
+  };
+
+  const shown = rows
+    ? all
+      ? rows
+      : rows.filter((r, i) => i < ZONE_TOP || r.key === selected)
+    : null;
+  const rest = rows && shown ? rows.length - shown.length : 0;
+  const max = Math.max(0, ...(rows ?? []).map((r) => r.value));
+  const digits = Math.max(3, ...(rows ?? []).map((r) => num(r.value).length));
+  const cols = `minmax(0,10rem) minmax(0,1fr) calc(${digits}ch + 2px)`;
+
+  const stat = (value: string, unit: string, label: string) => (
+    <div className="min-w-0">
+      <p className="num text-[18px] font-semibold leading-tight text-ink">
+        {value}
+        {unit ? (
+          <span className="ml-1 text-[11px] font-normal text-ink-3">{unit}</span>
+        ) : null}
+      </p>
+      <p className="mt-0.5 text-[11px] leading-snug text-ink-3">{label}</p>
+    </div>
+  );
+
+  return (
+    <SheetSection
+      title={zone.label}
+      dot={zone.tone}
+      open={open}
+      onToggle={onToggle}
+      anchor={anchor}
+      meta={`${num(Math.round(zone.ha))} га`}
+      action={
+        onHead ? (
+          <button
+            type="button"
+            onClick={onHead}
+            aria-pressed={active}
+            aria-label="Газрын зурагт харуулах"
+            title="Газрын зурагт харуулах"
+            className={cn(
+              "flex size-6 shrink-0 items-center justify-center rounded-xs border text-ink-3 hover:bg-paper-hi hover:text-ink",
+              active ? "border-line-2 bg-paper-hi text-ink" : "border-transparent",
+            )}
+            style={active ? { color: zone.tone } : undefined}
+          >
+            <MapPin size={13} />
+          </button>
+        ) : null
+      }
+    >
+      <div className="grid grid-cols-2 gap-x-4">
+        {stat(num(Math.round(zone.ha)), "га", "Талбай")}
+        {stat(
+          zone.parcels == null ? "…" : num(zone.parcels),
+          "",
+          "Давхцаж буй нэгж талбар",
+        )}
+      </div>
+
+      {shapes ? (
+        <div className="mt-2 border-t border-line pt-1.5">
+          <button
+            type="button"
+            aria-expanded={shapesOpen}
+            onClick={() => setShapesOpen((o) => !o)}
+            className="flex w-full items-center gap-1.5 text-left text-[11.5px] text-ink-2 hover:text-ink"
+          >
+            <ChevronDown
+              size={12}
+              className={cn(
+                "shrink-0 text-ink-3 transition-transform",
+                !shapesOpen && "-rotate-90",
+              )}
+            />
+            Дүрс
+          </button>
+          {shapesOpen ? <div className="pt-1">{shapes}</div> : null}
+        </div>
+      ) : null}
+
+      {axes && !axes.length ? null : (
+        <div className="mt-2 border-t border-line pt-1.5">
+          <p className="mb-1 flex items-baseline justify-between gap-2 text-[10.5px] font-semibold uppercase tracking-[0.06em] text-ink-3">
+            <span>{axis?.label ?? "Газрын зориулалт"}</span>
+            {rows ? (
+              <span className="num font-normal normal-case tracking-normal">
+                {num(rows.length)} ангилал
+              </span>
+            ) : null}
+          </p>
+          {axesError || current?.error ? (
+            <p className="py-1 text-[11.5px] text-clay">
+              {axesError ?? current?.error}
+            </p>
+          ) : !shown ? (
+            <p className="flex items-center gap-1.5 py-1 text-[11.5px] text-ink-3">
+              <Loader2 size={12} className="animate-spin" />
+              Тоолж байна…
+            </p>
+          ) : !shown.length ? (
+            <p className="py-1 text-[11.5px] text-ink-3">
+              Давхцаж буй нэгж талбар байхгүй
+            </p>
+          ) : (
+            <>
+              <div className="flex flex-col">
+                {shown.map((r) => {
+                  const on = selected === r.key;
+                  const w =
+                    max > 0 && r.value
+                      ? Math.max(1.5, (r.value / max) * 100)
+                      : 0;
+                  return (
+                    <button
+                      key={r.key}
+                      type="button"
+                      onClick={() => choose(r)}
+                      aria-pressed={on}
+                      title={r.label}
+                      style={{ gridTemplateColumns: cols }}
+                      className={cn(
+                        "grid w-full items-center gap-2.5 rounded-xs px-1.5 py-[3px] text-left text-[12.5px] transition-colors hover:bg-paper-hi",
+                        on && "bg-paper-hi",
+                        selected != null && !on && "opacity-45",
+                      )}
+                    >
+                      <span className="min-w-0 truncate text-[12px] text-ink">
+                        {r.label}
+                      </span>
+                      <span className="block h-2 rounded-[1px] bg-line">
+                        <span
+                          className="block h-full rounded-[1px]"
+                          style={{ width: `${w}%`, background: sheetFade(zone.tone) }}
+                        />
+                      </span>
+                      <span className="num text-right text-[12.5px] font-semibold text-ink">
+                        {num(r.value)}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+              {rest > 0 || all ? (
+                <button
+                  type="button"
+                  onClick={() => setAll((s) => !s)}
+                  className="mt-0.5 px-1.5 text-left text-[11px] text-ink-3 hover:text-ink"
+                >
+                  {all ? "Хураах" : `Бусад ${num(rest)} ангилал`}
+                </button>
+              ) : null}
+              {selected && pickInfo ? (
+                <p className="num mt-1 flex items-center gap-1.5 border-t border-line pt-1.5 text-[11px] text-ink-3">
+                  {pickInfo.busy ? (
+                    <>
+                      <Loader2 size={12} className="animate-spin" />
+                      Газрын зурагт тодруулж байна…
+                    </>
+                  ) : (
+                    <>
+                      Газрын зурагт:{" "}
+                      <span className="text-ink">
+                        {num(pickInfo.count ?? 0)} нэгж талбар
+                      </span>
+                      {pickInfo.capped ? " · хэсэгчилсэн" : ""}
+                    </>
+                  )}
+                </p>
+              ) : null}
+            </>
+          )}
+        </div>
+      )}
+    </SheetSection>
+  );
+}
+
 /** Хэмжилт хийгдэхээс өмнөх мөрийн тоо ({@link ParcelCard}) */
 const PARCEL_TOP = 10;
 
 function ParcelCard({
+  sheet = false,
   zones,
   prefer = null,
   onPick,
   pickInfo = null,
 }: {
+  /** Хуудасны харагдац ({@link LayerSet.sheet}) — хураагддаг хэсэг,
+      мөр нь `SheetAxis`-ийн хэлбэрээр, эхний {@link SHEET_ROWS} */
+  sheet?: boolean;
   zones: {
     id: string;
     label: string;
@@ -7718,7 +9824,9 @@ function ParcelCard({
      горимд (`is-fit`) талбай нь яг `n × мөр` тул нөөцийн 2px-ийг хасаад
      хуваавал n − 1 гарч, хураах ↔ дэлгэх хооронд эргэлдэнэ */
   const measured = fit.row > 0 && fit.avail > 0;
-  const cap = !measured
+  const cap = sheet
+    ? SHEET_ROWS
+    : !measured
     ? PARCEL_TOP
     : rows && rows.length * fit.row <= fit.avail + 1
       ? rows.length
@@ -7729,12 +9837,36 @@ function ParcelCard({
 
   if (axes && !axes.length) return null;
 
-  return (
+  /* Мөр товших — тэр бүсийн тэр ангиллын нэгж талбар зурагт тодорно */
+  const choose = (k: string | null) => {
+    const r = k && rows ? rows.find((x) => x.key === k) : null;
+    if (!k || !r || !key || !zone || !axis) {
+      setCat(null);
+      onPick?.(null);
+      return;
+    }
+    setCat({ ctx: key, key: k });
+    onPick?.({
+      id: `${key} ${k}`,
+      rings,
+      where: parcelWhere(axis.field, r.raws),
+      label: r.label,
+      tone: zone.tone,
+    });
+  };
+
+  const meta = total == null ? undefined : `${num(total)} нэгж талбар`;
+  const wrap = (body: React.ReactNode) =>
+    sheet ? (
+      <SheetSection title="Давхцаж буй нэгж талбар" meta={meta}>
+        {body}
+      </SheetSection>
+    ) : (
     <CutCard
       title="Давхцаж буй нэгж талбар"
       tone={zone?.tone ?? "var(--data)"}
       first
-      meta={total == null ? undefined : `${num(total)} нэгж талбар`}
+      meta={meta}
       fill
       /* Бүх мөр багтаж байвал карт АГУУЛГЫНХАА өндөртэй — үлдсэн
          өндрийг эзэлж доороо хоосон зай үлдээхгүй (хэрэглэгч,
@@ -7742,7 +9874,56 @@ function ParcelCard({
          (`folded`) үлдсэн өндрийг дүүргэж хураана */
       fit={!!rows && !folded && !expanded}
     >
-      <div className="flex min-h-0 flex-1 flex-col gap-2">
+      {body}
+    </CutCard>
+    );
+
+  /* Хуудасны мөрүүд — `SheetAxis`-тэй нэг хэлбэр: нэр · зурвас · тоо */
+  const sheetRows = (list: ParcelCount[]) => {
+    const max = Math.max(0, ...(rows ?? []).map((r) => r.value));
+    const digits = Math.max(3, ...list.map((r) => num(r.value).length));
+    const cols = `minmax(0,10rem) minmax(0,1fr) calc(${digits}ch + 2px)`;
+    const tone = zone?.tone ?? "var(--data)";
+    return (
+      <div className="flex flex-col">
+        {list.map((r) => {
+          const on = selectedCat === r.key;
+          const w = max > 0 && r.value ? Math.max(1.5, (r.value / max) * 100) : 0;
+          return (
+            <button
+              key={r.key}
+              type="button"
+              onClick={() => choose(on ? null : r.key)}
+              aria-pressed={on}
+              title={r.label}
+              style={{ gridTemplateColumns: cols }}
+              className={cn(
+                "grid w-full items-center gap-2.5 rounded-xs px-1.5 py-[3px] text-left text-[12.5px] transition-colors hover:bg-paper-hi",
+                on && "bg-paper-hi",
+                selectedCat != null && !on && "opacity-45",
+              )}
+            >
+              <span className="min-w-0 truncate text-[12px] text-ink">
+                {r.label}
+              </span>
+              <span className="block h-2 rounded-[1px] bg-line">
+                <span
+                  className="block h-full rounded-[1px]"
+                  style={{ width: `${w}%`, background: sheetFade(tone) }}
+                />
+              </span>
+              <span className="num text-right text-[12.5px] font-semibold text-ink">
+                {num(r.value)}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    );
+  };
+
+  return wrap(
+      <div className={cn("flex flex-col gap-2", !sheet && "min-h-0 flex-1")}>
         {/* Бүс сонгогч — бүсийн картын дарааллаар, өнгөөр */}
         <div className="flex flex-wrap gap-1">
           {zones.map((z) => {
@@ -7807,11 +9988,12 @@ function ParcelCard({
               <div
                 ref={listRef}
                 className={cn(
-                  "min-h-0 flex-1",
-                  expanded ? "overflow-y-auto" : "overflow-hidden",
+                  !sheet && "min-h-0 flex-1",
+                  !sheet && (expanded ? "overflow-y-auto" : "overflow-hidden"),
                 )}
               >
                 <div ref={chartRef} data-rows={shown.length}>
+                  {sheet ? sheetRows(shown) : (
                   <RowChart
                     data={shown}
                     tone={zone?.tone}
@@ -7829,23 +10011,9 @@ function ParcelCard({
                       болдог тул нэгийг нь л авбал зурагт дутуу гарна.
                     */
                     selected={selectedCat}
-                    onSelect={(k) => {
-                      const r = k ? rows.find((x) => x.key === k) : null;
-                      if (!k || !r || !key || !zone || !axis) {
-                        setCat(null);
-                        onPick?.(null);
-                        return;
-                      }
-                      setCat({ ctx: key, key: k });
-                      onPick?.({
-                        id: `${key}\u0000${k}`,
-                        rings,
-                        where: parcelWhere(axis.field, r.raws),
-                        label: r.label,
-                        tone: zone.tone,
-                      });
-                    }}
+                    onSelect={choose}
                   />
+                  )}
                 </div>
               </div>
               {selectedCat && pickInfo ? (
@@ -7904,8 +10072,7 @@ function ParcelCard({
             Нэгж талбарын мэдээллийг ачаалж байна…
           </p>
         )}
-      </div>
-    </CutCard>
+      </div>,
   );
 }
 
@@ -8132,11 +10299,25 @@ function RecordPanel({
 
   const filled: {
     name: string;
-    alias: string;
+    /** Шошго — нэгж нь утга руу шилжсэн бол нэгжгүй нэр */
+    label: string;
     text: string;
+    unit: string;
     isNum: boolean;
+    /** Урт бичвэр — шошго нь дээр, утга нь бүтэн өргөнөөр */
+    wide: boolean;
   }[] = [];
   const empty: { name: string; alias: string }[] = [];
+  /*
+    ⚠⚠ БАЙРШИЛ ТОЛГОЙД (хэрэглэгч, 2026-10-22: "buh datanii pop up
+    saijruulaarai"). Засаг захиргааны шат (аймаг · сум, дүүрэг · баг,
+    хороо — {@link adminRank}) нь жагсаалтын дунд тархаж, "хаана вэ"
+    гэдэг нь хэдэн мөрөөс угсрагддаг байв. Одоо нэрийн доор НЭГ мөр,
+    өргөнөөс нарийн руу; жагсаалтад давтагдахгүй.
+    ⚠ Богино утга л (≤ 40 тэмдэгт): урт бол тэр нь хаяг, тайлбар —
+    жагсаалтад бүтнээрээ үлдэнэ.
+  */
+  const where: { rank: number; text: string }[] = [];
   /* Толгойд гарсан утга жагсаалтад ДАВТАГДАХГҮЙ — нэг тоог хоёр газар
      бичихгүй дүрэм (нэр, ангилал, талбай) */
   const shown = new Set<string>();
@@ -8144,6 +10325,19 @@ function RecordPanel({
     shown.add(hit.labels.name);
   if (group && tag !== "Бүртгэгдээгүй") shown.add(group);
   if (ha != null && info.areaField) shown.add(info.areaField);
+  for (const f of info.fields) {
+    if (shown.has(f.name) || charted.has(f.name)) continue;
+    const rank = adminRank(f.alias) ?? adminRank(f.name);
+    if (rank == null) continue;
+    const v = row[f.name];
+    const t =
+      typeof v === "number" ? String(v) : typeof v === "string" ? v.trim() : "";
+    if (!t || t.length > 40) continue;
+    shown.add(f.name);
+    if (t !== title && !where.some((w) => w.text === t))
+      where.push({ rank, text: t });
+  }
+  where.sort((a, b) => a.rank - b.rank);
   for (const f of info.fields) {
     if (shown.has(f.name) || charted.has(f.name)) continue;
     /* Систем талбар (дугаарлалт, координат, нэгтгэлийн үлдэц) хүнд
@@ -8155,11 +10349,18 @@ function RecordPanel({
       empty.push({ name: f.name, alias: f.alias });
       continue;
     }
+    const out = fieldText(f, text);
+    if (!out.text) {
+      empty.push({ name: f.name, alias: f.alias });
+      continue;
+    }
     filled.push({
       name: f.name,
-      alias: f.alias,
-      text: fieldText(f.alias, text),
-      isNum: typeof text === "number" && Number.isFinite(text),
+      label: out.unit ? unitOf(f.alias).name : f.alias,
+      text: out.text,
+      unit: out.unit,
+      isNum: out.isNum,
+      wide: !out.isNum && out.text.length > 48,
     });
   }
 
@@ -8247,7 +10448,7 @@ function RecordPanel({
         ⚠⚠ ӨНДӨР НЬ АГУУЛГААРАА, БҮТЭН БИШ (2026-09-29): `max-h` нь урт
         бичлэгийг хамгаална, бие нь дотроо гүйнэ.
       */
-      className="top-2 right-2 max-h-[calc(100%-2.5rem)] w-[300px]"
+      className="top-2 right-2 max-h-[calc(100%-2.5rem)] w-[320px]"
     >
       <div className="min-h-0 overflow-y-auto">
         {/* ---- 1. Толгой ---- */}
@@ -8261,6 +10462,18 @@ function RecordPanel({
             <p className="display text-[14px] leading-snug text-ink">{title}</p>
             {name && tag !== "Бүртгэгдээгүй" && tag !== name ? (
               <p className="mt-0.5 text-[11.5px] text-ink-3">{tag}</p>
+            ) : null}
+            {where.length ? (
+              <p className="mt-1 flex items-start gap-1 text-[11.5px] leading-snug text-ink-2">
+                <MapPin
+                  size={11}
+                  aria-hidden
+                  className="mt-[2px] shrink-0 text-ink-3"
+                />
+                <span className="min-w-0">
+                  {where.map((w) => w.text).join(" · ")}
+                </span>
+              </p>
             ) : null}
           </div>
           {ha != null ? (
@@ -8285,34 +10498,55 @@ function RecordPanel({
         {/* ---- 2. Бөглөгдсөн талбарууд ---- */}
         {filled.length ? (
           <dl className="divide-y divide-line">
-            {filled.map((f) => (
-              <div
-                key={f.name}
-                className="grid grid-cols-[minmax(0,42%)_minmax(0,1fr)] gap-3 px-3 py-1.5"
-              >
-                <dt className="text-[11px] leading-snug text-ink-3">
-                  {f.alias}
-                </dt>
-                <dd
-                  className={cn(
-                    "min-w-0 text-[12px] leading-snug break-words text-ink",
-                    f.isNum && "num",
-                  )}
+            {filled.map((f) =>
+              f.wide ? (
+                <div key={f.name} className="px-3 py-2">
+                  <dt className="text-[11px] leading-snug text-ink-3">
+                    {f.label}
+                  </dt>
+                  <dd className="mt-0.5 text-[12px] leading-relaxed break-words whitespace-pre-line text-ink">
+                    {f.text}
+                  </dd>
+                </div>
+              ) : (
+                <div
+                  key={f.name}
+                  className="grid grid-cols-[minmax(0,44%)_minmax(0,1fr)] items-baseline gap-3 px-3 py-1.5"
                 >
-                  {f.text}
-                </dd>
-              </div>
-            ))}
+                  <dt className="text-[11px] leading-snug text-ink-3">
+                    {f.label}
+                  </dt>
+                  <dd
+                    className={cn(
+                      "min-w-0 text-[12px] leading-snug break-words text-ink",
+                      f.isNum && "num font-medium",
+                    )}
+                  >
+                    {f.text}
+                    {f.unit ? (
+                      <span className="ml-1 text-[11px] font-normal text-ink-3">
+                        {f.unit}
+                      </span>
+                    ) : null}
+                  </dd>
+                </div>
+              ),
+            )}
           </dl>
         ) : null}
 
         {/* ---- 3. Бөглөөгүй талбарууд ---- */}
         {empty.length ? (
-          <div className="border-t border-line px-3 py-2">
-            <p className="eyebrow text-ink-3">
+          <details className="group border-t border-line px-3 py-2">
+            <summary className="eyebrow flex cursor-pointer list-none items-center gap-1 text-ink-3 select-none hover:text-ink-2 [&::-webkit-details-marker]:hidden">
+              <ChevronDown
+                size={11}
+                aria-hidden
+                className="-rotate-90 transition-transform group-open:rotate-0"
+              />
               Бөглөөгүй талбар ·{" "}
               <span className="num">{num(empty.length)}</span>
-            </p>
+            </summary>
             <div className="mt-1.5 flex flex-wrap gap-1">
               {empty.map((f) => (
                 <span
@@ -8323,7 +10557,7 @@ function RecordPanel({
                 </span>
               ))}
             </div>
-          </div>
+          </details>
         ) : null}
       </div>
     </MapPanel>
@@ -8417,10 +10651,35 @@ function RecordBars({
  * нь (зургийн шошготой яг таарна), доош нь хоёр орноор — химийн
  * бодисын 0.27 тонныг бүхэлчилбэл "0" болж утгаа алдана.
  */
-function fieldText(alias: string, v: unknown): string {
-  if (typeof v !== "number" || !Number.isFinite(v)) return String(v);
-  if (!unitOf(alias).unit) return String(v);
-  return num(v, Math.abs(v) >= 100 ? 0 : 2);
+function fieldText(
+  f: { alias: string; type: string },
+  v: unknown,
+): { text: string; unit: string; isNum: boolean } {
+  /*
+    ⚠⚠ ОГНОО ТҮҮХИЙ ТООГООР ГАРДАГ БАЙВ (2026-10-22): `Date` талбарыг
+    ArcGIS миллисекундээр буцаадаг тул цонхонд "1694563200000" гэж
+    бичигддэг байлаа. Одоо `2023.09.13` (UTC — диаграмын он, сартай
+    нэг). Тэг, 1900-аас өмнөх утга нь бөглөөгүйн тэмдэг — хоосон
+    буцааж, бөглөөгүй талбарт оруулна.
+  */
+  if (f.type === "Date") {
+    const ms = typeof v === "number" ? v : Date.parse(String(v));
+    const d = Number.isFinite(ms) && ms !== 0 ? new Date(ms) : null;
+    if (!d || d.getUTCFullYear() < 1900)
+      return { text: "", unit: "", isNum: false };
+    const p = (n: number) => String(n).padStart(2, "0");
+    return {
+      text: `${d.getUTCFullYear()}.${p(d.getUTCMonth() + 1)}.${p(d.getUTCDate())}`,
+      unit: "",
+      isNum: true,
+    };
+  }
+  if (typeof v !== "number" || !Number.isFinite(v))
+    return { text: String(v), unit: "", isNum: false };
+  /* Нэгж нь утгын ард шилжинэ ("Талбай" · "1,392 га") — шошго богиносно */
+  const { unit } = unitOf(f.alias);
+  if (!unit) return { text: String(v), unit: "", isNum: true };
+  return { text: num(v, Math.abs(v) >= 100 ? 0 : 2), unit, isNum: true };
 }
 
 /** Геометрийн төрлийн монгол нэр */

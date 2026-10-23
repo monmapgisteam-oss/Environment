@@ -12,7 +12,7 @@
 
 import type * as React from "react";
 import type { MapOverlay, WellsMap } from "@/components/wells/map";
-import { DATA_COLOR, FIREFLY, oklchHex } from "@/components/wells/colors";
+import { categoryHex, DATA_COLOR, FIREFLY, oklchHex } from "@/components/wells/colors";
 import { zoomForScale } from "@/components/wells/map";
 import { ASSESSMENT_SERVICES } from "@/lib/assessment";
 import { BOMT_SERVICE, classifyPlanting, PLANTING } from "@/lib/bomt";
@@ -513,12 +513,15 @@ async function portalLook(set: LayerSet, id: string, environment: boolean): Prom
     const ramp = span
       ? b.values.map((_, i) => oklchHex(0.74, 0.15, count < 2 ? span[0] : span[0] + ((span[1] - span[0]) * i) / (count - 1)))
       : categoryRamp(hue, count);
+    const vivid = set.categorical?.includes(id);
+    let slot = 0;
     palette = {
       keyOf: b.keyOf,
       colors: new Map(
         b.values.map((v, i) => {
           const hex = set.valueColors?.[id]?.[v.key];
           if (hex) return [v.key, hex];
+          if (vivid) return [v.key, categoryHex(v.key, v.key === "Бүртгэгдээгүй" ? -1 : slot++)];
           const t = set.valueTones?.[id]?.[v.key];
           if (t) return [v.key, oklchHex(t[0], t[1], t[2])];
           const h = set.valueHues?.[id]?.[v.key];

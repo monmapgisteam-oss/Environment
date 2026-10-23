@@ -2,14 +2,14 @@
 
 import dynamic from "next/dynamic";
 import {
-  BadgeCheck,
+  Building2,
   Dam,
   Droplet,
   Droplets,
-  FileCheck,
   FileSignature,
   FileText,
   Gauge,
+  Layers,
   Loader2,
   Mountain,
   Recycle,
@@ -83,12 +83,14 @@ export const TABS = [
     icon: ShieldCheck,
   },
   {
-    /* Гурван давхарга НЭГ зурагт: тэжээгдэл → хязгаарлалт → хориглолт
-       нь нэг системийн шатууд тул тусад нь харвал давхцал нь алдагдана */
+    /* Гурван бүс ба голын татам НЭГ зурагт (хэрэглэгч 2026-10-23: "goliin
+       tatam bolon hamgaalaltiin bus 2 tsesiig negtgeh … map deer zereg
+       haragdana"). Хуучин "tatam" табыг хадгалсан хэрэглэгч `useStoredTab`-ийн
+       нөөцөөр анхдагч руу буцна. */
     id: "bus",
-    label: "Хамгаалалтын бүс",
-    note: "Тэжээгдэл · хязгаарлалт · хориглолт",
-    full: "Тэжээгдлийн муж, хязгаарлалтын болон хориглолтын бүс",
+    label: "Хамгаалалтын бүс, голын татам",
+    note: "Тэжээгдэл · хязгаарлалт · хориглолт · татам",
+    full: "Тэжээгдлийн муж, хязгаарлалтын болон хориглолтын бүс, голын татам",
     icon: Trees,
   },
   {
@@ -96,12 +98,6 @@ export const TABS = [
     label: "Булгийн хамгаалалтын бүс",
     note: "Хоёр хувилбар · 2026",
     icon: Droplet,
-  },
-  {
-    id: "tatam",
-    label: "Голын татам",
-    note: "Татмын хүрээ",
-    icon: Waves,
   },
   {
     id: "namag",
@@ -122,6 +118,13 @@ export const TABS = [
     note: "2015–2026",
     full: "Гүний худгийн паспортын бүртгэл 2015–2026",
     icon: FileText,
+  },
+  {
+    id: "noots",
+    label: "Боломжит нөөц",
+    note: "Усны эх үүсвэр",
+    full: "Боломжит нөөцийн бүртгэл",
+    icon: Layers,
   },
   /*
     ⚠ Бүртгэл (2021–2023, портал) ба тооллого (2026, Survey123) НЭГ цэс —
@@ -151,27 +154,15 @@ export const TABS = [
     тогтвортой.
   */
   {
-    id: "geree",
-    label: "Ус ашиглагчийн гэрээ",
-    /* Эх сурвалжийн `wsource` нь БҮГД "Газрын доорх ус" — 218 мөрд
-       ганц утгатай тул тайлбарт найдвартай гарна */
-    note: "Газрын доорх ус · төлбөр, ашигласан хэмжээ",
-    full: "Ус ашиглагч иргэн, аж ахуйн нэгжийн гэрээ",
+    /* ⚠ Гэрээ, зөвшөөрөл, дүгнэлт НЭГ цэс — дотор нь товчоор сэлгэнэ
+       (хэрэглэгч, 2026-10-22). Хуучин "geree", "zuwshuurul", "dugnelt"
+       табыг хадгалсан хэрэглэгч `useStoredTab`-ийн нөөцөөр анхдагч руу
+       буцна. */
+    id: "usashiglalt",
+    label: "Ус ашиглалт",
+    note: "Гэрээ · зөвшөөрөл · дүгнэлт · хаягдал ус",
+    full: "Ус ашиглагчийн гэрээ, ус ашиглуулах зөвшөөрөл, дүгнэлт, хаягдал усны дүгнэлт",
     icon: FileSignature,
-  },
-  {
-    id: "zuwshuurul",
-    label: "Ус ашиглуулах зөвшөөрөл",
-    note: "Зөвшөөрсөн усны хэмжээ, м³",
-    icon: BadgeCheck,
-  },
-  {
-    id: "dugnelt",
-    /* Тайлбар нь `concl_form` домэйнээс — бичгээр ба цахим хоёр
-       хэлбэрээр гардаг нь энэ бүртгэлийн гол ялгаа */
-    label: "Ус ашиглуулах дүгнэлт",
-    note: "Бичгээр · цахим (E-систем)",
-    icon: FileCheck,
   },
   {
     id: "tooluur",
@@ -191,11 +182,20 @@ export const TABS = [
   },
   {
     id: "tsuurum",
-    label: "Хув, цөөрөм, далан",
+    label: "Хөв, цөөрөм, далан",
     /* `tuluv` домэйн гурван шаттай: байгуулсан · зураг төсөв
        боловсруулсан · цаашид хийх шаардлагатай */
     note: "Байгуулсан · төсөл · төлөвлөсөн",
     icon: Dam,
+  },
+  {
+    id: "usug",
+    label: "Ус сувгийн удирдах газар",
+    /* Байгууллагын чиг үүрэг — бүртгэлийн тоо, хугацаа бичихгүй
+       (талбар токеноор шалгагдаагүй) */
+    note: "Ус хангамж · ариутгах татуурга",
+    full: "Ус сувгийн удирдах газрын мэдээ",
+    icon: Building2,
   },
 ] as const;
 
@@ -208,17 +208,16 @@ const SETS: Record<TabId, (typeof NOGOON_TABS)[keyof typeof NOGOON_TABS]> = {
   hamgaalagch: NOGOON_TABS.hamgaalagch,
   bus: NOGOON_TABS.bus,
   bulag: NOGOON_TABS.bulag,
-  tatam: NOGOON_TABS.tatam,
   namag: NOGOON_TABS.namag,
   hudag: NOGOON_TABS.hudag,
   passport: NOGOON_TABS.passport,
+  noots: NOGOON_TABS.noots,
   gadarga: NOGOON_TABS.gadarga,
-  geree: NOGOON_TABS.geree,
-  zuwshuurul: NOGOON_TABS.zuwshuurul,
-  dugnelt: NOGOON_TABS.dugnelt,
+  usashiglalt: NOGOON_TABS.usashiglalt,
   tooluur: NOGOON_TABS.tooluur,
   ergelt: NOGOON_TABS.ergelt,
   tsuurum: NOGOON_TABS.tsuurum,
+  usug: NOGOON_TABS.usug,
 };
 
 export function NogoonBusWorkspace() {
