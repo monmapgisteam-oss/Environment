@@ -3,6 +3,7 @@
 import { useState, useSyncExternalStore } from "react";
 import { CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
 import { asset } from "@/lib/base-path";
+import { useLang } from "@/lib/i18n";
 
 const MONTHS = [
   "Нэгдүгээр сар", "Хоёрдугаар сар", "Гуравдугаар сар", "Дөрөвдүгээр сар",
@@ -12,6 +13,12 @@ const MONTHS = [
 /** Долоо хоног Даваагаас эхэлнэ — Монголын хуанлийн жишиг. */
 const WEEK = ["Да", "Мя", "Лх", "Пү", "Ба", "Бя", "Ня"];
 const DAY_NAMES = ["Ням", "Даваа", "Мягмар", "Лхагва", "Пүрэв", "Баасан", "Бямба"];
+const MONTHS_EN = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+];
+const WEEK_EN = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"];
+const DAY_NAMES_EN = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
 /**
  * Өнөөдрийн огноо зөвхөн хөтөч дээр уншигдана: сайт статикаар экспортлогддог
@@ -27,6 +34,11 @@ const noop = () => () => {};
 export function CalendarCard() {
   const key = useSyncExternalStore(noop, todayKey, () => null);
   const [offset, setOffset] = useState(0);
+  const en = useLang() === "en";
+  const t = (mn: string, e: string) => (en ? e : mn);
+  const months = en ? MONTHS_EN : MONTHS;
+  const week = en ? WEEK_EN : WEEK;
+  const dayNames = en ? DAY_NAMES_EN : DAY_NAMES;
 
   const [ty, tm, td] = key ? key.split("-").map(Number) : [2000, 0, 1];
   const first = new Date(ty, tm + offset, 1);
@@ -43,22 +55,22 @@ export function CalendarCard() {
   const today = key ? new Date(ty, tm, td) : null;
 
   return (
-    <section className="landscape-feature calendar-card" aria-label="Хуанли">
+    <section className="landscape-feature calendar-card" aria-label={t("Хуанли", "Calendar")}>
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img src={asset("/auth/envi-7.webp")} width={1832} height={859} alt="" fetchPriority="high" />
       <div className="calendar-head">
         <div>
-          <span className="calendar-kicker"><CalendarDays size={13} /> ХУАНЛИ</span>
-          <h2>{key ? <>{MONTHS[month]} <span className="num">{year}</span></> : " "}</h2>
+          <span className="calendar-kicker"><CalendarDays size={13} /> {t("ХУАНЛИ", "CALENDAR")}</span>
+          <h2>{key ? <>{months[month]} <span className="num">{year}</span></> : " "}</h2>
         </div>
         <div className="calendar-nav">
-          {offset !== 0 && <button type="button" className="calendar-today" onClick={() => setOffset(0)}>Өнөөдөр</button>}
-          <button type="button" onClick={() => setOffset((o) => o - 1)} aria-label="Өмнөх сар"><ChevronLeft size={16} /></button>
-          <button type="button" onClick={() => setOffset((o) => o + 1)} aria-label="Дараах сар"><ChevronRight size={16} /></button>
+          {offset !== 0 && <button type="button" className="calendar-today" onClick={() => setOffset(0)}>{t("Өнөөдөр", "Today")}</button>}
+          <button type="button" onClick={() => setOffset((o) => o - 1)} aria-label={t("Өмнөх сар", "Previous month")}><ChevronLeft size={16} /></button>
+          <button type="button" onClick={() => setOffset((o) => o + 1)} aria-label={t("Дараах сар", "Next month")}><ChevronRight size={16} /></button>
         </div>
       </div>
       <div className="calendar-grid" role="grid">
-        {WEEK.map((w, i) => <span key={w} className={i > 4 ? "calendar-wd is-weekend" : "calendar-wd"}>{w}</span>)}
+        {week.map((w, i) => <span key={w} className={i > 4 ? "calendar-wd is-weekend" : "calendar-wd"}>{w}</span>)}
         {cells.map((d, i) => (
           <span
             key={i}
@@ -71,11 +83,11 @@ export function CalendarCard() {
       <div className="calendar-foot">
         {today && (
           <>
-            <span>Өнөөдөр</span>
+            <span>{t("Өнөөдөр", "Today")}</span>
             <strong className="num">
               {today.getFullYear()}.{String(today.getMonth() + 1).padStart(2, "0")}.{String(today.getDate()).padStart(2, "0")}
             </strong>
-            <span>{DAY_NAMES[today.getDay()]}</span>
+            <span>{dayNames[today.getDay()]}</span>
           </>
         )}
       </div>

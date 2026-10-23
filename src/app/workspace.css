@@ -177,6 +177,12 @@
 .workspace-icon-button:hover {
   background: var(--paper-hi);
 }
+/* Хэлний товч — дүрсний оронд хоёр үсэг (EN / МН) */
+.workspace-lang-button {
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
 .workspace-search-dialog {
   position: fixed;
   inset: 0;
@@ -3751,3 +3757,21 @@
 .access-nodb .wells-esri * {
   visibility: visible;
 }
+
+/* Агуулга руу шилжих холбоос — зөвхөн гарын фокус авахад харагдана */
+.skip-link {
+  position: fixed;
+  top: 8px;
+  left: 8px;
+  z-index: 100;
+  padding: 8px 12px;
+  border: 1px solid var(--line-2);
+  border-radius: 2px;
+  background: var(--paper-2);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
+  transform: translateY(-200%);
+}
+.skip-link:focus-visible { transform: none; }
+#main:focus { outline: none; }
