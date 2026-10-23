@@ -12,6 +12,8 @@ import { asset } from "@/lib/base-path";
 import type { BoundarySet } from "@/lib/boundaries";
 import { labelPoints } from "@/lib/extent";
 import { ratioText } from "@/lib/utils";
+import { NoAccess } from "@/components/auth/access";
+import { useMapAllowed } from "@/components/auth/tab-access";
 
 /* ==========================================================================
    НЭГДСЭН 2D ГАЗРЫН ЗУРАГ — ArcGIS Maps SDK `MapView` (2026-10-12)
@@ -977,7 +979,16 @@ function highlightSymbol(f: Fire) {
   return cimPoint([disc(10, null, [cim(f.core, 0.9), 1.3]), ...glow(15, f.glow, 0.4)]);
 }
 
-export function WellsMap({
+/*
+  ЦЭСИЙН ЭРХЭЭР ГАЗРЫН ЗУРАГ ХААЛТТАЙ бол ({@link src/components/auth/tab-access.tsx})
+  зургийн оронд блок — SDK ачаалагдахгүй, давхарга татагдахгүй.
+*/
+export function WellsMap(props: React.ComponentProps<typeof WellsMapBody>) {
+  if (!useMapAllowed()) return <NoAccess className="h-full w-full" text="Газрын зураг харах эрх байхгүй байна" />;
+  return <WellsMapBody {...props} />;
+}
+
+function WellsMapBody({
   points,
   visible,
   basemap,

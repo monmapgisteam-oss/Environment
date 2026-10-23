@@ -121,13 +121,21 @@ export function LicensesDashboard() {
   const shown = React.useMemo(() => (rows ?? []).filter((l) => keep(l)), [rows, keep]);
 
   /*
-    Сонгосон зөвшөөрөл нь диаграм, үзүүлэлтийн ШҮҮЛТ (хөндлөн шүүлт хоёр
-    тийш). Бусад шүүлтэд тохирохгүй бол сонголт ДАМ цуцлагдана. Газрын
-    зураг, жагсаалт сонголтоор хумигдахгүй — өөр зөвшөөрөл сонгох зам.
+    Сонгосон зөвшөөрөл нь диаграм, үзүүлэлт, ЖАГСААЛТЫН шүүлт (хөндлөн
+    шүүлт хоёр тийш; жагсаалт хэрэглэгч 2026-10-22: "зөвшөөрлийн жагсаалт
+    шүүгдэхгүй юм уу"). Бусад шүүлтэд тохирохгүй бол сонголт ДАМ
+    цуцлагдана. Газрын зураг сонголтоор хумигдахгүй — өөр зөвшөөрөл сонгох
+    зам; жагсаалтын мөрийг дахин дарахад сонголт цуцлагдана.
   */
   const sel = React.useMemo(
     () => (picked != null && shown.some((l) => l.oid === picked) ? picked : null),
     [shown, picked],
+  );
+
+  /** Жагсаалт — сонгосон зөвшөөрөл байвал зөвхөн тэр */
+  const listed = React.useMemo(
+    () => (sel == null ? shown : shown.filter((l) => l.oid === sel)),
+    [shown, sel],
   );
 
   /** Диаграм, үзүүлэлтийн шүүлт — сонгосон зөвшөөрөлтэй хамт */
@@ -224,21 +232,26 @@ export function LicensesDashboard() {
   const byExpiry = React.useMemo<Datum[]>(() => {
     /* Диаграм ӨӨРИЙНХӨӨ шүүлтийг алгасна — эс тэгвээс нэг он сонгомогц
        бусад багана алга болж, харьцуулах юм үлдэхгүй */
-    const years = (rows ?? [])
-      .filter((l) => keepSel(l, "expiry"))
+    /* Тэнхлэг нь сонголтоос ҮЛ ХАМААРНА — ганц зөвшөөрөл сонгоход цуваа
+       нэг цэг болж "Үзүүлэлт байхгүй" гэж гардаг байв */
+    const axis = (rows ?? [])
+      .filter((l) => keep(l, "expiry"))
       .map((l) => l.expires)
       .filter((y): y is number => y != null);
-    if (!years.length) return [];
-    const lo = Math.min(...years);
-    const hi = Math.max(...years);
+    if (!axis.length) return [];
+    const lo = Math.min(...axis);
+    const hi = Math.max(...axis);
     const c = new Map<number, number>();
-    for (const y of years) c.set(y, (c.get(y) ?? 0) + 1);
+    for (const l of rows ?? []) {
+      if (l.expires == null || !keepSel(l, "expiry")) continue;
+      c.set(l.expires, (c.get(l.expires) ?? 0) + 1);
+    }
     const out: Datum[] = [];
     for (let y = lo; y <= hi; y++) {
       out.push({ key: String(y), label: String(y), value: c.get(y) ?? 0 });
     }
     return out;
-  }, [rows, keepSel]);
+  }, [rows, keep, keepSel]);
 
   const stats = React.useMemo(() => {
     const own = sel == null ? shown : shown.filter((l) => l.oid === sel);
@@ -395,10 +408,10 @@ export function LicensesDashboard() {
           <Card className="min-h-[120px] flex-1 xl:w-(--col-l) xl:flex-none">
             {/* Хугацаагаар нь эрэмбэлсэн — эхэнд нь хамгийн түрүүнд дуусах нь */}
             <Head title="Зөвшөөрлийн жагсаалт">
-              <span className="num text-[11.5px] text-ink-3">{num(shown.length)}</span>
+              <span className="num text-[11.5px] text-ink-3">{num(listed.length)}</span>
             </Head>
             <div className="min-h-0 flex-1 divide-y divide-line overflow-y-auto">
-              {shown.map((l) => (
+              {listed.map((l) => (
                 <button
                   key={l.oid}
                   onClick={() => setPicked(sel === l.oid ? null : l.oid)}

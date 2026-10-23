@@ -538,16 +538,31 @@
   overflow-wrap: anywhere;
 }
 
-.groupTitle {
-  display: block;
-  overflow: hidden;
-  margin: 0;
+/* Бүлэгтэй хэлтсийн цэсүүд — бүлгийн гарчиг, доор нь тор */
+.groupedTabs {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 6px 8px;
+}
+
+.tabGroup + .tabGroup { margin-top: 12px; }
+
+.groupHeading {
+  margin: 0 0 6px;
+  padding: 0 2px;
   color: var(--ink-3);
   font-size: 10px;
   font-weight: 600;
-  line-height: 1.2;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  letter-spacing: 0.08em;
+}
+
+.groupGrid {
+  display: grid;
+  /* дээд тал нь гурван багана — бусад хэлтсийн цэсний тортой ижил */
+  grid-template-columns: repeat(auto-fill, minmax(max(260px, calc((100% - 8px) / 3)), 1fr));
+  grid-auto-rows: 52px;
+  gap: 4px;
 }
 
 .checkboxLabel {

@@ -1,10 +1,11 @@
 "use client";
 
 import * as React from "react";
-import { ChevronDown, ChevronRight, Scale, Search, X } from "lucide-react";
+import { ArrowUp, BookOpen, ChevronDown, ChevronRight, FileSearch, Minus, Plus, Scale, Search, X } from "lucide-react";
 import { LEGAL_BASIS } from "@/lib/inspection-scheme";
 import raw from "@/lib/legal-basis.json";
 import { cn, num } from "@/lib/utils";
+import styles from "./legal-basis.module.css";
 
 /* --------------------------------------------------------------------------
    ҮНДЭСЛЭЛ ХУУЛЬ, ЖУРАМ
@@ -141,7 +142,7 @@ export function LegalBasisCard() {
         бүлэг болж задардаг байв.
    ⚠ Зүүн талын "Агуулга" багана мөн ХАСАГДСАН (хэрэглэгч: "ийм хэсэг
    хэрэггүй") — дахин бүү нэм. Журмын табад дөрвөн журам дараалан гарна.
-   Одоо: уншигдах бичвэр ганцаараа — хуулийн нэр төвд том үсгээр,
+   Уншигдах бичвэр ганцаараа — хуулийн нэр төвд том үсгээр,
    "13 дугаар зүйл." тод гарчиг, заалт нь дугаараа ЭХЭНДЭЭ авсан догол
    мөр ("13.4. …"), шатлал нь дугаарын гүнээр догол мөр болно.
    Ганц фонт (Inter) — платформын дүрэм; legalinfo-гийн serif-ийг
@@ -152,26 +153,30 @@ function LegalDrawer({ topic, onClose }: { topic: Topic; onClose: () => void }) 
   const tabs = React.useMemo(() => tabsOf(topic), [topic]);
   const [tab, setTab] = React.useState(tabs[0]?.id ?? "");
   const [query, setQuery] = React.useState("");
+  const [fontSize, setFontSize] = React.useState(14);
   const body = React.useRef<HTMLDivElement>(null);
+  const drawer = React.useRef<HTMLElement>(null);
+  const titleId = React.useId();
 
   React.useEffect(() => {
+    const previous = document.activeElement;
+    drawer.current?.focus({ preventScroll: true });
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
     };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      if (previous instanceof HTMLElement && previous.isConnected) previous.focus({ preventScroll: true });
+    };
   }, [onClose]);
 
   const q = query.trim().toLowerCase();
   const hit = (...xs: string[]) => !q || xs.some((x) => x.toLowerCase().includes(q));
 
   const section = topic.sections.find((s) => s.kind === tab);
-  const groups = section
-    ? groupChecks(
-        section.items.filter((it) => hit(it.ref, ...it.lines)),
-        topic.name,
-      )
-    : [];
+  const checks = section?.items.filter((it) => hit(it.ref, ...it.lines)) ?? [];
+  const groups = groupChecks(checks, topic.name);
   const violations =
     tab === "@violations" && topic.violations
       ? topic.violations.items.filter((v) => hit(v.head, ...v.sub, ...v.links))
@@ -186,75 +191,102 @@ function LegalDrawer({ topic, onClose }: { topic: Topic; onClose: () => void }) 
   };
 
   const kindLabel = tabs.find((x) => x.id === tab)?.label ?? "";
+  const total = tabs.find((x) => x.id === tab)?.count ?? 0;
+  const count = checks.length + violations.length + documents.length;
+  const countLabel = tab === "@documents" ? "баримт бичиг" : tab === "@violations" ? "хэсэг" : "заалт";
 
   return (
-    <aside
-      role="dialog"
-      aria-label={topic.name}
-      className="elevated fixed inset-y-0 right-0 z-50 flex w-[min(760px,100vw)] flex-col border-l border-line bg-paper-2"
-    >
-      {/* ---- Толгой: нэр, таб, хайлт ---- */}
-      <header className="shrink-0 border-b border-line px-5 pt-3">
-        <div className="flex items-start gap-3">
-          <div className="min-w-0 flex-1">
-            <div className="eyebrow">Үндэслэл хууль, журам</div>
-            <h2 className="display mt-1 text-[15px] leading-snug">{topic.name}</h2>
+    <SearchContext.Provider value={q}>
+      <aside
+        ref={drawer}
+        role="dialog"
+        aria-label={topic.name}
+        aria-labelledby={empty ? undefined : titleId}
+        tabIndex={-1}
+        className={cn("elevated", styles.drawer)}
+        style={{ "--legal-font-size": `${fontSize}px`, "--tone": "var(--d-hyanalt)" } as React.CSSProperties}
+      >
+        <header className={styles.header}>
+          <div className="flex items-center gap-3">
+            <span className={styles.headerIcon}><Scale size={20} aria-hidden /></span>
+            <div className="min-w-0 flex-1">
+              <div className="eyebrow">Хяналтын хэлтэс</div>
+              <p className="display mt-1 text-[15px] leading-snug">Хууль, эрх зүйн үндэслэл</p>
+            </div>
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Хаах"
+              title="Хаах (Esc)"
+              className={styles.iconButton}
+            >
+              <X size={18} />
+            </button>
           </div>
-          <label className="mt-1 flex w-[240px] items-center gap-2 rounded-xs border border-line bg-paper px-2 py-1.5 focus-within:border-(--tone)/60 max-md:hidden">
-            <Search size={13} className="shrink-0 text-ink-3" />
+
+          <nav aria-label="Баримт бичгийн төрөл" className={styles.tabs}>
+            {tabs.map((x) => (
+              <button
+                key={x.id}
+                type="button"
+                aria-pressed={tab === x.id}
+                onClick={() => pickTab(x.id)}
+                className={cn(
+                  styles.tab,
+                  tab === x.id && styles.activeTab,
+                )}
+              >
+                {x.label}
+                <span className={cn("num", styles.tabCount)}>{num(x.count)}</span>
+              </button>
+            ))}
+          </nav>
+        </header>
+
+        <div className={styles.toolbar}>
+          <label className={styles.search}>
+            <Search size={16} aria-hidden />
             <input
+              type="search"
+              aria-label="Бичвэрээс хайх"
               value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Бичвэрээс хайх"
-              className="min-w-0 flex-1 bg-transparent text-[12px] text-ink outline-none placeholder:text-ink-3"
+              onChange={(e) => {
+                setQuery(e.target.value);
+                body.current?.scrollTo({ top: 0 });
+              }}
+              placeholder="Заалт, түлхүүр үгээр хайх…"
             />
             {query ? (
-              <button type="button" onClick={() => setQuery("")} aria-label="Цэвэрлэх">
-                <X size={12} className="text-ink-3 hover:text-ink" />
+              <button type="button" onClick={() => setQuery("")} aria-label="Хайлтыг цэвэрлэх" className={styles.clearButton}>
+                <X size={14} />
               </button>
             ) : null}
           </label>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Хаах"
-            className="shrink-0 rounded-xs p-1 text-ink-3 hover:bg-paper-hi hover:text-ink"
-          >
-            <X size={16} />
-          </button>
+          <div className={styles.fontControls} role="group" aria-label="Үсгийн хэмжээ">
+            <button type="button" className={styles.iconButton} onClick={() => setFontSize((size) => Math.max(13, size - 1))} disabled={fontSize === 13} aria-label="Үсгийн хэмжээ багасгах" title="Үсгийн хэмжээ багасгах"><Minus size={14} /></button>
+            <span className="num" aria-live="polite">{fontSize}</span>
+            <button type="button" className={styles.iconButton} onClick={() => setFontSize((size) => Math.min(18, size + 1))} disabled={fontSize === 18} aria-label="Үсгийн хэмжээ томруулах" title="Үсгийн хэмжээ томруулах"><Plus size={14} /></button>
+          </div>
         </div>
 
-        {/* Таб — legalinfo-гийн адил доогуураа зураастай */}
-        <nav className="mt-2 -mb-px flex flex-wrap gap-x-4">
-          {tabs.map((x) => (
-            <button
-              key={x.id}
-              type="button"
-              aria-pressed={tab === x.id}
-              onClick={() => pickTab(x.id)}
-              className={cn(
-                "flex items-center gap-1.5 border-b-2 py-2 text-[12px] transition-colors",
-                tab === x.id
-                  ? "border-(--tone) font-medium text-ink"
-                  : "border-transparent text-ink-3 hover:text-ink",
-              )}
-            >
-              {x.label}
-              <span className="num text-[10.5px] text-ink-3">{num(x.count)}</span>
-            </button>
-          ))}
-        </nav>
-      </header>
-
-      <div className="flex min-h-0 flex-1">
-        {/* ---- БАРУУН: бичвэр ---- */}
-        <div ref={body} className="relative min-h-0 flex-1 overflow-y-auto">
+        <div ref={body} className={styles.body}>
           {empty ? (
-            <p className="px-6 py-10 text-center text-[12px] text-ink-3">
-              Тохирох заалт олдсонгүй
-            </p>
+            <div className={styles.empty}>
+              <FileSearch size={30} strokeWidth={1.4} aria-hidden />
+              <p className="display text-[15px] text-ink">Тохирох заалт олдсонгүй</p>
+              <p>Өөр түлхүүр үг эсвэл баримт бичгийн төрөл сонгож хайна уу.</p>
+              <button type="button" onClick={() => setQuery("")}>Хайлтыг цэвэрлэх</button>
+            </div>
           ) : (
-            <article className="mx-auto max-w-[660px] px-8 pt-7 pb-16">
+            <article className={styles.document}>
+              <header className={styles.documentHeader}>
+                <div className={styles.documentMeta}>
+                  <span className={styles.kind}><BookOpen size={13} aria-hidden />{kindLabel}</span>
+                  <span className="num">{num(total)} {countLabel}</span>
+                </div>
+                <h2 id={titleId}>{topic.name}</h2>
+                <p>Хяналт шалгалтад баримтлах хууль тогтоомж, холбогдох заалтууд</p>
+              </header>
               {tab === "@documents" ? (
                 documents.map((d, i) => (
                   <section key={d.title} className={cn(i > 0 && "mt-10 border-t border-line pt-8")}>
@@ -263,21 +295,14 @@ function LegalDrawer({ topic, onClose }: { topic: Topic; onClose: () => void }) 
                 ))
               ) : (
                 <>
-                  <header className="mb-6 text-center">
-                    <h1 className="display text-[14px] leading-snug tracking-[0.03em] uppercase">
-                      {topic.name}
-                    </h1>
-                    <div className="eyebrow mt-1.5 text-(--tone)">{kindLabel}</div>
-                  </header>
-
                   {groups.map((g, i) => (
                     <GroupText key={i} id={`g${i}`} group={g} />
                   ))}
 
                   {tab === "@violations" && topic.violations ? (
                     <>
-                      <h3 className="mb-3 text-[13px] leading-snug font-semibold text-ink">
-                        {topic.violations.article}
+                      <h3 className={styles.articleHeading}>
+                        <Highlighted text={topic.violations.article} />
                       </h3>
                       {violations.map((v, i) => (
                         <ViolationText key={i} id={`v${i}`} item={v} />
@@ -289,9 +314,32 @@ function LegalDrawer({ topic, onClose }: { topic: Topic; onClose: () => void }) 
             </article>
           )}
         </div>
-      </div>
-    </aside>
+        <footer className={styles.footer}>
+          <span role="status">{q ? `${num(count)} / ${num(total)} ${countLabel} олдлоо` : `Нийт ${num(total)} ${countLabel}`}</span>
+          <button type="button" onClick={() => body.current?.scrollTo({ top: 0 })}><ArrowUp size={13} aria-hidden />Эхэнд очих</button>
+        </footer>
+      </aside>
+    </SearchContext.Provider>
   );
+}
+
+const SearchContext = React.createContext("");
+
+function Highlighted({ text }: { text: string }) {
+  const query = React.useContext(SearchContext);
+  if (!query) return text;
+  const parts: React.ReactNode[] = [];
+  const lower = text.toLowerCase();
+  let start = 0;
+  let at = lower.indexOf(query);
+  while (at !== -1) {
+    parts.push(text.slice(start, at));
+    parts.push(<mark key={at} className={styles.highlight}>{text.slice(at, at + query.length)}</mark>);
+    start = at + query.length;
+    at = lower.indexOf(query, start);
+  }
+  parts.push(text.slice(start));
+  return <>{parts}</>;
 }
 
 /* --------------------------------------------------------------------------
@@ -456,16 +504,16 @@ function depthOf(clause: string): number {
 function Clause({ row, indent }: { row: Row; indent: number }) {
   return (
     <p
-      className={cn("text-[13px] leading-[1.7] text-ink", !row.clause && "indent-6")}
+      className={cn(styles.clause, !row.clause && "indent-6")}
       style={indent ? { paddingLeft: `${Math.min(indent, 3) * 1.25}rem` } : undefined}
     >
       {row.clause ? (
         <span className="num mr-1.5 font-semibold text-ink">
-          {row.clause}
+          <Highlighted text={row.clause} />
           {/[.)]$/.test(row.clause) ? "" : "."}
         </span>
       ) : null}
-      {row.text}
+      <Highlighted text={row.text} />
     </p>
   );
 }
@@ -484,22 +532,21 @@ function rowsWithIndent(rows: Row[]) {
 
 function GroupText({ id, group }: { id: string; group: Group }) {
   return (
-    <section id={id} className="mb-6">
+    <section id={id} className={styles.articleSection}>
       {group.title ? (
-        <h3 className="mb-2 text-[13px] leading-snug text-ink">
+        <h3 className={styles.articleHeading}>
           <span className="font-semibold">
-            {group.law ? `${group.law} ` : ""}
-            {group.title}.
+            <Highlighted text={`${group.law ? `${group.law} ` : ""}${group.title}.`} />
           </span>
-          {group.note ? <span className="font-semibold"> {group.note}</span> : null}
+          {group.note ? <span className="font-semibold"> <Highlighted text={group.note} /></span> : null}
         </h3>
       ) : (
         /* Журам, стандарт, дүрэм — баримт бичгийн нэр төвд */
-        <h3 className="mx-auto mb-3 max-w-[520px] text-center text-[12.5px] leading-snug font-semibold text-ink">
-          {group.note}
+        <h3 className={styles.docHeading}>
+          <Highlighted text={group.note} />
         </h3>
       )}
-      <div className="space-y-1.5">
+      <div className="space-y-3">
         {rowsWithIndent(group.rows).map(({ row, indent }, i) => (
           <Clause key={i} row={row} indent={indent} />
         ))}
@@ -516,8 +563,8 @@ function GroupText({ id, group }: { id: string; group: Group }) {
 function ViolationText({ id, item }: { id: string; item: Violation }) {
   const [open, setOpen] = React.useState(false);
   return (
-    <section id={id} className="mb-5">
-      <div className="space-y-1.5">
+    <section id={id} className={styles.articleSection}>
+      <div className="space-y-3">
         <Clause row={splitLead(item.head)} indent={0} />
         {item.sub.map((s, i) => (
           <Clause key={i} row={splitLead(s)} indent={1} />
@@ -536,18 +583,18 @@ function ViolationText({ id, item }: { id: string; item: Violation }) {
             <span className="num text-ink-3">{num(item.links.length)}</span>
           </button>
           {open ? (
-            <div className="mt-2 space-y-1 rounded-xs border-l-2 border-(--tone)/50 bg-paper px-4 py-3">
+            <div className={cn(styles.relatedContent, "mt-2 space-y-1 rounded-xs border-l-2 border-(--tone)/50 bg-paper px-4 py-3")}>
               {item.links.map((l, i) =>
                 isArticle(l) ? (
                   <h4
                     key={i}
                     className="pt-1.5 text-[12px] leading-snug font-semibold text-ink first:pt-0"
                   >
-                    {l}
+                    <Highlighted text={l} />
                   </h4>
                 ) : (
                   <p key={i} className="text-[12px] leading-[1.65] text-ink-2">
-                    {l}
+                    <Highlighted text={l} />
                   </p>
                 ),
               )}
@@ -579,19 +626,19 @@ function DocText({ doc }: { doc: Doc }) {
   return (
     <>
       <header className="mb-6 text-center">
-        <h1 className="display mx-auto max-w-[540px] text-[14px] leading-snug tracking-[0.03em] uppercase">
-          {doc.title}
-        </h1>
+        <h3 className={styles.docHeading}>
+          <Highlighted text={doc.title} />
+        </h3>
       </header>
-      <div className="space-y-1.5">
+      <div className="space-y-3">
         {doc.lines.map((l, i) => {
           if (CHAPTER.test(l)) {
             return (
               <h3
                 key={i}
-                className="pt-4 pb-1 text-center text-[12.5px] leading-snug font-semibold tracking-[0.03em] text-ink uppercase"
+                className={styles.chapterHeading}
               >
-                {l}
+                <Highlighted text={l} />
               </h3>
             );
           }

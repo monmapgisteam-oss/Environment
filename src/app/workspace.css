@@ -3721,3 +3721,16 @@
 .scene-measure [class*="hint"] {
   display: none;
 }
+
+/*
+  МЭДЭЭЛЛИЙН САМБАР ХААЛТТАЙ ЦЭС ({@link src/components/auth/tab-access.tsx},
+  хэрэглэгч 2026-10-23). Газрын зургаас бусад бүх элемент (диаграм,
+  үзүүлэлт, жагсаалт, дэлгэрэнгүй цонх) үл үзэгдэнэ — зураг байрандаа.
+*/
+.access-nodb * {
+  visibility: hidden;
+}
+.access-nodb .wells-esri,
+.access-nodb .wells-esri * {
+  visibility: visible;
+}

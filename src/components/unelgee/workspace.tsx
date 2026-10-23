@@ -16,6 +16,7 @@ import { SourceTabs, useStoredTab } from "@/components/ui/source-tabs";
 import "./workspace.css";
 import type { LayerSet } from "@/lib/portal-layers";
 import { ECO, FLOOD, GAS, GREEN, WASTE } from "@/lib/unelgee-layers";
+import { TabAccess } from "@/components/auth/tab-access";
 
 /*
   Хэлтэс гурван эх сурвалжтай тул самбар хооронд сольж харна.
@@ -152,14 +153,16 @@ export function UnelgeeWorkspace() {
         scope="unelgee-uur-amisgal" tabs={TABS} value={tab} onChange={pick} label="Сэдэв" />
 
       <div id="ue-topic-panel" className="department-workspace-content" role="region" aria-label={TABS.find((topic) => topic.id === tab)?.label}>
-        {tab === "unelgee" ? <UnelgeeDashboard /> : null}
-        {tab === "bomt" ? <BomtDashboard /> : null}
-        {tab === "flood" ? <FloodDashboard /> : null}
-        {tab === "green" ? <GreenDashboard /> : null}
-        {tab === "eco" ? <EcoDashboard /> : null}
-        {tab === "waste" ? <WasteDashboard /> : null}
-        {tab === "gas" ? <GasDashboard /> : null}
-        {tab === "weather" ? <WeatherDashboard /> : null}
+        <TabAccess scope="unelgee-uur-amisgal" tab={tab}>
+          {tab === "unelgee" ? <UnelgeeDashboard /> : null}
+          {tab === "bomt" ? <BomtDashboard /> : null}
+          {tab === "flood" ? <FloodDashboard /> : null}
+          {tab === "green" ? <GreenDashboard /> : null}
+          {tab === "eco" ? <EcoDashboard /> : null}
+          {tab === "waste" ? <WasteDashboard /> : null}
+          {tab === "gas" ? <GasDashboard /> : null}
+          {tab === "weather" ? <WeatherDashboard /> : null}
+        </TabAccess>
       </div>
     </div>
   );

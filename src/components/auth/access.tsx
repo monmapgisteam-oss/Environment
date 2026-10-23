@@ -5,6 +5,7 @@ import { ShieldOff } from "lucide-react";
 import {
   ANALYSIS,
   defaultGrant,
+  withHome,
   FULL_RULE,
   grantAllowsScope,
   grantAllowsTab,
@@ -109,7 +110,7 @@ export function useAccess() {
     const u = normName(username);
     const row = remote.rows?.find((r) => r.username === u);
     /* Хүснэгтийн мөр давуу; `removed` бол анхдагч ч хүчингүй */
-    const grant: Grant | null = row ? (row.removed ? null : row.grant) : defaultGrant(u);
+    const grant: Grant | null = row ? (row.removed ? null : withHome(u, row.grant)) : defaultGrant(u);
     const pending =
       signed && !nameAdmin && (remote.status !== "ready" || (!grant && role === undefined));
     const blocked = signed && !admin && !grant && !pending;
@@ -133,9 +134,9 @@ export function useAccess() {
 }
 
 /** Эрхгүй хуудсанд гарах блок */
-export function NoAccess({ text = "Энэ хуудсыг харах эрх байхгүй байна" }: { text?: string }) {
+export function NoAccess({ text = "Энэ хуудсыг харах эрх байхгүй байна", className }: { text?: string; className?: string }) {
   return (
-    <div className="hatch flex min-h-[320px] flex-col items-center justify-center gap-2 rounded-xs border border-dashed border-line-2 px-6 text-center">
+    <div className={`${className ?? "min-h-[320px]"} hatch flex flex-col items-center justify-center gap-2 rounded-xs border border-dashed border-line-2 px-6 text-center`}>
       <ShieldOff size={20} className="text-ink-3" />
       <p className="text-[13px] font-medium text-ink-2">{text}</p>
     </div>
