@@ -11,7 +11,9 @@ import {
   Sprout,
   Trees,
 } from "lucide-react";
-import { SourceTabs, useStoredTab } from "@/components/ui/source-tabs";
+import * as React from "react";
+import { SourceTabs, TabGroups, useStoredTab } from "@/components/ui/source-tabs";
+import { useAccess } from "@/components/auth/access";
 import { FOREST_TABS } from "@/lib/forest-layers";
 
 /*
@@ -46,9 +48,24 @@ const LayersDashboard = dynamic(
   УНШСАН утгуудыг нэрлэнэ (2026-10-06-нд токеноор шалгасан) —
   таамаглаж тайлбарлахгүй.
 */
+/*
+  ДЭЭД ТАЛЫН БҮЛГИЙН ТОВЧ — амьтан, ургамлын хэлтэс шиг (хэрэглэгч
+  2026-10-23: "ойн хэлтсийн цэсүүдийг бас НБАХХ, АУХХ 2 шиг болгоё" →
+  "Бүлэгт хуваах"). Бүлэг нь ТУСДАА төлөв барихгүй — сонгосон цэснээс
+  гарна (`TabGroups`); бүлэг товшиход түүний эхний нээлттэй цэс нээгдэнэ.
+*/
+export const GROUPS = [
+  { id: "hamgaalalt", label: "Хамгаалалт", note: "2 сэдэв", icon: ShieldCheck },
+  { id: "oi_san", label: "Ойн сан", note: "3 сэдэв", icon: Trees },
+  { id: "ashiglalt", label: "Ашиглалт", note: "2 сэдэв", icon: Coins },
+] as const;
+
+type GroupId = (typeof GROUPS)[number]["id"];
+
 export const TABS = [
   {
     id: "O01_THGN_polygon",
+    group: "hamgaalalt",
     label: "Тусгай хамгаалалттай газар",
     /* `tuvshin` домэйн — гурван утга */
     note: "УИХ · НИТХ · ДИТХ",
@@ -56,15 +73,8 @@ export const TABS = [
     icon: ShieldCheck,
   },
   {
-    id: "O03_tulbur_duureg",
-    label: "Ойн төлбөр",
-    /* Хоёр хэмжилтийн нэр (м³ нь хэлтсийн шийдвэрээр диаграмд ороогүй) */
-    note: "Мод бэлтгэсэн талбай · төлбөрийн орлого",
-    full: "Ойн төлбөр, дүүргээр",
-    icon: Coins,
-  },
-  {
     id: "O03_buffer_100m",
+    group: "hamgaalalt",
     label: "Хамгаалалтын зурвас",
     note: "100 метр",
     full: "100 метрийн хамгаалалтын зурвас",
@@ -72,6 +82,7 @@ export const TABS = [
   },
   {
     id: "O03_oi_yalgaral",
+    group: "oi_san",
     label: "Ойн ялгарал",
     /* `ylgaral`-ын хамгийн олон гурван утга */
     note: "Ой · тармаг мод · мод бэлтгэсэн талбай",
@@ -79,6 +90,7 @@ export const TABS = [
   },
   {
     id: "O03_oi_heseglel",
+    group: "oi_san",
     label: "Ойн хэсэглэл",
     /* `name` талбарын хоёр утга */
     note: "Улаанбаатар · Багануур",
@@ -86,6 +98,7 @@ export const TABS = [
   },
   {
     id: "O03_nogoon_bus_heseg",
+    group: "oi_san",
     label: "Ногоон бүсийн хэсэг",
     /* `folderpath` — бүх мөрд ижил ганц утга */
     note: "Ногоон бүс ба Богд уул",
@@ -93,7 +106,17 @@ export const TABS = [
     icon: Sprout,
   },
   {
+    id: "O03_tulbur_duureg",
+    group: "ashiglalt",
+    label: "Ойн төлбөр",
+    /* Хоёр хэмжилтийн нэр (м³ нь хэлтсийн шийдвэрээр диаграмд ороогүй) */
+    note: "Мод бэлтгэсэн талбай · төлбөрийн орлого",
+    full: "Ойн төлбөр, дүүргээр",
+    icon: Coins,
+  },
+  {
     id: "O03_dagalt_baylag",
+    group: "ashiglalt",
     label: "Ойн дагалт баялаг",
     /* `zuiluud` жагсаалтаас — эх сурвалжийн зүйлийн нэрс */
     note: "Нэрс · хушны самар · чага",
@@ -111,6 +134,19 @@ export function OiWorkspace() {
 
   const set = FOREST_TABS[tab];
 
+  /* Бүлэг нь сонгосон цэснээс гарна; нээлттэй цэсгүй бүлэг ГАРАХГҮЙ */
+  const group: GroupId = TABS.find((t) => t.id === tab)?.group ?? GROUPS[0].id;
+  const shown = React.useMemo(() => TABS.filter((t) => t.group === group), [group]);
+  const { allowsTab } = useAccess();
+  const groups = GROUPS.filter((g) => TABS.some((t) => t.group === g.id && allowsTab("oi", t.id)));
+  const pickGroup = React.useCallback(
+    (id: GroupId) => {
+      const first = TABS.find((t) => t.group === id && allowsTab("oi", t.id));
+      if (first) pick(first.id);
+    },
+    [pick, allowsTab],
+  );
+
   return (
     <div className="department-workspace">
       {/*
@@ -118,7 +154,7 @@ export function OiWorkspace() {
         толгой ба хажуугийн зурвас хэлтсийн нэрийг аль хэдийн харуулдаг.
       */}
       <SourceTabs
-        scope="oi" tabs={TABS} value={tab} onChange={pick} label="Сэдэв" />
+        scope="oi" groupControl={<TabGroups groups={groups} value={group} onChange={pickGroup} />} tabs={shown} value={tab} onChange={pick} label="Сэдэв" />
 
       {/*
         ⚠ `key` ЗААВАЛ: бүх таб НЭГ бүрэлдэхүүнээр зурагддаг тул React

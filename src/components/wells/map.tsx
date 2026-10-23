@@ -1302,15 +1302,37 @@ export function WellsMap({
         */
         const shapeLabels =
           mode.shaped
-            ? clientLayer(E, "point", [{ name: "t", type: "string" }], {
+            ? clientLayer(E, "point", [{ name: "t", type: "string" }, { name: "s", type: "double" }], {
                 renderer: INVISIBLE,
                 labelingInfo: [
                   {
-                    labelExpressionInfo: { expression: "$feature.t" },
+                    /*
+                      ⚠⚠ ШОШГО ДҮРСЭЭСЭЭ ТОМ БАЙХГҮЙ (хэрэглэгч 2026-10-23, ТХГН-ийн
+                      зургаар: "label zasay"). Хол байхад хотын төвийн жижиг
+                      дүрсүүдийн урт нэр бие биен дээгүүр давхцаж уншигдахгүй
+                      байв. Одоо дүрсийн хэмжээ (`s`, метр) дэлгэц дээр 48px-ээс
+                      бага бол шошго гарахгүй — ойртоход өөрөө гарна; урт нэр
+                      хоёр мөрөнд залгагдаж, 46 тэмдэгтээс хэтэрвэл тасарна
+                      (бүтэн нэр нь цонх, диаграмд). Шугамд `s` хоосон тул
+                      хязгааргүй.
+                    */
+                    labelExpressionInfo: {
+                      expression: `var t = $feature.t;
+                        var s = $feature.s;
+                        if (!IsEmpty(s) && s * 3779.5 / $view.scale < 48) return "";
+                        return IIF(Count(t) > 46, Left(t, 45) + "…", t);`,
+                    },
                     labelPlacement: "center-center",
                     deconflictionStrategy: lineLabels ? "none" : "static",
                     minScale: mode.shapeLabelZoom ? scaleAt(mode.shapeLabelZoom) * 1.01 : 0,
-                    symbol: { type: "text", color: "#ffffff", haloColor: HALO, haloSize: 0.9, font: { ...FONT, size: 8 } },
+                    symbol: {
+                      type: "text",
+                      color: "#ffffff",
+                      haloColor: HALO,
+                      haloSize: 0.9,
+                      lineWidth: 130,
+                      font: { ...FONT, size: 8 },
+                    },
                   },
                 ],
               })
@@ -1875,7 +1897,9 @@ export function WellsMap({
       refill(E, live.view, slotOf(layers, "shapeLabels"), () =>
         lp.features.flatMap((f) => {
           const geometry = cleanGeom(f.geometry);
-          return geometry ? [{ type: "Feature" as const, geometry, properties: { t: f.properties?.t ?? null } }] : [];
+          return geometry
+            ? [{ type: "Feature" as const, geometry, properties: { t: f.properties?.t ?? null, s: f.properties?.s ?? null } }]
+            : [];
         }),
       );
     }

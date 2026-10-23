@@ -1225,6 +1225,13 @@
   text-align: left;
   transition: background 150ms;
 }
+.dataset-edit-button.is-add {
+  border-color: var(--moss);
+  background: color-mix(in oklab, var(--moss) 18%, var(--paper-2));
+}
+.dataset-edit-button.is-add:hover:not(:disabled) {
+  background: color-mix(in oklab, var(--moss) 26%, var(--paper-2));
+}
 .dataset-edit-button:hover:not(:disabled) {
   background: color-mix(in oklab, var(--moss) 16%, var(--paper-2));
 }
@@ -2402,7 +2409,7 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 4px 12px;
-  margin-bottom: 6px;
+
   font-size: 10.5px;
   color: var(--ink-2);
 }
@@ -2439,7 +2446,9 @@
   align-items: center;
   gap: 8px;
   width: 100%;
-  padding: 6px 6px;
+  /* Нягт мөр (хэрэглэгч 2026-10-23, ойн төлбөр: гурван картын 7 дүүрэг
+     гүйлгэхгүйгээр багтах) — 6px байхад карт бүр дотроо гүйдэг байв */
+  padding: 2px 6px;
   border: 1px solid transparent;
   border-radius: 6px;
   text-align: left;
@@ -3110,10 +3119,13 @@
 }
 .row-chart.is-fill .row-chart-item {
   display: flex;
-  flex: 1 1 0;
+  /* ⚠ Агшихгүй (`flex-shrink: 0`): мөр олон бол (ногоон бүсийн 24
+     хэсэг) `flex: 1 1 0; min-height: 0` нь мөрийг агуулгаасаа нам
+     болгож бичвэр нь хөрш зурвасан дээгүүр давхцдаг байв (2026-10-23).
+     Одоо илүү зайг тэнцүү хуваана, дутвал карт дотроо гүйнэ. */
+  flex: 1 0 auto;
   flex-direction: column;
   justify-content: center;
-  min-height: 0;
   /* ⚠ 120px нь "арай дэндүү" байв (хэрэглэгч, 2026-10-06): таван мөр
      баганын өндрөөр тарж, мөр хооронд 80px хоосон зай үүсэж байлаа.
      64px-ээр туршихад нөгөө туйл руу — картын доод хагас хоосон
@@ -3122,7 +3134,7 @@
   padding: 5px 10px;
 }
 .row-chart.is-fill .row-chart-heading {
-  margin-bottom: 6px;
+
 }
 .row-chart.is-fill .row-chart-label {
   font-size: 12.5px;
@@ -3204,6 +3216,11 @@
   .analytics-chart-card.is-fill.is-fit {
     flex: 0 1 auto;
     min-height: 0;
+  }
+  /* Задарсан тэнхлэгийн урт жагсаалт — 150px хүртэл агшиж дотроо гүйнэ
+     (`CutCard low`, ойн ТХГН 2026-10-23: "ih scrolltoi") */
+  .analytics-chart-card.is-fill.is-low {
+    min-height: 150px;
   }
 }
 

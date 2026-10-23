@@ -368,6 +368,23 @@ function mainArea(g: GeoJSON.Geometry | null): number {
 }
 
 /**
+ * Дүрсийн ХЭМЖЭЭ метрээр (гол хэсгийн талбайн квадрат язгуур) — шошго нь
+ * дэлгэц дээр дүрс хангалттай томорсон үед л гарна (`WellsMap` шошгын
+ * илэрхийлэл). Шугамд `null` — шошго нь үргэлж гарна.
+ */
+function spanOf(
+  g: GeoJSON.Geometry | null,
+  area: number,
+  at: GeoJSON.Position,
+  polygon = false,
+): number | null {
+  if (!polygon && g?.type !== "Polygon" && g?.type !== "MultiPolygon") return null;
+  if (!(area > 0)) return null;
+  const m = 111320;
+  return Math.sqrt(area * m * m * Math.cos((at[1] * Math.PI) / 180));
+}
+
+/**
  * Шошгын цэгүүд — дүрс бүрд ЯГ НЭГ.
  *
  * `unique` үед НЭГ БИЧВЭРТ яг нэг: ижил нэртэй бүх дүрсээс ХАМГИЙН
@@ -398,16 +415,16 @@ export function labelPoints(
     if (typeof t !== "string" || !t) continue;
     const at = mainPoint(f.geometry);
     if (!at) continue;
+    const area = mainArea(f.geometry);
     if (!unique) {
       features.push({
         type: "Feature",
         id: f.id,
-        properties: { t },
+        properties: { t, s: spanOf(f.geometry, area, at) },
         geometry: { type: "Point", coordinates: at },
       });
       continue;
     }
-    const area = mainArea(f.geometry);
     const seen = best.get(t);
     if (!seen || area > seen.area) best.set(t, { at, area, id: f.id });
   }
@@ -415,7 +432,7 @@ export function labelPoints(
     features.push({
       type: "Feature",
       id: b.id,
-      properties: { t },
+      properties: { t, s: spanOf(null, b.area, b.at, true) },
       geometry: { type: "Point", coordinates: b.at },
     });
   return { type: "FeatureCollection", features };
