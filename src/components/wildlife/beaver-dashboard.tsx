@@ -4,13 +4,11 @@ import * as React from "react";
 import dynamic from "next/dynamic";
 import {
   CalendarRange,
-  LandPlot,
   Loader2,
   MapPin,
-  Route,
   Tag,
 } from "lucide-react";
-import { RowChart, type Datum } from "@/components/charts";
+import type { Datum } from "@/components/charts";
 import { BasemapGallery } from "@/components/map/basemap-gallery";
 import { DATA_COLOR, oklchHex } from "@/components/wells/colors";
 import { FilterBar, FilterMenu, PickList } from "@/components/wells/filter-bar";
@@ -23,7 +21,9 @@ import {
 import { Columns } from "@/components/ui/resizable-columns";
 import { fetchBeaver, type BeaverData } from "@/lib/beaver";
 import { Bounds } from "@/lib/extent";
-import { cn, num } from "@/lib/utils";
+import { num } from "@/lib/utils";
+import { SheetBars, SheetSection, SheetStats, catMeta } from "./sheet";
+import { MapLegend } from "./map-legend";
 
 const PointMap = dynamic(
   () => import("@/components/wells/map").then((m) => m.WellsMap),
@@ -387,14 +387,31 @@ export function BeaverDashboard() {
                 focus={focus}
               />
               <BasemapGallery value={basemap} onChange={setBasemap} />
+              <MapLegend
+                groups={[
+                  {
+                    key: "survey",
+                    items: [
+                      { key: "area", label: "Судалгааны талбай", color: DATA_COLOR, shape: "area" },
+                      { key: "route", label: "Маршрут", color: ROUTE_COLOR, shape: "line" },
+                    ],
+                  },
+                  {
+                    key: "kind",
+                    title: "Ажиглалт",
+                    field: "Ангилал",
+                    items: [...kindColor].map(([k, c]) => ({ key: k, label: k, color: c })),
+                  },
+                ]}
+              />
 
               {/*
-                СОНГОСОН ЦЭГ — зургийн доод зүүн буланд, жижиг хуудас.
+                СОНГОСОН ЦЭГ — зургийн доод БАРУУН буланд (зүүн доод нь таних тэмдгийнх).
                 Бичлэгт талбар цөөн (ангилал, үе, байршил, тэмдэглэгээ)
                 тул бүтэн хөвөгч самбар нэмэх нь илүүц.
               */}
               {detail ? (
-                <div className="elevated absolute bottom-2.5 left-2.5 z-10 w-[240px] rounded-xs border border-line-2 bg-paper/92 backdrop-blur-md">
+                <div className="elevated absolute right-2.5 bottom-8 z-10 w-[240px] rounded-xs border border-line-2 bg-paper/92 backdrop-blur-md">
                   <div className="flex items-baseline justify-between gap-2 border-b border-line px-2.5 py-2">
                     <span className="text-[12.5px] leading-none font-medium text-ink">
                       {detail.kind}
@@ -421,76 +438,50 @@ export function BeaverDashboard() {
         </div>
 
         {/* ---- БАРУУН: үзүүлэлт, задаргаа, талбайн жагсаалт ---- */}
-        <div className="flex min-h-0 flex-col gap-2.5 overflow-y-auto xl:w-(--col-r) xl:shrink-0">
-          <Card className="shrink-0">
-            <div className="grid grid-cols-2 divide-x divide-y divide-line">
-              <Stat icon={MapPin} label="Ажиглалт" value={num(stats.spots)} />
-              <Stat icon={Tag} label="Ангилал" value={num(stats.kinds)} />
-              <Stat
-                icon={Route}
-                label="Маршрут, км"
-                value={num(Math.round(stats.km))}
-              />
-              <Stat
-                icon={LandPlot}
-                label="Судалгааны талбай, га"
-                value={num(Math.round(stats.ha))}
-              />
-            </div>
-          </Card>
-
-          {/*
-            ⚠ Карт ӨНДРӨӨ АГУУЛГААРАА авна, `flex-1` БИШ (2026-09-22, хэрэглэгч:
-            "энэ баганыг янзлаарай"). Багана бүтэн өндөр авсны дараа энэ
-            карт үлдсэн зайг бүгдийг шингээж, найман мөрөөс доош бүтэн
-            дэлгэцийн хоосон талбай гаргаж байв. Үлдсэн зай баганын ДООД
-            талд хуримтлагдана — карт ДОТОР биш.
-          */}
-          <Card className="shrink-0">
-            <Head title="Ангиллаар">
-              <span className="text-[10.5px] text-ink-3">ажиглалт</span>
-            </Head>
-            <div className="max-h-[420px] overflow-y-auto p-3">
-              <RowChart
-                data={byKind}
-                colorOf={(d) => kindColor.get(d.key) ?? DATA_COLOR}
-                selected={kind}
-                onSelect={setKind}
-              />
-            </div>
-          </Card>
-
-          <Card className="shrink-0">
-            <Head title="Судалгааны үеэр">
-              <span className="text-[10.5px] text-ink-3">ажиглалт</span>
-            </Head>
-            <div className="p-3">
-              <RowChart data={byRound} selected={round} onSelect={setRound} />
-            </div>
-          </Card>
-
-          {/*
-            Талбай ердөө ХОЁР тул диаграм болгохгүй — жагсаалт нь
-            нэр, хэмжээ хоёрыг шууд хэлнэ.
-          */}
-          <Card className="shrink-0">
-            <Head title="Судалгааны талбай" />
+        {/*
+          ⚠ NBAHH-ЫН ХУУДАС (хэрэглэгч 2026-10-23, ногоон бүсийн зургаар):
+          Тойм → ангилал → судалгааны үе → талбай.
+        */}
+        <div className="flex min-h-0 flex-col gap-2 overflow-y-auto xl:w-(--col-r) xl:shrink-0">
+          <SheetStats
+            stats={[
+              { label: "Ажиглалт", value: stats.spots },
+              { label: "Ангилал", value: stats.kinds },
+              { label: "Маршрут", value: Math.round(stats.km), unit: "км" },
+              { label: "Судалгааны талбай", value: Math.round(stats.ha), unit: "га" },
+            ]}
+          />
+          <SheetSection title="Ангиллаар" meta={catMeta(byKind.length)}>
+            <SheetBars
+              data={byKind}
+              measure="Ажиглалтын тоо"
+              colorOf={(d) => kindColor.get(d.key) ?? DATA_COLOR}
+              selected={kind}
+              onSelect={setKind}
+            />
+          </SheetSection>
+          <SheetSection title="Судалгааны үеэр" meta={catMeta(byRound.length)}>
+            <SheetBars
+              data={byRound}
+              measure="Ажиглалтын тоо"
+              selected={round}
+              onSelect={setRound}
+            />
+          </SheetSection>
+          {/* Талбай ердөө ХОЁР тул диаграм болгохгүй — нэр, хэмжээ шууд */}
+          <SheetSection title="Судалгааны талбай" meta={`${num(data.areas.length)} талбай`}>
             <ul className="divide-y divide-line">
               {data.areas.map((a) => (
-                <li
-                  key={a.oid}
-                  className="flex items-baseline justify-between gap-2 px-3 py-2"
-                >
-                  <span className="min-w-0 flex-1 truncate text-[11.5px] text-ink-2">
-                    {a.name}
-                  </span>
-                  <span className="num shrink-0 text-[11.5px] text-ink">
-                    {num(Math.round(a.ha))} га
+                <li key={a.oid} className="flex items-baseline justify-between gap-2 px-1.5 py-1.5">
+                  <span className="min-w-0 flex-1 truncate text-[12px] text-ink">{a.name}</span>
+                  <span className="num shrink-0 text-[12.5px] font-semibold text-ink">
+                    {num(Math.round(a.ha))}
+                    <span className="ml-1 text-[11px] font-normal text-ink-3">га</span>
                   </span>
                 </li>
               ))}
             </ul>
-          </Card>
+          </SheetSection>
         </div>
       </Columns>
     </div>
@@ -534,60 +525,3 @@ function Field({ k, v }: { k: string; v: string }) {
   );
 }
 
-function Card({
-  className,
-  children,
-}: {
-  className?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div
-      className={cn(
-        "flex flex-col rounded-xs border border-line bg-paper-2",
-        className,
-      )}
-    >
-      {children}
-    </div>
-  );
-}
-
-function Head({
-  title,
-  children,
-}: {
-  title: string;
-  children?: React.ReactNode;
-}) {
-  return (
-    <div className="flex shrink-0 items-center justify-between gap-2 border-b border-line px-3 py-2">
-      <h2 className="display text-[13.5px] leading-none tracking-[0.06em] uppercase">
-        {title}
-      </h2>
-      {children}
-    </div>
-  );
-}
-
-function Stat({
-  label,
-  value,
-  icon: Icon,
-}: {
-  label: string;
-  value: string;
-  icon: typeof MapPin;
-}) {
-  return (
-    <div className="px-3 py-2.5">
-      <span className="eyebrow block min-h-[28px] leading-[1.25]">{label}</span>
-      <span className="mt-1.5 flex items-center gap-1.5">
-        <Icon size={20} strokeWidth={1.6} className="shrink-0 text-ink-3" />
-        <span className="num truncate text-[16px] leading-none font-medium text-ink">
-          {value}
-        </span>
-      </span>
-    </div>
-  );
-}

@@ -13,7 +13,6 @@ import {
 } from "lucide-react";
 import {
   GroupedRowChart,
-  RowChart,
   type Datum,
   type DatumGroup,
 } from "@/components/charts";
@@ -23,6 +22,8 @@ import { DATA_COLOR } from "@/components/wells/colors";
 import { FilterBar, FilterMenu, PickList } from "@/components/wells/filter-bar";
 import { defaultBasemap, type Basemap, type Extent } from "@/components/wells/map";
 import { Columns } from "@/components/ui/resizable-columns";
+import { SheetBars, SheetSection, SheetStats, catMeta } from "./sheet";
+import { MapLegend } from "./map-legend";
 import { Bounds } from "@/lib/extent";
 import { fetchFlora, FLORA, type FloraData, type FloraKind } from "@/lib/flora";
 import { cn, num } from "@/lib/utils";
@@ -512,12 +513,12 @@ export function FloraDashboard({ kind }: { kind: FloraKind }) {
         className="min-h-0 flex-1"
       >
         {/* ---- ЗҮҮН: төрөл → зүйл ---- */}
-        <Card className="min-h-[180px] flex-1 xl:w-(--col-l) xl:flex-none">
-          <Head title="Төрөл, зүйл">
-            <span className="num text-[11.5px] text-ink-3">
-              {num(tree.length)} төрөл · {num(data.species.length)} зүйл
-            </span>
-          </Head>
+        <SheetSection
+          title="Төрөл, зүйл"
+          meta={`${num(tree.length)} төрөл · ${num(data.species.length)} зүйл`}
+          className="min-h-[180px] flex-1 xl:w-(--col-l) xl:flex-none"
+          bodyClassName="flex min-h-0 flex-1 flex-col px-0 pt-0 pb-0"
+        >
           <div className="shrink-0 border-b border-line p-2">
             <input
               value={query}
@@ -544,7 +545,7 @@ export function FloraDashboard({ kind }: { kind: FloraKind }) {
               </p>
             )}
           </div>
-        </Card>
+        </SheetSection>
 
         {/* ---- ГОЛ: газрын зураг ---- */}
         <div className="flex min-h-0 flex-1 flex-col gap-2.5">
@@ -556,11 +557,9 @@ export function FloraDashboard({ kind }: { kind: FloraKind }) {
                 visible={visible}
                 labels={labels}
                 grades={grades}
-                /* Хагийн самбартай ижил — хиймэл дагуулын өтгөн өнгөн
-                   дээр жижиг цэг төдийлөн ялгарахгүй байв */
-                pulse
+                /* ⚠ Цохилтын тэмдэглэгээ (`pulse`) ХАСАГДСАН (2026-10-23) —
+                   амьтны зургуудтай ижил firefly цэг; хэмжээ нь зүйлийн тоо */
                 cluster={false}
-                pickedMark={detail?.oid ?? null}
                 highlight={detail ? [detail.lon, detail.lat] : null}
                 focus={focus}
                 basemap={basemap}
@@ -570,6 +569,20 @@ export function FloraDashboard({ kind }: { kind: FloraKind }) {
                 }}
               />
               <BasemapGallery value={basemap} onChange={setBasemap} />
+              <MapLegend
+                groups={[
+                  {
+                    key: "spot",
+                    items: [
+                      {
+                        key: "spot",
+                        label: meta.unit[0].toUpperCase() + meta.unit.slice(1),
+                        color: DATA_COLOR,
+                      },
+                    ],
+                  },
+                ]}
+              />
 
               {detail ? (
                 <MapPanel
@@ -713,69 +726,42 @@ export function FloraDashboard({ kind }: { kind: FloraKind }) {
           </Card>
 
           <p className="shrink-0 px-0.5 text-[10.5px] leading-none text-ink-3">
-            Суурь зураг: Esri · Дата: ArcGIS Enterprise ·{" "}
-            {num(data.spots.length)} {meta.unit}
-            {data.mismatched > 0
-              ? ` · ${num(data.mismatched)} мөрийн зүйлийн жагсаалт эх сурвалжийн тоотой зөрж байна`
-              : ""}
+            Суурь зураг: Esri · Дата: ArcGIS Enterprise
           </p>
         </div>
 
-        {/* ---- БАРУУН: үзүүлэлт ба задаргаа ---- */}
-        <div className="flex min-h-0 flex-col gap-2.5 xl:w-(--col-r) xl:shrink-0">
-          <Card className="shrink-0">
-            <div className="grid grid-cols-2 divide-x divide-y divide-line">
-              <Stat icon={Leaf} label="Зүйл" value={num(stats.species)} />
-              <Stat icon={Sprout} label="Төрөл" value={num(stats.genera)} />
-              <Stat
-                icon={MapPin}
-                label={meta.unit[0].toUpperCase() + meta.unit.slice(1)}
-                value={num(stats.spots)}
-              />
-              <Stat
-                icon={Building2}
-                label="Хамрагдсан дүүрэг"
-                value={num(stats.districts)}
-              />
-            </div>
-          </Card>
-
-          <Card className={byElev.length ? "shrink-0" : "min-h-[120px] flex-1"}>
-            <Head title="Дүүргээр">
-              <span className="text-[10.5px] text-ink-3">{meta.unit}</span>
-            </Head>
-            <div className="min-h-0 flex-1 overflow-y-auto p-3">
-              <RowChart
-                data={byDistrict}
-                selected={district}
-                onSelect={setDistrict}
-              />
-            </div>
-          </Card>
-
+        {/* ---- БАРУУН: ТОЙМ → задаргаа (амьтны цэсүүдтэй ижил, 2026-10-23) ---- */}
+        <div className="flex min-h-0 flex-col gap-2 overflow-y-auto xl:w-(--col-r) xl:shrink-0">
+          <SheetStats
+            stats={[
+              { label: "Зүйл", value: stats.species },
+              { label: "Төрөл", value: stats.genera },
+              { label: meta.unit[0].toUpperCase() + meta.unit.slice(1), value: stats.spots },
+              { label: "Хамрагдсан дүүрэг", value: stats.districts },
+            ]}
+          />
+          <SheetSection title="Дүүргээр" meta={catMeta(byDistrict.length)}>
+            <SheetBars
+              data={byDistrict}
+              measure={`Тоо, ${meta.unit}`}
+              selected={district}
+              onSelect={setDistrict}
+            />
+          </SheetSection>
           {/* Өндөршил нь ЗӨВХӨН мөөгний давхаргад бий */}
           {byElev.length ? (
-            <Card className="min-h-[120px] flex-1">
-              <Head title="Өндөршлөөр">
-                <span className="text-[10.5px] text-ink-3">{meta.unit}</span>
-              </Head>
-              <div className="min-h-0 flex-1 overflow-y-auto p-3">
-                <RowChart data={byElev} />
-              </div>
-            </Card>
+            <SheetSection title="Өндөршлөөр" meta={catMeta(byElev.length)}>
+              <SheetBars data={byElev} measure={`Тоо, ${meta.unit}`} />
+            </SheetSection>
           ) : (
-            <Card className="min-h-[120px] flex-1">
-              <Head title="Хороогоор">
-                <span className="text-[10.5px] text-ink-3">{meta.unit}</span>
-              </Head>
-              <div className="min-h-0 flex-1 overflow-y-auto p-3">
-                <RowChart
-                  data={byKhoroo}
-                  selected={khoroo}
-                  onSelect={setKhoroo}
-                />
-              </div>
-            </Card>
+            <SheetSection title="Хороогоор" meta={catMeta(byKhoroo.length)}>
+              <SheetBars
+                data={byKhoroo}
+                measure={`Тоо, ${meta.unit}`}
+                selected={khoroo}
+                onSelect={setKhoroo}
+              />
+            </SheetSection>
           )}
         </div>
       </Columns>
@@ -818,41 +804,3 @@ function Card({
   );
 }
 
-function Head({
-  title,
-  children,
-}: {
-  title: string;
-  children?: React.ReactNode;
-}) {
-  return (
-    <div className="flex shrink-0 items-center justify-between gap-2 border-b border-line px-3 py-2">
-      <h2 className="display text-[13.5px] leading-none tracking-[0.06em] uppercase">
-        {title}
-      </h2>
-      {children}
-    </div>
-  );
-}
-
-function Stat({
-  label,
-  value,
-  icon: Icon,
-}: {
-  label: string;
-  value: string;
-  icon: typeof Leaf;
-}) {
-  return (
-    <div className="px-3 py-2.5">
-      <span className="eyebrow block min-h-[28px] leading-[1.25]">{label}</span>
-      <span className="mt-1.5 flex items-center gap-1.5">
-        <Icon size={20} strokeWidth={1.6} className="shrink-0 text-ink-3" />
-        <span className="num truncate text-[16px] leading-none font-medium text-ink">
-          {value}
-        </span>
-      </span>
-    </div>
-  );
-}

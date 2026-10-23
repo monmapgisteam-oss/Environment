@@ -833,6 +833,8 @@ type Mode = {
   shapeLabelOnLine: boolean;
   shapeThin: boolean;
   shapeHair: boolean;
+  /** Эдгээр өнгөтэй олон өнцөгт ДҮҮРГЭЛТГҮЙ, нарийн хүрээтэй */
+  shapeHollow: string[];
   shapeOutline: boolean;
   shapeLabelUnique: boolean;
   labeled: boolean;
@@ -876,6 +878,14 @@ function strokes(m: Mode, lit: boolean) {
 }
 
 function polySymbol(m: Mode, color: string, lit: boolean) {
+  if (m.shapeHollow.includes(color)) {
+    /* Нарийн хүрээ, дүүргэлтгүй; сонгосон үед л бүдэг дүүргэлт */
+    const layers: any[] = [
+      { type: "CIMSolidStroke", enable: true, width: (lit ? 1.8 : 0.7) * 0.75, color: cim(color, 1), joinStyle: "Round", capStyle: "Round" },
+    ];
+    if (lit) layers.push({ type: "CIMSolidFill", enable: true, color: cim(color, 0.22) });
+    return { type: "cim", data: { type: "CIMSymbolReference", symbol: { type: "CIMPolygonSymbol", symbolLayers: layers } } };
+  }
   const s = strokes(m, lit);
   /* ХҮРЭЭГҮЙ горимд зөвхөн СОНГОСОН дүрс нимгэн хүрээтэй */
   const outlined = m.shapeOutline || lit;
@@ -1125,6 +1135,12 @@ export function WellsMap({
     edge?: "thin" | "hair";
     /** ОЛОН ӨНЦӨГТИЙН ХҮРЭЭ (анхдагчаар гарна); сонгосон дүрс үргэлж хүрээтэй */
     outline?: boolean;
+    /**
+     * ДҮҮРГЭЛТГҮЙ, НАРИЙН ХҮРЭЭТЭЙ зурагдах өнгөнүүд (`properties.c`) —
+     * нэг цуглуулгад өөр давхарга дээгүүр суух тор (коридорт давхцсан
+     * нэгж талбар). Анхны зурагдалтад л уншигдана.
+     */
+    hollow?: string[];
     /** НЭГ БИЧВЭРТ ЯГ НЭГ ШОШГО — хамгийн том дүрс дээр */
     labelUnique?: boolean;
   };
@@ -1238,6 +1254,7 @@ export function WellsMap({
     shapeLabelOnLine: shapes?.labelPlacement === "line-center",
     shapeThin: shapes?.edge === "thin",
     shapeHair: shapes?.edge === "hair",
+    shapeHollow: shapes?.hollow ?? [],
     shapeOutline: shapes?.outline !== false,
     shapeLabelUnique: Boolean(shapes?.labelUnique),
     labeled: Boolean(labels),
@@ -1380,44 +1397,35 @@ export function WellsMap({
             ? {
                 featureReduction: {
                   type: "cluster",
-                  clusterRadius: "48px",
-                  clusterMinSize: `${pt(10)}pt`,
-                  clusterMaxSize: `${pt(38)}pt`,
+                  /* ⚠ "badge" горим (аврагдсан амьтан, авто засвар): булангийн
+                     хайрцагтай тоо Esri дээр хөршийнхөө дээгүүр давхцаж зураг
+                     замбараагүй харагдаж байв (2026-10-23). Одоо cyan дүүргэлттэй
+                     дугуй (42%), тоо нь ДОТОРОО, бөөгнөрлийн радиус илүү өргөн.
+                     Бараан цул дүүргэлт "онцгүй" гэж буцаагдсан. */
+                  clusterRadius: badge ? "72px" : "48px",
+                  clusterMinSize: `${pt(badge ? 12 : 10)}pt`,
+                  clusterMaxSize: `${pt(badge ? 28 : 38)}pt`,
                   maxScale: scaleAt(mode.clusterMaxZoom),
                   /* ⚠ `renderer` БИШ `symbol`: өөрийн рендерер өгвөл НЭГ гишүүнтэй
                      бөөгнөрөл ч цагираг болж зурагддаг байв */
                   symbol: {
                     type: "simple-marker",
-                    color: col(mode.fire.glow, badge ? 0.14 : 0.22),
-                    outline: { color: col(mode.fire.glow, 0.95), width: (badge ? 2 : 1.4) * 0.75 },
+                    color: col(mode.fire.glow, badge ? 0.42 : 0.22),
+                    outline: { color: col(mode.fire.glow, 0.95), width: (badge ? 1.6 : 1.4) * 0.75 },
                   },
                   labelingInfo: [
-                    badge
-                      ? {
-                          deconflictionStrategy: "none",
-                          labelExpressionInfo: { expression: CLUSTER_TEXT },
-                          labelPlacement: "above-right",
-                          symbol: {
-                            type: "text",
-                            color: "#ffffff",
-                            backgroundColor: [15, 23, 32, 0.92],
-                            borderLineColor: col(mode.fire.glow),
-                            borderLineSize: 0.75,
-                            font: { ...FONT, size: 7.5 },
-                          },
-                        }
-                      : {
-                          deconflictionStrategy: "none",
-                          labelExpressionInfo: { expression: CLUSTER_TEXT },
-                          labelPlacement: "center-center",
-                          symbol: {
-                            type: "text",
-                            color: "#ffffff",
-                            haloColor: [0, 0, 0, 0.7],
-                            haloSize: 0.9,
-                            font: { ...FONT, size: 8 },
-                          },
-                        },
+                    {
+                      deconflictionStrategy: "none",
+                      labelExpressionInfo: { expression: CLUSTER_TEXT },
+                      labelPlacement: "center-center",
+                      symbol: {
+                        type: "text",
+                        color: "#ffffff",
+                        haloColor: [0, 0, 0, 0.7],
+                        haloSize: 0.9,
+                        font: { ...FONT, size: 8 },
+                      },
+                    },
                   ],
                 },
               }
