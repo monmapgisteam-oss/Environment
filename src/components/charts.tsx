@@ -741,19 +741,28 @@ export function AreaChart({
           шилжилтээс (`tabIndex={-1}`) хасаж, 25 хоосон зогсоол
           үүсгэхээс сэргийлнэ.
         */}
-        <div className="absolute inset-0 flex">
-          {data.map((d, i) => (
-            <button
-              key={d.key}
-              type="button"
-              tabIndex={interactive ? 0 : -1}
-              onMouseEnter={() => setHover(i)}
-              onFocus={() => setHover(i)}
-              onClick={() => onSelect?.(clickValue(selected, d.key))}
-              aria-label={`${d.label}: ${num(d.value)}`}
-              className={cn("h-full flex-1", interactive && "cursor-pointer")}
-            />
-          ))}
+        {/* ⚠ Бүс бүр ЦЭГИЙНХЭЭ голд (`i/(n−1)`), тэнцүү нүдээр БИШ —
+            эс тэгвээс хулганы бүс цэгээсээ хагас нүдээр зөрнө
+            (хэрэглэгч 2026-10-23, ойн ТХГН "Он": "eniig") */}
+        <div className="absolute inset-0">
+          {data.map((d, i) => {
+            const step = 100 / (data.length - 1);
+            const from = Math.max(0, (i - 0.5) * step);
+            const to = Math.min(100, (i + 0.5) * step);
+            return (
+              <button
+                key={d.key}
+                type="button"
+                tabIndex={interactive ? 0 : -1}
+                onMouseEnter={() => setHover(i)}
+                onFocus={() => setHover(i)}
+                onClick={() => onSelect?.(clickValue(selected, d.key))}
+                aria-label={`${d.label}: ${num(d.value)}`}
+                className={cn("absolute inset-y-0", interactive && "cursor-pointer")}
+                style={{ left: `${from}%`, width: `${to - from}%` }}
+              />
+            );
+          })}
         </div>
 
         {/* Hover самбар */}
@@ -794,20 +803,35 @@ export function AreaChart({
         нь бодит завсар үүснэ. Огцом байх тусам өндөр илүү иддэг тул
         цааш нэмэхгүй.
       */}
-      <div className={cn("flex", tilt ? "mt-2 h-7 items-start" : "mt-1.5")}>
-        {data.map((d, i) => (
-          <span key={d.key} className="flex min-w-0 flex-1 justify-center">
+      {/*
+        ⚠⚠ ШОШГО ЦЭГИЙНХЭЭ ЯГ ДООР (хэрэглэгч 2026-10-23, ойн ТХГН "Он":
+        "eniig"). Урьд нь тэнцүү нүдний голд (`(i+½)/n`) суудаг байсан тул
+        цэгүүд (`i/(n−1)`, ирмэгээс ирмэг) -ээс зөрж, "1995" нь эхний цэгээс
+        баруун тийш, "2020" нь сүүлийнхээс зүүн тийш харагдаж байв. Одоо
+        цэгтэй НЭГ байрлалд; эхний, сүүлийн шошго дотогшоо эгнэнэ (халихгүй).
+      */}
+      <div className={cn("relative", tilt ? "mt-2 h-7" : "mt-1.5 h-[10px]")}>
+        {data.map((d, i) => {
+          const last = data.length - 1;
+          const edge = tilt ? "-50%" : i === 0 ? "0%" : i === last ? "-100%" : "-50%";
+          return (
             <span
-              className={cn(
-                "num text-[10px] leading-none whitespace-nowrap transition-colors",
-                active === i ? "text-ink" : "text-ink-3",
-                tilt && "origin-top-right -translate-x-1/2 -rotate-[60deg]",
-              )}
+              key={d.key}
+              className="absolute top-0 flex"
+              style={{ left: `${(i / last) * 100}%`, transform: `translateX(${edge})` }}
             >
-              {ticks[i]}
+              <span
+                className={cn(
+                  "num text-[10px] leading-none whitespace-nowrap transition-colors",
+                  active === i ? "text-ink" : "text-ink-3",
+                  tilt && "origin-top-right -translate-x-1/2 -rotate-[60deg]",
+                )}
+              >
+                {ticks[i]}
+              </span>
             </span>
-          </span>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

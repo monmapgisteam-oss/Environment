@@ -1670,7 +1670,7 @@ function LayersBoard({
   const districtRows = (
     id: string,
     hit: Loaded,
-    b: Breakdown,
+    b: Breakdown | undefined,
     passes: (row: Row, skip?: readonly string[]) => boolean,
     colorOf: (key: string) => string,
   ) => {
@@ -1678,16 +1678,22 @@ function LayersBoard({
     if (dist === undefined) return "loading" as const;
     if (dist === null) return "failed" as const;
     /* Бүлэггүй давхаргад ангилал бүр ӨӨРИЙН хэсэг (хэсэглэл: ДЦГ ·
-       бүртгэгдээгүй) */
-    const defs =
-      set.valueGroups?.[id] ??
-      b.values.map((v) => ({ label: v.label, keys: [v.key] }));
-    const area = b.notes;
+       бүртгэгдээгүй). Зургийг будах ангилалгүй давхарга (ногоон бүсийн
+       хэсэг, дагалт баялаг — 2026-10-23) ГАНЦ хэсэгтэй: нийт талбай. */
+    const defs = b
+      ? (set.valueGroups?.[id] ??
+        b.values.map((v) => ({ label: v.label, keys: [v.key] })))
+      : [{ label: set.names?.[id] ?? hit.info.name, keys: [] as string[] }];
+    const area = b?.notes;
     const parts = defs.map((g) => {
       const lead = [...g.keys].sort(
         (x, y) => (area?.get(y) ?? 0) - (area?.get(x) ?? 0),
       )[0];
-      return { label: g.label, color: colorOf(lead), keys: [...g.keys] };
+      return {
+        label: g.label,
+        color: lead == null ? colorOf("") : colorOf(lead),
+        keys: [...g.keys],
+      };
     });
     const gi = new Map<string, number>();
     defs.forEach((g, i) => g.keys.forEach((k) => gi.set(k, i)));
@@ -1698,8 +1704,8 @@ function LayersBoard({
       if (!passes(row, [DISTRICT_KEY])) continue;
       const name = dist.get(Number(oid)) ?? "Тодорхойгүй";
       const v = (hit.data.area[Number(oid)] ?? 0) * k;
-      const key = b.keyOf(row)[0];
-      let i = key == null ? undefined : gi.get(key);
+      const key = b?.keyOf(row)[0];
+      let i = !b ? 0 : key == null ? undefined : gi.get(key);
       if (i == null) {
         i = defs.length;
         loose = true;
@@ -3580,6 +3586,7 @@ function LayersBoard({
           full
         >
           <Matrix
+            dense={Boolean(set.unfold)}
             rows={cross.row.values.map((d): Key => ({
               key: d.key,
               label: d.label,
@@ -3747,8 +3754,11 @@ function LayersBoard({
         ⚠ ЗӨВХӨН тоолол: тэр тэнхлэгээр задарсан ХЭМЖИЛТ (жишээ нь
         дүүргээр талбай) хүснэгтэд байхгүй тул үлдэнэ.
       */
-      const crossKeys = cross
-        ? new Set([filterKey(cross.row), filterKey(cross.col)])
+      /* Зургийн хоёр талд хуваасан үед ({@link LayerSet.grid2}) хүснэгт
+         нөгөө баганад байсан ч тэнхлэг нь энд ДАВТАГДАХГҮЙ */
+      const crossOf = cross ?? (set.grid2 ? crosses.get(id) : undefined);
+      const crossKeys = crossOf
+        ? new Set([filterKey(crossOf.row), filterKey(crossOf.col)])
         : null;
       const crossed = (b: Breakdown) =>
         !!crossKeys &&
@@ -3795,20 +3805,29 @@ function LayersBoard({
         хилээс ТООЦООЛСОН, хэсгүүд нь газрын зургийг будаж буй талбарын
         ангиллууд (өнгө нь зургийнх); мөр дарахад шүүнэ.
       */
-      const distB =
-        set.districts?.includes(id) && !set.shareChart?.includes(id)
-          ? charts.find((c) => c.field === colorField(id) && c.kind === "count")
-          : undefined;
-      const distData = distB
+      const wantDist =
+        Boolean(set.districts?.includes(id)) && !set.shareChart?.includes(id);
+      const distB = wantDist
+        ? charts.find((c) => c.field === colorField(id) && c.kind === "count")
+        : undefined;
+      const distData = wantDist
         ? districtRows(id, hit, distB, passes, (k) => palettes[id]?.colors.get(k) ?? tone)
         : null;
+      /* Задарсан тэнхлэгийн урт карт ({@link LayerSet.unfold}, 12-оос олон
+         мөр) баганын ҮЛДСЭН өндрийг авна — дүүргийн карт тэр үед
+         агуулгынхаа өндөртэй. Эс тэгвээс хоёр карт өндрийг хуваалцаж,
+         урт жагсаалт гүйж, дүүргийн картын доор хоосон зай үлддэг байв
+         (хэрэглэгч 2026-10-23, ногоон бүсийн хэсэг). */
+      const axisFills =
+        Boolean(set.unfold) && axes.some((a) => a.list[0].values.length > 12);
       const districtCard =
-        distB && distData ? (
+        wantDist && distData ? (
           <CutCard
             key={`${id}:district`}
             title="Дүүргээр — талбай, га"
             tone={tone}
-            fill
+            fill={!axisFills}
+            full={axisFills}
             meta={
               typeof distData === "object"
                 ? `${num(Math.round(distData.rows.reduce((n, r) => n + r.ha, 0)))} га · ${num(distData.rows.length)} дүүрэг`
@@ -3834,9 +3853,13 @@ function LayersBoard({
                     ? pick(id, DISTRICT_KEY, null)
                     : pickOnly(id, [[DISTRICT_KEY, n]])
                 }
-                chosen={sel[filterKey(distB)] ?? []}
-                onPart={(keys) => pickSet(id, filterKey(distB), keys)}
-                fill
+                chosen={distB ? (sel[filterKey(distB)] ?? []) : undefined}
+                onPart={
+                  distB
+                    ? (keys) => pickSet(id, filterKey(distB), keys)
+                    : undefined
+                }
+                fill={!axisFills}
               />
             )}
           </CutCard>
@@ -3911,21 +3934,26 @@ function LayersBoard({
           */
           const axis = axes.find((a) => a.list.some((x) => x.id === b.id));
           if (!axis || axis.list[0].id !== b.id) return null;
+          const axisFill =
+            axis.list[0].values.length > 12 &&
+            axes.every(
+              (a) => a.list[0].values.length <= axis.list[0].values.length,
+            );
           return (
             <AxisCard
               key={`${id}:axis:${axis.key}`}
               compact
+              /* Зургийн хоёр талд хуваасан үед ({@link LayerSet.grid2})
+                 богино карт агуулгынхаа өндөртэй — дотор нь хоосон зай
+                 үлдэхгүй, үлдсэн өндрийг урт жагсаалт эсвэл он авна
+                 (хэрэглэгч 2026-10-23: "carduudiin zaig ynzlaarai") */
+              full={Boolean(set.grid2) && !axisFill}
               /* ХАМГИЙН УРТ тэнхлэг (гүйцэтгэгч, 452 мөр) баганын ҮЛДСЭН
                  өндрийг авч ЗӨВХӨН КАРТ ДОТРОО гүйнэ (хэрэглэгч,
                  2026-10-07: "зөвхөн тэр карт дотроо л scroll-доно шүү").
                  ⚠ `top`-оор таньдаг байсан нь жагсаалт хураагдахаа
                  болимогц унтарч, карт 11,695px болж БАГАНА гүйж байв */
-              fill={
-                axis.list[0].values.length > 12 &&
-                axes.every(
-                  (a) => a.list[0].values.length <= axis.list[0].values.length,
-                )
-              }
+              fill={axisFill}
               axes={[axis]}
               tone={tone}
               first={b.id === leadId && !crossCard}
@@ -4148,8 +4176,12 @@ function LayersBoard({
             source={`${hit.info.name} · талбар: ${b.field}${b.measure ? ` · хэмжилт: ${b.measure}` : ""}`}
             tone={tone}
             first={b.id === leadId && !crossCard}
-            weight={cardWeight(b)}
-            fill={solo}
+            /* Ойн хэлтэст хугацааны карт шахагдахгүй (хэрэглэгч
+               2026-10-23: ТХГН-ийн "Он" баганын ёроолд шахагдсан) —
+               шал нь 168px, илүүг нь нэрийн карт дотроо гүйлгэнэ */
+            weight={isTime(b) && set.fillSolo ? 5 : cardWeight(b)}
+            /* Хоёр талд хуваасан үед он үлдсэн өндрийг авна ({@link LayerSet.grid2}) */
+            fill={solo || (Boolean(set.grid2) && isTime(b))}
             /* Дүүргийн карт доор нь байвал агуулгынхаа өндөртэй — үлдсэн
                зайг дүүргийн карт авна (хэрэглэгч 2026-10-07: "картуудын
                зайг янзлаач") */
@@ -4391,7 +4423,11 @@ function LayersBoard({
                   <div className="mb-1 flex items-baseline justify-between gap-3 border-b border-line pb-1">
                     <span className="eyebrow min-w-0 truncate text-ink-3">
                       {b.label} · {b.note.label}
-                      {b.note.unit ? `, ${b.note.unit}` : ""}
+                      {/* Хэмжилтийн нэр нэгжээ аль хэдийн агуулдаг
+                          ("Талбай, га") — давтвал "ГА, ГА" болж байв */}
+                      {b.note.unit && !unitOf(b.note.label).unit
+                        ? `, ${b.note.unit}`
+                        : ""}
                     </span>
                     <span className="eyebrow shrink-0 text-ink-3">
                       {b.kind === "count"
@@ -4499,6 +4535,14 @@ function LayersBoard({
     ? views.filter((v) => !mapIds.includes(v.id) || set.charts?.[v.id])
     : views;
   const chartsShown = showCharts && chartable;
+  /*
+    ЗУРГИЙН ХОЁР ТАЛД ({@link LayerSet.grid2}, ойн ТХГН — хэрэглэгч
+    2026-10-23: "mapiin baruun zuun tald gargaad uz"). Зүүн талд хөндлөн
+    хүснэгт ба НЭРИЙН жагсаалт, баруун талд бусад (ангилал, он).
+  */
+  const sideLeft = (id: string, b: Breakdown) =>
+    b.field === views.find((v) => v.id === id)?.hit.labels.name;
+
   const chartsBlock = chartsShown ? (
     <div className="flex min-h-0 flex-col gap-2 overflow-y-auto">
       {chartViews.length === 0 ||
@@ -4556,11 +4600,12 @@ function LayersBoard({
       {parcelCutCards}
 
       {chartCards(
-        (id, b) => !split?.has(`${id}:${b.id}`),
+        (id, b) => !split?.has(`${id}:${b.id}`) && !(set.grid2 && sideLeft(id, b)),
         /* Талбайн карт ҮРГЭЛЖ баруун баганад, давхаргынхаа
                    туузан дор */
         () => true,
-        true,
+        /* Хоёр талд хуваасан үед хүснэгт ЗҮҮН талд ({@link LayerSet.grid2}) */
+        !set.grid2,
       )}
     </div>
   ) : null;
@@ -5026,8 +5071,18 @@ function LayersBoard({
            өөрчлөхөд түлхүүрийг мөн солихгүй бол нэг удаа самбар
            нээсэн хэрэглэгчийн хуучин өргөн шинийг дарна (биотехникийн
            `biotech-2`-той нэг зарчим) */
-        id={`layers-${set.key}${set.tidy ? "-w" : ""}`}
-        left={listColumn ? (environment ? 228 : 286) : split ? 320 : undefined}
+        id={`layers-${set.key}${set.tidy ? "-w" : ""}${set.grid2 ? "-s" : ""}`}
+        left={
+          listColumn
+            ? environment
+              ? 228
+              : 286
+            : split
+              ? 320
+              : set.grid2 && chartsShown && !noMap
+                ? 400
+                : undefined
+        }
         /* Бүлэглэсэн багана энд сууна — 300px дээр гурван оны
          харьцуулалт зураас болно. Хэрэглэгч чирж өөрчилнө */
         /* ⚠⚠ `tidy` бүрдэлд БАРУУН БАГАНА ӨРГӨН (хэрэглэгч,
@@ -5040,7 +5095,9 @@ function LayersBoard({
            гарчгийг хоёр мөрөнд багтааж, зурагт зай үлдээнэ. */
         right={
           chartsShown && !noMap
-            ? set.tidy
+            ? set.grid2
+              ? 400
+              : set.tidy
               ? picker
                 ? 440
                 : 560
@@ -5052,6 +5109,11 @@ function LayersBoard({
         className="min-h-0 flex-1"
       >
         {/* ---- ЗҮҮН: давхаргын жагсаалт, эсвэл хамгийн урт диаграм ---- */}
+        {!picker && !split && set.grid2 && chartsShown && !noMap ? (
+          <div className="flex min-h-0 flex-col gap-2 overflow-y-auto">
+            {chartCards((id, b) => sideLeft(id, b), () => false, true)}
+          </div>
+        ) : null}
         {!picker && split ? (
           <div className="flex min-h-0 flex-col gap-2 overflow-y-auto">
             {chartCards(
@@ -5230,7 +5292,7 @@ function LayersBoard({
                   labelZoom: showLabels ? LABEL_ZOOM : OFF_ZOOM,
                   /* Нарийн дүрстэй давхаргад нимгэн хүрээ
                      ({@link LayerSet.thinEdge}) */
-                  edge: set.thinEdge ? "thin" : undefined,
+                  edge: set.thinEdge === "hair" ? "hair" : set.thinEdge ? "thin" : undefined,
                   /* Хүрээ гарах эсэх нь хэлтсийн сонголт
                      ({@link LayerSet.shapeOutline}) */
                   outline: set.shapeOutline !== false,
@@ -5441,6 +5503,7 @@ function LayersBoard({
               {views.length ? (
                 <TopicMapLegend
                   hideable={environment}
+                  compact={Boolean(set.legendCompact)}
                   groups={views.map(({ id, hit }) => {
                     const field = colorField(id);
                     const breakdown = hit.charts.find(
@@ -6286,7 +6349,9 @@ function DistrictBars({
   return (
     <div className={cn("flex flex-col", fill && "min-h-0 flex-1")}>
       {/* Өнгөний тайлбар ДЭЭР: мөрүүд доошоо сунахад тайлбар ба мөрийн
-          хооронд хоосон зай үүсэхгүй */}
+          хооронд хоосон зай үүсэхгүй. Ганц хэсэгтэй үед (ангилалгүй
+          давхарга) тайлбар ГАРАХГҮЙ — картын гарчиг аль хэдийн хэлнэ. */}
+      {parts.length > 1 ? (
       <div className="flex shrink-0 flex-wrap gap-x-3 gap-y-1 border-b border-line px-1 pb-2 text-[11px] text-ink-2">
         {parts.map((p) => {
           const swatch = (
@@ -6322,6 +6387,7 @@ function DistrictBars({
           );
         })}
       </div>
+      ) : null}
       <div
         className={cn(
           "pt-1",
@@ -6369,7 +6435,12 @@ function DistrictBars({
                           color: "#0b1a14",
                         }}
                       >
-                        {px >= text.length * 6.2 + 8 ? text : null}
+                        {/* Ганц хэсэгтэй зурвасын утга мөрийн ард аль
+                            хэдийн бичигдсэн — дотор нь ДАВТАХГҮЙ
+                            (хэрэглэгч 2026-10-23, ногоон бүсийн хэсэг) */}
+                        {parts.length > 1 && px >= text.length * 6.2 + 8
+                          ? text
+                          : null}
                       </span>
                     );
                   })}
@@ -6714,13 +6785,14 @@ function AxisCard({
     v == null ? <span className="text-ink-3">—</span> : num(Math.round(v));
   /* Зурвасын горимын гол багана — толгой ба нийт дүнд */
   const main = cols.find((c) => c.key === count.id);
+  const title = bars && count.kind !== "count" ? chartTitle(count) : count.label;
 
   return (
     <CutCard
       /* Зурвасын горимд хэмжилтийн диаграм ("Нэр" тэнхлэг — талбай)
          юуг хэмжсэнээ гарчигтаа хэлнэ: хүснэгтэд тэр нь баганын
          толгойд байсан */
-      title={bars && count.kind !== "count" ? chartTitle(count) : count.label}
+      title={title}
       tone={tone}
       first={first}
       weight={cardWeight(count)}
@@ -6728,9 +6800,19 @@ function AxisCard({
          картын тал хоосон үлддэг байв (хэрэглэгч, 2026-10-07) */
       full={full || (bars && !stretch && !fill)}
       fill={bars && fill}
-      meta={`${num(records)} ${one} · ${
-        count.top ? `эхний ${count.top}` : `${num(count.values.length)} ангилал`
-      }`}
+      low={compact}
+      /* Зурвас ТАЛБАЙГ хэмжвэл ({@link LayerSet.measureFirst}) толгой нь
+         бүртгэлийн тоо биш нийт талбай — "139 бүртгэл" нь зурвасуудтай
+         зөрдөг байв (хэрэглэгч 2026-10-23) */
+      meta={
+        count.measure && !count.top
+          ? headMeta(count, word)
+          : `${num(records)} ${one} · ${
+              count.top
+                ? `эхний ${count.top}`
+                : `${num(count.values.length)} ангилал`
+            }`
+      }
       action={
         /* Зурвасын горимд товчнууд БИЕД — гарчгийг хоёр мөр болгож
            шахдаг байв (доорхыг үзнэ үү) */
@@ -6779,8 +6861,10 @@ function AxisCard({
               картын гарчиг, нийт тоо нь толгойн мета-д аль хэдийн бий */}
           {compact ? null : (
           <div className="flex shrink-0 items-baseline justify-between gap-3 border-b border-line pb-1">
+            {/* Тэнхлэгийн нэр гарчигтай ижил бол ДАВТАХГҮЙ (ойн
+                хэсэглэл: "Тусгай хамгаалалттай газар" хоёр удаа) */}
             <span className="eyebrow min-w-0 truncate text-ink-3">
-              {axis.label}
+              {axes.length > 1 || axis.label !== title ? axis.label : ""}
             </span>
             <span className="eyebrow shrink-0 text-ink-3">
               {main
@@ -7240,7 +7324,10 @@ function AxisBars({
       <div
         className={cn(
           "flex flex-col gap-0.5",
-          spread && "min-h-0 flex-1 justify-evenly",
+          /* ⚠ `min-h-0` ТАВИХГҮЙ: мөр олон бол жагсаалт агуулгаараа
+             өндөрсөж карт ДОТРОО гүйнэ — эс тэгвээс мөрүүд агшиж
+             бичвэр нь зурвасан дээгүүр давхцдаг байв (2026-10-23) */
+          spread && "flex-1 justify-evenly",
         )}
       >
         {data.map((d, i) => {
@@ -7256,7 +7343,7 @@ function AxisBars({
               className={cn(
                 "grid w-full grid-cols-[auto_minmax(0,1fr)_auto] items-baseline gap-x-2.5 gap-y-1 rounded-xs px-1.5 py-1.5 text-left hover:bg-paper-hi focus-visible:outline-offset-[-2px]",
                 on && "bg-paper-hi",
-                spread && "max-h-[88px]",
+                spread && "max-h-[88px] shrink-0",
               )}
               style={on ? { boxShadow: `inset 2px 0 0 ${tone}` } : undefined}
             >
@@ -7308,15 +7395,31 @@ function AxisBars({
             {"0".repeat(pad)}
           </span>
           <div className="relative h-4 border-t border-line-2">
-            {ticks.map((v) => (
+            {ticks.map((v, ti) => (
               <span
                 key={v}
-                className="num absolute top-0 -translate-x-1/2 pt-0.5 text-[10px] text-ink-3"
+                className={cn(
+                  "num absolute top-0 pt-0.5 text-[10px] text-ink-3",
+                  /* Ирмэгийн шошго дотогшоо эгнэнэ — голлуулбал картаас
+                     хальж тасардаг байв ("8,00") */
+                  ti === 0
+                    ? "translate-x-0"
+                    : ti === ticks.length - 1
+                      ? "-translate-x-full"
+                      : "-translate-x-1/2",
+                )}
                 style={{ left: `${(v / top) * 100}%` }}
               >
                 <span
                   aria-hidden
-                  className="absolute -top-px left-1/2 h-1 w-px bg-line-2"
+                  className={cn(
+                    "absolute -top-px h-1 w-px bg-line-2",
+                    ti === 0
+                      ? "left-0"
+                      : ti === ticks.length - 1
+                        ? "right-0"
+                        : "left-1/2",
+                  )}
                 />
                 {format(v)}
               </span>
@@ -7860,6 +7963,7 @@ function CutCard({
   fit,
   source,
   bare,
+  low,
   children,
 }: {
   title: string;
@@ -7905,6 +8009,12 @@ function CutCard({
   source?: string;
   /** Гарчгийн мөр ГАРАХГҮЙ — биеийн эхний мөр (тайлбар) толгойн үүрэг гүйцэтгэнэ */
   bare?: boolean;
+  /**
+   * `fill` картын доод өндөр 220 → 150px (`.is-low`) — задарсан тэнхлэгийн
+   * урт жагсаалт ({@link LayerSet.unfold}) дотроо гүйж, БАГАНА гүйхгүй
+   * (хэрэглэгч 2026-10-23, ойн ТХГН: "ih scrolltoi").
+   */
+  low?: boolean;
   children: React.ReactNode;
 }) {
   return (
@@ -7915,6 +8025,7 @@ function CutCard({
         full && "is-full",
         fill && "is-fill",
         fill && fit && "is-fit",
+        fill && low && "is-low",
       )}
       style={
         {

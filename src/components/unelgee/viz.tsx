@@ -42,7 +42,10 @@ export function Matrix({
   unit = "",
   colTotals,
   total,
+  dense = false,
 }: {
+  /** Нягт мөр — `py-1.5` → `py-0.5` (ойн ТХГН, хэрэглэгч 2026-10-23: "ih scrolltoi") */
+  dense?: boolean;
   rows: Key[];
   cols: Key[];
   /** Нүдний утга — мөр × багана */
@@ -67,6 +70,7 @@ export function Matrix({
   colTotals?: (col: string) => number;
   total?: number;
 }) {
+  const pad = dense ? "py-0.5" : "py-1.5";
   const grid = React.useMemo(() => {
     const g = rows.map((r) => cols.map((c) => cell(r.key, c.key)));
     const rowTotal = g.map((line) => line.reduce((s, v) => s + v, 0));
@@ -91,7 +95,7 @@ export function Matrix({
         <caption className="sr-only">Дүүрэг болон сонгосон ангиллаар харьцуулсан {unit}</caption>
         <thead className="sticky top-0 z-10 bg-paper-2">
           <tr>
-            <th className="sticky left-0 z-20 bg-paper-2 border-b border-r border-line px-2 py-1.5 text-left font-normal">
+            <th className={`sticky left-0 z-20 bg-paper-2 border-b border-r border-line px-2 ${pad} text-left font-normal`}>
               <span className="eyebrow">{unit}</span>
             </th>
             {cols.map((c) => (
@@ -101,7 +105,7 @@ export function Matrix({
                   aria-pressed={colSel === c.key}
                   onClick={() => onCol(colSel === c.key ? null : c.key)}
                   className={cn(
-                    "block w-full px-1 py-1.5 text-center text-[10px] leading-tight font-medium transition-colors hover:bg-paper-hi",
+                    `block w-full px-1 ${pad} text-center text-[10px] leading-tight font-medium transition-colors hover:bg-paper-hi`,
                     colSel === c.key ? "text-ink" : "text-ink-2",
                   )}
                   style={{ opacity: dimCol(c.key) ? 0.4 : 1 }}
@@ -110,7 +114,7 @@ export function Matrix({
                 </button>
               </th>
             ))}
-            <th className="border-b border-l border-line px-2 py-1.5 text-right text-[10px] font-normal text-ink-3">
+            <th className={`border-b border-l border-line px-2 ${pad} text-right text-[10px] font-normal text-ink-3`}>
               Нийт
             </th>
           </tr>
@@ -127,7 +131,7 @@ export function Matrix({
                   aria-pressed={rowSel === r.key}
                   onClick={() => onRow(rowSel === r.key ? null : r.key)}
                   className={cn(
-                    "flex w-full items-center gap-1.5 px-2 py-1.5 text-left leading-tight transition-colors hover:bg-paper-hi",
+                    `flex w-full items-center gap-1.5 px-2 ${pad} text-left leading-tight transition-colors hover:bg-paper-hi`,
                     rowSel === r.key ? "font-medium text-ink" : "text-ink-2",
                   )}
                 >
@@ -153,7 +157,7 @@ export function Matrix({
                       disabled={!onCell || v === 0}
                       onClick={() => onCell?.(r.key, c.key)}
                       className={cn(
-                        "num block h-full w-full px-1 py-1.5 text-center transition-opacity",
+                        `num block h-full w-full px-1 ${pad} text-center transition-opacity`,
                         v ? "text-ink" : "text-ink-3",
                         onCell && v ? "hover:outline hover:outline-1 hover:outline-data/60" : "",
                       )}
@@ -173,7 +177,7 @@ export function Matrix({
                 );
               })}
               <td
-                className="num border-b border-l border-line px-2 py-1.5 text-right font-medium text-ink"
+                className={`num border-b border-l border-line px-2 ${pad} text-right font-medium text-ink`}
                 style={{ opacity: dimRow(r.key) ? 0.4 : 1 }}
               >
                 {num(grid.rowTotal[i])}
@@ -183,19 +187,19 @@ export function Matrix({
         </tbody>
         <tfoot>
           <tr>
-            <th className="sticky left-0 z-10 border-r border-line bg-paper-2 px-2 py-1.5 text-left text-[10px] font-normal text-ink-3">
+            <th className={`sticky left-0 z-10 border-r border-line bg-paper-2 px-2 ${pad} text-left text-[10px] font-normal text-ink-3`}>
               Нийт
             </th>
             {cols.map((c, j) => (
               <td
                 key={c.key}
-                className="num px-1 py-1.5 text-center font-medium text-ink"
+                className={`num px-1 ${pad} text-center font-medium text-ink`}
                 style={{ opacity: dimCol(c.key) ? 0.4 : 1 }}
               >
                 {num(grid.colTotal[j])}
               </td>
             ))}
-            <td className="num border-l border-line px-2 py-1.5 text-right font-semibold text-ink">
+            <td className={`num border-l border-line px-2 ${pad} text-right font-semibold text-ink`}>
               {num(grid.total)}
             </td>
           </tr>

@@ -575,7 +575,7 @@ async function portalLook(set: LayerSet, id: string, environment: boolean): Prom
     shapeOpts: {
       color: tone,
       labelZoom: minzoom,
-      edge: set.thinEdge ? "thin" : undefined,
+      edge: set.thinEdge === "hair" ? "hair" : set.thinEdge ? "thin" : undefined,
       outline: set.shapeOutline !== false,
       crisp: environment,
       labelUnique: set.labelBy != null,

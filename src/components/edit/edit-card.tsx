@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import dynamic from "next/dynamic";
-import { PencilLine, type LucideIcon } from "lucide-react";
+import { PencilLine, Plus, type LucideIcon } from "lucide-react";
 import { editTargets } from "@/lib/edit-targets";
 
 /*
@@ -16,7 +16,7 @@ const DataEditor = dynamic(() => import("./data-editor").then((m) => m.DataEdito
 
 export function EditCard({ scope, tab, label, full, icon }: { scope: string; tab: string; label: string; full?: string; icon?: LucideIcon }) {
   const targets = React.useMemo(() => editTargets(scope, tab), [scope, tab]);
-  const [open, setOpen] = React.useState(false);
+  const [open, setOpen] = React.useState<false | "add">(false);
   const has = targets.length > 0;
 
   return (
@@ -28,15 +28,18 @@ export function EditCard({ scope, tab, label, full, icon }: { scope: string; tab
           <h2>Өгөгдөл засах</h2>
         </div>
       </header>
-      <button type="button" className="dataset-edit-button" disabled={!has} onClick={() => setOpen(true)} title={has ? (full ?? label) : undefined}>
-        <PencilLine size={14} strokeWidth={1.8} />
-        <span>{has ? "Засварлах" : "Засварлах давхарга байхгүй"}</span>
-        {has && <span className="dataset-edit-count num">{targets.length} давхарга</span>}
+      {/* "Засварлах" товч ХАСАГДСАН (хэрэглэгч 2026-10-22: "data shinechleh hsg
+          hrggui bolchloo") — хуучин бүртгэлийг засварлагч доторх "Сонгох"
+          хэрэгслээр засах боломж хэвээр. */}
+      <button type="button" className="dataset-edit-button is-add" disabled={!has} onClick={() => setOpen("add")} title={has ? (full ?? label) : undefined}>
+        <Plus size={14} strokeWidth={2} />
+        <span>{has ? "Шинэ бүртгэл нэмэх" : "Бүртгэх давхарга байхгүй"}</span>
       </button>
       {open && (
         <DataEditor
           source={{ scope, label, icon }}
           targets={targets}
+          startAdd={open === "add"}
           onClose={(changed) => {
             setOpen(false);
             if (changed) window.location.reload();
