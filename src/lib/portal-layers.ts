@@ -305,6 +305,16 @@ export type LayerSet = {
    * нэг утгат — эс тэгвээс мөрийн нийт ч давхарна.
    */
   cross?: Readonly<Record<string, readonly [string, string]>>;
+  /** Хөндлөн хүснэгт ГАРАХГҮЙ давхаргууд (гадаргын ус — "энгийн болго") */
+  noCross?: readonly string[];
+  /**
+   * ХӨНДЛӨН ХҮСНЭГТИЙН БАГАНА ТОГТМОЛ (хэрэглэгч, 2026-10-22, гадаргын
+   * ус: "Төрөл × он хүснэгт"). Давхаргын НЭГ утгат тоолол БҮР мөр болж,
+   * багана нь энэ талбарын утга (он) — тэнхлэг тус бүр өөрийн хүснэгт.
+   * Тэр задаргаанууд зурвас болж ДАВТАГДАХГҮЙ.
+   * ⚠ Баганын талбар диаграмгүй байж болно (`chartSkip`) — утгыг мөрөөс шууд.
+   */
+  crossBy?: Readonly<Record<string, string>>;
   /**
    * АНГИЛЛЫН ДИАГРАМЫН ДЭЭД ТОО — анхдагч {@link MAX_CATEGORIES} (4).
    *
@@ -329,6 +339,8 @@ export type LayerSet = {
    * Олон мянган цэгтэй давхаргад: гэрэл нь нийлж толбо болдог.
    */
   dots?: Record<string, Record<string, number>>;
+  /** Цэг ArcGIS Online-ийн Firefly тэмдгээр, ангиллын өнгөөр (`WellsMap esriFirefly`) */
+  fireflyPoints?: boolean;
   /** Зураг дээрх цэгийн хэмжээний үржүүлэгч ({@link WellsMap} `pointScale`), анхдагч 1 */
   pointScale?: number;
   /**
@@ -380,6 +392,11 @@ export type LayerSet = {
   foldLoose?: Record<string, RegExp>;
   /** Бөөгнөрөл ЭНЭ түвшнээс цааш задарна (анхдагч 15) */
   clusterMaxZoom?: number;
+  /**
+   * Бөөгнөрлийн радиус, px (анхдагч 48). Олон мянган цэгтэй давхаргад
+   * ихэсгэвэл холоос цөөн, том бөөгнөрөл болж зураг цэгцэрнэ.
+   */
+  clusterRadius?: number;
   /** Анхны суурь зураг ({@link BASEMAPS}-ийн `id`) — өгөөгүй бол хиймэл дагуул */
   basemap?: string;
   /**
@@ -513,6 +530,12 @@ export type LayerSet = {
    */
   layerLabel?: string;
   /**
+   * БҮСИЙН ХУУДАСНЫ БҮЛГИЙН НЭР — хуваагдаагүй давхаргуудын (хамгаалалтын
+   * гурван бүс) бүлэг. Хуваагдсан давхарга ({@link splitZones}) өөрийн
+   * нэрээр бүлэг болно. Бүлэг хоёроос цөөн бол толгой гарахгүй.
+   */
+  zoneGroup?: string;
+  /**
    * ТАЛБАРААР ШҮҮХ УНЖДАГ ЦЭС гарах эсэх (анхдагчаар гарна).
    *
    * ⚠⚠ Ногоон бүсийн хэлтэст `false` (хэрэглэгч, 2026-09-29, зургаар:
@@ -574,6 +597,9 @@ export type LayerSet = {
    * ⚠ Талбарын нэрээр түлхүүрлэнэ ({@link fields}-тэй ижил), жагсаасан
    * ДАРААЛЛААР нь эгнэнэ. Бусад диаграм тэдний доор, өөрсдийн
    * эрэмбээрээ үлдэнэ.
+   *
+   * ⚠ Хуудасны ({@link sheet}) хэсгийн дараалалд харагдах НЭР
+   * (`Breakdown.label`) ч таарна — талбарын нэр нь мэдэгдээгүй үед.
    */
   lead?: string[];
   /**
@@ -676,6 +702,18 @@ export type LayerSet = {
    */
   labelBy?: string;
   /**
+   * ЦЭГИЙН ШОШГО ЭНЭ ТАЛБАРААС (хэрэглэгч, 2026-10-22: "label pointiin
+   * turluuruu asna"). Зөвхөн зургийн шошгонд — бичлэгийн цонхны нэр,
+   * нэрийн тэнхлэг `labelBy`/`nameField`-ээрээ хэвээр.
+   */
+  pointLabel?: string;
+  /**
+   * ШОШГО АСАХ ХАРЬЦАА (анхдагч 1:496 000). Нягт цэгтэй давхаргад
+   * алсаас шошго нь зургийг бүрхэнэ (гадаргын ус, 2026-10-22: "map
+   * zasaarai") — тэнд ойртсон үед л.
+   */
+  labelScale?: number;
+  /**
    * "Талбай, га — дүрс тус бүрээр" карт гарах эсэх (анхдагчаар гарна).
    *
    * ⚠ Татамд `false` (хэрэглэгч, 2026-10-02: "энэ чартад харуулах
@@ -747,7 +785,7 @@ export type LayerSet = {
    * нэгж талбарын карт мөн сав газар тус бүрээр.
    * ⚠ Өнгө нь зургийн палитраас — карт нь газрын зургийн тайлбар.
    */
-  splitZones?: boolean;
+  splitZones?: boolean | string[];
   /**
    * ГАНЦ БИЧЛЭГТЭЙ ДАВХАРГЫН НЭРИЙН БАГАНЫН ЗААЛТ — талбарын нэр
    * эсвэл alias-д таарах хэв.
@@ -917,6 +955,21 @@ export type LayerSet = {
    */
   hueSpan?: Record<string, readonly [number, number]>;
   /**
+   * АНГИЛАЛ БҮР ТОД, ЯЛГААТАЙ ӨНГӨ — давхаргууд, утгыг нь мэдэхгүй ч
+   * (хэрэглэгч, 2026-10-22: Ус ашиглалтын "mapuud zasay"). Ангилал нь
+   * тоогоор буурах дарааллаар {@link CATEGORY_HEX}-ийн өнгийг авна;
+   * "Бүртгэгдээгүй" ба илүүдэл ангилал саарал. Гадаргын усны гараар
+   * сонгосон палитртай нэг гэр бүл — `valueColors` давуу эрхтэй.
+   */
+  categorical?: readonly string[];
+  /**
+   * `false` бол НЭРИЙН баганаар хэмжсэн диаграм ("Ус ашиглагчийн нэр —
+   * эхний 20") гарахгүй. Зургийн шошго нэрээрээ ХЭВЭЭР — хасалт нь
+   * зөвхөн диаграмд (хэрэглэгч 2026-10-22, тоолуурын мэдээ: "ene
+   * hereggui"). Иргэдийн нэр жагсаалт болж гарахаас ч сэргийлнэ.
+   */
+  nameCharts?: false;
+  /**
    * ОЙРТОХОД НЭГЖ ТАЛБАРЫН ХИЛ ӨӨРӨӨ ГАРНА (хэрэглэгч, 2026-10-06:
    * "ойртохоор parcel хил харагддаг болгоорой").
    *
@@ -1058,6 +1111,28 @@ export type LayerSet = {
    * бүртгэл өгнө — эх сурвалжийн alias-аас ("мян.₮ нийт") угсрахгүй.
    * ⚠ Багана нь олдохгүй карт, он ЧИМЭЭГҮЙ алгасагдана.
    */
+  /**
+   * ⚠⚠ ИЖИЛ НЭГЖТЭЙ ХЭМЖИЛТҮҮДИЙГ ХАРЬЦУУЛАЛТАД НИЙЛҮҮЛЭХГҮЙ
+   * (давхаргын дугаараар; хэрэглэгч 2026-10-22, ус ашиглагчийн гэрээ:
+   * "чартуудыг нь засаарай" → "хэт ойлгомжгүй" → "нэг хүснэгт").
+   * "Харьцуулалт, м³/жил — Салбар" гэсэн бүлэглэсэн багана нь урт нэрийг
+   * тайрч, нийт дүн хаана ч гаргадаггүй байв. Тугтай давхаргад хэмжилт
+   * бүр ДАН нийлбэр болж, `tidy` бүрдлийн нэгдсэн тэнхлэгийн хүснэгтэд
+   * ({@link AxisCard}) тооллын хажууд ӨӨРИЙН БАГАНА болно — мөр нь
+   * салбар, ёроолд нийт дүн.
+   * ⚠ "Хэмжилт бүр өөр карт" хувилбар ТУРШИЖ БУЦААГДСАН — дахин бүү
+   * санал болго.
+   */
+  splitMeasures?: readonly string[];
+  /**
+   * ⚠⚠ ХУУДАСНЫ ХАРАГДАЦ (хэрэглэгч 2026-10-22, Archimap-ийн ANALYSIS
+   * самбарын зургаар: "цэвэрхэн, ойлгомжтой, энгийн"). Баруун баганын
+   * карт, хүснэгтийн оронд хураагддаг хэсгүүд: ТОЙМ (хоёр баганат том
+   * тоо) → тэнхлэг бүр (өнгөт дөрвөлжин · нэр · тоо, доор нь нимгэн
+   * зурвас; хэмжилтийн сэлгэгч) → хугацаа (багана, оргил, муж).
+   * Хөндлөн хүснэгт, харьцуулалт энэ горимд ГАРАХГҮЙ.
+   */
+  sheet?: boolean;
   measureCards?: Record<
     string,
     {
@@ -1077,7 +1152,61 @@ export type LayerSet = {
       }[];
     }
   >;
+  /**
+   * НЭГТГЭСЭН ДАВХАРГА — хэд хэдэн эх сурвалжийг НЭГ бүртгэл болгоно
+   * (хэрэглэгч, 2026-10-22, гадаргын ус: "hoorond n negtgeed onoor n l
+   * shuuyaa"). Түлхүүр нь `layers`-д бичигдэх ХИЙСВЭР давхаргын нэр;
+   * самбар түүнийг энгийн давхарга мэт харна.
+   * ⚠ Эх давхарга бүр ӨӨРИЙН дүрмээр татагдана (токен, `values`,
+   * бичиглэлийн нэгтгэл) — нэгтгэл нь зөвхөн мөрийг НИЙТЛЭГ талбарт
+   * буулгана ({@link UnionField}).
+   * ⚠ Дугаар нь эх тус бүрээр нэрийн орон зайд орно
+   * (`эхийн индекс × UNION_STRIDE + oid`) — хоёр давхарга хоёулаа
+   * 1-ээс эхэлдэг.
+   */
+  unions?: Readonly<Record<string, LayerUnion>>;
+  /**
+   * ШҮҮЛТҮҮРИЙН МӨРИЙН ЭХЭНД УТГЫН ТОВЧ ("Бүгд · 2021 · … · 2026").
+   * Талбар нь диаграмгүй байж болно ({@link chartSkip}) — шүүлт нь
+   * мөрийн утгаар шууд ажиллана.
+   */
+  pickBar?: { layer: string; field: string; label: string };
+  /**
+   * ОГНООГООР ШҮҮХ МӨР шүүлтүүрийн мөрийн эхэнд — он (ба `Date` талбарт
+   * сар) сонгоно ({@link dateAxes}). `pickBar`-тай бүрдэлд гарахгүй.
+   */
+  dateBar?: boolean;
 };
+
+/** Нэгтгэсэн давхаргын нэг эх */
+export type UnionPart = {
+  layer: string;
+  /** Бүх мөрд онооно — тухайн эх нь нэг оных бол (тооллого 2026) */
+  year?: string;
+};
+
+/**
+ * Нийтлэг талбар. `pick`-ийн `get` нь эх давхаргын талбарыг НЭР ЭСВЭЛ
+ * ALIAS-аар нь хайна (таарсан талбаруудын эхний ХООСОН БИШ утга) —
+ * талбарын нэрийг кодод бичихгүй, эх сурвалж өөрчлөгдөхөд тэсвэртэй.
+ */
+export type UnionField = LayerField & {
+  pick: (
+    get: (re: RegExp) => unknown,
+    part: UnionPart,
+    /** Эх мөр ба түүний талбарууд — бүх баганыг гүйх шаардлагатай үед (он) */
+    row: Row,
+    fields: readonly LayerField[],
+  ) => unknown;
+};
+
+export type LayerUnion = {
+  parts: readonly UnionPart[];
+  fields: readonly UnionField[];
+};
+
+/** Нэгтгэлд эх тус бүрийн дугаарын зай — давхарга бүр 100 мянгаас цөөн бичлэгтэй */
+const UNION_STRIDE = 100_000;
 
 /** Давхаргын харагдах нэр — бүртгэлд байхгүй бол үйлчилгээнийхээр */
 export function layerName(
@@ -1205,7 +1334,7 @@ export function isSystemField(name: string, alias = ""): boolean {
 
 /** KML-ээс хөрвүүлсэн давхаргын үлдэц талбарууд — утга агуулдаггүй */
 const KML_NOISE =
-  /^(SymbolID|AltMode|Base|Clamped|Extruded|Snippet|PopupInfo)$/i;
+  /^(SymbolID|AltMode|Base|Clamped|Extruded|Snippet|PopupInfo|Folder|FolderPath)$/i;
 
 type ServiceMeta = {
   layers?: { id: number; name: string; geometryType?: string }[];
@@ -1291,6 +1420,10 @@ async function loadLayerInfo(
       /* Түлхүүр нь талбарын нэр, эсвэл эх сурвалжийн alias — нэр нь
          токенгүйгээр уншигдаагүй давхаргад alias-аар дарна */
       alias:
+        /* "давхарга/талбар" түлхүүр нь ЗӨВХӨН тэр давхаргад — нэг цэсэд
+           ижил нэртэй талбар өөр утгатай байж болно (татмын `name` нь
+           сав газар, хамгаалалтын бүсийнх биш; 2026-10-23) */
+        set.fields?.[`${id}/${f.name}`] ??
         set.fields?.[f.name] ??
         set.fields?.[(f.alias ?? "").trim()] ??
         officialLabel((f.alias ?? "").trim() || f.name),
@@ -3310,9 +3443,12 @@ function measureCharts(
   by: LayerField,
   keyOf: (row: Row) => string[],
   limit?: number,
+  split = false,
 ): Breakdown[] {
   const out: Breakdown[] = [];
   if (!measures.length) return out;
+  /* {@link LayerSet.splitMeasures} — нэгтгэлгүй, хэмжилт бүр дан нийлбэр */
+  const cap = split ? MAX_MEASURE_FIELDS : MAX_MEASURES;
 
   /*
     ⚠ ГАНЦ БАГАНАТАЙ диаграм харьцуулалт БИШ.
@@ -3350,7 +3486,7 @@ function measureCharts(
   /* Ижил нэгжтэй, НЭМЭГДДЭГ хэмжилтүүд — нэг харьцуулалт */
   const byUnit = new Map<string, Measure[]>();
   for (const m of usable) {
-    if (!m.unit || m.share) continue;
+    if (split || !m.unit || m.share) continue;
     const list = byUnit.get(m.unit) ?? [];
     list.push(m);
     byUnit.set(m.unit, list);
@@ -3439,7 +3575,7 @@ function measureCharts(
   for (const m of usable) {
     if (merged.has(m.field.name)) continue;
     /* Харьцуулалтууд аль хэдийн суудлаа эзэлсэн байж болно */
-    if (out.length >= MAX_MEASURES) break;
+    if (out.length >= cap) break;
 
     const count = (rs: Row[]): Counted => {
       const vs = rollUp(m, rs, keyOf);
@@ -3459,7 +3595,7 @@ function measureCharts(
     });
   }
 
-  return out.slice(0, MAX_MEASURES);
+  return out.slice(0, cap);
 }
 
 /**
@@ -3775,6 +3911,74 @@ function chartInfo(info: LayerInfo): LayerInfo {
   };
 }
 
+/**
+ * ОГНООГООР ШҮҮХ ТЭНХЛЭГ ({@link LayerSet.dateBar}; хэрэглэгч 2026-10-22:
+ * "ontoi datanuud deer deed hsgt n ognoogoor shuuh hsg").
+ *
+ * Давхаргын огноо агуулсан талбар бүр — `Date` төрөл, эсвэл он гэж
+ * танигдсан тоон багана (`Date` байхгүй үед л). Диаграм нь
+ * {@link YEAR_DENSITY}-оор нуугдсан байсан ч шүүлт БОЛОМЖТОЙ хэвээр.
+ *
+ * ⚠ Шүүлтийн түлхүүр нь хугацааны диаграмынхтай ИЖИЛ
+ * (`<талбар>\0year`, `<талбар>\0month`) — нэг он диаграм дээр ч, дээд
+ * товч дээр ч НЭГ төлөвөөр тодорно.
+ * ⚠ Хоёроос цөөн ОН бөглөгдсөн талбар орохгүй: сонгох зүйл байхгүй.
+ */
+export type DateAxis = {
+  field: string;
+  label: string;
+  yearOf: (row: Row) => number | null;
+  /** Зөвхөн `Date` талбарт — тусдаа сарын багана сараа өөрөө хэлдэггүй */
+  monthOf: ((row: Row) => number | null) | null;
+  /** Бөглөгдсөн онууд, өсөхөөр */
+  years: number[];
+};
+
+export function dateAxes(info: LayerInfo, data: LayerFeatures): DateAxis[] {
+  const rows = Object.values(data.rows);
+  const yearsOf = (yearOf: (row: Row) => number | null) => {
+    const seen = new Set<number>();
+    for (const r of rows) {
+      const y = yearOf(r);
+      if (y != null) seen.add(y);
+    }
+    return [...seen].sort((a, b) => a - b);
+  };
+  const out: DateAxis[] = [];
+  for (const f of info.fields) {
+    if (f.type !== "Date") continue;
+    const yearOf = (row: Row) => dateOf(row[f.name])?.getUTCFullYear() ?? null;
+    const years = yearsOf(yearOf);
+    if (years.length < 2) continue;
+    out.push({
+      field: f.name,
+      label: f.alias,
+      yearOf,
+      monthOf: (row) => {
+        const d = dateOf(row[f.name]);
+        return d ? d.getUTCMonth() + 1 : null;
+      },
+      years,
+    });
+  }
+  if (out.length) return out;
+  for (const f of info.fields) {
+    if (!NUMERIC.test(f.type)) continue;
+    const nums = rows
+      .map((r) => numberOf(r[f.name]))
+      .filter((v): v is number => v != null);
+    if (nums.length < MIN_VALUES || calendarOf(f, nums) !== "year") continue;
+    const yearOf = (row: Row) => {
+      const y = numberOf(row[f.name]);
+      return y != null && y > 1900 && y < 2200 ? Math.round(y) : null;
+    };
+    const years = yearsOf(yearOf);
+    if (years.length < 2) continue;
+    out.push({ field: f.name, label: f.alias, yearOf, monthOf: null, years });
+  }
+  return out;
+}
+
 export function breakdowns(full: LayerInfo, data: LayerFeatures): Breakdown[] {
   const out = autoBreakdowns(full, data);
   /* Бүртгэлийн нэмэлт хураасан диаграм ({@link LayerSet.topCharts}) */
@@ -3892,7 +4096,16 @@ function autoBreakdowns(full: LayerInfo, data: LayerFeatures): Breakdown[] {
   if (primary) {
     /* Хэмжилт бүрийг ангиллаар нь задална. Нэг бичлэг НЭГ ангилалд
        харьяалагддаг тул `keys[i][0]` хангалттай */
-    out.push(...measureCharts(measures, rows, primary.field, primary.keyOf));
+    out.push(
+      ...measureCharts(
+        measures,
+        rows,
+        primary.field,
+        primary.keyOf,
+        undefined,
+        info.set.splitMeasures?.includes(info.id) === true,
+      ),
+    );
   }
 
   /*
@@ -3905,7 +4118,7 @@ function autoBreakdowns(full: LayerInfo, data: LayerFeatures): Breakdown[] {
     хариулт өгнө.
   */
   const named = nameField(info, rows, kept);
-  if (named) {
+  if (named && info.set.nameCharts !== false) {
     const keyOf = (row: Row) => [categoryKey(row[named.name])];
     out.push(...measureCharts(measures, rows, named, keyOf, TOP_ROWS));
   }
@@ -4328,10 +4541,123 @@ export function fetchLayerInfo(
   id: string,
   signal?: AbortSignal,
 ): Promise<LayerInfo> {
+  const union = set.unions?.[id];
+  if (union)
+    return abortable(
+      memo(infoCache, `union:${set.key}:${id}`, () =>
+        loadUnionInfo(set, id, union),
+      ),
+      signal,
+    );
   return abortable(
     memo(infoCache, serviceOf(set, id), () => loadLayerInfo(set, id)),
     signal,
   );
+}
+
+/** Нэгтгэсэн давхаргын эх давхаргууд — {@link fetchLayerFeatures} эндээс уншина */
+const unionParts = new WeakMap<LayerInfo, LayerInfo[]>();
+
+async function loadUnionInfo(
+  set: LayerSet,
+  id: string,
+  union: LayerUnion,
+): Promise<LayerInfo> {
+  const parts = await Promise.all(
+    union.parts.map((p) => fetchLayerInfo(set, p.layer)),
+  );
+  const info: LayerInfo = {
+    id,
+    set,
+    name: set.names[id] ?? id,
+    geometry: parts[0]?.geometry ?? "Point",
+    layerId: 0,
+    objectIdField: "objectid",
+    areaField: null,
+    areaInHa: false,
+    count: parts.reduce((n, p) => n + p.count, 0),
+    pageSize: Math.min(...parts.map((p) => p.pageSize)),
+    fields: union.fields.map(({ name, alias, type }) => ({ name, alias, type })),
+  };
+  unionParts.set(info, parts);
+  return info;
+}
+
+/** Нэг давхаргын атрибут, геометр — хоёр үе шат тус тусдаа кэштэй */
+function stagesOf(info: LayerInfo) {
+  const key = `${serviceOf(info.set, info.id)}/${info.layerId}`;
+  return {
+    rows: memo(rowsCache, key, () => loadLayerRows(info)),
+    shapes: memo(shapesCache, key, () => loadLayerShapes(info)),
+  };
+}
+
+/** Эх давхаргын талбарыг нэр эсвэл alias-аар нь хайгч */
+function getter(fields: readonly LayerField[]) {
+  const cache = new Map<RegExp, string[]>();
+  return (row: Row) => (re: RegExp) => {
+    let names = cache.get(re);
+    if (!names) {
+      names = fields
+        .filter((f) => re.test(f.name) || re.test(f.alias))
+        .map((f) => f.name);
+      cache.set(re, names);
+    }
+    for (const n of names) {
+      const v = row[n];
+      if (v != null && !(typeof v === "string" && !v.trim())) return v;
+    }
+    return null;
+  };
+}
+
+/** Нэгтгэсэн давхаргын хоёр үе шат — эх бүрийг өөрийн кэшээр татна */
+const unionCache = new WeakMap<
+  LayerInfo,
+  { rows: Promise<LayerRows>; shapes: Promise<GeoJSON.Feature[]> }
+>();
+
+function unionStages(info: LayerInfo, parts: LayerInfo[]) {
+  let hit = unionCache.get(info);
+  if (!hit) {
+    hit = mergeStages(info, parts);
+    unionCache.set(info, hit);
+    hit.rows.catch(() => unionCache.delete(info));
+    hit.shapes.catch(() => unionCache.delete(info));
+  }
+  return hit;
+}
+
+function mergeStages(info: LayerInfo, parts: LayerInfo[]) {
+  const union = info.set.unions![info.id];
+  const rows = Promise.all(parts.map((p) => stagesOf(p).rows)).then(
+    (all): LayerRows => {
+      const out: Record<number, Row> = {};
+      all.forEach((r, k) => {
+        const part = union.parts[k];
+        const get = getter(parts[k].fields);
+        for (const [oid, row] of Object.entries(r.rows)) {
+          const uid = k * UNION_STRIDE + Number(oid);
+          const g = get(row);
+          const next: Row = { objectid: uid };
+          for (const f of union.fields)
+            next[f.name] = f.pick(g, part, row, parts[k].fields) ?? null;
+          out[uid] = next;
+        }
+      });
+      return { rows: out, area: {} };
+    },
+  );
+  const shapes = Promise.all(parts.map((p) => stagesOf(p).shapes)).then(
+    (all) =>
+      all.flatMap((list, k) =>
+        list.map((f) => {
+          const uid = k * UNION_STRIDE + Number(f.id);
+          return { ...f, id: uid, properties: { oid: uid } };
+        }),
+      ),
+  );
+  return { rows, shapes };
 }
 
 const NO_SHAPES: GeoJSON.FeatureCollection = {
@@ -4350,9 +4676,8 @@ export function fetchLayerFeatures(
   signal?: AbortSignal,
   onRows?: (partial: LayerFeatures) => void,
 ): Promise<LayerFeatures> {
-  const key = `${serviceOf(info.set, info.id)}/${info.layerId}`;
-  const rows = memo(rowsCache, key, () => loadLayerRows(info));
-  const shapes = memo(shapesCache, key, () => loadLayerShapes(info));
+  const parts = unionParts.get(info);
+  const { rows, shapes } = parts ? unionStages(info, parts) : stagesOf(info);
   if (onRows) {
     void rows.then(
       (r) => {
@@ -4369,4 +4694,15 @@ export function fetchLayerFeatures(
     })),
     signal,
   );
+}
+
+/**
+ * Давхарга сав газраараа (тэргүүлэх ангиллаараа) бүс болж хуваагдах эсэх
+ * ({@link LayerSet.splitZones}) — `true` бол цэсийн бүх давхарга, жагсаалт
+ * бол зөвхөн тэд (хамгаалалтын бүс + голын татам нэг цэст, 2026-10-23).
+ */
+export function splitsZones(set: LayerSet, id: string): boolean {
+  return Array.isArray(set.splitZones)
+    ? set.splitZones.includes(id)
+    : Boolean(set.splitZones);
 }

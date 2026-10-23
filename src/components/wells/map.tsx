@@ -816,6 +816,7 @@ When(n >= 10000, Text(Round(n / 1000)) + "k", n >= 1000, Text(Round(n / 1000, 1)
 type Mode = {
   cluster: boolean;
   clusterMaxZoom: number;
+  clusterRadius: number;
   clusterLabel: "inside" | "badge";
   weighted: boolean;
   graded: [number, string][] | undefined;
@@ -828,6 +829,8 @@ type Mode = {
   fire: Fire;
   tinted: boolean;
   dots: { rank?: Record<string, number> } | null;
+  /** Esri-ийн Firefly зурган тэмдэг ангиллын өнгөөр ({@link WellsMap} `esriFirefly`) */
+  esriFire: boolean;
   /** Цэгийн хэмжээний үржүүлэгч (зэрэглэлгүй цэгт), анхдагч 1 */
   pointScale: number;
   shapeLabelZoom: number;
@@ -947,6 +950,7 @@ function shapeRenderer(m: Mode, colors: string[], sym: (m: Mode, c: string, lit:
 }
 
 function pointSymbolFor(m: Mode): (tint: string | null) => any {
+  if (m.esriFire) return (t) => gradedMultiSymbol(t ?? m.fire.glow);
   if (m.dots) return (t) => dotSymbol(m.fire, t);
   return (t) => fireSymbol(m.fire, t, m.tinted);
 }
@@ -962,7 +966,14 @@ function pointRenderer(m: Mode, colors: string[]) {
     return gradeRenderer(stops, gradedSymbol, sizeByValue(lo, hi, 2.4));
   }
   const sym = pointSymbolFor(m);
-  const base: [number, number][] = m.dots
+  const base: [number, number][] = m.esriFire
+    ? [
+        /* Firefly-ийн гэрэл 20pt — тэмдгийн хамгийн том давхарга */
+        [8, 7],
+        [12, 10],
+        [16, 15],
+      ]
+    : m.dots
     ? [
         [9, 3.4],
         [12, 5.6],
@@ -1012,6 +1023,7 @@ function WellsMapBody({
   focus = null,
   cluster = true,
   clusterMaxZoom = 15,
+  clusterRadius = 48,
   clusterLabel = "inside",
   marks,
   pulse = false,
@@ -1022,6 +1034,7 @@ function WellsMapBody({
   firefly,
   colors,
   dots,
+  esriFirefly = false,
   pointScale,
   highlight = null,
   overlays,
@@ -1070,6 +1083,8 @@ function WellsMapBody({
   cluster?: boolean;
   /** Бөөгнөрөл ЭНЭ түвшнээс цааш задарна (MapLibre-ийн zoom, анхдагч 15) */
   clusterMaxZoom?: number;
+  /** Бөөгнөрлийн радиус, px (анхдагч 48). ЗӨВХӨН анхны зурагдалтад */
+  clusterRadius?: number;
   /** Тоог дугуйн дотор бичих үү, баруун дээд буланд тэмдэг болгох уу */
   clusterLabel?: "inside" | "badge";
   /**
@@ -1111,6 +1126,12 @@ function WellsMapBody({
    * зурах дараалал; их нь ДЭЭР.
    */
   dots?: { rank?: Record<string, number> };
+  /**
+   * ARCGIS ONLINE-ИЙН FIREFLY ТЭМДЭГ (хэрэглэгч, 2026-10-22: "arcgis online
+   * map deer bdg shig firefly"). Цагаан цөм + ангиллын өнгөөр будсан
+   * гэрэл — хөрсний мониторингийн `grades.firefly: "graded"`-тэй НЭГ зураг.
+   */
+  esriFirefly?: boolean;
   /** Цэгийн хэмжээний үржүүлэгч (зэрэглэлгүй цэгт), анхдагч 1 */
   pointScale?: number;
   /** Тодруулах цэгийн байрлал `[lon, lat]` — гэрэлтэх цагираг */
@@ -1247,6 +1268,7 @@ function WellsMapBody({
   const modeRef = React.useRef<Mode>({
     cluster,
     clusterMaxZoom,
+    clusterRadius,
     clusterLabel,
     weighted: Boolean(weights),
     graded: grades?.stops,
@@ -1259,6 +1281,7 @@ function WellsMapBody({
     fire: firefly ?? FIREFLY,
     tinted: Boolean(colors),
     dots: dots ?? null,
+    esriFire: esriFirefly,
     pointScale: pointScale ?? 1,
     shapeLabelZoom: shapes?.labelZoom ?? 0,
     shapeFlow: Boolean(shapes?.flow),
@@ -1435,7 +1458,7 @@ function WellsMapBody({
                      замбараагүй харагдаж байв (2026-10-23). Одоо cyan дүүргэлттэй
                      дугуй (42%), тоо нь ДОТОРОО, бөөгнөрлийн радиус илүү өргөн.
                      Бараан цул дүүргэлт "онцгүй" гэж буцаагдсан. */
-                  clusterRadius: badge ? "72px" : "48px",
+                  clusterRadius: badge ? "72px" : `${mode.clusterRadius}px`,
                   clusterMinSize: `${pt(badge ? 12 : 10)}pt`,
                   clusterMaxSize: `${pt(badge ? 28 : 38)}pt`,
                   maxScale: scaleAt(mode.clusterMaxZoom),
