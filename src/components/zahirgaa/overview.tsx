@@ -21,6 +21,7 @@ import Link from "next/link";
 import {
   ArrowUpRight,
   ChevronDown,
+  UserCog,
   Landmark,
   Network,
   UserCheck,
@@ -34,11 +35,13 @@ import {
   LEAD_DEPT,
   ORG_NAME,
   ZAHIRGAA_LAYERS,
+  canEditEvents,
   fetchStaff,
   type Staff,
 } from "@/lib/zahirgaa";
 import { cn, num } from "@/lib/utils";
 import { EventsCalendar } from "./events-calendar";
+import { StaffEditor } from "./staff-editor";
 
 const DEPT = getDepartment("zahirgaa")!;
 
@@ -55,8 +58,10 @@ type Load<T> =
  * Төлөв нь хариунаас ДАМ гарна (`res.url`): эффект дотор синхроноор
  * `set*` дуудахыг `react-hooks/set-state-in-effect` хориглодог.
  */
-function useLayer<T>(url: string, load: (signal: AbortSignal) => Promise<T[]>): Load<T> {
+function useLayer<T>(url: string, load: (signal: AbortSignal) => Promise<T[]>, rev = 0): Load<T> {
   const [res, setRes] = React.useState<{ url: string; rows?: T[]; error?: string } | null>(null);
+  /* `rev` өөрчлөгдөхөд (засвар хадгалагдсан) дахин татна — хуучин мөрүүд
+     шинэ нь ирэх хүртэл харагдсаар, "Ачаалж байна" анивчихгүй */
   React.useEffect(() => {
     if (!url) return;
     const ac = new AbortController();
@@ -68,7 +73,7 @@ function useLayer<T>(url: string, load: (signal: AbortSignal) => Promise<T[]>): 
       },
     );
     return () => ac.abort();
-  }, [url, load]);
+  }, [url, load, rev]);
   if (!url) return { state: "pending" };
   if (!res || res.url !== url) return { state: "loading" };
   if (res.error !== undefined) return { state: "error", message: res.error };
@@ -78,7 +83,16 @@ function useLayer<T>(url: string, load: (signal: AbortSignal) => Promise<T[]>): 
 /* ------------------------------------------------------------------ */
 
 export function ZahirgaaOverview() {
-  const staff = useLayer(ZAHIRGAA_LAYERS.staff, fetchStaff);
+  const [staffRev, setStaffRev] = React.useState(0);
+  const staff = useLayer(ZAHIRGAA_LAYERS.staff, fetchStaff, staffRev);
+  /** Засах эрх — календарийн засварлагч бүлэг (хэрэглэгчийн шийдвэр 2026-10-26) */
+  const [editable, setEditable] = React.useState(false);
+  const [editing, setEditing] = React.useState(false);
+  React.useEffect(() => {
+    const ac = new AbortController();
+    canEditEvents(ac.signal).then(setEditable, () => {});
+    return () => ac.abort();
+  }, []);
   /** Сонгосон хэлтэс (бүлгийн түлхүүр) — албан тушаалын жагсаалтыг шүүж, бүтцэд тодорно */
   const [picked, setPicked] = React.useState<string | null>(null);
 
@@ -98,9 +112,10 @@ export function ZahirgaaOverview() {
           дотроо гүйнэ. Нарийн дэлгэцэд (lg–2xl) календарь илүү өргөн (1fr : 2fr)
           — нүд нарийсахад арга хэмжээний нэр үг дундуураа тасардаг байв. */}
       <div className="grid gap-4 lg:min-h-0 lg:flex-1 lg:shrink! lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] lg:grid-rows-[minmax(0,1fr)] lg:gap-3 2xl:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
-        <PositionsChart staff={staff} picked={picked} onPick={setPicked} />
+        <PositionsChart staff={staff} picked={picked} onPick={setPicked} onEdit={editable ? () => setEditing(true) : undefined} />
         <EventsCalendar />
       </div>
+      {editing ? <StaffEditor onClose={() => setEditing(false)} onChanged={() => setStaffRev((v) => v + 1)} /> : null}
     </div>
   );
 }
@@ -182,10 +197,13 @@ function PositionsChart({
   staff,
   picked,
   onPick,
+  onEdit,
 }: {
   staff: Load<Staff>;
   picked: string | null;
   onPick: (k: string | null) => void;
+  /** Засварлагчид л — "Албан хаагч бүртгэх" товч */
+  onEdit?: () => void;
 }) {
   const meta = picked ? groupMeta(picked) : null;
   const rows = React.useMemo(() => {
@@ -216,7 +234,20 @@ function PositionsChart({
 
   return (
     <Panel className="flex h-full flex-col">
-      <PanelHead title="Албан хаагчид, албан тушаалаар" />
+      <PanelHead
+        title="Албан хаагчид, албан тушаалаар"
+        action={
+          onEdit ? (
+            <button
+              type="button"
+              onClick={onEdit}
+              className="inline-flex items-center gap-1 rounded-xs bg-(--tone) px-2 py-1 text-[11.5px] font-medium text-paper hover:opacity-90"
+            >
+              <UserCog size={13} /> Албан хаагч бүртгэх
+            </button>
+          ) : undefined
+        }
+      />
       {staff.state === "ready" ? (
         <div className="relative flex-1">
           <div className="flex flex-col pb-2 lg:absolute lg:inset-0">

@@ -25,8 +25,15 @@
  *     албан_тушаал   String   албан тушаал
  *     ⚠ нэр, ажлын_утас, албан_хаагчийн_утас, цахим_шуудангийн_хаяг,
  *     өрөө__ нь ТАТАГДАХГҮЙ — хувь хүний мэдээлэл хөтөч рүү буухгүй.
- *     ⚠ Төлөвийн (ажиллаж байгаа / чөлөөтэй) талбар БАЙХГҮЙ — "Одоо
- *     ажиллаж байгаа" үзүүлэлт хүлээгдэж буй хэвээр.
+ *     төлөв          String   Ажиллаж байгаа · Чөлөөтэй · Ажлаас гарсан
+ *                             (2026-10-26-нд нэмэх — хэрэглэгчийн шийдвэр:
+ *                             ажлаас гарсныг УСТГАХГҮЙ, төлөвөөр тэмдэглэнэ).
+ *     ⚠ Талбар хүснэгтэд байгаа эсэхийг давхаргын тодорхойлолтоос уншина —
+ *     нэмэгдээгүй үед төлөвгүйгээр ажилласаар ("Одоо ажиллаж байгаа"
+ *     хүлээгдэж буй), алдаа өгөхгүй.
+ *     ⚠ БҮРТГЭЛ ЗАСАХ ({@link fetchStaffRecords}, {@link saveStaff}): нэрийг
+ *     ЗӨВХӨН засварлагч (календарийн бүлэг — хэрэглэгчийн шийдвэр) татна;
+ *     утас, имэйл, өрөө хэзээ ч татагдахгүй.
  *
  *   Z03 арга хэмжээний хөтөлбөр — ҮҮСГЭСЭН (2026-10-22, хэрэглэгчийн
  *     хүсэлт: календарьт гараар бичдэг болгох). ХҮСНЭГТ, хоёр үйлчилгээ:
@@ -118,28 +125,108 @@ export function deptSlug(raw: string): string | null {
 /** Газрын удирдлага — хэлтэс биш, бүтцийн ҮНДЭСТ харьяалагдана */
 export const LEAD_DEPT = "Удирдлага";
 
+export const STAFF_STATUS_FIELD = "төлөв";
+export const STAFF_STATUSES = ["Ажиллаж байгаа", "Чөлөөтэй", "Ажлаас гарсан"];
+export const STAFF_WORKING = "Ажиллаж байгаа";
+export const STAFF_LEFT = "Ажлаас гарсан";
+
 export type Staff = {
   dept: string;
   slug: string | null;
   /** Газрын удирдлага ("Удирдлага") эсэх */
   lead: boolean;
   position: string;
-  /** Төлөвийн талбар хүснэгтэд байхгүй тул одоогоор үргэлж `null` */
+  /** Төлөв бүртгэгдээгүй (эсвэл талбар байхгүй) бол `null` */
   active: boolean | null;
 };
 
+type LayerDef = { objectIdField?: string; fields?: { name: string }[] };
+const defs = new Map<string, Promise<LayerDef>>();
+
+/** Давхаргын тодорхойлолт (талбарууд, дугаарын талбар) — нэг удаа, кэштэй */
+function layerDef(url: string): Promise<LayerDef> {
+  let p = defs.get(url);
+  if (!p) {
+    p = arcgisJson<LayerDef>(`${url}?f=json`, "Албан хаагчийн бүртгэл");
+    p.catch(() => defs.delete(url));
+    defs.set(url, p);
+  }
+  return p;
+}
+
+const hasField = (def: LayerDef, name: string) => (def.fields ?? []).some((f) => f.name === name);
+
+/** Нийтийн тоо — ажлаас гарсан хүн ОРОХГҮЙ */
 export async function fetchStaff(signal: AbortSignal): Promise<Staff[]> {
-  const rows = await queryAll(ZAHIRGAA_LAYERS.staff, "Албан хаагчийн бүртгэл", ["хэлтэс", "албан_тушаал"], signal);
-  return rows.map((a) => {
-    const dept = text(a["хэлтэс"]);
-    return {
-      dept,
-      slug: deptSlug(dept),
-      lead: dept.toLowerCase() === LEAD_DEPT.toLowerCase(),
-      position: text(a["албан_тушаал"]),
-      active: null,
-    };
-  });
+  const def = await layerDef(ZAHIRGAA_LAYERS.staff);
+  const status = hasField(def, STAFF_STATUS_FIELD);
+  const rows = await queryAll(
+    ZAHIRGAA_LAYERS.staff,
+    "Албан хаагчийн бүртгэл",
+    ["хэлтэс", "албан_тушаал", ...(status ? [STAFF_STATUS_FIELD] : [])],
+    signal,
+  );
+  return rows
+    .filter((a) => text(a[STAFF_STATUS_FIELD]) !== STAFF_LEFT)
+    .map((a) => {
+      const dept = text(a["хэлтэс"]);
+      const st = status ? text(a[STAFF_STATUS_FIELD]) : "";
+      return {
+        dept,
+        slug: deptSlug(dept),
+        lead: dept.toLowerCase() === LEAD_DEPT.toLowerCase(),
+        position: text(a["албан_тушаал"]),
+        active: st ? st === STAFF_WORKING : null,
+      };
+    });
+}
+
+/* --------------------------- Z01 засвар --------------------------- */
+
+/** Засварлах эх — одоогоор унших хаягтай ижил хүснэгт */
+export const STAFF_EDIT_URL = ZAHIRGAA_LAYERS.staff;
+
+export type StaffRecord = { id: number; name: string; dept: string; position: string; status: string };
+
+/** Засварлагчийн жагсаалт — нэртэй. Төлөвийн талбар байгаа эсэхийг хамт буцаана */
+export async function fetchStaffRecords(signal: AbortSignal): Promise<{ rows: StaffRecord[]; hasStatus: boolean }> {
+  const def = await layerDef(STAFF_EDIT_URL);
+  const oid = def.objectIdField ?? "objectid";
+  const hasStatus = hasField(def, STAFF_STATUS_FIELD);
+  const rows = await queryAll(
+    STAFF_EDIT_URL,
+    "Албан хаагчийн бүртгэл",
+    [oid, "нэр", "хэлтэс", "албан_тушаал", ...(hasStatus ? [STAFF_STATUS_FIELD] : [])],
+    signal,
+  );
+  return {
+    hasStatus,
+    rows: rows
+      .map((a) => ({
+        id: number(a[oid]),
+        name: text(a["нэр"]),
+        dept: text(a["хэлтэс"]),
+        position: text(a["албан_тушаал"]),
+        status: hasStatus ? text(a[STAFF_STATUS_FIELD]) : "",
+      }))
+      .sort((x, y) => x.name.localeCompare(y.name, "mn")),
+  };
+}
+
+export type StaffInput = { name: string; dept: string; position: string; status: string };
+
+/** Шинээр нэмнэ (`id` байхгүй) эсвэл засна. Төлөвийн талбар байхгүй бол төлөв бичихгүй */
+export async function saveStaff(input: StaffInput, id?: number) {
+  const def = await layerDef(STAFF_EDIT_URL);
+  const oid = def.objectIdField ?? "objectid";
+  const attributes: Record<string, unknown> = {
+    "нэр": input.name.trim(),
+    "хэлтэс": input.dept.trim() || null,
+    "албан_тушаал": input.position.trim() || null,
+  };
+  if (hasField(def, STAFF_STATUS_FIELD)) attributes[STAFF_STATUS_FIELD] = input.status.trim() || null;
+  if (id === undefined) await applyEdits(STAFF_EDIT_URL, "Албан хаагч хадгалах", { adds: JSON.stringify([{ attributes }]) });
+  else await applyEdits(STAFF_EDIT_URL, "Албан хаагч хадгалах", { updates: JSON.stringify([{ attributes: { [oid]: id, ...attributes } }]) });
 }
 
 /* ------------------------------ Z03 ------------------------------- */
@@ -199,14 +286,14 @@ const dayToMs = (day: string) => {
 type EditResult = { success: boolean; error?: { description?: string } };
 type ApplyEdits = { addResults?: EditResult[]; updateResults?: EditResult[]; deleteResults?: EditResult[] };
 
-async function applyEdits(body: Record<string, string>) {
-  const res = await arcgisJson<ApplyEdits>(`${EVENTS_EDIT_URL}/applyEdits?f=json`, "Арга хэмжээ хадгалах", {
+async function applyEdits(url: string, label: string, body: Record<string, string>) {
+  const res = await arcgisJson<ApplyEdits>(`${url}/applyEdits?f=json`, label, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams(body),
   });
   const r = res.addResults?.[0] ?? res.updateResults?.[0] ?? res.deleteResults?.[0];
-  if (!r?.success) throw new Error(`Арга хэмжээ хадгалагдсангүй${r?.error?.description ? ` (${r.error.description})` : ""}`);
+  if (!r?.success) throw new Error(`${label} амжилтгүй${r?.error?.description ? ` (${r.error.description})` : ""}`);
 }
 
 /** Шинээр нэмнэ (`id` байхгүй) эсвэл засна */
@@ -219,10 +306,10 @@ export async function saveEvent(input: EventInput, id?: number) {
     tuluv: input.status.trim() || null,
     tailbar: input.note.trim() || null,
   };
-  if (id === undefined) await applyEdits({ adds: JSON.stringify([{ attributes }]) });
-  else await applyEdits({ updates: JSON.stringify([{ attributes: { objectid: id, ...attributes } }]) });
+  if (id === undefined) await applyEdits(EVENTS_EDIT_URL, "Арга хэмжээ хадгалах", { adds: JSON.stringify([{ attributes }]) });
+  else await applyEdits(EVENTS_EDIT_URL, "Арга хэмжээ хадгалах", { updates: JSON.stringify([{ attributes: { objectid: id, ...attributes } }]) });
 }
 
 export async function deleteEvent(id: number) {
-  await applyEdits({ deletes: String(id) });
+  await applyEdits(EVENTS_EDIT_URL, "Арга хэмжээ устгах", { deletes: String(id) });
 }
