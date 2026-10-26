@@ -162,6 +162,13 @@
 .org-empty { margin: 0 11px 9px; }
 .organization .org-toolbar .org-toggle, .organization .org-toolbar .org-reset { padding: 7px 10px; border-radius: 6px; background: var(--paper); }
 .organization .org-toolbar .org-toggle[aria-pressed="true"] { background: color-mix(in srgb, var(--tone) 12%, var(--paper)); }
+/* Модны томруулалт — "Албан хаагч" товчны ард, нэг хүрээтэй гурван товч */
+.org-zoom { display: flex; align-items: stretch; border: 1px solid var(--line); border-radius: 6px; background: var(--paper); overflow: hidden; }
+.org-zoom button { display: grid; place-items: center; min-width: 28px; padding: 6px 7px; color: var(--ink-2); font-size: 11px; transition: background-color .15s, color .15s; }
+.org-zoom button + button { border-left: 1px solid var(--line); }
+.org-zoom button.num { min-width: 46px; }
+.org-zoom button:not(:disabled):hover { background: var(--paper-hi); color: var(--ink); }
+.org-zoom button:disabled { opacity: .4; cursor: default; }
 /* Албан хаагчийн мөр — дугуй тэмдэгтэй (жишээ зургийн санаа) */
 .org-person { --org-person-indent: 30px; padding: 7px 9px; }
 .organization .org-staff-list { display: grid; gap: 5px; padding: 6px; border-top: 1px solid var(--org-border); background: var(--org-inset); box-shadow: inset 0 3px 6px #07121f12; }

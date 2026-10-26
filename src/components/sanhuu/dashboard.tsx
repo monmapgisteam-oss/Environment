@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Building2, ChevronLeft, ChevronRight, ClipboardList, Layers, Loader2, User, UserRound, Network, Users, RotateCcw, Search, CalendarDays, X } from "lucide-react";
+import { Building2, ChevronLeft, ChevronRight, ClipboardList, Layers, Loader2, User, UserRound, Network, Users, RotateCcw, Search, CalendarDays, X, ZoomIn, ZoomOut } from "lucide-react";
 import "./organization.css";
 import "./tasks.css";
 import {
@@ -229,6 +229,34 @@ export function SanhuuDashboard() {
     el.scrollTo({ left: (el.scrollWidth - el.clientWidth) / 2, top: 0 });
   }, [focus, breakdown, loaded]);
 
+  /*
+    ⚠⚠ МОДНЫ ТОМРУУЛАЛТ (хэрэглэгч 2026-10-26: "албан хаагчийн ард
+    zoom in out товч … доорх ажлын модыг"). CSS `zoom` нь layout-ыг ч
+    хамт томруулдаг тул гүйлтийн хүрээ, холбоос зураас зөв үлдэнэ
+    (`transform: scale` бол гүйлгүүр хуучин хэмжээгээрээ үлдэнэ).
+    ⚠ Зөвхөн бүтэн модонд — задаргааны нарийн баганад хамаарахгүй.
+    ⚠ Солих үед харагдаж буй ТӨВ байрандаа үлдэнэ (`zoomAnchor`).
+  */
+  const [zoom, setZoom] = React.useState(1);
+  const zoomAnchor = React.useRef<{ x: number; y: number } | null>(null);
+  const changeZoom = React.useCallback((next: number) => {
+    const el = bodyRef.current;
+    if (el && el.scrollWidth && el.scrollHeight) {
+      zoomAnchor.current = {
+        x: (el.scrollLeft + el.clientWidth / 2) / el.scrollWidth,
+        y: (el.scrollTop + el.clientHeight / 2) / el.scrollHeight,
+      };
+    }
+    setZoom(Math.round(Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, next)) * 10) / 10);
+  }, []);
+  React.useLayoutEffect(() => {
+    const el = bodyRef.current;
+    const a = zoomAnchor.current;
+    if (!el || !a) return;
+    zoomAnchor.current = null;
+    el.scrollTo({ left: a.x * el.scrollWidth - el.clientWidth / 2, top: a.y * el.scrollHeight - el.clientHeight / 2 });
+  }, [zoom]);
+
   const resetTaskView = React.useCallback(() => {
     setRecordFilter("all");
     setStatus(null);
@@ -416,7 +444,7 @@ export function SanhuuDashboard() {
         <section className="organization" aria-label="Байгууллагын бүтэц">
           <header className="org-toolbar">
             <div className="org-title"><Network size={17} aria-hidden /><h2>Байгууллагын бүтэц</h2></div>
-            <OrgPath units={units} focus={focus} onPick={goTo} />
+            <OrgPath units={units} focus={focus} open={breakdown} onPick={goTo} />
             {/* ⚠ Нэрийг нуухад СОНГОЛТ нь ч цуцлагдана — эс тэгвээс
                 сонгогдсон хүн хаана ч харагдахгүй атлаа доорх ажлын
                 жагсаалтыг шүүсээр үлдэнэ */}
@@ -434,6 +462,11 @@ export function SanhuuDashboard() {
               <User size={12} aria-hidden />
               Албан хаагч
             </button>
+            <div className="org-zoom" role="group" aria-label="Модны томруулалт">
+              <button type="button" disabled={breakdown || zoom <= ZOOM_MIN} onClick={() => changeZoom(zoom - ZOOM_STEP)} aria-label="Жижигрүүлэх" title="Жижигрүүлэх"><ZoomOut size={13} aria-hidden /></button>
+              <button type="button" className="num" disabled={breakdown || zoom === 1} onClick={() => changeZoom(1)} title="Анхны хэмжээ">{Math.round(zoom * 100)}%</button>
+              <button type="button" disabled={breakdown || zoom >= ZOOM_MAX} onClick={() => changeZoom(zoom + ZOOM_STEP)} aria-label="Томруулах" title="Томруулах"><ZoomIn size={13} aria-hidden /></button>
+            </div>
             <button type="button" className="org-reset" disabled={unit === rootId && person == null && focus === rootId && !breakdown} onClick={() => goTo(rootId)} aria-label="Бүх бүтэц" title="Бүх бүтэц"><RotateCcw size={13} aria-hidden /></button>
           </header>
           {/* ⚠ Хэмжигчийн тайлбар ("Хэрэгжилт | Хугацааны явц") ХАСАГДСАН
@@ -462,6 +495,7 @@ export function SanhuuDashboard() {
               showStaff={showStaff}
               focus={focus}
               breakdown={breakdown}
+              zoom={zoom}
               onPick={pickUnit}
               onPickHead={openBreakdown}
               onPickPerson={pickPerson}
@@ -719,6 +753,10 @@ type PersonStat = {
    Эс тэгвээс дэлгэц хоосон болж, хэрэглэгч замаа алдана.
    -------------------------------------------------------------------------- */
 
+const ZOOM_MIN = 0.5;
+const ZOOM_MAX = 1.5;
+const ZOOM_STEP = 0.1;
+
 function OrgChart({
   units,
   tree,
@@ -729,6 +767,7 @@ function OrgChart({
   showStaff,
   focus,
   breakdown,
+  zoom,
   onPick,
   onPickHead,
   onPickPerson,
@@ -744,6 +783,8 @@ function OrgChart({
   focus: string;
   /** Задаргаа нээгдсэн эсэх — нарийн багана болох эсэхийг энэ шийднэ */
   breakdown: boolean;
+  /** Бүтэн модны томруулалт (CSS `zoom`) */
+  zoom: number;
   onPick: (id: string) => void;
   /** Дээд картын товшилт — задаргааг нээнэ */
   onPickHead: (id: string) => void;
@@ -776,7 +817,7 @@ function OrgChart({
       {/* ⚠ Гүйлтийн хүрээ ба агуулга нь ХОЁР ӨӨР элемент байна:
           нэг элемент зэрэг гүйж, зэрэг агуулгынхаа өргөнөөр тэлж
           чадахгүй. Дээд карт нь энэ давхаргын ДОТОР голлоно */}
-      <div className="org-canvas">
+      <div className="org-canvas" style={deep || zoom === 1 ? undefined : { zoom }}>
         <div className="org-root">
           <NodeCard
             unit={head}
@@ -881,10 +922,13 @@ function Branch({
 function OrgPath({
   units,
   focus,
+  open,
   onPick,
 }: {
   units: Unit[];
   focus: string;
+  /** Задаргаа нээлттэй эсэх */
+  open: boolean;
   onPick: (id: string) => void;
 }) {
   const chain: Unit[] = [];
@@ -897,7 +941,16 @@ function OrgPath({
   }
   return (
     <nav className="org-path" aria-label="Бүтцийн зам">
-      {chain.map((u, i) => (
+      {chain.map((u, i) => {
+        /*
+          ⚠ ҮНДЭС ДЭЭРХ ЗАДАРГААНААС БУЦАХ (хэрэглэгч 2026-10-26: хэлтсийн
+          карт дээр дарахад буцах товч алга). Дэд нэгж дээр дарахад зам
+          "Хэлтэс › Нэгж" болж хэлтэс нь буцах товч болдог; хэлтсийн
+          карт дээр дарахад зам ганц шаттай хэвээр тул тэр шат идэвхтэй
+          үлдэж, дарахад бүтэн мод руу буцна.
+        */
+        const current = i === chain.length - 1 && !(open && chain.length === 1);
+        return (
         <React.Fragment key={u.id}>
           {i ? (
             <ChevronRight size={11} aria-hidden className="org-path-sep" />
@@ -905,13 +958,14 @@ function OrgPath({
           <button
             type="button"
             onClick={() => onPick(u.id)}
-            aria-current={i === chain.length - 1 ? "true" : undefined}
-            disabled={i === chain.length - 1}
+            aria-current={current ? "true" : undefined}
+            disabled={current}
           >
             {u.label}
           </button>
         </React.Fragment>
-      ))}
+        );
+      })}
     </nav>
   );
 }
