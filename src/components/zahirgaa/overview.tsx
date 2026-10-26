@@ -225,7 +225,7 @@ function PositionsChart({
       />
       {staff.state === "ready" ? (
         <div className="relative flex-1 2xl:min-h-[300px]">
-          <div className="flex flex-col 2xl:absolute 2xl:inset-0">
+          <div className="flex flex-col pb-2 2xl:absolute 2xl:inset-0">
             <div className="flex items-center gap-2 border-b border-line px-4 py-2">
               <Icon size={15} strokeWidth={1.6} className="shrink-0 text-(--tone)" />
               <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-ink">{meta ? meta.label : "Бүх хэлтэс"}</span>
@@ -247,10 +247,12 @@ function PositionsChart({
                 <li key={r.name} className="grid grid-cols-[22px_minmax(0,1fr)_minmax(60px,110px)_30px] items-center gap-3 py-1.5">
                   <span className="num text-[11px] text-ink-3">{String(i + 1).padStart(2, "0")}</span>
                   <span className="flex min-w-0 items-baseline gap-2">
-                    <span className="min-w-0 text-[12.5px] leading-snug text-ink">{r.name}</span>
+                    <span className="min-w-0 truncate text-[12.5px] leading-snug text-ink" title={r.name}>
+                      {r.name}
+                    </span>
                     {picked ? null : (
                       <span
-                        className="num ml-auto max-w-[45%] shrink-0 truncate text-[10.5px] text-ink-3"
+                        className="num ml-auto max-w-[40%] shrink-0 truncate text-[10.5px] text-ink-3"
                         title={r.depts.map(([g, v]) => `${groupMeta(g).label} — ${v}`).join(" · ")}
                       >
                         {r.depts.map(([g, v]) => `${shortOf(g)}${r.depts.length > 1 ? ` ${v}` : ""}`).join(" · ")}
