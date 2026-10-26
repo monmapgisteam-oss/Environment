@@ -1,9 +1,10 @@
 .drawer {
   position: fixed;
-  inset: 12px 12px 12px auto;
+  inset: var(--legal-y, 12px) 12px auto var(--legal-x, auto);
   z-index: 70;
   display: flex;
   width: min(860px, calc(100vw - 24px));
+  height: min(900px, calc(100dvh - 24px));
   flex-direction: column;
   overflow: hidden;
   border: 1px solid var(--line-2);
@@ -12,6 +13,37 @@
   background: var(--paper-2);
   color: var(--ink);
   font-weight: 400;
+}
+
+/* Reader-only overrides use the workspace palette without changing the page theme. */
+.drawer[data-theme="dark"] {
+  color-scheme: dark;
+  --paper: #0c1719;
+  --paper-2: #142427;
+  --paper-3: #102023;
+  --paper-hi: #203639;
+  --ink: #edf4f1;
+  --ink-2: #c4d3cf;
+  --ink-3: #95aca6;
+  --line: color-mix(in oklab, #cbd5e1 13%, transparent);
+  --line-2: color-mix(in oklab, #cbd5e1 24%, transparent);
+  --d-hyanalt: oklch(0.83 0.115 190);
+  --shadow: 0 20px 40px rgba(0, 0, 0, 0.45);
+}
+
+.drawer[data-theme="light"] {
+  color-scheme: light;
+  --paper: #f6f7f2;
+  --paper-2: #ffffff;
+  --paper-3: #eef0e7;
+  --paper-hi: #edf1e4;
+  --ink: #131c17;
+  --ink-2: #38463d;
+  --ink-3: #55635a;
+  --line: color-mix(in oklab, #1e293b 14%, transparent);
+  --line-2: color-mix(in oklab, #1e293b 26%, transparent);
+  --d-hyanalt: oklch(0.505 0.1 190);
+  --shadow: 0 20px 40px rgba(41, 76, 96, 0.16);
 }
 
 .drawer button {
@@ -35,6 +67,21 @@
   padding: 22px 28px 0;
   border-bottom: 1px solid var(--line);
 }
+
+.drawer .dragHandle {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-items: center;
+  gap: 12px;
+  cursor: grab;
+  border-radius: 6px;
+  text-align: left;
+  touch-action: none;
+  user-select: none;
+}
+
+.drawer .dragHandle:active { cursor: grabbing; }
 
 .headerIcon {
   display: grid;
@@ -320,7 +367,8 @@
 .footer button:hover { color: var(--tone); }
 
 @media (max-width: 600px) {
-  .drawer { inset: 0; width: 100%; border: 0; border-radius: 0; }
+  .drawer { inset: 0; width: 100%; height: 100dvh; border: 0; border-radius: 0; }
+  .drawer .dragHandle { cursor: default; touch-action: auto; }
   .header { padding: 18px 18px 0; }
   .toolbar { gap: 10px; padding: 12px 18px; }
   .fontControls { gap: 0; padding-left: 8px; }

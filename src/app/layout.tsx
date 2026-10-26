@@ -18,7 +18,7 @@ export const metadata: Metadata = {
 
 // Resolve the workspace theme before paint. The entrance has its own palette.
 // Хэл (`lang`) мөн эхний зурагдалтаас өмнө — `lib/i18n.ts`.
-const bootScript = `(function(){var t,l;try{t=localStorage.getItem('workspace-theme');l=localStorage.getItem('workspace-lang')}catch(e){}var r=document.documentElement;r.setAttribute('data-theme',t==='dark'?'dark':'light');r.setAttribute('lang',l==='en'?'en':'mn')})();`;
+const bootScript = `(function(){var t,l;try{t=localStorage.getItem('workspace-theme');l=localStorage.getItem('workspace-lang')}catch(e){}var r=document.documentElement;r.setAttribute('data-theme',t==='dark'?'dark':'light');r.setAttribute('lang',l==='en'?'en':'mn');if(window.self!==window.top&&location.pathname.includes('/departments/')&&new URLSearchParams(location.search).get('preview')==='1')r.setAttribute('data-department-preview','true')})();`;
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (

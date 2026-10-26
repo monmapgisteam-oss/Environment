@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { ArrowUp, BookOpen, ChevronDown, ChevronRight, FileSearch, Minus, Plus, Scale, Search, X } from "lucide-react";
+import { ArrowUp, BookOpen, ChevronDown, ChevronRight, FileSearch, Minus, Moon, Plus, Scale, Search, Sun, X } from "lucide-react";
 import { LEGAL_BASIS } from "@/lib/inspection-scheme";
 import raw from "@/lib/legal-basis.json";
 import { cn, num } from "@/lib/utils";
@@ -154,9 +154,37 @@ function LegalDrawer({ topic, onClose }: { topic: Topic; onClose: () => void }) 
   const [tab, setTab] = React.useState(tabs[0]?.id ?? "");
   const [query, setQuery] = React.useState("");
   const [fontSize, setFontSize] = React.useState(14);
+  const [theme, setTheme] = React.useState<"light" | "dark">(() => {
+    if (typeof window === "undefined") return "light";
+    try {
+      const saved = localStorage.getItem("legal-basis-theme");
+      if (saved === "light" || saved === "dark") return saved;
+    } catch { /* Storage may be unavailable; keep the selection in memory. */ }
+    return document.documentElement.dataset.theme === "dark" ? "dark" : "light";
+  });
   const body = React.useRef<HTMLDivElement>(null);
   const drawer = React.useRef<HTMLElement>(null);
+  const [position, setPosition] = React.useState<{ x: number; y: number } | null>(null);
+  const drag = React.useRef<{ pointerId: number; x: number; y: number } | null>(null);
   const titleId = React.useId();
+
+  const fitPosition = React.useCallback((point: { x: number; y: number }) => {
+    const bounds = drawer.current?.getBoundingClientRect();
+    if (!bounds) return point;
+    return {
+      x: Math.max(12, Math.min(point.x, window.innerWidth - bounds.width - 12)),
+      y: Math.max(12, Math.min(point.y, window.innerHeight - bounds.height - 12)),
+    };
+  }, []);
+
+  React.useEffect(() => {
+    const onResize = () => {
+      drag.current = null;
+      setPosition((current) => window.innerWidth <= 600 ? null : current && fitPosition(current));
+    };
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, [fitPosition]);
 
   React.useEffect(() => {
     const previous = document.activeElement;
@@ -190,6 +218,52 @@ function LegalDrawer({ topic, onClose }: { topic: Topic; onClose: () => void }) 
     body.current?.scrollTo({ top: 0 });
   };
 
+  const toggleTheme = () => {
+    const next = theme === "light" ? "dark" : "light";
+    setTheme(next);
+    try { localStorage.setItem("legal-basis-theme", next); } catch { /* In-memory selection still works. */ }
+  };
+
+  const startDrag = (event: React.PointerEvent<HTMLButtonElement>) => {
+    if (event.button !== 0 || !event.isPrimary || window.innerWidth <= 600) return;
+    const bounds = drawer.current?.getBoundingClientRect();
+    if (!bounds) return;
+    event.preventDefault();
+    event.currentTarget.focus({ preventScroll: true });
+    event.currentTarget.setPointerCapture(event.pointerId);
+    drag.current = { pointerId: event.pointerId, x: event.clientX - bounds.left, y: event.clientY - bounds.top };
+  };
+
+  const moveDrag = (event: React.PointerEvent<HTMLButtonElement>) => {
+    const from = drag.current;
+    if (!from || from.pointerId !== event.pointerId) return;
+    setPosition(fitPosition({ x: event.clientX - from.x, y: event.clientY - from.y }));
+  };
+
+  const stopDrag = (event: React.PointerEvent<HTMLButtonElement>) => {
+    if (drag.current?.pointerId !== event.pointerId) return;
+    drag.current = null;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+  };
+
+  const moveWithKeyboard = (event: React.KeyboardEvent<HTMLButtonElement>) => {
+    if (window.innerWidth <= 600) return;
+    if (event.key === "Home") {
+      event.preventDefault();
+      setPosition(null);
+      return;
+    }
+    const directions: Record<string, [number, number]> = {
+      ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1],
+    };
+    const direction = directions[event.key];
+    const bounds = drawer.current?.getBoundingClientRect();
+    if (!direction || !bounds) return;
+    event.preventDefault();
+    const step = event.shiftKey ? 48 : 16;
+    setPosition(fitPosition({ x: bounds.left + direction[0] * step, y: bounds.top + direction[1] * step }));
+  };
+
   const kindLabel = tabs.find((x) => x.id === tab)?.label ?? "";
   const total = tabs.find((x) => x.id === tab)?.count ?? 0;
   const count = checks.length + violations.length + documents.length;
@@ -204,15 +278,43 @@ function LegalDrawer({ topic, onClose }: { topic: Topic; onClose: () => void }) 
         aria-labelledby={empty ? undefined : titleId}
         tabIndex={-1}
         className={cn("elevated", styles.drawer)}
-        style={{ "--legal-font-size": `${fontSize}px`, "--tone": "var(--d-hyanalt)" } as React.CSSProperties}
+        data-theme={theme}
+        style={{
+          "--legal-font-size": `${fontSize}px`,
+          "--tone": "var(--d-hyanalt)",
+          ...(position && { "--legal-x": `${position.x}px`, "--legal-y": `${position.y}px` }),
+        } as React.CSSProperties}
       >
         <header className={styles.header}>
           <div className="flex items-center gap-3">
-            <span className={styles.headerIcon}><Scale size={20} aria-hidden /></span>
-            <div className="min-w-0 flex-1">
-              <div className="eyebrow">Хяналтын хэлтэс</div>
-              <p className="display mt-1 text-[15px] leading-snug">Хууль, эрх зүйн үндэслэл</p>
-            </div>
+            <button
+              type="button"
+              className={styles.dragHandle}
+              aria-label="Самбарыг зөөх"
+              title="Чирж эсвэл сумтай товчоор зөөх · Давхар товшиж анхны байрлалд буцаах"
+              onPointerDown={startDrag}
+              onPointerMove={moveDrag}
+              onPointerUp={stopDrag}
+              onPointerCancel={stopDrag}
+              onLostPointerCapture={stopDrag}
+              onKeyDown={moveWithKeyboard}
+              onDoubleClick={() => setPosition(null)}
+            >
+              <span className={styles.headerIcon}><Scale size={20} aria-hidden /></span>
+              <span className="min-w-0 flex-1">
+                <span className="eyebrow block">Хяналтын хэлтэс</span>
+                <span className="display mt-1 block text-[15px] leading-snug">Хууль, эрх зүйн үндэслэл</span>
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={toggleTheme}
+              aria-label={theme === "dark" ? "Гэрэл горимд шилжүүлэх" : "Харанхуй горимд шилжүүлэх"}
+              title={theme === "dark" ? "Энэ самбарыг гэрэл горимд шилжүүлэх" : "Энэ самбарыг харанхуй горимд шилжүүлэх"}
+              className={styles.iconButton}
+            >
+              {theme === "dark" ? <Sun size={18} aria-hidden /> : <Moon size={18} aria-hidden />}
+            </button>
             <button
               type="button"
               onClick={onClose}
