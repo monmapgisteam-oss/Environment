@@ -4,7 +4,6 @@ import dynamic from "next/dynamic";
 import * as React from "react";
 import { Loader2, Mountain, PhoneCall, Waves } from "lucide-react";
 import { TabGroups, useStoredTab } from "@/components/ui/source-tabs";
-import { WILDLIFE_SOLO } from "@/lib/wildlife-layers";
 
 /* --------------------------------------------------------------------------
    МОНИТОРИНГ СУДАЛГААНЫ САН
@@ -36,10 +35,10 @@ const spinner = () => (
   </div>
 );
 
-const PortalLayers = dynamic(
+const SonginoDashboard = dynamic(
   () =>
-    import("@/components/layers/portal-dashboard").then(
-      (m) => m.PortalLayersDashboard,
+    import("@/components/wildlife/songino-dashboard").then(
+      (m) => m.SonginoDashboard,
     ),
   { ssr: false, loading: spinner },
 );
@@ -136,11 +135,9 @@ export function MonitoringWorkspace() {
         {survey === "minj" ? (
           <BeaverDashboard key="minj" />
         ) : survey === "songino" ? (
-          <PortalLayers
-            key={WILDLIFE_SOLO.songino.key}
-            set={WILDLIFE_SOLO.songino}
-            access={{ scope: "amitan-urgamal", tab: "monitoring" }}
-          />
+          /* Өөрийн самбар (2026-10-23) — бусад амьтны цэс шиг NBAHH-ын
+             хуудас хэлбэр ({@link SonginoDashboard}) */
+          <SonginoDashboard key="songino" />
         ) : (
           /*
             ЭХ СУРВАЛЖ ИРЭЭГҮЙ. Хоосон төлөв нь дизайны нэг хэсэг:

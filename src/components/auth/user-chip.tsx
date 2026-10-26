@@ -3,6 +3,7 @@
 import * as React from "react";
 import { LogOut, User } from "lucide-react";
 import { useAuth } from "@/components/auth/provider";
+import { useT } from "@/lib/i18n";
 
 /* --------------------------------------------------------------------------
    НЭВТЭРСЭН ХЭРЭГЛЭГЧ — толгойн баруун буланд
@@ -18,6 +19,7 @@ import { useAuth } from "@/components/auth/provider";
 export function UserChip() {
   const { session, leave } = useAuth();
   const [open, setOpen] = React.useState(false);
+  const t = useT();
   const box = React.useRef<HTMLDivElement>(null);
 
   /* Гадуур товшиход хаагдана — цэс нээлттэй үлдвэл газрын зураг дээр
@@ -81,7 +83,7 @@ export function UserChip() {
             className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-[11.5px] text-ink-2 transition-colors hover:bg-paper-hi hover:text-ink"
           >
             <LogOut size={12} strokeWidth={1.75} />
-            Системээс гарах
+            {t("Системээс гарах", "Sign out")}
           </button>
         </div>
       ) : null}

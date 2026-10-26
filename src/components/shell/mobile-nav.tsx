@@ -6,17 +6,20 @@ import { usePathname } from "next/navigation";
 import { ChartNoAxesCombined, Database, LayoutGrid, ShieldCheck } from "lucide-react";
 import { useAccess } from "@/components/auth/access";
 import { cn, isActivePath } from "@/lib/utils";
+import { useDeptName, useT } from "@/lib/i18n";
 
 export function MobileNav() {
   const pathname = usePathname();
   const { departments, admin, analysis, blocked } = useAccess();
+  const t = useT();
+  const deptName = useDeptName();
   if (blocked) return null;
 
   return (
     <div className="flex gap-1 overflow-x-auto border-b border-line bg-paper-3 px-3 py-2 lg:hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
       <Chip href="/" active={isActivePath(pathname, "/")}>
         <LayoutGrid size={13} strokeWidth={1.75} />
-        Ерөнхий
+        {t("Ерөнхий", "Overview")}
       </Chip>
       {departments.map((d) => (
         <Chip
@@ -26,24 +29,24 @@ export function MobileNav() {
           tone={d.tone}
         >
           <d.icon size={13} strokeWidth={1.75} style={{ color: `var(${d.tone})` }} />
-          {d.name}
+          {deptName(d)}
         </Chip>
       ))}
       {/* Хажуугийн зурвастай ИЖИЛ дараалал — хоёр цэс зөрвөл ямар
           хуудас байгаа нь төхөөрөмжөөс хамаарна */}
       {analysis && (
         <Chip href="/analysis" active={isActivePath(pathname, "/analysis", true)}>
-          <ChartNoAxesCombined size={13} strokeWidth={1.75} /> Дүн шинжилгээ
+          <ChartNoAxesCombined size={13} strokeWidth={1.75} /> {t("Дүн шинжилгээ", "Analysis")}
         </Chip>
       )}
       {admin && (
         <Chip href="/sources" active={isActivePath(pathname, "/sources", true)}>
-          <Database size={13} strokeWidth={1.75} /> Дата эх сурвалж
+          <Database size={13} strokeWidth={1.75} /> {t("Дата эх сурвалж", "Data sources")}
         </Chip>
       )}
       {admin && (
         <Chip href="/access" active={isActivePath(pathname, "/access", true)}>
-          <ShieldCheck size={13} strokeWidth={1.75} /> Эрхийн зохицуулалт
+          <ShieldCheck size={13} strokeWidth={1.75} /> {t("Эрхийн зохицуулалт", "Access control")}
         </Chip>
       )}
     </div>

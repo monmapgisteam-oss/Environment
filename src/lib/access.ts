@@ -71,6 +71,27 @@ export function isAdminName(username: string | null | undefined): boolean {
   return normName(username) === ADMIN_USERNAME;
 }
 
+/**
+ * Бүртгэлийн ӨӨРИЙН хэлтэс(үүд) — анхдагч эрхийн "Дүн шинжилгээ"-ээс бусад
+ * хэсэг. Тэр нь ҮРГЭЛЖ нээлттэй: эрхийн тохиргоонд чагтгүй (хэрэглэгч
+ * 2026-10-23: "өөрийн хэлтэс дотор өөрийн хэлтэс гэсэн check хэрэггүй"),
+ * зөвхөн цэсүүдийг нь нарийвчилна. Нэмэлт бүртгэлд байхгүй.
+ */
+export function homeScopes(username: string | null | undefined): string[] {
+  const u = normName(username);
+  const g = ACCOUNTS.find((a) => a.username === u)?.grant ?? {};
+  return Object.keys(g).filter((k) => k !== ANALYSIS && !k.startsWith("@"));
+}
+
+/** Өөрийн хэлтэс эрхгүй үлдсэн бол бүхэлд нь нээнэ (хуучин мөрд ч) */
+export function withHome(username: string | null | undefined, g: Grant): Grant {
+  const home = homeScopes(username).filter((s) => !grantAllowsScope(g, s));
+  if (!home.length) return g;
+  const next = { ...g };
+  for (const s of home) next[s] = "all";
+  return next;
+}
+
 export function defaultGrant(username: string | null | undefined): Grant | null {
   const u = normName(username);
   return ACCOUNTS.find((a) => a.username === u)?.grant ?? null;
@@ -114,15 +135,26 @@ export function parseGrant(raw: unknown): Grant | null {
   "@"-ээр эхэлдэггүй тул мөргөлдөхгүй, хүснэгтийн бүтэц өөрчлөгдөхгүй):
     "@v:<scope>/<tab>" — харагдах хэсгүүд, "@l:<scope>/<tab>" — давхаргууд.
   Түлхүүр БАЙХГҮЙ бол бүгд нээлттэй (хуучин хадгалсан эрх хэвээр ажиллана).
-  ⚠ Зөвхөн порталын хуваалцсан самбарт ({@link PortalLayersDashboard})
-  хэрэгжинэ — тусгай самбартай цэст энэ тохиргоо гарахгүй.
+  ⚠⚠ ГУРВАН ЗҮЙЛ (хэрэглэгч 2026-10-23: "1. map 2. layer 3. db"): газрын
+  зураг · давхарга · мэдээллийн самбар (диаграм, үзүүлэлт, дэлгэрэнгүй).
+  Хэлтсийн БҮХ цэсэд — порталын самбарт `PortalLayersDashboard`, бусад
+  самбарт `TabAccess` ({@link src/components/auth/tab-access.tsx}).
+  ⚠ Хуучин хадгалсан "charts" · "overview" · "record" нь самбарын хэсэг —
+  тэдний аль нэг нь байвал самбар нээлттэй гэж уншина (`normViews`).
 */
 export const VIEW_PARTS = [
   { id: "map", label: "Газрын зураг" },
-  { id: "charts", label: "Диаграм" },
-  { id: "overview", label: "Үзүүлэлт" },
-  { id: "record", label: "Дэлгэрэнгүй мэдээлэл" },
+  { id: "db", label: "Мэдээллийн самбар" },
 ] as const;
+const DB_PARTS = ["charts", "overview", "record"];
+
+/** Хадгалсан хэсгүүдийг шинэ хоёр нэр рүү (map, db) буулгана */
+export function normViews(list: readonly string[]): string[] {
+  const out: string[] = [];
+  if (list.includes("map")) out.push("map");
+  if (list.includes("db") || DB_PARTS.some((p) => list.includes(p))) out.push("db");
+  return out;
+}
 export type ViewPart = (typeof VIEW_PARTS)[number]["id"];
 
 /** `null` — хязгааргүй (бүгд) */
@@ -136,7 +168,9 @@ export const isDetailKey = (key: string) => key.startsWith("@");
 export function tabRule(g: Grant, scope: string, tab: string): TabRule {
   const v = g[viewKey(scope, tab)];
   const l = g[layerKey(scope, tab)];
-  return { views: Array.isArray(v) ? v : null, layers: Array.isArray(l) ? l : null };
+  /* "db" нь порталын самбарын гурван хэсгийг бүгдийг нь нээнэ */
+  const views = Array.isArray(v) ? (v.includes("db") ? [...v, ...DB_PARTS] : v) : null;
+  return { views, layers: Array.isArray(l) ? l : null };
 }
 
 /** Хэсгийн (эсвэл нэг цэсийн) нарийвчлалыг арилгана */
@@ -146,4 +180,36 @@ export function clearDetail(g: Grant, scope: string, tab?: string) {
     const path = key.slice(3);
     if (tab ? path === `${scope}/${tab}` : path.startsWith(`${scope}/`)) delete g[key];
   }
+}
+
+/** Харагдах хэсэг нээлттэй юу (`null` — бүгд) */
+export const viewAllowed = (rule: TabRule, part: "map" | "db") =>
+  !rule.views || normViews(rule.views).includes(part);
+
+/*
+  ХОРИГЛОСОН ДАВХАРГА — тусгай самбартай цэс нээлттэй байх хооронд
+  ({@link src/components/auth/tab-access.tsx}) `arcgisJson` эдгээр хаяг руу
+  хүсэлт явуулахгүй. Хаягийг жижиг үсгээр, кодчилолгүйгээр харьцуулна;
+  угтвар таарч дараагийн тэмдэгт нь "/", "?" эсвэл төгсгөл байх ёстой
+  (".../FeatureServer/1" нь ".../FeatureServer/10"-ыг хаахгүй).
+*/
+let denied: string[] = [];
+const plainUrl = (u: string) => {
+  let x = u;
+  try {
+    x = decodeURI(u);
+  } catch {
+    /* эвдэрсэн кодчилол — байгаагаар нь */
+  }
+  return x.trim().toLowerCase().replace(/\/+$/, "");
+};
+
+export function setDeniedLayers(urls: string[]) {
+  denied = urls.map(plainUrl);
+}
+
+export function deniedLayer(url: string): boolean {
+  if (!denied.length) return false;
+  const u = plainUrl(url);
+  return denied.some((d) => u.startsWith(d) && (u.length === d.length || u[d.length] === "/" || u[d.length] === "?"));
 }

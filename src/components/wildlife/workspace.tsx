@@ -24,6 +24,7 @@ import {
   useStoredTab,
 } from "@/components/ui/source-tabs";
 import { useAccess } from "@/components/auth/access";
+import { TabAccess } from "@/components/auth/tab-access";
 
 /*
   Хэлтсийн сэдвүүд. Самбар хооронд сольж харна.
@@ -351,29 +352,31 @@ export function WildlifeWorkspace() {
         Бүрдлийн түлхүүрийг өгснөөр таб бүр цэвэр төлөвтэй нээгдэнэ.
       */}
       <div className="department-workspace-content">
-        {tab === "bear" ? (
-          <BearDashboard />
-        ) : tab === "rescues" ? (
-          <RescuesDashboard />
-        ) : tab === "eco" ? (
-          <EcoDashboard />
-        ) : tab === "poles" ? (
-          <PolesDashboard />
-        ) : tab === "stickers" ? (
-          <StickersDashboard />
-        ) : tab === "marmots" ? (
-          <MarmotsDashboard />
-        ) : tab === "lichens" ? (
-          <LichensDashboard />
-        ) : tab === "hovd" ? (
-          <FloraDashboard key="hovd" kind="hovd" />
-        ) : tab === "moog" ? (
-          <FloraDashboard key="moog" kind="moog" />
-        ) : tab === "biotechnik" ? (
-          <BiotechDashboard />
-        ) : (
-          <MonitoringWorkspace />
-        )}
+        <TabAccess scope="amitan-urgamal" tab={tab}>
+          {tab === "bear" ? (
+            <BearDashboard />
+          ) : tab === "rescues" ? (
+            <RescuesDashboard />
+          ) : tab === "eco" ? (
+            <EcoDashboard />
+          ) : tab === "poles" ? (
+            <PolesDashboard />
+          ) : tab === "stickers" ? (
+            <StickersDashboard />
+          ) : tab === "marmots" ? (
+            <MarmotsDashboard />
+          ) : tab === "lichens" ? (
+            <LichensDashboard />
+          ) : tab === "hovd" ? (
+            <FloraDashboard key="hovd" kind="hovd" />
+          ) : tab === "moog" ? (
+            <FloraDashboard key="moog" kind="moog" />
+          ) : tab === "biotechnik" ? (
+            <BiotechDashboard />
+          ) : (
+            <MonitoringWorkspace />
+          )}
+        </TabAccess>
       </div>
     </div>
   );

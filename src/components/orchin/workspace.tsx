@@ -13,6 +13,7 @@ import {
   Toilet,
 } from "lucide-react";
 import { SourceTabs, useStoredTab } from "@/components/ui/source-tabs";
+import { TabAccess } from "@/components/auth/tab-access";
 
 /*
   Хэлтсийн сэдвүүд. Самбар хооронд сольж харна.
@@ -177,7 +178,7 @@ export const TABS = [
     */
     id: "mining-plan",
     group: "land",
-    label: "Уулын ажлын төлөвлөгөө, тайлан",
+    label: "Байгаль орчны менежментийн төлөвлөгөө",
     note: "Байгаль орчны мэдээллийн сан",
     icon: ClipboardList,
     /* Гадаад систем — мөр дарахад eic.mn-ийн нэвтрэх хуудас шинэ цонхоор
@@ -208,30 +209,32 @@ export function OrchinWorkspace() {
       />
 
       <div className="department-workspace-content">
-        {tab === "sanitation" ? (
-          <SanitationDashboard />
-        ) : tab === "soil" ? (
-          <SoilDashboard />
-        ) : tab === "neutralization" ? (
-          <NeutralizationDashboard />
-        ) : tab === "reclamation" ? (
-          <ReclamationDashboard />
-        ) : tab === "damaged" ? (
-          <DamagedDashboard />
-        ) : tab === "petitions" ? (
-          <PetitionsDashboard />
-        ) : tab === "licenses" ? (
-          <LicensesDashboard />
-        ) : tab === "minerals" ? (
-          <MineralsDashboard />
-        ) : (
-          /* Эх сурвалж ирээгүй — "хоосон" биш "хүлээгдэж буй" */
-          <div className="hatch flex h-full items-center justify-center rounded-xs border border-dashed border-line-2">
-            <p className="px-6 text-center text-[12.5px] leading-snug text-ink-3">
-              Мэдээлэл хүлээгдэж байна
-            </p>
-          </div>
-        )}
+        <TabAccess scope="orchin" tab={tab}>
+          {tab === "sanitation" ? (
+            <SanitationDashboard />
+          ) : tab === "soil" ? (
+            <SoilDashboard />
+          ) : tab === "neutralization" ? (
+            <NeutralizationDashboard />
+          ) : tab === "reclamation" ? (
+            <ReclamationDashboard />
+          ) : tab === "damaged" ? (
+            <DamagedDashboard />
+          ) : tab === "petitions" ? (
+            <PetitionsDashboard />
+          ) : tab === "licenses" ? (
+            <LicensesDashboard />
+          ) : tab === "minerals" ? (
+            <MineralsDashboard />
+          ) : (
+            /* Эх сурвалж ирээгүй — "хоосон" биш "хүлээгдэж буй" */
+            <div className="hatch flex h-full items-center justify-center rounded-xs border border-dashed border-line-2">
+              <p className="px-6 text-center text-[12.5px] leading-snug text-ink-3">
+                Мэдээлэл хүлээгдэж байна
+              </p>
+            </div>
+          )}
+        </TabAccess>
       </div>
     </div>
   );

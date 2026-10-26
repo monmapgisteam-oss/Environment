@@ -33,6 +33,30 @@ export const FIREFLY = {
 };
 
 /**
+ * Ангиллын ТОД, ЯЛГААТАЙ өнгө ({@link LayerSet.categorical}) — хиймэл
+ * дагуулын бараан дэвсгэр дээр бүгд ялгарна. Эхний таваа нь Гадаргын
+ * усны төрлүүдийн гараар сонгосон өнгө. Түгээмэл ангилал эхнийхийг авна;
+ * илүүдэл ба "Бүртгэгдээгүй" нь {@link CATEGORY_REST}.
+ */
+export const CATEGORY_HEX = [
+  "#38e1f0",
+  "#ffc857",
+  "#c58cff",
+  "#7fe08a",
+  "#4c8dff",
+  "#ff8f6b",
+  "#f06fb4",
+  "#d8e85a",
+] as const;
+export const CATEGORY_REST = "#8d99a6";
+
+/** Тоогоор буурах дараалал дахь `i` дэх ангиллын өнгө */
+export function categoryHex(key: string, i: number): string {
+  if (key === "Бүртгэгдээгүй") return CATEGORY_REST;
+  return CATEGORY_HEX[i] ?? CATEGORY_REST;
+}
+
+/**
  * Ойн хэлтсийн ногоон.
  *
  * Платформын дүрмээр дата дүрслэл нь ГАНЦ өнгөтэй (`--data`, цэнхэр).

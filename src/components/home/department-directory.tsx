@@ -1,49 +1,60 @@
-﻿"use client";
+"use client";
 
-import { useState } from "react";
 import Link from "next/link";
-import { ArrowUpRight, LayoutGrid, List, Search, X } from "lucide-react";
+import { ArrowUpRight, Building2, Database } from "lucide-react";
 import { useAccess } from "@/components/auth/access";
-import { cn } from "@/lib/utils";
+import { num } from "@/lib/utils";
+import { DepartmentPreview } from "./department-preview";
+import { SHORT_NAMES } from "@/lib/departments";
+import { SHORT_EN, useDeptName, useLang, useT } from "@/lib/i18n";
 
-const filters = [{ value: "all", label: "Бүх хэлтэс" }, { value: "live", label: "Дата холбогдсон" }, { value: "waiting", label: "Хүлээгдэж буй" }] as const;
+/** Summary and directory use the same access-filtered department list. */
+export function HomeSummary({ sourceCounts }: { sourceCounts: Record<string, number> }) {
+  const { departments } = useAccess();
+  const t = useT();
+  const deptName = useDeptName();
+  const lang = useLang();
+  const sources = departments.reduce((total, d) => total + (sourceCounts[d.slug] ?? 0), 0);
 
-export function DepartmentDirectory({ sourceCounts }: { sourceCounts: Record<string, number> }) {
-  const [query, setQuery] = useState("");
-  const [filter, setFilter] = useState<(typeof filters)[number]["value"]>("all");
-  const [view, setView] = useState<"list" | "grid">("list");
-  const { departments: DEPARTMENTS } = useAccess();
-  const normalized = query.trim().toLocaleLowerCase("mn");
-  const departments = DEPARTMENTS.filter((d) => d.name.toLocaleLowerCase("mn").includes(normalized) && (filter === "all" || (filter === "live" ? d.status === "live" : d.status !== "live")));
   return (
-    <section id="departments" aria-labelledby="departments-heading" className="department-section">
-      <div className="directory-heading">
-        <div><p className="section-kicker">АЖЛЫН ЧИГЛЭЛҮҮД</p><h2 id="departments-heading">Хэлтсийн самбарууд<span>{DEPARTMENTS.length}</span></h2></div>
-        <p>Хариуцсан чиглэлээ сонгож,<br />мэдээлэлтэйгээ ажиллаарай.</p>
-      </div>
-      <div className="directory-toolbar">
-        <div className="directory-filters" role="group" aria-label="Хэлтсийн төлөв">
-          {filters.map((f) => <button key={f.value} type="button" aria-pressed={filter === f.value} onClick={() => setFilter(f.value)} className={cn(filter === f.value && "selected")}>{f.label}</button>)}
+    <dl className="home-summary">
+      <div><dt><span className="summary-icon" aria-hidden><Building2 size={19} /></span>{t("Хэлтэс", "Divisions")}</dt><dd className="num">{num(departments.length)}</dd></div>
+      <div><dt><span className="summary-icon" aria-hidden><Database size={19} /></span>{t("Эх сурвалж", "Data sources")}</dt><dd className="num">{num(sources)}</dd></div>
+      {departments.filter((d) => (sourceCounts[d.slug] ?? 0) > 0).map((d) => (
+        <div key={d.slug} className="home-source-indicator">
+          <dt>
+            <span className="summary-icon" aria-hidden><d.icon size={19} /></span>
+            <abbr className="summary-label" title={`${deptName(d)} · ${t("Эх сурвалж", "Data sources")}`}>
+              {lang === "en" ? SHORT_EN[d.slug] : SHORT_NAMES[d.slug]}
+            </abbr>
+          </dt>
+          <dd className="num">{num(sourceCounts[d.slug])}</dd>
         </div>
-        <div className="directory-tools">
-          <div className="directory-search"><Search size={16} aria-hidden="true" /><input type="search" aria-label="Хэлтэс хайх" placeholder="Хэлтэс хайх…" value={query} onChange={(e) => setQuery(e.target.value)} />{query && <button type="button" onClick={() => setQuery("")} aria-label="Хайлт цэвэрлэх"><X size={14} /></button>}</div>
-          <div className="view-switch" role="group" aria-label="Харагдац сонгох">
-            <button type="button" aria-label="Жагсаалт" aria-pressed={view === "list"} onClick={() => setView("list")}><List size={17} /></button>
-            <button type="button" aria-label="Карт" aria-pressed={view === "grid"} onClick={() => setView("grid")}><LayoutGrid size={17} /></button>
-          </div>
-        </div>
-      </div>
-      <div className={cn("department-collection", view === "grid" && "as-grid")}>
-        {departments.map((d) => <Link key={d.slug} href={`/departments/${d.slug}`} className={cn("department-entry", d.status !== "live" && "is-pending")}>
-          <span className="entry-number">{String(DEPARTMENTS.indexOf(d) + 1).padStart(2, "0")}</span>
-          <span className="entry-icon"><d.icon size={24} strokeWidth={1.4} /></span>
-          <div className="entry-copy"><h3>{d.name}</h3><p>{sourceCounts[d.slug] ? `${sourceCounts[d.slug]} бүртгэлтэй эх сурвалж` : d.status === "live" ? "Хэлтсийн мэдээлэлтэй танилцах" : "Эх сурвалжийн мэдээлэл хүлээгдэж байна"}</p></div>
-          <span className="entry-status"><span />{d.status === "live" ? "Холбогдсон" : "Хүлээгдэж буй"}</span>
-          <span className="entry-arrow"><ArrowUpRight size={21} /></span>
-        </Link>)}
-      </div>
-      {!departments.length && <div className="directory-empty"><Search size={26} /><h3>Тохирох хэлтэс олдсонгүй</h3><p>Хайлтын үг эсвэл төлөвөө өөрчилнө үү.</p><button type="button" onClick={() => { setQuery(""); setFilter("all"); }} className="action-text">Бүх хэлтсийг харах <ArrowUpRight size={16} /></button></div>}
-      <p role="status" className="mt-4 text-xs text-ink-3">{departments.length} / {DEPARTMENTS.length} хэлтэс</p>
-    </section>
+      ))}
+    </dl>
+  );
+}
+
+/** Department tiles fill the available height without stretching the page. */
+export function DepartmentDirectory() {
+  const { departments } = useAccess();
+  const t = useT();
+  const deptName = useDeptName();
+  const lang = useLang();
+  return (
+    <nav aria-label={t("Хэлтэс", "Divisions")} className="home-depts">
+      {departments.map((d) => (
+          <Link key={d.slug} href={`/departments/${d.slug}`} className="department-entry" title={deptName(d)} aria-label={deptName(d)}>
+            <span className="entry-top">
+              <span className="entry-icon" aria-hidden><d.icon size={23} strokeWidth={1.5} /></span>
+              <span className="entry-name">{lang === "en" ? SHORT_EN[d.slug] : SHORT_NAMES[d.slug]}</span>
+              <span className="entry-arrow" aria-hidden><ArrowUpRight size={17} /></span>
+            </span>
+            <span className="entry-copy">
+              <DepartmentPreview slug={d.slug} name={deptName(d)} />
+            </span>
+          </Link>
+      ))}
+    </nav>
   );
 }

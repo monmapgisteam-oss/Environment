@@ -352,7 +352,18 @@ function lookDataOf(m: MapData): LookData {
 /** SQL-ийн бичвэр — хашилтыг давхарлана */
 const sq = (s: string) => s.replace(/'/g, "''");
 
-export function DataEditor({ source, targets, onClose }: { source: EditSource; targets: EditTarget[]; onClose: (changed: boolean) => void }) {
+export function DataEditor({
+  source,
+  targets,
+  startAdd,
+  onClose,
+}: {
+  source: EditSource;
+  targets: EditTarget[];
+  /** "Шинэ бүртгэл нэмэх" товчоор нээгдсэн — бэлэн болмогц шууд нэмэх горимд орно. */
+  startAdd?: boolean;
+  onClose: (changed: boolean) => void;
+}) {
   const esri = React.useRef<any>(null);
   const changed = React.useRef(false);
   const placeAc = React.useRef<AbortController | null>(null);
@@ -752,6 +763,25 @@ export function DataEditor({ source, targets, onClose }: { source: EditSource; t
       } else setMode("select");
     }
   }, [meta, clearSketch, sketchOf]);
+
+  /*
+    ШИНЭ БҮРТГЭЛ — ШУУД НЭМЭХ ГОРИМД (хэрэглэгч 2026-10-22: "data shineer
+    nemegdehed burtgeh heseg"). Зөвхөн НЭГ удаа: давхарга солих, цуцлах
+    зэргийн дараа дахин өөрөө эхлэхгүй. Олон өнцөгт, шугамд зурах хэрэгсэл
+    (SketchViewModel) зургийн хөдөлгүүр бэлэн болсны дараа л үүсдэг тул
+    түүнийг хүлээнэ.
+  */
+  const autoAdd = React.useRef(Boolean(startAdd));
+  React.useEffect(() => {
+    if (!autoAdd.current || status !== "ready" || !meta?.canAdd) return;
+    const t = window.setInterval(() => {
+      if (meta.geo !== "point" && !sketchOf()) return;
+      window.clearInterval(t);
+      autoAdd.current = false;
+      startNew();
+    }, 150);
+    return () => window.clearInterval(t);
+  }, [status, meta, sketchOf, startNew]);
 
   const cancel = React.useCallback(() => {
     placeAc.current?.abort();

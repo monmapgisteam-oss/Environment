@@ -4,6 +4,7 @@ import * as React from "react";
 import dynamic from "next/dynamic";
 import { Boxes, FlaskConical, Loader2, Trash2, Workflow, Wrench } from "lucide-react";
 import { SourceTabs, useStoredTab } from "@/components/ui/source-tabs";
+import { TabAccess } from "@/components/auth/tab-access";
 
 /*
   Хэлтэс ТАВАН табтай. Зэрэг ачаалахгүй: сонгосон нь л татагдана.
@@ -197,28 +198,30 @@ export function HyanaltWorkspace() {
       />
 
       <div className="department-workspace-content">
-        {open === "chemsystem" ? (
-          <ChemSystemDashboard />
-        ) : open === "landfill" ? (
-          <WasteDashboard />
-        ) : open === "repair" ? (
-          <RepairMap />
-        ) : open === "scheme" ? (
-          <InspectionScheme />
-        ) : open === "chemicals" ? (
-          <ChemicalsDashboard />
-        ) : (
-          /*
-            Тэмдэглэгдээгүй таб. ХООСОН ТӨЛӨВ нь дизайны нэг хэсэг:
-            `.hatch` зураастай, тасархай хүрээтэй блок — "хоосон" биш
-            "зөвшөөрөл хүлээж буй".
-          */
-          <div className="hatch flex h-full items-center justify-center rounded-xs border border-dashed border-line-2">
-            <p className="px-6 text-center text-[12.5px] leading-snug text-ink-3">
-              Сэдвийн хайрцгийг тэмдэглэснээр агуулга нь нээгдэнэ
-            </p>
-          </div>
-        )}
+        <TabAccess scope="hyanalt" tab={open ?? ""}>
+          {open === "chemsystem" ? (
+            <ChemSystemDashboard />
+          ) : open === "landfill" ? (
+            <WasteDashboard />
+          ) : open === "repair" ? (
+            <RepairMap />
+          ) : open === "scheme" ? (
+            <InspectionScheme />
+          ) : open === "chemicals" ? (
+            <ChemicalsDashboard />
+          ) : (
+            /*
+              Тэмдэглэгдээгүй таб. ХООСОН ТӨЛӨВ нь дизайны нэг хэсэг:
+              `.hatch` зураастай, тасархай хүрээтэй блок — "хоосон" биш
+              "зөвшөөрөл хүлээж буй".
+            */
+            <div className="hatch flex h-full items-center justify-center rounded-xs border border-dashed border-line-2">
+              <p className="px-6 text-center text-[12.5px] leading-snug text-ink-3">
+                Сэдвийн хайрцгийг тэмдэглэснээр агуулга нь нээгдэнэ
+              </p>
+            </div>
+          )}
+        </TabAccess>
       </div>
     </div>
   );

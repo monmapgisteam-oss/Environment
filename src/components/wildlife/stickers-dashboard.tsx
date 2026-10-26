@@ -7,9 +7,8 @@ import {
   Loader2,
   MapPin,
   Sticker,
-  Target,
 } from "lucide-react";
-import { RowChart, type Datum } from "@/components/charts";
+import type { Datum } from "@/components/charts";
 import { BasemapGallery } from "@/components/map/basemap-gallery";
 import { FilterBar, FilterMenu, PickList } from "@/components/wells/filter-bar";
 import { defaultBasemap, type Basemap, type Extent } from "@/components/wells/map";
@@ -17,6 +16,8 @@ import { Columns } from "@/components/ui/resizable-columns";
 import { Bounds } from "@/lib/extent";
 import { fetchStickers, type StickerData } from "@/lib/stickers";
 import { cn, num } from "@/lib/utils";
+import { SheetBars, SheetSection, SheetStats, catMeta } from "./sheet";
+import { MapLegend } from "./map-legend";
 
 const PointMap = dynamic(
   () => import("@/components/wells/map").then((m) => m.WellsMap),
@@ -111,18 +112,14 @@ export function StickersDashboard() {
     return { text: data.rows.map((r) => r.name), minzoom: 13 };
   }, [data]);
 
-  /**
-   * Тэмдэглэгээний өнгө — ТӨЛӨВӨӨР.
-   *
-   * MapLibre CSS хувьсагч уншдаггүй ч дохиоллын тэмдэглэгээ нь ердийн
-   * DOM элемент тул хувьсагч дамжина ({@link pulseColor}).
-   */
-  const pulseColor = React.useCallback(
-    (oid: number) => {
-      const r = data?.rows.find((x) => x.oid === oid);
-      if (!r) return undefined;
-      return r.sticker === true ? "var(--water)" : "var(--ochre)";
-    },
+  /*
+    Цэгийн өнгө — ТӨЛӨВӨӨР, тогтмол hex (газрын зураг хоёр горимд ижил).
+    ⚠ 2026-10-23-нд цохилтын DOM тэмдэглэгээнээс (`pulse`) бусад амьтны
+    зурагтай ижил firefly цэг рүү шилжсэн ("мапуудыг янзлая"). Өнгөний
+    утга хэвээр: стикертэй `--water`, стикергүй `--ochre`, тэмдэглээгүй саарал.
+  */
+  const colors = React.useMemo(
+    () => (data?.rows ?? []).map((r) => STATE_HEX[stateOf(r.sticker)]),
     [data],
   );
 
@@ -361,31 +358,6 @@ export function StickersDashboard() {
         </FilterMenu>
       </FilterBar>
 
-      <div className="grid shrink-0 grid-cols-2 divide-x divide-y divide-line rounded-xs border border-line bg-paper-2 sm:grid-cols-4 sm:divide-y-0">
-        {/* Судалгаанд хамрагдсан барилга ба тэдгээрийн хэдэд нь стикер
-            наагдсан нь ХОЁР ӨӨР тоо — эхнийхийг нь "стикертэй" гэж
-            нэрлэвэл 78 барилга бүгд стикертэй мэт болно */}
-        <Stat
-          icon={Building2}
-          label="Хамрагдсан барилга"
-          value={num(stats.n)}
-        />
-        <Stat
-          icon={Sticker}
-          label="Стикер байршуулсан"
-          value={num(stats.stickered)}
-        />
-        <Stat
-          icon={Target}
-          label="Хамрах хүрээ, хувь"
-          value={num(stats.share)}
-        />
-        <Stat
-          icon={MapPin}
-          label="Хамрагдсан дүүрэг"
-          value={num(stats.districts)}
-        />
-      </div>
 
       <Columns
         layout="flex"
@@ -480,25 +452,31 @@ export function StickersDashboard() {
                 points={data.points}
                 visible={visible}
                 labels={labels}
-                pulse
-                pulseColor={pulseColor}
+                colors={colors}
                 cluster={false}
-                /*
-                  ⚠ Сонголтыг ТЭМДЭГ ӨӨРӨӨ үүрнэ: `highlight` цагираг нь
-                  зурагт (canvas) зурагддаг тул DOM тэмдэглэгээний АРД
-                  дарагдана. Хоёуланг өгсөн нь санаатай — цагираг нь
-                  ойртолтын үед зайнаас ч анзаарагдана.
-                */
-                pickedMark={sel}
                 highlight={detail ? [detail.lon, detail.lat] : null}
                 basemap={basemap}
                 onSelect={(oid) => setPicked(sel === oid ? null : oid)}
                 focus={focus}
               />
               <BasemapGallery value={basemap} onChange={setBasemap} />
+              <MapLegend
+                groups={[
+                  {
+                    key: "state",
+                    title: "Шилэн барилга",
+                    field: "Стикерийн байдал",
+                    items: (["Байршуулсан", "Байршуулаагүй", "Тэмдэглээгүй"] as const).map((k) => ({
+                      key: k,
+                      label: k,
+                      color: STATE_HEX[k],
+                    })),
+                  },
+                ]}
+              />
 
               {detail ? (
-                <div className="elevated absolute bottom-2.5 left-2.5 z-10 w-[250px] rounded-xs border border-line-2 bg-paper/92 backdrop-blur-md">
+                <div className="elevated absolute right-2.5 bottom-8 z-10 w-[250px] rounded-xs border border-line-2 bg-paper/92 backdrop-blur-md">
                   <div className="flex items-baseline justify-between gap-2 border-b border-line px-2.5 py-2">
                     <span className="min-w-0 flex-1 truncate text-[12.5px] leading-none font-medium text-ink">
                       {detail.name || "—"}
@@ -537,43 +515,46 @@ export function StickersDashboard() {
 
           Мөрийн тоо: стикерийн байдал 2 · дүүрэг 4 · хороо 10.
         */}
-        <div className="flex min-h-0 flex-col gap-2.5 overflow-y-auto xl:w-(--col-r) xl:shrink-0">
-          <Card className="shrink-0">
-            <Head title="Стикерийн байдал">
-              <span className="text-[10.5px] text-ink-3">барилга</span>
-            </Head>
-            <div className="p-3">
-              <RowChart data={byState} selected={state} onSelect={setState} dense />
-            </div>
-          </Card>
-
-          <Card className="shrink-0">
-            <Head title="Дүүргээр — стикертэй">
-              <span className="text-[10.5px] text-ink-3">байршуулсан</span>
-            </Head>
-            <div className="p-3">
-              <RowChart
-                data={coverage}
-                selected={district}
-                onSelect={setDistrict}
-                dense
-              />
-            </div>
-          </Card>
-
-          <Card className="min-h-[120px] flex-1">
-            <Head title="Хороогоор">
-              <span className="text-[10.5px] text-ink-3">барилга</span>
-            </Head>
-            <div className="min-h-0 flex-1 overflow-y-auto p-3">
-              <RowChart
-                data={byKhoroo}
-                selected={khoroo}
-                onSelect={setKhoroo}
-                dense
-              />
-            </div>
-          </Card>
+        {/*
+          ⚠ NBAHH-ЫН ХУУДАС (хэрэглэгч 2026-10-23, ногоон бүсийн зургаар):
+          Тойм → стикерийн байдал → дүүрэг → хороо. Үзүүлэлтийн зурвас
+          зургийн дээрээс энд шилжив.
+        */}
+        <div className="flex min-h-0 flex-col gap-2 overflow-y-auto xl:w-(--col-r) xl:shrink-0">
+          {/* Судалгаанд хамрагдсан барилга ба тэдгээрийн хэдэд нь стикер
+              наагдсан нь ХОЁР ӨӨР тоо */}
+          <SheetStats
+            stats={[
+              { label: "Хамрагдсан барилга", value: stats.n },
+              { label: "Стикер байршуулсан", value: stats.stickered },
+              { label: "Хамрах хүрээ", value: stats.share, unit: "%" },
+              { label: "Хамрагдсан дүүрэг", value: stats.districts },
+            ]}
+          />
+          <SheetSection title="Стикерийн байдал" meta={catMeta(byState.length)}>
+            <SheetBars
+              data={byState}
+              measure="Барилгын тоо"
+              selected={state}
+              onSelect={setState}
+            />
+          </SheetSection>
+          <SheetSection title="Дүүргээр — стикертэй" meta={catMeta(coverage.length)}>
+            <SheetBars
+              data={coverage}
+              measure="Стикертэй барилга"
+              selected={district}
+              onSelect={setDistrict}
+            />
+          </SheetSection>
+          <SheetSection title="Хороогоор" meta={catMeta(byKhoroo.length)}>
+            <SheetBars
+              data={byKhoroo}
+              measure="Барилгын тоо"
+              selected={khoroo}
+              onSelect={setKhoroo}
+            />
+          </SheetSection>
         </div>
       </Columns>
     </div>
@@ -589,6 +570,13 @@ export function StickersDashboard() {
  * Хоёрыг нэгтгэвэл судалгаа хийгдсэн ч тэмдэглэгдээгүй барилгыг
  * "стикергүй" гэж батлах болно.
  */
+/** Төлөвийн өнгө — газрын зураг, тайлбар хоёр НЭГ эх сурвалжаас */
+const STATE_HEX: Record<string, string> = {
+  Байршуулсан: "#5fa8ff",
+  Байршуулаагүй: "#e5b75a",
+  Тэмдэглээгүй: "#8d99a6",
+};
+
 function stateOf(v: boolean | null): string {
   return v === true
     ? "Байршуулсан"
@@ -647,24 +635,3 @@ function Head({
   );
 }
 
-function Stat({
-  label,
-  value,
-  icon: Icon,
-}: {
-  label: string;
-  value: string;
-  icon: typeof MapPin;
-}) {
-  return (
-    <div className="px-3 py-2.5">
-      <span className="eyebrow block min-h-[28px] leading-[1.25]">{label}</span>
-      <span className="mt-1.5 flex items-center gap-1.5">
-        <Icon size={20} strokeWidth={1.6} className="shrink-0 text-ink-3" />
-        <span className="num truncate text-[16px] leading-none font-medium text-ink">
-          {value}
-        </span>
-      </span>
-    </div>
-  );
-}

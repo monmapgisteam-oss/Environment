@@ -21,6 +21,7 @@
  * самбар өөрийн алдааны дэлгэцийг харуулна.
  */
 
+import { deniedLayer } from "@/lib/access";
 import { getToken } from "@/lib/auth";
 import { needsToken } from "@/lib/portal";
 
@@ -41,6 +42,8 @@ export async function arcgisJson<T>(
   label: string,
   init?: RequestInit,
 ): Promise<T> {
+  /* Эрхээр хориглосон давхарга ({@link src/lib/access.ts} `deniedLayer`) */
+  if (deniedLayer(url)) throw new Error(`${label}: энэ давхаргыг харах эрх байхгүй байна`);
   const ready = await withToken(url);
 
   let res: Response;
@@ -119,6 +122,7 @@ export async function arcgisBlobUrl(
   url: string,
   label: string,
 ): Promise<string> {
+  if (deniedLayer(url)) throw new Error(`${label}: энэ давхаргыг харах эрх байхгүй байна`);
   const ready = await withToken(url);
 
   let res: Response;

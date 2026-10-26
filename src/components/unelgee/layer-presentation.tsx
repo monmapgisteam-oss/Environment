@@ -73,17 +73,25 @@ export function TopicBreakdown({ breakdown: b, tone, palette, selected, onSelect
  */
 export type LayerLegendGroup = { id: string; name: string; geometry: string; field?: string; solo?: boolean; items: { key: string; label: string; color: string }[] };
 
-export function TopicMapLegend({ groups, hideable = false }: {
+export function TopicMapLegend({ groups, hideable = false, compact = false }: {
   groups: LayerLegendGroup[];
   /** Нүдний товчоор бүхэлд нь нууж, гаргана ({@link LegendShell}) — үнэлгээний хэлтэст */
   hideable?: boolean;
+  /**
+   * НЯГТ ТАЙЛБАР (ойн хэлтэс, хэрэглэгч 2026-10-23: "mapuudaa zasaarai").
+   * Ганц давхаргатай цэсэд давхаргын нэр нь цэсний гарчигтай давхардана —
+   * гарчиг нь ӨНГӨӨР ЯЛГАСАН ТАЛБАР ("ТХГН ангилал"), "Өнгөөр ялгасан
+   * үзүүлэлт" мөр гарахгүй; "Бүртгэгдээгүй" жагсаалтын эцэст.
+   */
+  compact?: boolean;
 }) {
   if (!groups.length) return null;
+  const single = compact && groups.length === 1;
   const body = <div className="ue-map-legend-body">
       {groups.map((group) => <section key={group.id} className={group.solo ? "is-solo" : undefined}>
-        {group.solo ? null : <h3>{group.name}</h3>}
-        {group.field && !group.solo ? <p>Өнгөөр ялгасан үзүүлэлт: {group.field}</p> : null}
-        {group.items.map((item) => <div key={item.key} className="ue-legend-row">
+        {group.solo ? null : single ? (group.field ? <h3>{group.field}</h3> : null) : <h3>{group.name}</h3>}
+        {group.field && !group.solo && !single ? <p>Өнгөөр ялгасан үзүүлэлт: {group.field}</p> : null}
+        {(compact ? [...group.items].sort((a, b) => Number(a.label === "Бүртгэгдээгүй") - Number(b.label === "Бүртгэгдээгүй")) : group.items).map((item) => <div key={item.key} className="ue-legend-row">
           <span aria-hidden="true" className={`ue-map-symbol ${group.geometry.includes("Point") ? "is-point" : group.geometry.includes("Polyline") ? "is-line" : "is-area"}`} style={{ color: item.color }} />
           <span title={item.label}>{item.label}</span>
         </div>)}

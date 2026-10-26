@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { ArrowLeft, Check, ChevronLeft, ChevronRight, Loader2, LockKeyhole, Minus, Plus, RotateCcw, Save, Search, ShieldCheck, UnlockKeyhole, Users, X } from "lucide-react";
-import { ACCOUNTS, ADMIN_USERNAME, VIEW_PARTS, clearDetail, layerKey, normName, tabRule, viewKey, type Grant } from "@/lib/access";
+import { ACCOUNTS, ADMIN_USERNAME, VIEW_PARTS, clearDetail, homeScopes, layerKey, normName, normViews, tabRule, viewKey, withHome, type Grant } from "@/lib/access";
 import { readAccess, saveAccess, type AccessRow } from "@/lib/access-remote";
 import { NoAccess, setAccessRows, useAccess, useAccessRows } from "@/components/auth/access";
 import { CATALOG, type CatalogScope, type CatalogTab } from "@/components/access/catalog";
@@ -50,7 +50,7 @@ export function AccessDirectory() {
 
   const saved = (username: string): Draft => {
     const row = remote.rows?.find((item) => item.username === username);
-    if (row) return { grant: row.grant, removed: row.removed };
+    if (row) return { grant: withHome(username, row.grant), removed: row.removed };
     return { grant: ACCOUNTS.find((account) => account.username === username)?.grant ?? {}, removed: false };
   };
   const current = (username: string) => drafts[username] ?? saved(username);
@@ -77,9 +77,14 @@ export function AccessDirectory() {
   const selectedScopes = scopeCount(sel.grant);
   const allScopes = CATALOG.every((scope) => sel.grant[scope.scope] === "all");
   const activeScope = CATALOG.find((scope) => scope.scope === scopeId);
+  /** Бүртгэлийн өөрийн хэлтэс — үргэлж нээлттэй, чагтгүй */
+  const home = homeScopes(picked);
+  const activeHome = !!activeScope && home.includes(activeScope.scope);
   const activeTab = activeScope?.tabs.find((tab) => tab.id === tabId && tab.layers);
   const allSelected = activeScope ? sel.grant[activeScope.scope] === "all" : allScopes;
-  const anySelected = activeScope ? sel.grant[activeScope.scope] === "all" || openCount(sel.grant, activeScope) > 0 : selectedScopes > 0;
+  const anySelected = activeScope
+    ? sel.grant[activeScope.scope] === "all" || openCount(sel.grant, activeScope) > 0
+    : CATALOG.some((scope) => !homeScopes(picked).includes(scope.scope) && (sel.grant[scope.scope] === "all" || openCount(sel.grant, scope) > 0));
 
   function selectAccount(username: string) {
     setPicked(username);
@@ -101,7 +106,8 @@ export function AccessDirectory() {
     if (disabled) return;
     edit((grant) => {
       const value = grant[key];
-      const list = new Set(Array.isArray(value) ? value : all);
+      /* Хуучин хэсгүүд (charts, overview, record) → "db" */
+      const list = new Set(Array.isArray(value) ? (key.startsWith("@v:") ? normViews(value) : value) : all);
       if (list.has(id)) {
         if (list.size === 1) return grant;
         list.delete(id);
@@ -116,7 +122,7 @@ export function AccessDirectory() {
     if (locked) return;
     setMsg(null);
     setDrafts((previous) => {
-      const next = { grant: fn({ ...(previous[picked] ?? saved(picked)).grant }), removed };
+      const next = { grant: withHome(picked, fn({ ...(previous[picked] ?? saved(picked)).grant })), removed };
       const updated = { ...previous };
       if (!added.includes(picked) && sameDraft(next, saved(picked))) delete updated[picked];
       else updated[picked] = next;
@@ -125,7 +131,7 @@ export function AccessDirectory() {
   }
 
   function toggleScope(scope: CatalogScope) {
-    if (disabled) return;
+    if (disabled || home.includes(scope.scope)) return;
     edit((grant) => {
       if (grant[scope.scope] === "all") delete grant[scope.scope];
       else grant[scope.scope] = "all";
@@ -140,6 +146,8 @@ export function AccessDirectory() {
       const value = grant[scope.scope];
       const list = new Set(value === "all" ? scope.tabs.map((tab) => tab.id) : Array.isArray(value) ? value : []);
       if (list.has(id)) {
+        /* Өөрийн хэлтсийн сүүлчийн цэсийг хасахгүй — хэлтэс үргэлж нээлттэй */
+        if (list.size === 1 && home.includes(scope.scope)) return grant;
         list.delete(id);
         clearDetail(grant, scope.scope, id);
       } else list.add(id);
@@ -309,8 +317,8 @@ export function AccessDirectory() {
                     (activeScope ? [activeScope] : CATALOG).forEach((scope) => { grant[scope.scope] = "all"; clearDetail(grant, scope.scope); });
                     return grant;
                   })}>Бүгдийг сонгох</button>
-                  <button type="button" className={styles.textButton} disabled={disabled || !anySelected} onClick={() => edit((grant) => {
-                    (activeScope ? [activeScope] : CATALOG).forEach((scope) => { delete grant[scope.scope]; clearDetail(grant, scope.scope); });
+                  <button type="button" className={styles.textButton} disabled={disabled || !anySelected || activeHome} onClick={() => edit((grant) => {
+                    (activeScope ? [activeScope] : CATALOG).filter((scope) => !home.includes(scope.scope)).forEach((scope) => { delete grant[scope.scope]; clearDetail(grant, scope.scope); });
                     return grant;
                   })}>Сонголт арилгах</button>
                 </>
@@ -334,21 +342,19 @@ export function AccessDirectory() {
                 <button type="button" className={styles.button} onClick={() => { setScopeId(null); setTabId(null); }}><ArrowLeft size={14} aria-hidden="true" /> Хэлтсүүд</button>
                 <h4 className={styles.detailTitle} title={activeScope.label}>{activeScope.label.toUpperCase()}</h4>
               </div>
-              <PagedList
-                key={`${picked}:${activeScope.scope}`}
-                className={styles.tabs}
-                label={`${activeScope.label} — цэсүүд`}
-                rowHeight={52}
-                minColumnWidth={260}
-                maxColumns={3}
-                items={activeScope.tabs.map((tab) => {
+              {/*
+                Бүлэгтэй хэлтэст (амьтан · ургамал) карт бүрд бүлгийн нэрийг
+                давтахгүй — бүлгийн гарчгийн доор цэсүүд нь эгнэнэ (хэрэглэгч
+                2026-10-23: "амьтан гэж бичихгүйгээр бүлэглэ").
+              */}
+              {(() => {
+                const renderTab = (tab: CatalogTab) => {
                   const value = sel.grant[activeScope.scope];
                   const checked = value === "all" || (Array.isArray(value) && value.includes(tab.id));
                   return (
                     <label key={tab.id} className={cn(styles.tabOption, checked && !sel.removed && styles.selectedTab)} title={tab.label}>
                       <span className={styles.checkboxLabel}><Box state={checked ? "on" : "off"} onChange={() => toggleTab(activeScope, tab.id)} label={tab.label} disabled={disabled} /></span>
                       <span className={cn(styles.detailTabText, "flex-1")}>
-                        {tab.group && <span className={styles.groupTitle}>{tab.group.toUpperCase()}</span>}
                         <span>{tab.label}</span>
                       </span>
                       {/* Порталын самбартай цэс — харагдах хэсэг, давхаргыг нарийвчилна */}
@@ -363,14 +369,43 @@ export function AccessDirectory() {
                             setTabId(tab.id);
                           }}
                         >
-                          <span className={cn(styles.scopeStatus, checked && !sel.removed && styles.enabledStatus)}>{ruleText(sel.grant, activeScope.scope, tab)}</span>
+                          <span className={cn(styles.scopeStatus, checked && !sel.removed && styles.enabledStatus)}>{checked && !sel.removed ? ruleText(sel.grant, activeScope.scope, tab) : "Эрхгүй"}</span>
                           <ChevronRight size={14} className={styles.chevron} aria-hidden="true" />
                         </button>
                       )}
                     </label>
                   );
-                })}
-              />
+                };
+                const groups = [...new Set(activeScope.tabs.map((tab) => tab.group).filter((g): g is string => !!g))];
+                if (groups.length) {
+                  const order = [...groups, undefined];
+                  return (
+                    <div key={`${picked}:${activeScope.scope}`} className={styles.groupedTabs} role="group" aria-label={`${activeScope.label} — цэсүүд`}>
+                      {order.map((group) => {
+                        const tabs = activeScope.tabs.filter((tab) => tab.group === group);
+                        if (!tabs.length) return null;
+                        return (
+                          <section key={group ?? "other"} className={styles.tabGroup}>
+                            {group && <h5 className={styles.groupHeading}>{group.toUpperCase()}</h5>}
+                            <div className={styles.groupGrid}>{tabs.map(renderTab)}</div>
+                          </section>
+                        );
+                      })}
+                    </div>
+                  );
+                }
+                return (
+                  <PagedList
+                    key={`${picked}:${activeScope.scope}`}
+                    className={styles.tabs}
+                    label={`${activeScope.label} — цэсүүд`}
+                    rowHeight={52}
+                    minColumnWidth={260}
+                    maxColumns={3}
+                    items={activeScope.tabs.map(renderTab)}
+                  />
+                );
+              })()}
             </>
           ) : (
             <PagedList
@@ -378,7 +413,7 @@ export function AccessDirectory() {
               className={styles.scopeList}
               label="Хэлтэс, хэсгийн эрх"
               rowHeight={40}
-              items={CATALOG.map((scope) => {
+              items={CATALOG.filter((scope) => !home.includes(scope.scope)).map((scope) => {
                 const count = openCount(sel.grant, scope);
                 const full = sel.grant[scope.scope] === "all";
                 const enabled = full || count > 0;
@@ -408,15 +443,19 @@ function ruleText(grant: Grant, scope: string, tab: CatalogTab): string {
   const rule = tabRule(grant, scope, tab.id);
   if (!rule.views && !rule.layers) return "Бүгд";
   const parts: string[] = [];
-  if (rule.views) parts.push(`${rule.views.length} / ${VIEW_PARTS.length} хэсэг`);
+  if (rule.views) {
+    const views = normViews(rule.views);
+    parts.push(views.length === 1 ? (views[0] === "map" ? "Зөвхөн газрын зураг" : "Зөвхөн самбар") : `${views.length} / ${VIEW_PARTS.length} хэсэг`);
+  }
   if (rule.layers) parts.push(`${rule.layers.length} / ${tab.layers?.length ?? 0} давхарга`);
   return parts.join(" · ");
 }
 
 /*
-  НЭГ ЦЭСИЙН НАРИЙВЧЛАЛ — ХАРАГДАХ ХЭСЭГ ба ДАВХАРГА (хэрэглэгч 2026-10-20).
-  Цэс өөрөө эрхгүй бол чагтууд идэвхгүй (эхлээд цэсийг нээнэ).
-  Ганц давхаргатай цэст давхаргын хэсэг гарахгүй — сонгох зүйл байхгүй.
+  НЭГ ЦЭСИЙН НАРИЙВЧЛАЛ — газрын зураг · давхарга · мэдээллийн самбар
+  (хэрэглэгч 2026-10-23: "1. map 2. layer 3. db"). Цэс өөрөө эрхгүй бол
+  чагтууд идэвхгүй (эхлээд цэсийг нээнэ). Газрын зураг, самбар хоёрын ядаж
+  нэг нь, давхаргын ядаж нэг нь үлдэнэ.
 */
 function TabDetail({ scope, tab, grant, open, disabled, onBack, onToggle }: {
   scope: CatalogScope;
@@ -428,30 +467,31 @@ function TabDetail({ scope, tab, grant, open, disabled, onBack, onToggle }: {
   onToggle: (key: string, all: string[], id: string) => void;
 }) {
   const rule = tabRule(grant, scope.scope, tab.id);
+  const views = rule.views ? normViews(rule.views) : null;
   const layers = tab.layers ?? [];
   const off = disabled || !open;
-  const section = (title: string, key: string, items: readonly { id: string; label: string }[], chosen: string[] | null) => {
-    const all = items.map((item) => item.id);
+  const viewIds = VIEW_PARTS.map((part) => part.id as string);
+  const row = (key: string, all: string[], chosen: string[] | null, item: { id: string; label: string }) => {
+    const checked = open && (!chosen || chosen.includes(item.id));
+    const last = checked && (chosen ?? all).length === 1;
     return (
-      <section className="flex flex-col gap-1.5">
-        <h5 className={styles.toolbarLabel}>{title}</h5>
-        <div className="grid gap-1 [grid-template-columns:repeat(auto-fill,minmax(240px,1fr))]">
-          {items.map((item) => {
-            const checked = open && (!chosen || chosen.includes(item.id));
-            const last = checked && (chosen ?? all).length === 1;
-            return (
-              <label key={item.id} className={cn(styles.tabOption, "h-10", checked && styles.selectedTab)} title={item.label}>
-                <span className={styles.checkboxLabel}>
-                  <Box state={checked ? "on" : "off"} onChange={() => onToggle(key, all, item.id)} label={item.label} disabled={off || last} />
-                </span>
-                <span className={styles.detailTabText}><span>{item.label}</span></span>
-              </label>
-            );
-          })}
-        </div>
-      </section>
+      <label key={item.id} className={cn(styles.tabOption, "h-10", checked && styles.selectedTab)} title={item.label}>
+        <span className={styles.checkboxLabel}>
+          <Box state={checked ? "on" : "off"} onChange={() => onToggle(key, all, item.id)} label={item.label} disabled={off || last} />
+        </span>
+        <span className={styles.detailTabText}><span>{item.label}</span></span>
+      </label>
     );
   };
+  const section = (title: string, body: React.ReactNode) => (
+    <section className="flex flex-col gap-1.5">
+      <h5 className={styles.toolbarLabel}>{title}</h5>
+      <div className="grid gap-1 [grid-template-columns:repeat(auto-fill,minmax(240px,1fr))]">{body}</div>
+    </section>
+  );
+  const vKey = viewKey(scope.scope, tab.id);
+  const lKey = layerKey(scope.scope, tab.id);
+  const layerIds = layers.map((layer) => layer.id);
   return (
     <>
       <div className={styles.detailHeading}>
@@ -460,8 +500,9 @@ function TabDetail({ scope, tab, grant, open, disabled, onBack, onToggle }: {
       </div>
       <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-2.5 py-3">
         {!open && <p className="text-[12px] text-ink-3">Энэ цэсэд хандах эрх олгогдоогүй байна</p>}
-        {section("ХАРАГДАХ ХЭСЭГ", viewKey(scope.scope, tab.id), VIEW_PARTS, rule.views)}
-        {layers.length > 1 && section("ДАВХАРГА", layerKey(scope.scope, tab.id), layers, rule.layers)}
+        {section("ГАЗРЫН ЗУРАГ", row(vKey, viewIds, views, VIEW_PARTS[0]))}
+        {layers.length > 0 && section("ДАВХАРГА", layers.map((layer) => row(lKey, layerIds, rule.layers, layer)))}
+        {section("МЭДЭЭЛЛИЙН САМБАР", row(vKey, viewIds, views, VIEW_PARTS[1]))}
       </div>
     </>
   );

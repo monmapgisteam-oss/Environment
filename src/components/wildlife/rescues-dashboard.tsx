@@ -5,18 +5,15 @@ import dynamic from "next/dynamic";
 import {
   CalendarDays,
   CalendarRange,
-  ClipboardList,
   HeartPulse,
   Loader2,
   MousePointerClick,
   PawPrint,
   ShieldAlert,
-  Skull,
   Sparkles,
   Sprout,
-  type LucideIcon,
 } from "lucide-react";
-import { AreaChart, PieChart, RowChart, YearRange, type Datum } from "@/components/charts";
+import { AreaChart, YearRange, type Datum } from "@/components/charts";
 import { BasemapGallery } from "@/components/map/basemap-gallery";
 import { MapTip, MapTipRow, useMapTip } from "@/components/map/hover-tip";
 import { FilterBar, FilterMenu, PickList } from "@/components/wells/filter-bar";
@@ -27,7 +24,10 @@ import { Bounds } from "@/lib/extent";
 import { fetchRescues, type Rescue } from "@/lib/rescues";
 import { speciesIconSvg } from "@/lib/species-icons";
 import { speciesPhoto } from "@/lib/species-photos";
-import { cn, num } from "@/lib/utils";
+import { cn } from "@/lib/utils";
+import { SheetBars, SheetSection, SheetStats, catMeta } from "./sheet";
+import { MapLegend } from "./map-legend";
+import { FIREFLY } from "@/components/wells/colors";
 
 const PointMap = dynamic(
   () => import("@/components/wells/map").then((m) => m.WellsMap),
@@ -75,6 +75,8 @@ export function RescuesDashboard() {
   */
   const [range, setRange] = React.useState<[number, number] | null>(null);
 
+  /** Хугацааны хэсэг: жилээр эсвэл сараар (NBAHH-ын хугацааны карт шиг) */
+  const [timeView, setTimeView] = React.useState<"year" | "month">("year");
   const [basemap, setBasemap] = React.useState<Basemap>(() => defaultBasemap());
   const [extentOn, setExtentOn] = React.useState(false);
   const [extent, setExtent] = React.useState<Extent | null>(null);
@@ -516,14 +518,20 @@ export function RescuesDashboard() {
             мөр нь багана болно.
           */}
           <Columns layout="flex" id="rescues-list" left={300} className="min-h-0 flex-1">
-            <Card className="min-h-[130px] flex-1 xl:w-(--col-l) xl:flex-none">
-              <Head title="Зүйлээр">
-                <span className="num text-[11.5px] text-ink-3">{speciesData.length}</span>
-              </Head>
-              <div className="min-h-0 flex-1 overflow-y-auto p-3">
-                <RowChart data={speciesData} selected={species} onSelect={setSpecies} />
-              </div>
-            </Card>
+            <SheetSection
+              title="Зүйлээр"
+              meta={catMeta(speciesData.length)}
+              className="min-h-[130px] flex-1 xl:w-(--col-l) xl:flex-none"
+              bodyClassName="min-h-0 flex-1 overflow-y-auto"
+            >
+              <SheetBars
+                data={speciesData}
+                measure="Бүртгэлийн тоо"
+                selected={species}
+                onSelect={setSpecies}
+                rows={Infinity}
+              />
+            </SheetSection>
 
             <div className="flex min-h-0 flex-1 flex-col gap-2.5">
               {/*
@@ -531,15 +539,6 @@ export function RescuesDashboard() {
                 хажуугаа эгнэнэ — босоо жагсаалт энд хагас хоосон
                 зурвас болно.
               */}
-              <Card className="shrink-0">
-                <div className="grid grid-cols-2 divide-x divide-y divide-line sm:grid-cols-3 xl:grid-cols-5 xl:divide-y-0">
-                  <StatCell icon={ClipboardList} label="Нийт бүртгэл" value={stats.total} />
-                  <StatCell icon={PawPrint} label="Амьтны зүйл" value={stats.kinds} />
-                  <StatCell icon={ShieldAlert} label="Ховор зүйл" value={stats.rare} />
-                  <StatCell icon={Sprout} label="Байгальд тавьсан" value={stats.released} />
-                  <StatCell icon={Skull} label="Хорогдсон" value={stats.died} />
-                </div>
-              </Card>
 
               <Card className="relative min-h-[240px] flex-1 overflow-hidden">
                 <div className="relative h-full w-full">
@@ -569,6 +568,18 @@ export function RescuesDashboard() {
                     extent={extentOn}
                     onExtentChange={setExtentOn}
                     unit="бүртгэл"
+                  />
+                  <MapLegend
+                    groups={[
+                      {
+                        key: "rescue",
+                        items: [
+                          /* Бөөгнөрөл, задарсан цэг хоёулаа зургийн анхдагч cyan;
+                             задарсан бүртгэл нь зүйлийн зурагтай тэмдэг */
+                          { key: "pt", label: "Авран хамгаалсан амьтан", color: FIREFLY.glow },
+                        ],
+                      },
+                    ]}
                   />
                   {extentOn ? (
                     <div className="pointer-events-none absolute inset-0 z-10 border border-data/45" />
@@ -686,75 +697,79 @@ export function RescuesDashboard() {
           </p>
         </div>
 
-        {/* ---- БАРУУН: хугацаа, ангилал ---- */}
-        <div className="flex min-h-0 flex-col gap-2.5">
-          <Card className="shrink-0">
-            <Head title="Жилийн цуваа">
-              <span className="num text-[11.5px] text-ink-3">
-                {yearData.length ? `${yearData[0].key}–${yearData.at(-1)!.key}` : "—"}
-              </span>
-            </Head>
-            <div className="p-3">
+        {/*
+          ---- БАРУУН: NBAHH-ЫН ХУУДАС (хэрэглэгч 2026-10-23, ногоон бүсийн
+          зургаар) — Тойм → хугацаа → ховордол → шийдвэрлэлт. Үзүүлэлтийн
+          зурвас зургийн дээрээс энд шилжив. ----
+        */}
+        <div className="flex min-h-0 flex-col gap-2 overflow-y-auto">
+          <SheetStats
+            stats={[
+              { label: "Нийт бүртгэл", value: stats.total },
+              { label: "Амьтны зүйл", value: stats.kinds },
+              { label: "Ховор зүйл", value: stats.rare },
+              { label: "Байгальд тавьсан", value: stats.released },
+              { label: "Хорогдсон", value: stats.died },
+              {
+                label: "Хугацаа",
+                value: yearData.length ? `${yearData[0].key}–${yearData.at(-1)!.key}` : "—",
+              },
+            ]}
+          />
+          <SheetSection title="Огноо" meta={null}>
+            <div className="mb-1.5 flex gap-1">
+              {(["year", "month"] as const).map((v) => (
+                <button
+                  key={v}
+                  type="button"
+                  onClick={() => setTimeView(v)}
+                  aria-pressed={timeView === v}
+                  className={cn(
+                    "rounded-xs border px-2 py-0.5 text-[10.5px] transition-colors",
+                    timeView === v ? "border-data text-ink" : "border-line text-ink-3 hover:text-ink",
+                  )}
+                >
+                  {v === "year" ? "Жилээр" : "Сараар"}
+                </button>
+              ))}
+            </div>
+            {timeView === "year" ? (
               <AreaChart
                 data={yearData}
-                /* Шошго нь цэгийн дээр 15px зай иднэ — шугамын өндөр
-                   хэвээр үлдэхийн тулд картыг тэр хэмжээгээр өндөрсгөв */
                 height={94}
                 selected={singleYear}
                 onSelect={(k) => setRange(k ? [Number(k), Number(k)] : span)}
                 unit="бүртгэл"
-                /* Долоон жилийн тоог унших нь энэ самбарын гол хэрэгцээ:
-                   хандлагыг шугам, яг хэдийг шошго хэлнэ */
                 labels
               />
-            </div>
-          </Card>
-
-          {/*
-            БӨГЖ: ховордлын зэрэг бүрийн ЭЗЛЭХ ХУВЬ нь энд гол утга —
-            720 бүртгэлийн 534 нь элбэг зүйл (74%). Мөрөн диаграм дээр
-            тоонууд нь харагдах ч бүхэлд эзлэх хувь нь алдагдана.
-
-            ⚠ ТАЙЛБАР нь БӨГЖНИЙ ДООР, ХОЁР БАГААНААР (хэрэглэгчийн
-            хүсэлт, 2026-09-17). Найман зэрэгтэй тул хажуугийн нэг
-            багана нарийсаж, карт нь наймхан мөрийн өндөрт сунаж байв.
-          */}
-          <Card className="shrink-0">
-            <Head title="Ховордлын зэргээр" />
-            <div className="p-3">
-              <PieChart
-                data={rarityData}
-                selected={rarity}
-                onSelect={setRarity}
-                legend="below"
+            ) : (
+              <AreaChart
+                data={monthData}
+                height={94}
+                selected={month}
+                onSelect={setMonth}
+                unit="бүртгэл"
+                labels
+                formatTick={(d) => d.key}
               />
-            </div>
-          </Card>
-
-          {/*
-            ⚠ ЕСӨН АНГИЛАЛ ГҮЙЛГЭХГҮЙГЭЭР БАГТАНА (хэрэглэгчийн хүсэлт,
-            2026-09-17). Ердийн мөр ~57px тул ес нь 500px гаруй болж,
-            карт гүйлгүүртэй болдог байв — `dense` нь мөрийг ~31px
-            болгоно.
-
-            ⚠ `overflow-y-auto` нь ХЭВЭЭР: нам дэлгэц дээр эсвэл эх
-            сурвалжид шинэ ангилал нэмэгдвэл агуулга картаасаа халина.
-            Гүйлгүүр гарахгүй бол харагдахгүй — агуулга ТАСРАХААС
-            гүйлгэсэн нь дээр.
-          */}
-          <Card className="min-h-[130px] flex-1">
-            <Head title="Шийдвэрлэлтээр">
-              <span className="text-[11.5px] text-ink-3">бүлэглэсэн ангилал</span>
-            </Head>
-            <div className="min-h-0 flex-1 overflow-y-auto p-3">
-              <RowChart
-                data={outcomeData}
-                selected={outcome}
-                onSelect={setOutcome}
-                dense
-              />
-            </div>
-          </Card>
+            )}
+          </SheetSection>
+          <SheetSection title="Ховордлын зэргээр" meta={catMeta(rarityData.length)}>
+            <SheetBars
+              data={rarityData}
+              measure="Бүртгэлийн тоо"
+              selected={rarity}
+              onSelect={setRarity}
+            />
+          </SheetSection>
+          <SheetSection title="Шийдвэрлэлтээр" meta={catMeta(outcomeData.length)}>
+            <SheetBars
+              data={outcomeData}
+              measure="Бүртгэлийн тоо"
+              selected={outcome}
+              onSelect={setOutcome}
+            />
+          </SheetSection>
         </div>
       </Columns>
     </div>
@@ -786,45 +801,6 @@ function Card({ className, children }: { className?: string; children: React.Rea
   return (
     <div className={cn("flex flex-col rounded-xs border border-line bg-paper-2", className)}>
       {children}
-    </div>
-  );
-}
-
-function Head({ title, children }: { title: string; children?: React.ReactNode }) {
-  return (
-    <div className="flex shrink-0 items-center justify-between gap-2 border-b border-line px-3 py-2">
-      <h2 className="display text-[13.5px] leading-none tracking-[0.06em] uppercase">
-        {title}
-      </h2>
-      {children}
-    </div>
-  );
-}
-
-/**
- * Индикаторын нэгж нүд. Гарчгийн талбайд хоёр мөрийн зай нөөцөлж,
- * зэрэгцээ нүднүүдийн тоо бүгд нэг шугам дээр таарна. Икон нь чимэглэл
- * биш — ижил хэмжээний саарал гарчгуудыг нүдээр ялгах хэрэгсэл.
- */
-function StatCell({
-  label,
-  value,
-  icon: Icon,
-}: {
-  label: string;
-  value: number;
-  icon: LucideIcon;
-}) {
-  return (
-    <div className="flex flex-col px-3 py-2">
-      {/* Хоёр мөрийн зай нөөцөлсөн хэвээр, зөвхөн мөр хоорондын зай нягтарсан */}
-      <span className="eyebrow block min-h-[28px] leading-[1.25]">{label}</span>
-      <div className="mt-auto flex items-center gap-1.5">
-        <Icon size={20} strokeWidth={1.6} className="shrink-0 text-ink-3" />
-        <span className="num truncate text-[16px] leading-none font-medium text-ink">
-          {num(value)}
-        </span>
-      </div>
     </div>
   );
 }

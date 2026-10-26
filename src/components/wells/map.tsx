@@ -12,6 +12,8 @@ import { asset } from "@/lib/base-path";
 import type { BoundarySet } from "@/lib/boundaries";
 import { labelPoints } from "@/lib/extent";
 import { ratioText } from "@/lib/utils";
+import { NoAccess } from "@/components/auth/access";
+import { useMapAllowed } from "@/components/auth/tab-access";
 
 /* ==========================================================================
    НЭГДСЭН 2D ГАЗРЫН ЗУРАГ — ArcGIS Maps SDK `MapView` (2026-10-12)
@@ -814,6 +816,7 @@ When(n >= 10000, Text(Round(n / 1000)) + "k", n >= 1000, Text(Round(n / 1000, 1)
 type Mode = {
   cluster: boolean;
   clusterMaxZoom: number;
+  clusterRadius: number;
   clusterLabel: "inside" | "badge";
   weighted: boolean;
   graded: [number, string][] | undefined;
@@ -826,6 +829,8 @@ type Mode = {
   fire: Fire;
   tinted: boolean;
   dots: { rank?: Record<string, number> } | null;
+  /** Esri-ийн Firefly зурган тэмдэг ангиллын өнгөөр ({@link WellsMap} `esriFirefly`) */
+  esriFire: boolean;
   /** Цэгийн хэмжээний үржүүлэгч (зэрэглэлгүй цэгт), анхдагч 1 */
   pointScale: number;
   shapeLabelZoom: number;
@@ -833,6 +838,8 @@ type Mode = {
   shapeLabelOnLine: boolean;
   shapeThin: boolean;
   shapeHair: boolean;
+  /** Эдгээр өнгөтэй олон өнцөгт ДҮҮРГЭЛТГҮЙ, нарийн хүрээтэй */
+  shapeHollow: string[];
   shapeOutline: boolean;
   shapeLabelUnique: boolean;
   labeled: boolean;
@@ -876,6 +883,14 @@ function strokes(m: Mode, lit: boolean) {
 }
 
 function polySymbol(m: Mode, color: string, lit: boolean) {
+  if (m.shapeHollow.includes(color)) {
+    /* Нарийн хүрээ, дүүргэлтгүй; сонгосон үед л бүдэг дүүргэлт */
+    const layers: any[] = [
+      { type: "CIMSolidStroke", enable: true, width: (lit ? 1.8 : 0.7) * 0.75, color: cim(color, 1), joinStyle: "Round", capStyle: "Round" },
+    ];
+    if (lit) layers.push({ type: "CIMSolidFill", enable: true, color: cim(color, 0.22) });
+    return { type: "cim", data: { type: "CIMSymbolReference", symbol: { type: "CIMPolygonSymbol", symbolLayers: layers } } };
+  }
   const s = strokes(m, lit);
   /* ХҮРЭЭГҮЙ горимд зөвхөн СОНГОСОН дүрс нимгэн хүрээтэй */
   const outlined = m.shapeOutline || lit;
@@ -935,6 +950,7 @@ function shapeRenderer(m: Mode, colors: string[], sym: (m: Mode, c: string, lit:
 }
 
 function pointSymbolFor(m: Mode): (tint: string | null) => any {
+  if (m.esriFire) return (t) => gradedMultiSymbol(t ?? m.fire.glow);
   if (m.dots) return (t) => dotSymbol(m.fire, t);
   return (t) => fireSymbol(m.fire, t, m.tinted);
 }
@@ -950,7 +966,14 @@ function pointRenderer(m: Mode, colors: string[]) {
     return gradeRenderer(stops, gradedSymbol, sizeByValue(lo, hi, 2.4));
   }
   const sym = pointSymbolFor(m);
-  const base: [number, number][] = m.dots
+  const base: [number, number][] = m.esriFire
+    ? [
+        /* Firefly-ийн гэрэл 20pt — тэмдгийн хамгийн том давхарга */
+        [8, 7],
+        [12, 10],
+        [16, 15],
+      ]
+    : m.dots
     ? [
         [9, 3.4],
         [12, 5.6],
@@ -977,7 +1000,16 @@ function highlightSymbol(f: Fire) {
   return cimPoint([disc(10, null, [cim(f.core, 0.9), 1.3]), ...glow(15, f.glow, 0.4)]);
 }
 
-export function WellsMap({
+/*
+  ЦЭСИЙН ЭРХЭЭР ГАЗРЫН ЗУРАГ ХААЛТТАЙ бол ({@link src/components/auth/tab-access.tsx})
+  зургийн оронд блок — SDK ачаалагдахгүй, давхарга татагдахгүй.
+*/
+export function WellsMap(props: React.ComponentProps<typeof WellsMapBody>) {
+  if (!useMapAllowed()) return <NoAccess className="h-full w-full" text="Газрын зураг харах эрх байхгүй байна" />;
+  return <WellsMapBody {...props} />;
+}
+
+function WellsMapBody({
   points,
   visible,
   basemap,
@@ -991,6 +1023,7 @@ export function WellsMap({
   focus = null,
   cluster = true,
   clusterMaxZoom = 15,
+  clusterRadius = 48,
   clusterLabel = "inside",
   marks,
   pulse = false,
@@ -1001,6 +1034,7 @@ export function WellsMap({
   firefly,
   colors,
   dots,
+  esriFirefly = false,
   pointScale,
   highlight = null,
   overlays,
@@ -1049,6 +1083,8 @@ export function WellsMap({
   cluster?: boolean;
   /** Бөөгнөрөл ЭНЭ түвшнээс цааш задарна (MapLibre-ийн zoom, анхдагч 15) */
   clusterMaxZoom?: number;
+  /** Бөөгнөрлийн радиус, px (анхдагч 48). ЗӨВХӨН анхны зурагдалтад */
+  clusterRadius?: number;
   /** Тоог дугуйн дотор бичих үү, баруун дээд буланд тэмдэг болгох уу */
   clusterLabel?: "inside" | "badge";
   /**
@@ -1090,6 +1126,12 @@ export function WellsMap({
    * зурах дараалал; их нь ДЭЭР.
    */
   dots?: { rank?: Record<string, number> };
+  /**
+   * ARCGIS ONLINE-ИЙН FIREFLY ТЭМДЭГ (хэрэглэгч, 2026-10-22: "arcgis online
+   * map deer bdg shig firefly"). Цагаан цөм + ангиллын өнгөөр будсан
+   * гэрэл — хөрсний мониторингийн `grades.firefly: "graded"`-тэй НЭГ зураг.
+   */
+  esriFirefly?: boolean;
   /** Цэгийн хэмжээний үржүүлэгч (зэрэглэлгүй цэгт), анхдагч 1 */
   pointScale?: number;
   /** Тодруулах цэгийн байрлал `[lon, lat]` — гэрэлтэх цагираг */
@@ -1125,6 +1167,12 @@ export function WellsMap({
     edge?: "thin" | "hair";
     /** ОЛОН ӨНЦӨГТИЙН ХҮРЭЭ (анхдагчаар гарна); сонгосон дүрс үргэлж хүрээтэй */
     outline?: boolean;
+    /**
+     * ДҮҮРГЭЛТГҮЙ, НАРИЙН ХҮРЭЭТЭЙ зурагдах өнгөнүүд (`properties.c`) —
+     * нэг цуглуулгад өөр давхарга дээгүүр суух тор (коридорт давхцсан
+     * нэгж талбар). Анхны зурагдалтад л уншигдана.
+     */
+    hollow?: string[];
     /** НЭГ БИЧВЭРТ ЯГ НЭГ ШОШГО — хамгийн том дүрс дээр */
     labelUnique?: boolean;
   };
@@ -1220,6 +1268,7 @@ export function WellsMap({
   const modeRef = React.useRef<Mode>({
     cluster,
     clusterMaxZoom,
+    clusterRadius,
     clusterLabel,
     weighted: Boolean(weights),
     graded: grades?.stops,
@@ -1232,12 +1281,14 @@ export function WellsMap({
     fire: firefly ?? FIREFLY,
     tinted: Boolean(colors),
     dots: dots ?? null,
+    esriFire: esriFirefly,
     pointScale: pointScale ?? 1,
     shapeLabelZoom: shapes?.labelZoom ?? 0,
     shapeFlow: Boolean(shapes?.flow),
     shapeLabelOnLine: shapes?.labelPlacement === "line-center",
     shapeThin: shapes?.edge === "thin",
     shapeHair: shapes?.edge === "hair",
+    shapeHollow: shapes?.hollow ?? [],
     shapeOutline: shapes?.outline !== false,
     shapeLabelUnique: Boolean(shapes?.labelUnique),
     labeled: Boolean(labels),
@@ -1302,15 +1353,37 @@ export function WellsMap({
         */
         const shapeLabels =
           mode.shaped
-            ? clientLayer(E, "point", [{ name: "t", type: "string" }], {
+            ? clientLayer(E, "point", [{ name: "t", type: "string" }, { name: "s", type: "double" }], {
                 renderer: INVISIBLE,
                 labelingInfo: [
                   {
-                    labelExpressionInfo: { expression: "$feature.t" },
+                    /*
+                      ⚠⚠ ШОШГО ДҮРСЭЭСЭЭ ТОМ БАЙХГҮЙ (хэрэглэгч 2026-10-23, ТХГН-ийн
+                      зургаар: "label zasay"). Хол байхад хотын төвийн жижиг
+                      дүрсүүдийн урт нэр бие биен дээгүүр давхцаж уншигдахгүй
+                      байв. Одоо дүрсийн хэмжээ (`s`, метр) дэлгэц дээр 48px-ээс
+                      бага бол шошго гарахгүй — ойртоход өөрөө гарна; урт нэр
+                      хоёр мөрөнд залгагдаж, 46 тэмдэгтээс хэтэрвэл тасарна
+                      (бүтэн нэр нь цонх, диаграмд). Шугамд `s` хоосон тул
+                      хязгааргүй.
+                    */
+                    labelExpressionInfo: {
+                      expression: `var t = $feature.t;
+                        var s = $feature.s;
+                        if (!IsEmpty(s) && s * 3779.5 / $view.scale < 48) return "";
+                        return IIF(Count(t) > 46, Left(t, 45) + "…", t);`,
+                    },
                     labelPlacement: "center-center",
                     deconflictionStrategy: lineLabels ? "none" : "static",
                     minScale: mode.shapeLabelZoom ? scaleAt(mode.shapeLabelZoom) * 1.01 : 0,
-                    symbol: { type: "text", color: "#ffffff", haloColor: HALO, haloSize: 0.9, font: { ...FONT, size: 8 } },
+                    symbol: {
+                      type: "text",
+                      color: "#ffffff",
+                      haloColor: HALO,
+                      haloSize: 0.9,
+                      lineWidth: 130,
+                      font: { ...FONT, size: 8 },
+                    },
                   },
                 ],
               })
@@ -1380,44 +1453,35 @@ export function WellsMap({
             ? {
                 featureReduction: {
                   type: "cluster",
-                  clusterRadius: "48px",
-                  clusterMinSize: `${pt(10)}pt`,
-                  clusterMaxSize: `${pt(38)}pt`,
+                  /* ⚠ "badge" горим (аврагдсан амьтан, авто засвар): булангийн
+                     хайрцагтай тоо Esri дээр хөршийнхөө дээгүүр давхцаж зураг
+                     замбараагүй харагдаж байв (2026-10-23). Одоо cyan дүүргэлттэй
+                     дугуй (42%), тоо нь ДОТОРОО, бөөгнөрлийн радиус илүү өргөн.
+                     Бараан цул дүүргэлт "онцгүй" гэж буцаагдсан. */
+                  clusterRadius: badge ? "72px" : `${mode.clusterRadius}px`,
+                  clusterMinSize: `${pt(badge ? 12 : 10)}pt`,
+                  clusterMaxSize: `${pt(badge ? 28 : 38)}pt`,
                   maxScale: scaleAt(mode.clusterMaxZoom),
                   /* ⚠ `renderer` БИШ `symbol`: өөрийн рендерер өгвөл НЭГ гишүүнтэй
                      бөөгнөрөл ч цагираг болж зурагддаг байв */
                   symbol: {
                     type: "simple-marker",
-                    color: col(mode.fire.glow, badge ? 0.14 : 0.22),
-                    outline: { color: col(mode.fire.glow, 0.95), width: (badge ? 2 : 1.4) * 0.75 },
+                    color: col(mode.fire.glow, badge ? 0.42 : 0.22),
+                    outline: { color: col(mode.fire.glow, 0.95), width: (badge ? 1.6 : 1.4) * 0.75 },
                   },
                   labelingInfo: [
-                    badge
-                      ? {
-                          deconflictionStrategy: "none",
-                          labelExpressionInfo: { expression: CLUSTER_TEXT },
-                          labelPlacement: "above-right",
-                          symbol: {
-                            type: "text",
-                            color: "#ffffff",
-                            backgroundColor: [15, 23, 32, 0.92],
-                            borderLineColor: col(mode.fire.glow),
-                            borderLineSize: 0.75,
-                            font: { ...FONT, size: 7.5 },
-                          },
-                        }
-                      : {
-                          deconflictionStrategy: "none",
-                          labelExpressionInfo: { expression: CLUSTER_TEXT },
-                          labelPlacement: "center-center",
-                          symbol: {
-                            type: "text",
-                            color: "#ffffff",
-                            haloColor: [0, 0, 0, 0.7],
-                            haloSize: 0.9,
-                            font: { ...FONT, size: 8 },
-                          },
-                        },
+                    {
+                      deconflictionStrategy: "none",
+                      labelExpressionInfo: { expression: CLUSTER_TEXT },
+                      labelPlacement: "center-center",
+                      symbol: {
+                        type: "text",
+                        color: "#ffffff",
+                        haloColor: [0, 0, 0, 0.7],
+                        haloSize: 0.9,
+                        font: { ...FONT, size: 8 },
+                      },
+                    },
                   ],
                 },
               }
@@ -1875,7 +1939,9 @@ export function WellsMap({
       refill(E, live.view, slotOf(layers, "shapeLabels"), () =>
         lp.features.flatMap((f) => {
           const geometry = cleanGeom(f.geometry);
-          return geometry ? [{ type: "Feature" as const, geometry, properties: { t: f.properties?.t ?? null } }] : [];
+          return geometry
+            ? [{ type: "Feature" as const, geometry, properties: { t: f.properties?.t ?? null, s: f.properties?.s ?? null } }]
+            : [];
         }),
       );
     }
