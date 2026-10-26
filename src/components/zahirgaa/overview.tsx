@@ -225,11 +225,40 @@ function PositionsChart({
   const [open, setOpen] = React.useState(false);
   const people = rows.reduce((t, r) => t + r.n, 0);
   const max = Math.max(1, ...rows.map((r) => r.n));
-  /* Ганц хүнтэй албан тушаалууд олон бол нэг мөрөнд хураана — урт сүүл
-     жагсаалтыг гүйлгүүртэй болгож, олон хүнтэй албан тушаалуудыг дарж байв */
-  const singles = rows.filter((r) => r.n === 1);
-  const fold = singles.length > 6 && singles.length < rows.length;
-  const shown = fold && !open ? rows.filter((r) => r.n > 1) : rows;
+  /* Хураасан үед КАРТЫГ ДҮҮРГЭНЭ (хэрэглэгч 2026-10-26: "card дүүргэж
+     харуулаарай"): жагсаалтын өндөрт багтах мөрийн тоог хэмжиж (`fit`), үлдсэнийг
+     "Бусад N албан тушаал" мөрөнд хураана. Хэмжилт нь зөвхөн 1024px-ээс дээш
+     (өндөр нь календариар тогтдог) — доош бол ганц хүнтэйг хураах хуучин дүрэм. */
+  const listRef = React.useRef<HTMLUListElement>(null);
+  const [fit, setFit] = React.useState<number | null>(null);
+  React.useEffect(() => {
+    const ul = listRef.current;
+    if (!ul) return;
+    const measure = () => {
+      if (!window.matchMedia("(min-width: 1024px)").matches) return setFit(null);
+      const row = ul.querySelector<HTMLElement>("li[data-row]");
+      const h = row?.offsetHeight || 32;
+      setFit(Math.max(3, Math.floor(ul.clientHeight / h)));
+    };
+    const ro = new ResizeObserver(measure);
+    ro.observe(ul);
+    return () => ro.disconnect();
+  }, [staff.state]);
+  let shown = rows;
+  let rest: typeof rows = [];
+  if (!open) {
+    if (fit !== null) {
+      if (rows.length > fit) {
+        shown = rows.slice(0, fit - 1);
+        rest = rows.slice(fit - 1);
+      }
+    } else if (rows.filter((r) => r.n === 1).length > 6) {
+      shown = rows.filter((r) => r.n > 1);
+      rest = rows.filter((r) => r.n === 1);
+    }
+  }
+  const fold = open || rest.length > 0;
+  const restPeople = rest.reduce((t, r) => t + r.n, 0);
   const Icon = meta?.icon ?? Users;
 
   return (
@@ -270,9 +299,9 @@ function PositionsChart({
             {rows.length ? null : (
               <div className="px-4 py-6 text-center text-[12px] text-ink-3">Албан хаагч бүртгэгдээгүй байна</div>
             )}
-            <ul className="max-h-[460px] min-h-0 flex-1 divide-y divide-line overflow-y-auto px-4 lg:max-h-none">
+            <ul ref={listRef} className="max-h-[460px] min-h-0 flex-1 divide-y divide-line overflow-y-auto px-4 lg:max-h-none">
               {shown.map((r, i) => (
-                <li key={r.name} className="grid grid-cols-[22px_minmax(0,1fr)_minmax(60px,110px)_30px] items-center gap-3 py-1.5">
+                <li key={r.name} data-row className="grid grid-cols-[22px_minmax(0,1fr)_minmax(60px,110px)_30px] items-center gap-3 py-1.5">
                   <span className="num text-[11px] text-ink-3">{String(i + 1).padStart(2, "0")}</span>
                   <span className="flex min-w-0 items-baseline gap-2">
                     <span className="min-w-0 truncate text-[12.5px] leading-snug text-ink" title={r.name}>
@@ -302,7 +331,9 @@ function PositionsChart({
                     className="flex w-full items-center gap-2 py-1.5 text-left text-[12px] text-ink-2 hover:text-ink"
                   >
                     <ChevronDown size={14} className={cn("shrink-0 transition-transform", open && "rotate-180")} />
-                    {open ? "Хураах" : `Бусад ${num(singles.length)} албан тушаал · тус бүр 1 албан хаагч`}
+                    {open
+                      ? "Хураах"
+                      : `Бусад ${num(rest.length)} албан тушаал · ${rest.every((r) => r.n === 1) ? "тус бүр 1" : num(restPeople)} албан хаагч`}
                   </button>
                 </li>
               ) : null}
