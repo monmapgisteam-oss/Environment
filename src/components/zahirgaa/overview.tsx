@@ -32,7 +32,6 @@ import { DEPARTMENTS, SHORT_NAMES, STATUS_LABEL, getDepartment } from "@/lib/dep
 import {
   LEAD_DEPT,
   ORG_NAME,
-  ZAHIRGAA_INTRO,
   ZAHIRGAA_LAYERS,
   fetchStaff,
   type Staff,
@@ -86,22 +85,15 @@ export function ZahirgaaOverview() {
     <div className="w-full space-y-4" style={{ "--tone": `var(${DEPT.tone})` } as React.CSSProperties}>
       <Header />
 
-      <Panel>
-        <PanelHead title="Хэлтсийн танилцуулга" />
-        {ZAHIRGAA_INTRO ? (
-          <p className="px-4 py-3.5 text-[13px] leading-relaxed text-ink-2">{ZAHIRGAA_INTRO}</p>
-        ) : (
-          <Waiting className="m-3 py-6" />
-        )}
-      </Panel>
-
       <Structure staff={staff} picked={picked} onPick={setPicked} />
 
       {/* Албан хаагч ба календарь зэрэгцэнэ; мөрийн өндрийг КАЛЕНДАРЬ тогтоож,
           албан хаагчийн жагсаалт түүнд багтана (хэрэглэгч 2026-10-22: "картуудад
-          хоосон зай маш их байна") — урьд нь тайлан баруун талд давхарлагдаж,
-          зүүн карт тэр өндрөөр сунаж доороо хоосон үлддэг байв */}
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
+          хоосон зай маш их байна").
+          ⚠ Зэрэгцэх нь 1536px-ээс (`2xl`): түүнээс нарийн дэлгэцэд календарийн
+          нүд ~55px болж арга хэмжээний нэр үг дундуураа тасардаг байв — тэнд
+          хоёр карт босоо цуварч календарь бүтэн өргөнөө авна */}
+      <div className="grid gap-4 2xl:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
         <PositionsChart staff={staff} picked={picked} onPick={setPicked} />
         <EventsCalendar />
       </div>
@@ -152,8 +144,6 @@ function LoadState<T>({ load, className }: { load: Load<T>; className?: string }
     return <div className={cn("flex items-center justify-center px-4 text-center text-[12px] text-clay", className)}>{load.message}</div>;
   return null;
 }
-
-/* ------------------------- албан хаагчийн карт -------------------- */
 
 /* ------------------------- албан хаагчийн бүлэг -------------------- */
 
@@ -222,8 +212,8 @@ function PositionsChart({
         }
       />
       {staff.state === "ready" ? (
-        <div className="relative flex-1 xl:min-h-[300px]">
-          <div className="flex flex-col xl:absolute xl:inset-0">
+        <div className="relative flex-1 2xl:min-h-[300px]">
+          <div className="flex flex-col 2xl:absolute 2xl:inset-0">
             <div className="flex items-center gap-2 border-b border-line px-4 py-2" style={{ "--g": color } as React.CSSProperties}>
               <Icon size={15} strokeWidth={1.6} className="shrink-0 text-(--g)" />
               <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-ink">{meta ? meta.label : "Бүх хэлтэс"}</span>
@@ -237,7 +227,10 @@ function PositionsChart({
                 </button>
               ) : null}
             </div>
-            <ul className="max-h-[420px] min-h-0 flex-1 divide-y divide-line overflow-y-auto px-4 py-0.5 xl:max-h-none">
+            {rows.length ? null : (
+              <div className="px-4 py-6 text-center text-[12px] text-ink-3">Албан хаагч бүртгэгдээгүй байна</div>
+            )}
+            <ul className="max-h-[420px] min-h-0 flex-1 divide-y divide-line overflow-y-auto px-4 py-0.5 2xl:max-h-none">
               {rows.map(([name, v]) => (
                 <li key={name} className="grid grid-cols-[minmax(0,1fr)_88px_28px] items-center gap-3 py-1.5">
                   <span className="text-[12px] leading-snug text-ink-2">{name}</span>
@@ -381,13 +374,15 @@ function Structure({ staff, picked, onPick }: { staff: Load<Staff>; picked: stri
                       </span>
                       <span className="min-h-[30px] text-[11.5px] leading-[15px] text-ink">{d.name}</span>
                       <span className="mt-auto">
-                        <span className="flex items-baseline gap-1 whitespace-nowrap">
+                        <span className="flex min-w-0 items-baseline gap-1">
                           <span className="num text-[20px] leading-none font-semibold text-ink">{loading ?? num(c)}</span>
-                          <span className="text-[10.5px] text-ink-3">албан хаагч</span>
-                          {total ? <span className="num ml-auto text-[10.5px] text-ink-3">{Math.round(share)}%</span> : null}
+                          <span className="truncate text-[10.5px] text-ink-3">албан хаагч</span>
                         </span>
-                        <span className="mt-1.5 block h-[3px] rounded-xs bg-paper-3">
-                          <span className="block h-full rounded-xs bg-(--d)" style={{ width: `${share}%` }} />
+                        <span className="mt-1.5 flex items-center gap-2">
+                          <span className="block h-[3px] flex-1 rounded-xs bg-paper-3">
+                            <span className="block h-full rounded-xs bg-(--d)" style={{ width: `${share}%` }} />
+                          </span>
+                          {total ? <span className="num shrink-0 text-[10.5px] leading-none text-ink-3">{Math.round(share)}%</span> : null}
                         </span>
                       </span>
                     </button>
