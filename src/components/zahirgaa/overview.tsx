@@ -4,8 +4,8 @@
  * Захиргаа удирдлагын хэлтэс — байгууллагын тойм.
  *
  * Бүтэц нь хэрэглэгчийн хэвлэсэн загвар зургийнх (2026-10-20), загвар нь
- * платформынх: танилцуулга → зургаан үзүүлэлт → хэлтсээрх албан хаагч ба
- * байгууллагын бүтэц → арга хэмжээний хөтөлбөр ба тайлангийн хуваарь.
+ * платформынх: байгууллагын бүтэц (нэгтгэсэн үзүүлэлттэй) → албан тушаал ба
+ * арга хэмжээний календарь.
  *
  * ⚠ Загвар зургийн уулын арын зураг, ногоон өнгө, бөөрөнхий булан,
  * сүүдрийг ХУУЛААГҮЙ (хэрэглэгчийн сонголт) — хяналтын схемтэй нэг
@@ -20,6 +20,8 @@ import * as React from "react";
 import Link from "next/link";
 import {
   ArrowUpRight,
+  ChevronDown,
+  UserCog,
   Landmark,
   Network,
   UserCheck,
@@ -32,13 +34,14 @@ import { DEPARTMENTS, SHORT_NAMES, STATUS_LABEL, getDepartment } from "@/lib/dep
 import {
   LEAD_DEPT,
   ORG_NAME,
-  ZAHIRGAA_INTRO,
   ZAHIRGAA_LAYERS,
+  canEditEvents,
   fetchStaff,
   type Staff,
 } from "@/lib/zahirgaa";
 import { cn, num } from "@/lib/utils";
 import { EventsCalendar } from "./events-calendar";
+import { StaffEditor } from "./staff-editor";
 
 const DEPT = getDepartment("zahirgaa")!;
 
@@ -55,8 +58,10 @@ type Load<T> =
  * Төлөв нь хариунаас ДАМ гарна (`res.url`): эффект дотор синхроноор
  * `set*` дуудахыг `react-hooks/set-state-in-effect` хориглодог.
  */
-function useLayer<T>(url: string, load: (signal: AbortSignal) => Promise<T[]>): Load<T> {
+function useLayer<T>(url: string, load: (signal: AbortSignal) => Promise<T[]>, rev = 0): Load<T> {
   const [res, setRes] = React.useState<{ url: string; rows?: T[]; error?: string } | null>(null);
+  /* `rev` өөрчлөгдөхөд (засвар хадгалагдсан) дахин татна — хуучин мөрүүд
+     шинэ нь ирэх хүртэл харагдсаар, "Ачаалж байна" анивчихгүй */
   React.useEffect(() => {
     if (!url) return;
     const ac = new AbortController();
@@ -68,7 +73,7 @@ function useLayer<T>(url: string, load: (signal: AbortSignal) => Promise<T[]>): 
       },
     );
     return () => ac.abort();
-  }, [url, load]);
+  }, [url, load, rev]);
   if (!url) return { state: "pending" };
   if (!res || res.url !== url) return { state: "loading" };
   if (res.error !== undefined) return { state: "error", message: res.error };
@@ -78,33 +83,39 @@ function useLayer<T>(url: string, load: (signal: AbortSignal) => Promise<T[]>): 
 /* ------------------------------------------------------------------ */
 
 export function ZahirgaaOverview() {
-  const staff = useLayer(ZAHIRGAA_LAYERS.staff, fetchStaff);
+  const [staffRev, setStaffRev] = React.useState(0);
+  const staff = useLayer(ZAHIRGAA_LAYERS.staff, fetchStaff, staffRev);
+  /** Засах эрх — календарийн засварлагч бүлэг (хэрэглэгчийн шийдвэр 2026-10-26) */
+  const [editable, setEditable] = React.useState(false);
+  const [editing, setEditing] = React.useState(false);
+  React.useEffect(() => {
+    const ac = new AbortController();
+    canEditEvents(ac.signal).then(setEditable, () => {});
+    return () => ac.abort();
+  }, []);
   /** Сонгосон хэлтэс (бүлгийн түлхүүр) — албан тушаалын жагсаалтыг шүүж, бүтцэд тодорно */
   const [picked, setPicked] = React.useState<string | null>(null);
 
   return (
-    <div className="w-full space-y-4" style={{ "--tone": `var(${DEPT.tone})` } as React.CSSProperties}>
+    <div
+      className="w-full space-y-4 lg:flex lg:h-[calc(100dvh-var(--head-h)-3rem)] lg:flex-col lg:gap-3 lg:space-y-0 lg:[&>*]:shrink-0"
+      style={{ "--tone": `var(${DEPT.tone})` } as React.CSSProperties}
+    >
       <Header />
-
-      <Panel>
-        <PanelHead title="Хэлтсийн танилцуулга" />
-        {ZAHIRGAA_INTRO ? (
-          <p className="px-4 py-3.5 text-[13px] leading-relaxed text-ink-2">{ZAHIRGAA_INTRO}</p>
-        ) : (
-          <Waiting className="m-3 py-6" />
-        )}
-      </Panel>
 
       <Structure staff={staff} picked={picked} onPick={setPicked} />
 
-      {/* Албан хаагч ба календарь зэрэгцэнэ; мөрийн өндрийг КАЛЕНДАРЬ тогтоож,
-          албан хаагчийн жагсаалт түүнд багтана (хэрэглэгч 2026-10-22: "картуудад
-          хоосон зай маш их байна") — урьд нь тайлан баруун талд давхарлагдаж,
-          зүүн карт тэр өндрөөр сунаж доороо хоосон үлддэг байв */}
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
-        <PositionsChart staff={staff} picked={picked} onPick={setPicked} />
+      {/* ⚠⚠ 1024px-ээс дээш хуудас ЯМАР Ч ДЭЛГЭЦИЙН өндөрт ГҮЙЛГҮҮРГҮЙ багтана
+          (хэрэглэгч 2026-10-26: "ymrch delgetsen deer tawisan page scrolldohgui"):
+          энэ мөр үлдсэн өндрийг авч доод хязгааргүй агшина; календарийн долоо
+          хоногийн мөрүүд түүнийг тэнцүү хуваана, албан тушаалын жагсаалт карт
+          дотроо гүйнэ. Нарийн дэлгэцэд (lg–2xl) календарь илүү өргөн (1fr : 2fr)
+          — нүд нарийсахад арга хэмжээний нэр үг дундуураа тасардаг байв. */}
+      <div className="grid gap-4 lg:min-h-0 lg:flex-1 lg:shrink! lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] lg:grid-rows-[minmax(0,1fr)] lg:gap-3 2xl:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
+        <PositionsChart staff={staff} picked={picked} onPick={setPicked} onEdit={editable ? () => setEditing(true) : undefined} />
         <EventsCalendar />
       </div>
+      {editing ? <StaffEditor onClose={() => setEditing(false)} onChanged={() => setStaffRev((v) => v + 1)} /> : null}
     </div>
   );
 }
@@ -113,22 +124,22 @@ export function ZahirgaaOverview() {
 
 function Header() {
   return (
-    <header className="relative">
+    <header className="relative lg:[@media(max-height:780px)]:hidden">
       <span aria-hidden className="absolute top-0 -left-4 h-full w-[3px] bg-(--tone) lg:-left-6" />
       <div className="flex items-center gap-4">
         <div
-          className="tinted flex size-12 shrink-0 items-center justify-center rounded-xs border"
+          className="tinted flex size-10 shrink-0 items-center justify-center rounded-xs border"
           style={{ borderColor: "color-mix(in oklab, var(--tone) 30%, transparent)" }}
         >
           <DEPT.icon size={24} strokeWidth={1.4} className="text-(--tone)" />
         </div>
         <div className="min-w-0 flex-1">
-          <h1 className="display text-[24px] leading-tight">{DEPT.name}</h1>
-          <div className="mt-1 text-[12px] text-ink-3">{ORG_NAME}</div>
+          <h1 className="display text-[21px] leading-tight">{DEPT.name}</h1>
+          <div className="mt-0.5 text-[12px] text-ink-3">{ORG_NAME}</div>
         </div>
         <Badge tone="neutral">{STATUS_LABEL[DEPT.status]}</Badge>
       </div>
-      <div className="ruler mt-4 opacity-70" aria-hidden />
+      <div className="ruler mt-2.5 opacity-70" aria-hidden />
     </header>
   );
 }
@@ -152,8 +163,6 @@ function LoadState<T>({ load, className }: { load: Load<T>; className?: string }
     return <div className={cn("flex items-center justify-center px-4 text-center text-[12px] text-clay", className)}>{load.message}</div>;
   return null;
 }
-
-/* ------------------------- албан хаагчийн карт -------------------- */
 
 /* ------------------------- албан хаагчийн бүлэг -------------------- */
 
@@ -188,25 +197,68 @@ function PositionsChart({
   staff,
   picked,
   onPick,
+  onEdit,
 }: {
   staff: Load<Staff>;
   picked: string | null;
   onPick: (k: string | null) => void;
+  /** Засварлагчид л — "Албан хаагч бүртгэх" товч */
+  onEdit?: () => void;
 }) {
   const meta = picked ? groupMeta(picked) : null;
   const rows = React.useMemo(() => {
     if (staff.state !== "ready") return [];
-    const counts = new Map<string, number>();
+    const by = new Map<string, { n: number; depts: Map<string, number> }>();
     for (const s of staff.rows) {
-      if (picked && groupOf(s) !== picked) continue;
+      const g = groupOf(s);
+      if (picked && g !== picked) continue;
       const k = s.position || "Бүртгэгдээгүй";
-      counts.set(k, (counts.get(k) ?? 0) + 1);
+      const r = by.get(k) ?? { n: 0, depts: new Map() };
+      r.n++;
+      r.depts.set(g, (r.depts.get(g) ?? 0) + 1);
+      by.set(k, r);
     }
-    return [...counts].sort((x, y) => y[1] - x[1] || x[0].localeCompare(y[0], "mn"));
+    return [...by]
+      .map(([name, r]) => ({ name, n: r.n, depts: [...r.depts].sort((x, y) => y[1] - x[1]) }))
+      .sort((x, y) => y.n - x.n || x.name.localeCompare(y.name, "mn"));
   }, [staff, picked]);
-  const people = rows.reduce((t, [, v]) => t + v, 0);
-  const max = Math.max(1, ...rows.map(([, v]) => v));
-  const color = "var(--tone)";
+  const [open, setOpen] = React.useState(false);
+  const people = rows.reduce((t, r) => t + r.n, 0);
+  const max = Math.max(1, ...rows.map((r) => r.n));
+  /* Хураасан үед КАРТЫГ ДҮҮРГЭНЭ (хэрэглэгч 2026-10-26: "card дүүргэж
+     харуулаарай"): жагсаалтын өндөрт багтах мөрийн тоог хэмжиж (`fit`), үлдсэнийг
+     "Бусад N албан тушаал" мөрөнд хураана. Хэмжилт нь зөвхөн 1024px-ээс дээш
+     (өндөр нь календариар тогтдог) — доош бол ганц хүнтэйг хураах хуучин дүрэм. */
+  const listRef = React.useRef<HTMLUListElement>(null);
+  const [fit, setFit] = React.useState<number | null>(null);
+  React.useEffect(() => {
+    const ul = listRef.current;
+    if (!ul) return;
+    const measure = () => {
+      if (!window.matchMedia("(min-width: 1024px)").matches) return setFit(null);
+      const row = ul.querySelector<HTMLElement>("li[data-row]");
+      const h = row?.offsetHeight || 32;
+      setFit(Math.max(3, Math.floor(ul.clientHeight / h)));
+    };
+    const ro = new ResizeObserver(measure);
+    ro.observe(ul);
+    return () => ro.disconnect();
+  }, [staff.state]);
+  let shown = rows;
+  let rest: typeof rows = [];
+  if (!open) {
+    if (fit !== null) {
+      if (rows.length > fit) {
+        shown = rows.slice(0, fit - 1);
+        rest = rows.slice(fit - 1);
+      }
+    } else if (rows.filter((r) => r.n === 1).length > 6) {
+      shown = rows.filter((r) => r.n > 1);
+      rest = rows.filter((r) => r.n === 1);
+    }
+  }
+  const fold = open || rest.length > 0;
+  const restPeople = rest.reduce((t, r) => t + r.n, 0);
   const Icon = meta?.icon ?? Users;
 
   return (
@@ -214,19 +266,26 @@ function PositionsChart({
       <PanelHead
         title="Албан хаагчид, албан тушаалаар"
         action={
-          staff.state === "ready" ? (
-            <span className="num text-[11.5px] text-ink-3">
-              {num(people)} албан хаагч · {num(rows.length)} албан тушаал
-            </span>
-          ) : null
+          onEdit ? (
+            <button
+              type="button"
+              onClick={onEdit}
+              className="inline-flex items-center gap-1 rounded-xs bg-(--tone) px-2 py-1 text-[11.5px] font-medium text-paper hover:opacity-90"
+            >
+              <UserCog size={13} /> Албан хаагч бүртгэх
+            </button>
+          ) : undefined
         }
       />
       {staff.state === "ready" ? (
-        <div className="relative flex-1 xl:min-h-[300px]">
-          <div className="flex flex-col xl:absolute xl:inset-0">
-            <div className="flex items-center gap-2 border-b border-line px-4 py-2" style={{ "--g": color } as React.CSSProperties}>
-              <Icon size={15} strokeWidth={1.6} className="shrink-0 text-(--g)" />
+        <div className="relative flex-1">
+          <div className="flex flex-col pb-2 lg:absolute lg:inset-0">
+            <div className="flex items-center gap-2 border-b border-line px-4 py-2">
+              <Icon size={15} strokeWidth={1.6} className="shrink-0 text-(--tone)" />
               <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-ink">{meta ? meta.label : "Бүх хэлтэс"}</span>
+              <span className="num shrink-0 text-[11px] text-ink-3">
+                {num(people)} албан хаагч · {num(rows.length)} албан тушаал
+              </span>
               {picked ? (
                 <button
                   type="button"
@@ -237,16 +296,47 @@ function PositionsChart({
                 </button>
               ) : null}
             </div>
-            <ul className="max-h-[420px] min-h-0 flex-1 divide-y divide-line overflow-y-auto px-4 py-0.5 xl:max-h-none">
-              {rows.map(([name, v]) => (
-                <li key={name} className="grid grid-cols-[minmax(0,1fr)_88px_28px] items-center gap-3 py-1.5">
-                  <span className="text-[12px] leading-snug text-ink-2">{name}</span>
-                  <span className="h-[5px] rounded-xs bg-paper-3">
-                    <span className="block h-full rounded-xs" style={{ width: `${(v / max) * 100}%`, background: color, opacity: 0.8 }} />
+            {rows.length ? null : (
+              <div className="px-4 py-6 text-center text-[12px] text-ink-3">Албан хаагч бүртгэгдээгүй байна</div>
+            )}
+            <ul ref={listRef} className="max-h-[460px] min-h-0 flex-1 divide-y divide-line overflow-y-auto px-4 lg:max-h-none">
+              {shown.map((r, i) => (
+                <li key={r.name} data-row className="grid grid-cols-[22px_minmax(0,1fr)_minmax(60px,110px)_30px] items-center gap-3 py-1.5">
+                  <span className="num text-[11px] text-ink-3">{String(i + 1).padStart(2, "0")}</span>
+                  <span className="flex min-w-0 items-baseline gap-2">
+                    <span className="min-w-0 truncate text-[12.5px] leading-snug text-ink" title={r.name}>
+                      {r.name}
+                    </span>
+                    {picked ? null : (
+                      <span
+                        className="num ml-auto max-w-[40%] shrink-0 truncate text-[10.5px] text-ink-3"
+                        title={r.depts.map(([g, v]) => `${groupMeta(g).label} — ${v}`).join(" · ")}
+                      >
+                        {r.depts.map(([g, v]) => `${shortOf(g)}${r.depts.length > 1 ? ` ${v}` : ""}`).join(" · ")}
+                      </span>
+                    )}
                   </span>
-                  <span className="num text-right text-[12.5px] font-medium text-ink">{num(v)}</span>
+                  <span className="h-[5px] rounded-xs bg-paper-3">
+                    <span className="block h-full rounded-xs bg-(--tone)" style={{ width: `${(r.n / max) * 100}%`, opacity: 0.85 }} />
+                  </span>
+                  <span className="num text-right text-[13px] font-semibold text-ink">{num(r.n)}</span>
                 </li>
               ))}
+              {fold ? (
+                <li>
+                  <button
+                    type="button"
+                    aria-expanded={open}
+                    onClick={() => setOpen((v) => !v)}
+                    className="flex w-full items-center gap-2 py-1.5 text-left text-[12px] text-ink-2 hover:text-ink"
+                  >
+                    <ChevronDown size={14} className={cn("shrink-0 transition-transform", open && "rotate-180")} />
+                    {open
+                      ? "Хураах"
+                      : `Бусад ${num(rest.length)} албан тушаал · ${rest.every((r) => r.n === 1) ? "тус бүр 1" : num(restPeople)} албан хаагч`}
+                  </button>
+                </li>
+              ) : null}
             </ul>
           </div>
         </div>
@@ -256,6 +346,9 @@ function PositionsChart({
     </Panel>
   );
 }
+
+/** Бүлгийн товч нэр — хэлтсийн товчлол, удирдлага нь "Удирдлага" */
+const shortOf = (g: string) => SHORT_NAMES[g] ?? g;
 
 /* ---------------------------- бүтэц -------------------------------- */
 
@@ -299,7 +392,7 @@ function Structure({ staff, picked, onPick }: { staff: Load<Staff>; picked: stri
   return (
     <Panel className="flex flex-col">
       <PanelHead title="Байгууллагын бүтэц" />
-      <div className="flex flex-col items-center px-4 pt-4 pb-5">
+      <div className="flex flex-col items-center px-4 pt-3 pb-3.5">
         {/* ---- үндэс: газар ба нэгтгэсэн үзүүлэлтүүд ---- */}
         <div className="tinted flex w-full max-w-[880px] flex-wrap items-stretch gap-x-5 gap-y-3 rounded-xs border border-(--tone)/40 px-4 py-3">
           <div className="flex min-w-[240px] flex-1 items-center gap-3">
@@ -334,7 +427,7 @@ function Structure({ staff, picked, onPick }: { staff: Load<Staff>; picked: stri
             </RootStat>
           </dl>
         </div>
-        <span aria-hidden className="h-5 w-px bg-line-2" />
+        <span aria-hidden className="h-3 w-px bg-line-2" />
 
         {/* ---- хэлтсүүд ---- */}
         <div className="relative w-full">
@@ -353,8 +446,8 @@ function Structure({ staff, picked, onPick }: { staff: Load<Staff>; picked: stri
               const on = picked === d.slug;
               const dim = picked !== null && !on;
               return (
-                <li key={d.slug} className="relative lg:pt-5" style={{ "--d": `var(${d.tone})` } as React.CSSProperties}>
-                  <span aria-hidden className="absolute top-0 left-1/2 hidden h-5 w-px bg-line-2 lg:block" />
+                <li key={d.slug} className="relative lg:pt-3" style={{ "--d": `var(${d.tone})` } as React.CSSProperties}>
+                  <span aria-hidden className="absolute top-0 left-1/2 hidden h-3 w-px bg-line-2 lg:block" />
                   <div
                     className={cn(
                       "group relative flex h-full flex-col overflow-hidden rounded-xs border bg-paper transition-[background-color,border-color,opacity]",
@@ -379,15 +472,17 @@ function Structure({ staff, picked, onPick }: { staff: Load<Staff>; picked: stri
                         </span>
                         <span className="text-[10.5px] font-semibold tracking-wide text-ink-3">{SHORT_NAMES[d.slug]}</span>
                       </span>
-                      <span className="min-h-[30px] text-[11.5px] leading-[15px] text-ink">{d.name}</span>
+                      <span className="line-clamp-2 min-h-[30px] text-[11.5px] leading-[15px] text-ink lg:[@media(max-height:900px)]:hidden">{d.name}</span>
                       <span className="mt-auto">
-                        <span className="flex items-baseline gap-1 whitespace-nowrap">
+                        <span className="flex min-w-0 items-baseline gap-1">
                           <span className="num text-[20px] leading-none font-semibold text-ink">{loading ?? num(c)}</span>
-                          <span className="text-[10.5px] text-ink-3">албан хаагч</span>
-                          {total ? <span className="num ml-auto text-[10.5px] text-ink-3">{Math.round(share)}%</span> : null}
+                          <span className="truncate text-[10.5px] text-ink-3">албан хаагч</span>
                         </span>
-                        <span className="mt-1.5 block h-[3px] rounded-xs bg-paper-3">
-                          <span className="block h-full rounded-xs bg-(--d)" style={{ width: `${share}%` }} />
+                        <span className="mt-1.5 flex items-center gap-2">
+                          <span className="block h-[3px] flex-1 rounded-xs bg-paper-3">
+                            <span className="block h-full rounded-xs bg-(--d)" style={{ width: `${share}%` }} />
+                          </span>
+                          {total ? <span className="num shrink-0 text-[10.5px] leading-none text-ink-3">{Math.round(share)}%</span> : null}
                         </span>
                       </span>
                     </button>
