@@ -51,9 +51,9 @@ const shortDept = (dept: string) => {
 const statusTone = (s: string) =>
   s === STAFF_WORKING ? "var(--moss)" : s === STAFF_LEFT ? "var(--clay)" : s ? "var(--ochre)" : "var(--line-2)";
 
-const ROW = "grid w-full items-center gap-3 px-4";
-const COLS_STATUS = "grid-cols-[minmax(0,1.1fr)_minmax(0,1.4fr)_64px_118px]";
-const COLS_PLAIN = "grid-cols-[minmax(0,1.1fr)_minmax(0,1.4fr)_64px]";
+const ROW = "grid w-full items-center gap-x-5 pr-5 pl-4";
+const COLS_STATUS = "grid-cols-[minmax(0,0.75fr)_minmax(0,1.6fr)_72px_128px]";
+const COLS_PLAIN = "grid-cols-[minmax(0,0.75fr)_minmax(0,1.6fr)_72px]";
 
 const EMPTY: StaffInput = { name: "", dept: "", position: "", status: STAFF_WORKING };
 
@@ -234,7 +234,7 @@ export function StaffEditor({ onClose, onChanged }: { onClose: () => void; onCha
               >
                 <span>Нэр</span>
                 <span>Албан тушаал</span>
-                <span className="text-right">Хэлтэс</span>
+                <span>Хэлтэс</span>
                 {hasStatus ? <span>Төлөв</span> : null}
               </li>
               {shown.map((r) => (
@@ -255,7 +255,7 @@ export function StaffEditor({ onClose, onChanged }: { onClose: () => void; onCha
                     <span className="truncate text-[12px] text-ink-2" title={r.position}>
                       {r.position || "—"}
                     </span>
-                    <span className="truncate text-right text-[11px] text-ink-3" title={r.dept}>
+                    <span className="truncate text-[11px] text-ink-3" title={r.dept}>
                       {shortDept(r.dept)}
                     </span>
                     {hasStatus ? (
