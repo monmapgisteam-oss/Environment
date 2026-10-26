@@ -84,24 +84,20 @@ export function ZahirgaaOverview() {
 
   return (
     <div
-      className="w-full space-y-4 2xl:flex 2xl:h-[calc(100dvh-var(--head-h)-3rem)] 2xl:flex-col 2xl:gap-4 2xl:space-y-0 [&>*]:shrink-0"
+      className="w-full space-y-4 lg:flex lg:h-[calc(100dvh-var(--head-h)-3rem)] lg:flex-col lg:gap-3 lg:space-y-0 lg:[&>*]:shrink-0"
       style={{ "--tone": `var(${DEPT.tone})` } as React.CSSProperties}
     >
       <Header />
 
       <Structure staff={staff} picked={picked} onPick={setPicked} />
 
-      {/* Албан хаагч ба календарь зэрэгцэнэ; мөрийн өндрийг КАЛЕНДАРЬ тогтоож,
-          албан хаагчийн жагсаалт түүнд багтана (хэрэглэгч 2026-10-22: "картуудад
-          хоосон зай маш их байна").
-          ⚠ 1536px-ээс дээш хуудас ДЭЛГЭЦИЙН ӨНДӨРТ багтана (хэрэглэгч 2026-10-26:
-          "page iig scrolldohgui"): энэ мөр үлдсэн өндрийг авч календарийн
-          долоо хоногийн мөрүүд түүнийг тэнцүү хуваана; 400px-ээс намсахгүй —
-          тэр үед хуудас гүйнэ.
-          ⚠ Зэрэгцэх нь 1536px-ээс (`2xl`): түүнээс нарийн дэлгэцэд календарийн
-          нүд ~55px болж арга хэмжээний нэр үг дундуураа тасардаг байв — тэнд
-          хоёр карт босоо цуварч календарь бүтэн өргөнөө авна */}
-      <div className="grid gap-4 2xl:min-h-[400px] 2xl:flex-1 2xl:shrink! 2xl:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] 2xl:grid-rows-[minmax(0,1fr)]">
+      {/* ⚠⚠ 1024px-ээс дээш хуудас ЯМАР Ч ДЭЛГЭЦИЙН өндөрт ГҮЙЛГҮҮРГҮЙ багтана
+          (хэрэглэгч 2026-10-26: "ymrch delgetsen deer tawisan page scrolldohgui"):
+          энэ мөр үлдсэн өндрийг авч доод хязгааргүй агшина; календарийн долоо
+          хоногийн мөрүүд түүнийг тэнцүү хуваана, албан тушаалын жагсаалт карт
+          дотроо гүйнэ. Нарийн дэлгэцэд (lg–2xl) календарь илүү өргөн (1fr : 2fr)
+          — нүд нарийсахад арга хэмжээний нэр үг дундуураа тасардаг байв. */}
+      <div className="grid gap-4 lg:min-h-0 lg:flex-1 lg:shrink! lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] lg:grid-rows-[minmax(0,1fr)] lg:gap-3 2xl:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
         <PositionsChart staff={staff} picked={picked} onPick={setPicked} />
         <EventsCalendar />
       </div>
@@ -113,22 +109,22 @@ export function ZahirgaaOverview() {
 
 function Header() {
   return (
-    <header className="relative">
+    <header className="relative lg:[@media(max-height:780px)]:hidden">
       <span aria-hidden className="absolute top-0 -left-4 h-full w-[3px] bg-(--tone) lg:-left-6" />
       <div className="flex items-center gap-4">
         <div
-          className="tinted flex size-11 shrink-0 items-center justify-center rounded-xs border"
+          className="tinted flex size-10 shrink-0 items-center justify-center rounded-xs border"
           style={{ borderColor: "color-mix(in oklab, var(--tone) 30%, transparent)" }}
         >
           <DEPT.icon size={24} strokeWidth={1.4} className="text-(--tone)" />
         </div>
         <div className="min-w-0 flex-1">
-          <h1 className="display text-[22px] leading-tight">{DEPT.name}</h1>
+          <h1 className="display text-[21px] leading-tight">{DEPT.name}</h1>
           <div className="mt-0.5 text-[12px] text-ink-3">{ORG_NAME}</div>
         </div>
         <Badge tone="neutral">{STATUS_LABEL[DEPT.status]}</Badge>
       </div>
-      <div className="ruler mt-3 opacity-70" aria-hidden />
+      <div className="ruler mt-2.5 opacity-70" aria-hidden />
     </header>
   );
 }
@@ -220,22 +216,16 @@ function PositionsChart({
 
   return (
     <Panel className="flex h-full flex-col">
-      <PanelHead
-        title="Албан хаагчид, албан тушаалаар"
-        action={
-          staff.state === "ready" ? (
-            <span className="num text-[11.5px] text-ink-3">
-              {num(people)} албан хаагч · {num(rows.length)} албан тушаал
-            </span>
-          ) : null
-        }
-      />
+      <PanelHead title="Албан хаагчид, албан тушаалаар" />
       {staff.state === "ready" ? (
-        <div className="relative flex-1 2xl:min-h-[300px]">
-          <div className="flex flex-col pb-2 2xl:absolute 2xl:inset-0">
+        <div className="relative flex-1">
+          <div className="flex flex-col pb-2 lg:absolute lg:inset-0">
             <div className="flex items-center gap-2 border-b border-line px-4 py-2">
               <Icon size={15} strokeWidth={1.6} className="shrink-0 text-(--tone)" />
               <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-ink">{meta ? meta.label : "Бүх хэлтэс"}</span>
+              <span className="num shrink-0 text-[11px] text-ink-3">
+                {num(people)} албан хаагч · {num(rows.length)} албан тушаал
+              </span>
               {picked ? (
                 <button
                   type="button"
@@ -249,7 +239,7 @@ function PositionsChart({
             {rows.length ? null : (
               <div className="px-4 py-6 text-center text-[12px] text-ink-3">Албан хаагч бүртгэгдээгүй байна</div>
             )}
-            <ul className="max-h-[460px] min-h-0 flex-1 divide-y divide-line overflow-y-auto px-4 2xl:max-h-none">
+            <ul className="max-h-[460px] min-h-0 flex-1 divide-y divide-line overflow-y-auto px-4 lg:max-h-none">
               {shown.map((r, i) => (
                 <li key={r.name} className="grid grid-cols-[22px_minmax(0,1fr)_minmax(60px,110px)_30px] items-center gap-3 py-1.5">
                   <span className="num text-[11px] text-ink-3">{String(i + 1).padStart(2, "0")}</span>
@@ -340,7 +330,7 @@ function Structure({ staff, picked, onPick }: { staff: Load<Staff>; picked: stri
   return (
     <Panel className="flex flex-col">
       <PanelHead title="Байгууллагын бүтэц" />
-      <div className="flex flex-col items-center px-4 pt-3.5 pb-4">
+      <div className="flex flex-col items-center px-4 pt-3 pb-3.5">
         {/* ---- үндэс: газар ба нэгтгэсэн үзүүлэлтүүд ---- */}
         <div className="tinted flex w-full max-w-[880px] flex-wrap items-stretch gap-x-5 gap-y-3 rounded-xs border border-(--tone)/40 px-4 py-3">
           <div className="flex min-w-[240px] flex-1 items-center gap-3">
@@ -375,7 +365,7 @@ function Structure({ staff, picked, onPick }: { staff: Load<Staff>; picked: stri
             </RootStat>
           </dl>
         </div>
-        <span aria-hidden className="h-4 w-px bg-line-2" />
+        <span aria-hidden className="h-3 w-px bg-line-2" />
 
         {/* ---- хэлтсүүд ---- */}
         <div className="relative w-full">
@@ -394,8 +384,8 @@ function Structure({ staff, picked, onPick }: { staff: Load<Staff>; picked: stri
               const on = picked === d.slug;
               const dim = picked !== null && !on;
               return (
-                <li key={d.slug} className="relative lg:pt-4" style={{ "--d": `var(${d.tone})` } as React.CSSProperties}>
-                  <span aria-hidden className="absolute top-0 left-1/2 hidden h-4 w-px bg-line-2 lg:block" />
+                <li key={d.slug} className="relative lg:pt-3" style={{ "--d": `var(${d.tone})` } as React.CSSProperties}>
+                  <span aria-hidden className="absolute top-0 left-1/2 hidden h-3 w-px bg-line-2 lg:block" />
                   <div
                     className={cn(
                       "group relative flex h-full flex-col overflow-hidden rounded-xs border bg-paper transition-[background-color,border-color,opacity]",
@@ -420,7 +410,7 @@ function Structure({ staff, picked, onPick }: { staff: Load<Staff>; picked: stri
                         </span>
                         <span className="text-[10.5px] font-semibold tracking-wide text-ink-3">{SHORT_NAMES[d.slug]}</span>
                       </span>
-                      <span className="min-h-[30px] text-[11.5px] leading-[15px] text-ink">{d.name}</span>
+                      <span className="line-clamp-2 min-h-[30px] text-[11.5px] leading-[15px] text-ink lg:[@media(max-height:900px)]:hidden">{d.name}</span>
                       <span className="mt-auto">
                         <span className="flex min-w-0 items-baseline gap-1">
                           <span className="num text-[20px] leading-none font-semibold text-ink">{loading ?? num(c)}</span>
