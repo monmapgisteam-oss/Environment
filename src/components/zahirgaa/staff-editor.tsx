@@ -46,6 +46,14 @@ const shortDept = (dept: string) => {
   return slug ? SHORT_NAMES[slug] : dept || "—";
 };
 
+/** Төлөвийн өнгө — өнгө = утга: ажиллаж буй `--moss`, чөлөөтэй `--ochre`, гарсан `--clay` */
+const statusTone = (s: string) =>
+  s === STAFF_WORKING ? "var(--moss)" : s === STAFF_LEFT ? "var(--clay)" : s ? "var(--ochre)" : "var(--line-2)";
+
+const ROW = "grid w-full items-center gap-3 px-4";
+const COLS_STATUS = "grid-cols-[minmax(0,1.1fr)_minmax(0,1.4fr)_64px_118px]";
+const COLS_PLAIN = "grid-cols-[minmax(0,1.1fr)_minmax(0,1.4fr)_64px]";
+
 const EMPTY: StaffInput = { name: "", dept: "", position: "", status: STAFF_WORKING };
 
 export function StaffEditor({ onClose, onChanged }: { onClose: () => void; onChanged: () => void }) {
@@ -200,23 +208,32 @@ export function StaffEditor({ onClose, onChanged }: { onClose: () => void; onCha
             <div className="px-4 py-8 text-center text-[12px] text-ink-3">Ачаалж байна</div>
           ) : shown.length ? (
             <ul className="divide-y divide-line">
+              <li
+                className={cn(
+                  ROW,
+                  hasStatus ? COLS_STATUS : COLS_PLAIN,
+                  "sticky top-0 z-[1] bg-paper-2 py-1.5 text-[10px] tracking-wide text-ink-3 uppercase",
+                )}
+              >
+                <span>Нэр</span>
+                <span>Албан тушаал</span>
+                <span className="text-right">Хэлтэс</span>
+                {hasStatus ? <span>Төлөв</span> : null}
+              </li>
               {shown.map((r) => (
                 <li key={r.id}>
                   <button
                     type="button"
                     onClick={() => open(r)}
                     className={cn(
-                      "grid w-full grid-cols-[minmax(0,1.1fr)_minmax(0,1.4fr)_64px] items-center gap-3 px-4 py-2 text-left hover:bg-paper-hi",
+                      ROW,
+                      hasStatus ? COLS_STATUS : COLS_PLAIN,
+                      "py-2 text-left hover:bg-paper-hi",
                       edit === r.id && "bg-paper-hi shadow-[inset_2px_0_0_var(--tone)]",
                     )}
                   >
-                    <span className="min-w-0">
-                      <span className={cn("block truncate text-[12.5px] text-ink", r.status === STAFF_LEFT && "text-ink-3 line-through")}>
-                        {r.name || "—"}
-                      </span>
-                      {r.status && r.status !== STAFF_WORKING ? (
-                        <span className={cn("text-[10.5px]", r.status === STAFF_LEFT ? "text-clay" : "text-ochre")}>{r.status}</span>
-                      ) : null}
+                    <span className={cn("truncate text-[12.5px] text-ink", r.status === STAFF_LEFT && "text-ink-3 line-through")}>
+                      {r.name || "—"}
                     </span>
                     <span className="truncate text-[12px] text-ink-2" title={r.position}>
                       {r.position || "—"}
@@ -224,6 +241,12 @@ export function StaffEditor({ onClose, onChanged }: { onClose: () => void; onCha
                     <span className="truncate text-right text-[11px] text-ink-3" title={r.dept}>
                       {shortDept(r.dept)}
                     </span>
+                    {hasStatus ? (
+                      <span className="flex min-w-0 items-center gap-1.5 text-[11.5px]">
+                        <span className="size-1.5 shrink-0 rounded-full" style={{ background: statusTone(r.status) }} />
+                        <span className={cn("truncate", r.status ? "text-ink-2" : "text-ink-3")}>{r.status || "Бүртгэгдээгүй"}</span>
+                      </span>
+                    ) : null}
                   </button>
                 </li>
               ))}
