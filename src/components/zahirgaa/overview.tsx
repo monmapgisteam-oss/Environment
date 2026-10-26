@@ -4,8 +4,8 @@
  * Захиргаа удирдлагын хэлтэс — байгууллагын тойм.
  *
  * Бүтэц нь хэрэглэгчийн хэвлэсэн загвар зургийнх (2026-10-20), загвар нь
- * платформынх: танилцуулга → зургаан үзүүлэлт → хэлтсээрх албан хаагч ба
- * байгууллагын бүтэц → арга хэмжээний хөтөлбөр ба тайлангийн хуваарь.
+ * платформынх: байгууллагын бүтэц (нэгтгэсэн үзүүлэлттэй) → албан тушаал ба
+ * арга хэмжээний календарь.
  *
  * ⚠ Загвар зургийн уулын арын зураг, ногоон өнгө, бөөрөнхий булан,
  * сүүдрийг ХУУЛААГҮЙ (хэрэглэгчийн сонголт) — хяналтын схемтэй нэг
@@ -20,6 +20,7 @@ import * as React from "react";
 import Link from "next/link";
 import {
   ArrowUpRight,
+  ChevronDown,
   Landmark,
   Network,
   UserCheck,
@@ -186,17 +187,28 @@ function PositionsChart({
   const meta = picked ? groupMeta(picked) : null;
   const rows = React.useMemo(() => {
     if (staff.state !== "ready") return [];
-    const counts = new Map<string, number>();
+    const by = new Map<string, { n: number; depts: Map<string, number> }>();
     for (const s of staff.rows) {
-      if (picked && groupOf(s) !== picked) continue;
+      const g = groupOf(s);
+      if (picked && g !== picked) continue;
       const k = s.position || "Бүртгэгдээгүй";
-      counts.set(k, (counts.get(k) ?? 0) + 1);
+      const r = by.get(k) ?? { n: 0, depts: new Map() };
+      r.n++;
+      r.depts.set(g, (r.depts.get(g) ?? 0) + 1);
+      by.set(k, r);
     }
-    return [...counts].sort((x, y) => y[1] - x[1] || x[0].localeCompare(y[0], "mn"));
+    return [...by]
+      .map(([name, r]) => ({ name, n: r.n, depts: [...r.depts].sort((x, y) => y[1] - x[1]) }))
+      .sort((x, y) => y.n - x.n || x.name.localeCompare(y.name, "mn"));
   }, [staff, picked]);
-  const people = rows.reduce((t, [, v]) => t + v, 0);
-  const max = Math.max(1, ...rows.map(([, v]) => v));
-  const color = "var(--tone)";
+  const [open, setOpen] = React.useState(false);
+  const people = rows.reduce((t, r) => t + r.n, 0);
+  const max = Math.max(1, ...rows.map((r) => r.n));
+  /* Ганц хүнтэй албан тушаалууд олон бол нэг мөрөнд хураана — урт сүүл
+     жагсаалтыг гүйлгүүртэй болгож, олон хүнтэй албан тушаалуудыг дарж байв */
+  const singles = rows.filter((r) => r.n === 1);
+  const fold = singles.length > 6 && singles.length < rows.length;
+  const shown = fold && !open ? rows.filter((r) => r.n > 1) : rows;
   const Icon = meta?.icon ?? Users;
 
   return (
@@ -214,8 +226,8 @@ function PositionsChart({
       {staff.state === "ready" ? (
         <div className="relative flex-1 2xl:min-h-[300px]">
           <div className="flex flex-col 2xl:absolute 2xl:inset-0">
-            <div className="flex items-center gap-2 border-b border-line px-4 py-2" style={{ "--g": color } as React.CSSProperties}>
-              <Icon size={15} strokeWidth={1.6} className="shrink-0 text-(--g)" />
+            <div className="flex items-center gap-2 border-b border-line px-4 py-2">
+              <Icon size={15} strokeWidth={1.6} className="shrink-0 text-(--tone)" />
               <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-ink">{meta ? meta.label : "Бүх хэлтэс"}</span>
               {picked ? (
                 <button
@@ -230,16 +242,40 @@ function PositionsChart({
             {rows.length ? null : (
               <div className="px-4 py-6 text-center text-[12px] text-ink-3">Албан хаагч бүртгэгдээгүй байна</div>
             )}
-            <ul className="max-h-[420px] min-h-0 flex-1 divide-y divide-line overflow-y-auto px-4 py-0.5 2xl:max-h-none">
-              {rows.map(([name, v]) => (
-                <li key={name} className="grid grid-cols-[minmax(0,1fr)_88px_28px] items-center gap-3 py-1.5">
-                  <span className="text-[12px] leading-snug text-ink-2">{name}</span>
-                  <span className="h-[5px] rounded-xs bg-paper-3">
-                    <span className="block h-full rounded-xs" style={{ width: `${(v / max) * 100}%`, background: color, opacity: 0.8 }} />
+            <ul className="max-h-[460px] min-h-0 flex-1 divide-y divide-line overflow-y-auto px-4 2xl:max-h-none">
+              {shown.map((r, i) => (
+                <li key={r.name} className="grid grid-cols-[22px_minmax(0,1fr)_minmax(60px,120px)_30px] items-center gap-3 py-2">
+                  <span className="num text-[11px] text-ink-3">{String(i + 1).padStart(2, "0")}</span>
+                  <span className="min-w-0">
+                    <span className="block text-[12.5px] leading-snug text-ink">{r.name}</span>
+                    {picked ? null : (
+                      <span
+                        className="num mt-0.5 block truncate text-[10.5px] text-ink-3"
+                        title={r.depts.map(([g, v]) => `${groupMeta(g).label} — ${v}`).join(" · ")}
+                      >
+                        {r.depts.map(([g, v]) => `${shortOf(g)}${r.depts.length > 1 ? ` ${v}` : ""}`).join(" · ")}
+                      </span>
+                    )}
                   </span>
-                  <span className="num text-right text-[12.5px] font-medium text-ink">{num(v)}</span>
+                  <span className="h-[5px] rounded-xs bg-paper-3">
+                    <span className="block h-full rounded-xs bg-(--tone)" style={{ width: `${(r.n / max) * 100}%`, opacity: 0.85 }} />
+                  </span>
+                  <span className="num text-right text-[13px] font-semibold text-ink">{num(r.n)}</span>
                 </li>
               ))}
+              {fold ? (
+                <li>
+                  <button
+                    type="button"
+                    aria-expanded={open}
+                    onClick={() => setOpen((v) => !v)}
+                    className="flex w-full items-center gap-2 py-2 text-left text-[12px] text-ink-2 hover:text-ink"
+                  >
+                    <ChevronDown size={14} className={cn("shrink-0 transition-transform", open && "rotate-180")} />
+                    {open ? "Хураах" : `Бусад ${num(singles.length)} албан тушаал · тус бүр 1 албан хаагч`}
+                  </button>
+                </li>
+              ) : null}
             </ul>
           </div>
         </div>
@@ -249,6 +285,9 @@ function PositionsChart({
     </Panel>
   );
 }
+
+/** Бүлгийн товч нэр — хэлтсийн товчлол, удирдлага нь "Удирдлага" */
+const shortOf = (g: string) => SHORT_NAMES[g] ?? g;
 
 /* ---------------------------- бүтэц -------------------------------- */
 
