@@ -83,7 +83,10 @@ export function ZahirgaaOverview() {
   const [picked, setPicked] = React.useState<string | null>(null);
 
   return (
-    <div className="w-full space-y-4" style={{ "--tone": `var(${DEPT.tone})` } as React.CSSProperties}>
+    <div
+      className="w-full space-y-4 2xl:flex 2xl:h-[calc(100dvh-var(--head-h)-3rem)] 2xl:flex-col 2xl:gap-4 2xl:space-y-0 [&>*]:shrink-0"
+      style={{ "--tone": `var(${DEPT.tone})` } as React.CSSProperties}
+    >
       <Header />
 
       <Structure staff={staff} picked={picked} onPick={setPicked} />
@@ -91,10 +94,14 @@ export function ZahirgaaOverview() {
       {/* Албан хаагч ба календарь зэрэгцэнэ; мөрийн өндрийг КАЛЕНДАРЬ тогтоож,
           албан хаагчийн жагсаалт түүнд багтана (хэрэглэгч 2026-10-22: "картуудад
           хоосон зай маш их байна").
+          ⚠ 1536px-ээс дээш хуудас ДЭЛГЭЦИЙН ӨНДӨРТ багтана (хэрэглэгч 2026-10-26:
+          "page iig scrolldohgui"): энэ мөр үлдсэн өндрийг авч календарийн
+          долоо хоногийн мөрүүд түүнийг тэнцүү хуваана; 400px-ээс намсахгүй —
+          тэр үед хуудас гүйнэ.
           ⚠ Зэрэгцэх нь 1536px-ээс (`2xl`): түүнээс нарийн дэлгэцэд календарийн
           нүд ~55px болж арга хэмжээний нэр үг дундуураа тасардаг байв — тэнд
           хоёр карт босоо цуварч календарь бүтэн өргөнөө авна */}
-      <div className="grid gap-4 2xl:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
+      <div className="grid gap-4 2xl:min-h-[400px] 2xl:flex-1 2xl:shrink! 2xl:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] 2xl:grid-rows-[minmax(0,1fr)]">
         <PositionsChart staff={staff} picked={picked} onPick={setPicked} />
         <EventsCalendar />
       </div>
@@ -110,18 +117,18 @@ function Header() {
       <span aria-hidden className="absolute top-0 -left-4 h-full w-[3px] bg-(--tone) lg:-left-6" />
       <div className="flex items-center gap-4">
         <div
-          className="tinted flex size-12 shrink-0 items-center justify-center rounded-xs border"
+          className="tinted flex size-11 shrink-0 items-center justify-center rounded-xs border"
           style={{ borderColor: "color-mix(in oklab, var(--tone) 30%, transparent)" }}
         >
           <DEPT.icon size={24} strokeWidth={1.4} className="text-(--tone)" />
         </div>
         <div className="min-w-0 flex-1">
-          <h1 className="display text-[24px] leading-tight">{DEPT.name}</h1>
-          <div className="mt-1 text-[12px] text-ink-3">{ORG_NAME}</div>
+          <h1 className="display text-[22px] leading-tight">{DEPT.name}</h1>
+          <div className="mt-0.5 text-[12px] text-ink-3">{ORG_NAME}</div>
         </div>
         <Badge tone="neutral">{STATUS_LABEL[DEPT.status]}</Badge>
       </div>
-      <div className="ruler mt-4 opacity-70" aria-hidden />
+      <div className="ruler mt-3 opacity-70" aria-hidden />
     </header>
   );
 }
@@ -333,7 +340,7 @@ function Structure({ staff, picked, onPick }: { staff: Load<Staff>; picked: stri
   return (
     <Panel className="flex flex-col">
       <PanelHead title="Байгууллагын бүтэц" />
-      <div className="flex flex-col items-center px-4 pt-4 pb-5">
+      <div className="flex flex-col items-center px-4 pt-3.5 pb-4">
         {/* ---- үндэс: газар ба нэгтгэсэн үзүүлэлтүүд ---- */}
         <div className="tinted flex w-full max-w-[880px] flex-wrap items-stretch gap-x-5 gap-y-3 rounded-xs border border-(--tone)/40 px-4 py-3">
           <div className="flex min-w-[240px] flex-1 items-center gap-3">
@@ -368,7 +375,7 @@ function Structure({ staff, picked, onPick }: { staff: Load<Staff>; picked: stri
             </RootStat>
           </dl>
         </div>
-        <span aria-hidden className="h-5 w-px bg-line-2" />
+        <span aria-hidden className="h-4 w-px bg-line-2" />
 
         {/* ---- хэлтсүүд ---- */}
         <div className="relative w-full">
@@ -387,8 +394,8 @@ function Structure({ staff, picked, onPick }: { staff: Load<Staff>; picked: stri
               const on = picked === d.slug;
               const dim = picked !== null && !on;
               return (
-                <li key={d.slug} className="relative lg:pt-5" style={{ "--d": `var(${d.tone})` } as React.CSSProperties}>
-                  <span aria-hidden className="absolute top-0 left-1/2 hidden h-5 w-px bg-line-2 lg:block" />
+                <li key={d.slug} className="relative lg:pt-4" style={{ "--d": `var(${d.tone})` } as React.CSSProperties}>
+                  <span aria-hidden className="absolute top-0 left-1/2 hidden h-4 w-px bg-line-2 lg:block" />
                   <div
                     className={cn(
                       "group relative flex h-full flex-col overflow-hidden rounded-xs border bg-paper transition-[background-color,border-color,opacity]",

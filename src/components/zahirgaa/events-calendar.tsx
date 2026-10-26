@@ -278,7 +278,7 @@ export function EventsCalendar() {
   };
 
   return (
-    <Panel className="flex shrink-0 flex-col">
+    <Panel className="flex shrink-0 flex-col 2xl:h-full 2xl:min-h-0">
       <PanelHead
         title="Байгууллагын арга хэмжээний хөтөлбөр"
         action={
@@ -333,10 +333,10 @@ export function EventsCalendar() {
           {res.error}
         </div>
       ) : (
-        <div className="grid lg:grid-cols-[minmax(0,1fr)_248px]">
+        <div className="grid lg:grid-cols-[minmax(0,1fr)_248px] 2xl:min-h-0 2xl:flex-1">
           {/* ---- сарын тор ---- */}
           <div
-            className={cn("p-3 transition-opacity", loading && "opacity-60")}
+            className={cn("p-3 transition-opacity 2xl:flex 2xl:min-h-0 2xl:flex-col", loading && "opacity-60")}
           >
             <div className="grid grid-cols-7 pb-1.5">
               {WEEKDAYS.map((w, i) => (
@@ -351,7 +351,7 @@ export function EventsCalendar() {
                 </span>
               ))}
             </div>
-            <div className="grid grid-cols-7 gap-px overflow-hidden rounded-xs border border-line bg-line">
+            <div className="grid grid-cols-7 gap-px overflow-hidden rounded-xs border border-line bg-line 2xl:min-h-0 2xl:flex-1 2xl:auto-rows-[minmax(0,1fr)]">
               {cells.map((c, i) => {
                 const evs = byDay.get(c.key) ?? [];
                 const on = c.key === picked;
@@ -367,7 +367,7 @@ export function EventsCalendar() {
                     aria-pressed={on}
                     aria-label={dayLabel(c.key)}
                     className={cn(
-                      "flex min-h-[64px] min-w-0 flex-col gap-0.5 p-1 text-left transition-colors hover:bg-paper-hi",
+                      "flex min-h-[64px] min-w-0 flex-col gap-0.5 overflow-hidden p-1 text-left transition-colors hover:bg-paper-hi 2xl:min-h-[48px]",
                       weekend ? "bg-paper-3" : "bg-paper-2",
                       on &&
                         "bg-paper-hi shadow-[inset_0_0_0_1.5px_var(--tone)]",
@@ -395,7 +395,7 @@ export function EventsCalendar() {
                           <span
                             key={e.id}
                             title={e.kind ? `${k.label} · ${e.name}` : e.name}
-                            className="line-clamp-4 rounded-[2px] border-l-2 px-1 py-px text-[10px] leading-[13px] break-words text-ink"
+                            className="line-clamp-4 rounded-[2px] border-l-2 px-1 py-px text-[10px] leading-[13px] break-words text-ink 2xl:line-clamp-2"
                             style={{
                               borderColor: kindFill(k),
                               background: `color-mix(in oklab, ${kindFill(k)} 18%, transparent)`,
