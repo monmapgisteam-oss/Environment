@@ -224,8 +224,8 @@ function PositionsChart({
         }
       />
       {staff.state === "ready" ? (
-        <div className="relative flex-1 2xl:min-h-[300px]">
-          <div className="flex flex-col 2xl:absolute 2xl:inset-0">
+        <div className="flex-1">
+          <div className="flex flex-col">
             <div className="flex items-center gap-2 border-b border-line px-4 py-2">
               <Icon size={15} strokeWidth={1.6} className="shrink-0 text-(--tone)" />
               <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-ink">{meta ? meta.label : "Бүх хэлтэс"}</span>
@@ -242,15 +242,15 @@ function PositionsChart({
             {rows.length ? null : (
               <div className="px-4 py-6 text-center text-[12px] text-ink-3">Албан хаагч бүртгэгдээгүй байна</div>
             )}
-            <ul className="max-h-[460px] min-h-0 flex-1 divide-y divide-line overflow-y-auto px-4 2xl:max-h-none">
+            <ul className="divide-y divide-line px-4">
               {shown.map((r, i) => (
-                <li key={r.name} className="grid grid-cols-[22px_minmax(0,1fr)_minmax(60px,120px)_30px] items-center gap-3 py-2">
+                <li key={r.name} className="grid grid-cols-[22px_minmax(0,1fr)_minmax(60px,110px)_30px] items-center gap-3 py-1.5">
                   <span className="num text-[11px] text-ink-3">{String(i + 1).padStart(2, "0")}</span>
-                  <span className="min-w-0">
-                    <span className="block text-[12.5px] leading-snug text-ink">{r.name}</span>
+                  <span className="flex min-w-0 items-baseline gap-2">
+                    <span className="min-w-0 text-[12.5px] leading-snug text-ink">{r.name}</span>
                     {picked ? null : (
                       <span
-                        className="num mt-0.5 block truncate text-[10.5px] text-ink-3"
+                        className="num ml-auto max-w-[45%] shrink-0 truncate text-[10.5px] text-ink-3"
                         title={r.depts.map(([g, v]) => `${groupMeta(g).label} — ${v}`).join(" · ")}
                       >
                         {r.depts.map(([g, v]) => `${shortOf(g)}${r.depts.length > 1 ? ` ${v}` : ""}`).join(" · ")}
@@ -269,7 +269,7 @@ function PositionsChart({
                     type="button"
                     aria-expanded={open}
                     onClick={() => setOpen((v) => !v)}
-                    className="flex w-full items-center gap-2 py-2 text-left text-[12px] text-ink-2 hover:text-ink"
+                    className="flex w-full items-center gap-2 py-1.5 text-left text-[12px] text-ink-2 hover:text-ink"
                   >
                     <ChevronDown size={14} className={cn("shrink-0 transition-transform", open && "rotate-180")} />
                     {open ? "Хураах" : `Бусад ${num(singles.length)} албан тушаал · тус бүр 1 албан хаагч`}
