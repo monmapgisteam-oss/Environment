@@ -213,6 +213,11 @@ export async function fetchStaffRecords(signal: AbortSignal): Promise<{ rows: St
   };
 }
 
+/** Бүртгэлийг бүрмөсөн устгана (хэрэглэгч 2026-10-26) — ажлаас гарсныг төлөвөөр тэмдэглэнэ */
+export async function deleteStaff(id: number) {
+  await applyEdits(STAFF_EDIT_URL, "Албан хаагч устгах", { deletes: String(id) });
+}
+
 export type StaffInput = { name: string; dept: string; position: string; status: string };
 
 /** Шинээр нэмнэ (`id` байхгүй) эсвэл засна. Төлөвийн талбар байхгүй бол төлөв бичихгүй */

@@ -16,13 +16,14 @@
  */
 
 import * as React from "react";
-import { Plus, Search, UserMinus, X } from "lucide-react";
+import { Plus, Search, Trash2, X } from "lucide-react";
 import { DEPARTMENTS, SHORT_NAMES } from "@/lib/departments";
 import {
   LEAD_DEPT,
   STAFF_LEFT,
   STAFF_STATUSES,
   STAFF_WORKING,
+  deleteStaff,
   deptSlug,
   fetchStaffRecords,
   saveStaff,
@@ -119,6 +120,22 @@ export function StaffEditor({ onClose, onChanged }: { onClose: () => void; onCha
     setError(null);
     try {
       await saveStaff(input, typeof edit === "number" ? edit : undefined);
+      setEdit(null);
+      setConfirmLeave(false);
+      setRev((v) => v + 1);
+      onChanged();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const remove = async (id: number) => {
+    setBusy(true);
+    setError(null);
+    try {
+      await deleteStaff(id);
       setEdit(null);
       setConfirmLeave(false);
       setRev((v) => v + 1);
@@ -333,14 +350,13 @@ export function StaffEditor({ onClose, onChanged }: { onClose: () => void; onCha
               </button>
             </div>
 
-            {/* Ажлаас гаргах — нэг товшилт, баталгаажуулалттай; мөр устахгүй */}
-            {hasStatus && current && current.status !== STAFF_LEFT ? (
+            {/* Бүртгэл устгах (хэрэглэгч 2026-10-26: "бүртгэл устгах гээд улаан текст")
+                — баталгаажуулалттай; ажлаас гарсныг төлөвөөр тэмдэглэнэ */}
+            {current ? (
               <div className="mt-auto border-t border-line pt-3">
                 {confirmLeave ? (
-                  <div className="space-y-2 rounded-xs border border-ochre/40 bg-ochre/8 p-2.5">
-                    <div className="text-[11.5px] text-ink">
-                      {current.name} ажлаас гарсан гэж тэмдэглэх үү? Бүртгэл устахгүй, нийт тоонд орохгүй болно.
-                    </div>
+                  <div className="space-y-2 rounded-xs border border-clay/40 bg-clay/8 p-2.5">
+                    <div className="text-[11.5px] text-ink">{current.name}-ийн бүртгэлийг устгах уу? Буцаах боломжгүй.</div>
                     <div className="flex justify-end gap-2">
                       <button
                         type="button"
@@ -352,10 +368,10 @@ export function StaffEditor({ onClose, onChanged }: { onClose: () => void; onCha
                       <button
                         type="button"
                         disabled={busy}
-                        onClick={() => void save({ name: current.name, dept: current.dept, position: current.position, status: STAFF_LEFT })}
-                        className="rounded-xs bg-ochre px-2 py-0.5 text-[11.5px] font-medium text-paper disabled:opacity-40"
+                        onClick={() => void remove(current.id)}
+                        className="rounded-xs bg-clay px-2 py-0.5 text-[11.5px] font-medium text-paper disabled:opacity-40"
                       >
-                        Тэмдэглэх
+                        Устгах
                       </button>
                     </div>
                   </div>
@@ -363,9 +379,9 @@ export function StaffEditor({ onClose, onChanged }: { onClose: () => void; onCha
                   <button
                     type="button"
                     onClick={() => setConfirmLeave(true)}
-                    className="inline-flex items-center gap-1.5 text-[12px] text-ochre hover:underline"
+                    className="inline-flex items-center gap-1.5 text-[12px] text-clay hover:underline"
                   >
-                    <UserMinus size={13} /> Ажлаас гаргах
+                    <Trash2 size={13} /> Бүртгэл устгах
                   </button>
                 )}
               </div>
