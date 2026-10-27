@@ -16,6 +16,9 @@ if [ ! -d "$SRC/.git" ]; then
   changed=1
 else
   before=$(git -C "$SRC" rev-parse HEAD)
+  # REPO солигдсон бол (жишээ нь хаалттай репод SSH deploy key) хуучин
+  # хуулбар ч шинэ хаягаар татна — эс тэгвээс эхний clone-ийн хаяг үлдэнэ.
+  git -C "$SRC" remote set-url origin "$REPO"
   git -C "$SRC" fetch -q --depth 1 origin server-build
   git -C "$SRC" reset -q --hard FETCH_HEAD
   [ "$before" = "$(git -C "$SRC" rev-parse HEAD)" ] && changed=0 || changed=1

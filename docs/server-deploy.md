@@ -84,6 +84,51 @@ sudo nginx -t && sudo systemctl reload nginx
   байх ёстой — одоогийн хувилбар аль хэдийн энэ хаягаар нэвтэрдэг бол
   бүртгэлтэй байна.
 
+## 5. Репо хаалттай (Private) бол — deploy key
+
+Репо нийтэд нээлттэй үед сервер нэвтрэлтгүйгээр татдаг. Хаалттай болгохоос
+**ӨМНӨ** серверт зөвхөн унших эрхтэй түлхүүр тавина, эс тэгвээс сайт
+шинэчлэгдэхээ болино.
+
+```sh
+# 1. Сервер дээр түлхүүр үүсгэнэ (нууц үггүй — cron ашиглана)
+sudo mkdir -p /root/.ssh && sudo chmod 700 /root/.ssh
+sudo ssh-keygen -t ed25519 -N "" -C "environment-server" -f /root/.ssh/environment_deploy
+sudo cat /root/.ssh/environment_deploy.pub   # энэ мөрийг хөгжүүлэгчид өгнө
+```
+
+2. Хөгжүүлэгч GitHub → репо → **Settings → Deploy keys → Add deploy key**:
+   нэр `environment-server`, түлхүүр нь дээрх `.pub` мөр,
+   **"Allow write access"-ыг ЧАГТЛАХГҮЙ**.
+
+```sh
+# 3. SSH тохиргоо. 22 порт хаалттай бол GitHub-ийн 443 портыг ашиглана.
+sudo tee -a /root/.ssh/config >/dev/null <<'EOF'
+Host github.com
+  HostName ssh.github.com
+  Port 443
+  User git
+  IdentityFile /root/.ssh/environment_deploy
+  IdentitiesOnly yes
+EOF
+sudo ssh -T git@github.com   # "successfully authenticated" гэж гарвал болсон
+
+# 4. Скриптийг шинэ хаягаар нэг удаа гараар ажиллуулна
+sudo REPO=git@github.com:monmapgisteam-oss/Environment.git \
+  /opt/environment-platform/server-update.sh
+```
+
+5. cron-ийн мөрөнд мөн `REPO`-г нэмнэ:
+
+```cron
+*/5 * * * * REPO=git@github.com:monmapgisteam-oss/Environment.git /opt/environment-platform/server-update.sh >> /var/log/environment-platform.log 2>&1
+```
+
+⚠ Сервер дээрх `server-update.sh` нь анх татсан хуучин хувилбар байж болно.
+Шинэ хувилбар нь (`remote set-url` мөртэй) хуучин хуулбарыг ч шинэ хаяг руу
+шилжүүлдэг тул эхлээд 1-р хэсгийн `curl` командаар скриптийг дахин татна —
+репо нээлттэй байх ҮЕД.
+
 ## Буцаах
 
 Скриптийг cron-оос хасаад, nginx-ийн `root`-ийг өмнөх хавтас руу буцааж
