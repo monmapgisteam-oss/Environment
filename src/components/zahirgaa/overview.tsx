@@ -29,8 +29,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { Panel, PanelHead } from "@/components/ui/panel";
-import { Badge } from "@/components/ui/data";
-import { DEPARTMENTS, SHORT_NAMES, STATUS_LABEL, getDepartment } from "@/lib/departments";
+import { DEPARTMENTS, SHORT_NAMES, getDepartment } from "@/lib/departments";
 import {
   LEAD_DEPT,
   ORG_NAME,
@@ -101,8 +100,6 @@ export function ZahirgaaOverview() {
       className="w-full space-y-4 lg:flex lg:h-[calc(100dvh-var(--head-h)-3rem)] lg:flex-col lg:gap-3 lg:space-y-0 lg:[&>*]:shrink-0"
       style={{ "--tone": `var(${DEPT.tone})` } as React.CSSProperties}
     >
-      <Header />
-
       <Structure staff={staff} picked={picked} onPick={setPicked} />
 
       {/* ⚠⚠ 1024px-ээс дээш хуудас ЯМАР Ч ДЭЛГЭЦИЙН өндөрт ГҮЙЛГҮҮРГҮЙ багтана
@@ -117,30 +114,6 @@ export function ZahirgaaOverview() {
       </div>
       {editing ? <StaffEditor onClose={() => setEditing(false)} onChanged={() => setStaffRev((v) => v + 1)} /> : null}
     </div>
-  );
-}
-
-/* ------------------------------ толгой ---------------------------- */
-
-function Header() {
-  return (
-    <header className="relative lg:[@media(max-height:780px)]:hidden">
-      <span aria-hidden className="absolute top-0 -left-4 h-full w-[3px] bg-(--tone) lg:-left-6" />
-      <div className="flex items-center gap-4">
-        <div
-          className="tinted flex size-10 shrink-0 items-center justify-center rounded-xs border"
-          style={{ borderColor: "color-mix(in oklab, var(--tone) 30%, transparent)" }}
-        >
-          <DEPT.icon size={24} strokeWidth={1.4} className="text-(--tone)" />
-        </div>
-        <div className="min-w-0 flex-1">
-          <h1 className="display text-[21px] leading-tight">{DEPT.name}</h1>
-          <div className="mt-0.5 text-[12px] text-ink-3">{ORG_NAME}</div>
-        </div>
-        <Badge tone="neutral">{STATUS_LABEL[DEPT.status]}</Badge>
-      </div>
-      <div className="ruler mt-2.5 opacity-70" aria-hidden />
-    </header>
   );
 }
 
