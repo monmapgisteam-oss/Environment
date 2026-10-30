@@ -13,6 +13,7 @@ import { TABS as OI } from "@/components/oi/workspace";
 import { GROUPS as ORCHIN_GROUPS, TABS as ORCHIN } from "@/components/orchin/workspace";
 import { TABS as UNELGEE } from "@/components/unelgee/workspace";
 import { GROUPS as WILDLIFE_GROUPS, TABS as WILDLIFE } from "@/components/wildlife/workspace";
+import { TABS as SANHUU } from "@/components/sanhuu/workspace";
 import { tabLayers, type TabLayer } from "@/lib/access-layers";
 
 /**
@@ -35,6 +36,7 @@ const tabsOf = (raw: Raw, groups?: Groups, scope?: string): CatalogTab[] =>
   }));
 
 const TAB_LISTS: Record<string, CatalogTab[]> = {
+  "sanhuu-monitoring": tabsOf(SANHUU),
   hyanalt: tabsOf(HYANALT, undefined, "hyanalt"),
   "nogoon-bus": tabsOf(NOGOON, undefined, "nogoon-bus"),
   oi: tabsOf(OI, undefined, "oi"),
