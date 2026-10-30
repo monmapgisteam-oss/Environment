@@ -9,6 +9,7 @@ import {
   MapPin,
   RefreshCw,
 } from "lucide-react";
+import { smoothPath } from "@/components/charts";
 import { BasemapGallery } from "@/components/map/basemap-gallery";
 import { MapTip, MapTipRow, useMapTip } from "@/components/map/hover-tip";
 import { Columns } from "@/components/ui/resizable-columns";
@@ -296,7 +297,7 @@ export function WeatherArchive() {
           ⚠ Таван карт нэг дэлгэцэнд багтахгүй тул БАГАНА дотроо
           гүйнэ; зураг нь гүйхгүй, бүтэн өндрөө барина. */}
       <Columns id="weather-archive" left={640} className="min-h-0 flex-1">
-        <div className="flex min-h-0 flex-col gap-2 overflow-y-auto">
+        <div className="archive-charts flex min-h-0 flex-col gap-2 overflow-y-auto">
           {subjects.map((s) => (
             <Card key={s.m.id} className="min-h-[164px] flex-1">
               <Head title={s.m.label}>
@@ -397,10 +398,19 @@ function Line({
     T + (1 - (v - yLo) / Math.max(yHi - yLo, 1e-9)) * (H - T - B);
 
   // Hourly archive: don't imply continuous measurements across missing hours.
-  const d = points
-    .map(
-      (p, i) =>
-        `${i && p.t - points[i - 1].t <= 90 * 60_000 ? "L" : "M"}${X(p.t).toFixed(1)} ${Y(p.v).toFixed(1)}`,
+  // Зөөлөн муруй нь монотон (оргилоос хальж бодит бус утга зурахгүй);
+  // тасалдал бүрд шинэ хэсэг эхэлнэ.
+  const runs: { x: number; y: number }[][] = [];
+  points.forEach((p, i) => {
+    const pt = { x: X(p.t), y: Y(p.v) };
+    if (i && p.t - points[i - 1].t <= 90 * 60_000) runs[runs.length - 1].push(pt);
+    else runs.push([pt]);
+  });
+  const d = runs
+    .map((r) =>
+      r.length > 1
+        ? smoothPath(r)
+        : `M${r[0].x.toFixed(1)} ${r[0].y.toFixed(1)}`,
     )
     .join(" ");
 

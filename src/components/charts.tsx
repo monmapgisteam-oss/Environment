@@ -470,7 +470,7 @@ export function GroupedBarChart({
  * Энгийн Catmull-Rom бол оргилоос хальж, тэгээс доош унах тул тоон утгад
  * тохирохгүй. Энэ арга нь өгөгдлийн дараалал (өсөх/буурах)-ыг зөрчихгүй.
  */
-function smoothPath(pts: { x: number; y: number }[]) {
+export function smoothPath(pts: { x: number; y: number }[]) {
   const n = pts.length;
   if (n < 2) return "";
 
