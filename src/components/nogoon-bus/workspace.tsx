@@ -13,12 +13,14 @@ import {
   Loader2,
   Mountain,
   Recycle,
+  Scale,
   ShieldCheck,
   Trees,
   Waves,
 } from "lucide-react";
 import { SourceTabs, useStoredTab } from "@/components/ui/source-tabs";
 import { NOGOON_TABS } from "@/lib/nogoon-layers";
+import { WaterLaw } from "./water-law";
 
 /*
   Хэлтсийн сэдвүүд. Самбар хооронд сольж харна.
@@ -197,6 +199,15 @@ export const TABS = [
     full: "Ус сувгийн удирдах газрын мэдээ",
     icon: Building2,
   },
+  {
+    /* Лавлах баримт бичиг — газрын зураггүй (хэрэглэгч 2026-10-30).
+       Холбоосууд нь `lib/water-law.ts`-д. */
+    id: "huuli",
+    label: "Усны тухай хууль тогтоомж",
+    note: "Хууль · дүрэм · журам · стандарт · норм",
+    full: "Усны тухай хууль тогтоомж, дүрэм, журам, стандарт, норм",
+    icon: Scale,
+  },
 ] as const;
 
 type TabId = (typeof TABS)[number]["id"];
@@ -204,7 +215,7 @@ type TabId = (typeof TABS)[number]["id"];
 const IDS = TABS.map((t) => t.id);
 
 /** Таб → давхаргын бүрдэл. `TABS`-ийн `id` нь `NOGOON_TABS`-ийн түлхүүр */
-const SETS: Record<TabId, (typeof NOGOON_TABS)[keyof typeof NOGOON_TABS]> = {
+const SETS: Record<Exclude<TabId, "huuli">, (typeof NOGOON_TABS)[keyof typeof NOGOON_TABS]> = {
   hamgaalagch: NOGOON_TABS.hamgaalagch,
   bus: NOGOON_TABS.bus,
   bulag: NOGOON_TABS.bulag,
@@ -225,7 +236,7 @@ export function NogoonBusWorkspace() {
      сүүлд харж байсан самбар нээгдэнэ */
   const [tab, pick] = useStoredTab<TabId>("nogoon-bus.tab", IDS, "hamgaalagch", "nogoon-bus");
 
-  const set = SETS[tab];
+  const set = tab === "huuli" ? null : SETS[tab];
 
   return (
     <div className="department-workspace">
@@ -238,7 +249,11 @@ export function NogoonBusWorkspace() {
         давхарга, шүүлтүүр, татагдсан бичлэг өмнөх табынхаараа үлдэнэ.
       */}
       <div className="department-workspace-content">
-        <PortalLayers key={set.key} set={set} access={{ scope: "nogoon-bus", tab }} />
+        {set ? (
+          <PortalLayers key={set.key} set={set} access={{ scope: "nogoon-bus", tab }} />
+        ) : (
+          <WaterLaw />
+        )}
       </div>
     </div>
   );
