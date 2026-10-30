@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { SanhuuDashboard } from "@/components/sanhuu/dashboard";
+import { SanhuuWorkspace } from "@/components/sanhuu/workspace";
 import { getDepartment } from "@/lib/departments";
 
 const DEPT = getDepartment("sanhuu-monitoring")!;
@@ -19,7 +19,7 @@ export default function SanhuuPage() {
       className="h-full min-h-[420px] xl:h-[calc(100dvh-var(--head-h)-var(--workspace-gutter,3rem))]"
       style={{ "--tone": `var(${DEPT.tone})` } as React.CSSProperties}
     >
-      <SanhuuDashboard />
+      <SanhuuWorkspace />
     </div>
   );
 }
