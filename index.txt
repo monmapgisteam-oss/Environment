@@ -1,0 +1,42 @@
+1:"$Sreact.fragment"
+2:"/_next/static/chunks/0umf92h1sb77c.js"
+3:"/_next/static/chunks/2n83tyr1cb1wx.js"
+4:"/_next/static/chunks/0mx-bonhs2df7.js"
+5:"/_next/static/chunks/1lr72s357avqa.js"
+6:"/_next/static/chunks/2q9gy5n8e5fl4.js"
+7:"/_next/static/chunks/0jar3cu74o6hp.js"
+8:"/_next/static/chunks/0xkrf1m3n14x5.js"
+9:I[96258,["$2","$3","$4","$5","$6","$7","$8"],"AuthProvider"]
+a:I[98418,["$2","$3","$4","$5","$6","$7","$8"],"Sidebar"]
+b:I[70028,["$2","$3","$4","$5","$6","$7","$8"],"Header"]
+c:I[53284,["$2","$3","$4","$5","$6","$7","$8"],"AccountGate"]
+d:I[39756,["$2","$3","$4","$5","$6","$7","$8"],"default"]
+e:I[37457,["$2","$3","$4","$5","$6","$7","$8"],"default"]
+f:I[22016,["$2","$3","$4","$5","$6","$7","$8"],""]
+10:I[24495,["$2","$3","$4","$5","$6","$7","$8"],"AutoTranslate"]
+12:"/_next/static/chunks/39izotfvg2q17.js"
+13:I[62480,["$2","$3","$4","$5","$6","$7","$8","$12"],"HomeSummary"]
+14:I[75266,["$2","$3","$4","$5","$6","$7","$8","$12"],"CalendarCard"]
+15:I[87026,["$2","$3","$4","$5","$6","$7","$8","$12"],"T"]
+16:"DepartmentDirectory"
+17:I[62480,["$2","$3","$4","$5","$6","$7","$8","$12"],"$16"]
+18:I[97367,["$2","$3","$4","$5","$6","$7","$8"],"OutletBoundary"]
+19:"$Sreact.suspense"
+1b:"ViewportBoundary"
+1c:I[97367,["$2","$3","$4","$5","$6","$7","$8"],"$1b"]
+1e:"MetadataBoundary"
+1f:I[97367,["$2","$3","$4","$5","$6","$7","$8"],"$1e"]
+21:I[68027,["$2","$3","$4","$5","$6","$7","$8"],"default",1]
+:HL["/_next/static/chunks/08wxyanb64ea0.css","style"]
+:HL["/_next/static/chunks/39mfm39vxtrlk.css","style"]
+:HL["/_next/static/chunks/33rwmtpph4nvj.css","style"]
+:HL["/_next/static/media/07c7676b89ed2778-s.p.2bn3s6zvc0dyp.woff2","font",{"crossOrigin":"","type":"font/woff2"}]
+:HL["/_next/static/media/276a8f4fe816cb6b-s.p.2v2sz4qlut9s1.woff2","font",{"crossOrigin":"","type":"font/woff2"}]
+:HL["/_next/static/media/76b70a1dbe058eb5-s.p.1y4-pdgsjb-pw.woff2","font",{"crossOrigin":"","type":"font/woff2"}]
+:HL["/_next/static/media/82450a180bcad83c-s.p.0p-wng2nn8o-p.woff2","font",{"crossOrigin":"","type":"font/woff2"}]
+11:[["children",{"s":"__PAGE__","h":512,"d":{"r":["$","$1","c",{"children":[["$","section",null,{"className":"home-one","aria-label":"Ерөнхий самбар","children":[["$","div",null,{"className":"home-overview","children":[["$","$L13",null,{"sourceCounts":{"zahirgaa":0,"sanhuu-monitoring":0,"orchin":11,"oi":7,"amitan-urgamal":17,"nogoon-bus":21,"unelgee-uur-amisgal":26,"hyanalt":6}}],["$","$L14",null,{}]]}],["$","div",null,{"className":"home-layout","children":["$","div",null,{"className":"home-departments","children":[["$","h2",null,{"children":["$","$L15",null,{"mn":"Хэлтсүүд","en":"Divisions"}]}],["$","$L17",null,{}]]}]}]]}],[["$","script","script-0",{"src":"/_next/static/chunks/39izotfvg2q17.js","async":true,"nonce":"$undefined"}]],["$","$L18",null,{"children":["$","$19",null,{"name":"Next.MetadataOutlet","children":"$@1a"}]}]]}],"p":false,"v":null}}]]
+0:{"P":null,"c":["",""],"q":"","i":false,"t":{"t":{"s":"","h":528,"d":{"r":["$","$1","c",{"children":[[["$","link","0",{"rel":"stylesheet","href":"/_next/static/chunks/08wxyanb64ea0.css","precedence":"next","crossOrigin":"$undefined","nonce":"$undefined"}],["$","link","1",{"rel":"stylesheet","href":"/_next/static/chunks/39mfm39vxtrlk.css","precedence":"next","crossOrigin":"$undefined","nonce":"$undefined"}],["$","link","2",{"rel":"stylesheet","href":"/_next/static/chunks/33rwmtpph4nvj.css","precedence":"next","crossOrigin":"$undefined","nonce":"$undefined"}],["$","script","script-0",{"src":"/_next/static/chunks/0umf92h1sb77c.js","async":true,"nonce":"$undefined"}],["$","script","script-1",{"src":"/_next/static/chunks/2n83tyr1cb1wx.js","async":true,"nonce":"$undefined"}],["$","script","script-2",{"src":"/_next/static/chunks/0mx-bonhs2df7.js","async":true,"nonce":"$undefined"}],["$","script","script-3",{"src":"/_next/static/chunks/1lr72s357avqa.js","async":true,"nonce":"$undefined"}],["$","script","script-4",{"src":"/_next/static/chunks/2q9gy5n8e5fl4.js","async":true,"nonce":"$undefined"}],["$","script","script-5",{"src":"/_next/static/chunks/0jar3cu74o6hp.js","async":true,"nonce":"$undefined"}],["$","script","script-6",{"src":"/_next/static/chunks/0xkrf1m3n14x5.js","async":true,"nonce":"$undefined"}]],["$","html",null,{"lang":"mn","suppressHydrationWarning":true,"children":[["$","head",null,{"children":["$","script",null,{"dangerouslySetInnerHTML":{"__html":"(function(){var t,l;try{t=localStorage.getItem('workspace-theme');l=localStorage.getItem('workspace-lang')}catch(e){}var r=document.documentElement;r.setAttribute('data-theme',t==='dark'?'dark':'light');r.setAttribute('lang',l==='en'?'en':'mn');if(window.self!==window.top&&location.pathname.includes('/departments/')&&new URLSearchParams(location.search).get('preview')==='1')r.setAttribute('data-department-preview','true')})();"}}]}],["$","body",null,{"className":"T5ovJa_variable FVC5Iq_variable antialiased","children":[["$","a",null,{"href":"#main","className":"skip-link","children":"Агуулга руу шилжих"}],["$","$L9",null,{"children":[["$","$La",null,{}],["$","div",null,{"className":"workspace-frame","children":[["$","$Lb",null,{}],["$","main",null,{"id":"main","tabIndex":-1,"className":"workspace-main min-h-[calc(100dvh-var(--head-h))] px-4 py-5 lg:px-6 lg:py-6","children":["$","$Lc",null,{"children":["$","$Ld",null,{"parallelRouterKey":"children","error":"$undefined","errorStyles":"$undefined","errorScripts":"$undefined","template":["$","$Le",null,{}],"templateStyles":"$undefined","templateScripts":"$undefined","notFound":[["$","div",null,{"className":"mx-auto flex max-w-[1400px] flex-col items-center justify-center gap-4 py-24 text-center","children":[["$","span",null,{"className":"num text-[12px] tracking-[0.2em] text-ink-3","children":"404"}],["$","h1",null,{"className":"display text-[25px]","children":"Хуудас олдсонгүй"}],["$","p",null,{"className":"max-w-[46ch] text-[14px] text-ink-2","children":"Хайсан хуудас байхгүй эсвэл шилжсэн байна."}],["$","$Lf",null,{"href":"/","className":"mt-2 rounded-xs border border-line-2 px-3 py-1.5 text-[13.5px] transition-colors hover:bg-paper-2","children":"Ерөнхий самбар руу буцах"}]]}],[]],"forbidden":"$undefined","unauthorized":"$undefined"}]}]}]]}]]}],["$","$L10",null,{}]]}]]}]]}],"p":false,"v":null},"c":"$Q11"},"h":{"r":["$","$1","h",{"children":[null,["$","$L1c",null,{"children":"$L1d"}],["$","$L1f",null,{"children":[["$","div",null,{"hidden":true,"children":["$","$19",null,{"name":"Next.Metadata","children":"$L20"}]}],null]}],["$","meta",null,{"name":"next-size-adjust","content":""}]]}],"p":false,"v":null}},"m":"$undefined","G":["$21",[["$","link","0",{"rel":"stylesheet","href":"/_next/static/chunks/08wxyanb64ea0.css","precedence":"next","crossOrigin":"$undefined","nonce":"$undefined"}],["$","link","1",{"rel":"stylesheet","href":"/_next/static/chunks/39mfm39vxtrlk.css","precedence":"next","crossOrigin":"$undefined","nonce":"$undefined"}],["$","link","2",{"rel":"stylesheet","href":"/_next/static/chunks/33rwmtpph4nvj.css","precedence":"next","crossOrigin":"$undefined","nonce":"$undefined"}]]],"S":true,"r":"$undefined","s":"$undefined","a":"$undefined","l":"$undefined","p":"$undefined","d":"$undefined","b":"_xVuoaWYVROy9rqxUgapc"}
+1d:[["$","meta","0",{"charSet":"utf-8"}],["$","meta","1",{"name":"viewport","content":"width=device-width, initial-scale=1"}]]
+22:I[27201,["$2","$3","$4","$5","$6","$7","$8"],"IconMark"]
+1a:null
+20:[["$","title","0",{"children":"Байгаль орчны хяналтын нэгдсэн систем"}],["$","meta","1",{"name":"description","content":"Байгаль орчны салбарын үйл ажиллагааг удирдан зохион байгуулах, хянах, шийдвэр гаргалтыг дэмжих нэгдсэн систем."}],["$","link","2",{"rel":"icon","href":"/favicon.ico?favicon.2vob68tjqpejf.ico","sizes":"256x256","type":"image/x-icon"}],["$","$L22","3",{}]]

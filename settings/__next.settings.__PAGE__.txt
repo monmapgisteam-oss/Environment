@@ -1,0 +1,46 @@
+1:"$Sreact.fragment"
+2:"/_next/static/chunks/0umf92h1sb77c.js"
+3:"/_next/static/chunks/2n83tyr1cb1wx.js"
+4:"/_next/static/chunks/0mx-bonhs2df7.js"
+5:"/_next/static/chunks/1lr72s357avqa.js"
+6:"/_next/static/chunks/2q9gy5n8e5fl4.js"
+7:"/_next/static/chunks/0jar3cu74o6hp.js"
+8:"/_next/static/chunks/0xkrf1m3n14x5.js"
+9:I[96258,["$2","$3","$4","$5","$6","$7","$8"],"AuthProvider"]
+a:I[98418,["$2","$3","$4","$5","$6","$7","$8"],"Sidebar"]
+b:I[70028,["$2","$3","$4","$5","$6","$7","$8"],"Header"]
+c:I[53284,["$2","$3","$4","$5","$6","$7","$8"],"AccountGate"]
+d:I[39756,["$2","$3","$4","$5","$6","$7","$8"],"default"]
+e:I[37457,["$2","$3","$4","$5","$6","$7","$8"],"default"]
+f:I[22016,["$2","$3","$4","$5","$6","$7","$8"],""]
+10:I[24495,["$2","$3","$4","$5","$6","$7","$8"],"AutoTranslate"]
+1d:"ViewportBoundary"
+1e:I[97367,["$2","$3","$4","$5","$6","$7","$8"],"$1d"]
+1f:"MetadataBoundary"
+20:I[97367,["$2","$3","$4","$5","$6","$7","$8"],"$1f"]
+21:"$Sreact.suspense"
+22:I[27201,["$2","$3","$4","$5","$6","$7","$8"],"IconMark"]
+:HL["/_next/static/chunks/08wxyanb64ea0.css","style"]
+:HL["/_next/static/chunks/39mfm39vxtrlk.css","style"]
+:HL["/_next/static/chunks/33rwmtpph4nvj.css","style"]
+12:X
+15:X
+15:C
+16:[["children",{"s":"__PAGE__","h":160,"d":{"r":["$","$1","c",{"children":[["$","div",null,{"className":"mx-auto max-w-[1400px] space-y-6","children":[["$","div",null,{"className":"border-b border-line pb-5","children":[["$","div",null,{"className":"eyebrow mb-2","children":"Систем"}],["$","h1",null,{"className":"display text-[28px] leading-none","children":"Тохиргоо"}],["$","p",null,{"className":"mt-2.5 max-w-[62ch] text-[14px] leading-relaxed text-ink-2","children":"Хэрэглэгч, эрхийн түвшин, лавлах мэдээлэл, интеграцийн тохиргоо."}]]}],["$","div",null,{"className":"border border-line bg-paper-2 rounded-xl overflow-hidden paper-grid border-dashed","children":["$","div",null,{"className":"flex flex-col items-center gap-4 px-6 py-16 text-center","children":[["$","span",null,{"className":"rounded-xs border border-line-2 bg-paper-2 px-2 py-1 text-[11.5px] tracking-[0.14em] text-ink-3 uppercase","children":"Боловсруулж байна"}],["$","div",null,{"className":"grid max-w-[640px] gap-1.5 sm:grid-cols-2","children":[["$","div","Хэрэглэгч, үүрэг (RBAC)",{"className":"rounded-xs border border-line bg-paper-2 px-3 py-2 text-left text-[13px] text-ink-2","children":"Хэрэглэгч, үүрэг (RBAC)"}],["$","div","Хэлтсийн бүтэц",{"className":"rounded-xs border border-line bg-paper-2 px-3 py-2 text-left text-[13px] text-ink-2","children":"Хэлтсийн бүтэц"}],"$L17","$L18","$L19","$L1a"]}]]}]}]]}],null,"$L1b"]}],"p":"$@1c","v":null,"s":"$12"}}]]
+13:[["children",{"s":"settings","h":96,"d":{"r":["$","$1","c",{"children":[null,["$","$Ld",null,{"parallelRouterKey":"children","template":["$","$Le",null,{}]}]]}],"p":"$@14","v":"$15","s":"$12"},"c":"$Q16"}]]
+0:{"t":{"t":{"s":"","h":80,"d":{"r":["$","$1","c",{"children":[[["$","link","0",{"rel":"stylesheet","href":"/_next/static/chunks/08wxyanb64ea0.css","precedence":"next"}],["$","link","1",{"rel":"stylesheet","href":"/_next/static/chunks/39mfm39vxtrlk.css","precedence":"next"}],["$","link","2",{"rel":"stylesheet","href":"/_next/static/chunks/33rwmtpph4nvj.css","precedence":"next"}],["$","script","script-0",{"src":"/_next/static/chunks/0umf92h1sb77c.js","async":true}],["$","script","script-1",{"src":"/_next/static/chunks/2n83tyr1cb1wx.js","async":true}],["$","script","script-2",{"src":"/_next/static/chunks/0mx-bonhs2df7.js","async":true}],["$","script","script-3",{"src":"/_next/static/chunks/1lr72s357avqa.js","async":true}],["$","script","script-4",{"src":"/_next/static/chunks/2q9gy5n8e5fl4.js","async":true}],["$","script","script-5",{"src":"/_next/static/chunks/0jar3cu74o6hp.js","async":true}],["$","script","script-6",{"src":"/_next/static/chunks/0xkrf1m3n14x5.js","async":true}]],["$","html",null,{"lang":"mn","suppressHydrationWarning":true,"children":[["$","head",null,{"children":["$","script",null,{"dangerouslySetInnerHTML":{"__html":"(function(){var t,l;try{t=localStorage.getItem('workspace-theme');l=localStorage.getItem('workspace-lang')}catch(e){}var r=document.documentElement;r.setAttribute('data-theme',t==='dark'?'dark':'light');r.setAttribute('lang',l==='en'?'en':'mn');if(window.self!==window.top&&location.pathname.includes('/departments/')&&new URLSearchParams(location.search).get('preview')==='1')r.setAttribute('data-department-preview','true')})();"}}]}],["$","body",null,{"className":"T5ovJa_variable FVC5Iq_variable antialiased","children":[["$","a",null,{"href":"#main","className":"skip-link","children":"Агуулга руу шилжих"}],["$","$L9",null,{"children":[["$","$La",null,{}],["$","div",null,{"className":"workspace-frame","children":[["$","$Lb",null,{}],["$","main",null,{"id":"main","tabIndex":-1,"className":"workspace-main min-h-[calc(100dvh-var(--head-h))] px-4 py-5 lg:px-6 lg:py-6","children":["$","$Lc",null,{"children":["$","$Ld",null,{"parallelRouterKey":"children","template":["$","$Le",null,{}],"notFound":[["$","div",null,{"className":"mx-auto flex max-w-[1400px] flex-col items-center justify-center gap-4 py-24 text-center","children":[["$","span",null,{"className":"num text-[12px] tracking-[0.2em] text-ink-3","children":"404"}],["$","h1",null,{"className":"display text-[25px]","children":"Хуудас олдсонгүй"}],["$","p",null,{"className":"max-w-[46ch] text-[14px] text-ink-2","children":"Хайсан хуудас байхгүй эсвэл шилжсэн байна."}],["$","$Lf",null,{"href":"/","className":"mt-2 rounded-xs border border-line-2 px-3 py-1.5 text-[13.5px] transition-colors hover:bg-paper-2","children":"Ерөнхий самбар руу буцах"}]]}],[]]}]}]}]]}]]}],["$","$L10",null,{}]]}]]}]]}],"p":"$@11","v":null,"s":"$12"},"c":"$Q13"},"h":{"r":["$","$1","h",{"children":[null,["$","$L1e",null,{"children":[["$","meta","0",{"charSet":"utf-8"}],["$","meta","1",{"name":"viewport","content":"width=device-width, initial-scale=1"}]]}],["$","$L20",null,{"children":[["$","div",null,{"hidden":true,"children":["$","$21",null,{"name":"Next.Metadata","children":[["$","title","0",{"children":"Тохиргоо · Байгаль орчны хяналтын нэгдсэн систем"}],["$","meta","1",{"name":"description","content":"Байгаль орчны салбарын үйл ажиллагааг удирдан зохион байгуулах, хянах, шийдвэр гаргалтыг дэмжих нэгдсэн систем."}],["$","link","2",{"rel":"icon","href":"/favicon.ico?favicon.2vob68tjqpejf.ico","sizes":"256x256","type":"image/x-icon"}],["$","$L22","3",{}]]}]}],null]}],["$","meta",null,{"name":"next-size-adjust","content":""}]]}],"p":"$@23","v":null,"s":"$12"}},"a":"$@24","u":"$@25","b":"_xVuoaWYVROy9rqxUgapc"}
+26:I[97367,["$2","$3","$4","$5","$6","$7","$8"],"OutletBoundary"]
+17:["$","div","Лавлах жагсаалтууд",{"className":"rounded-xs border border-line bg-paper-2 px-3 py-2 text-left text-[13px] text-ink-2","children":"Лавлах жагсаалтууд"}]
+18:["$","div","Аудитын бүртгэл",{"className":"rounded-xs border border-line bg-paper-2 px-3 py-2 text-left text-[13px] text-ink-2","children":"Аудитын бүртгэл"}]
+19:["$","div","Интеграц, API түлхүүр",{"className":"rounded-xs border border-line bg-paper-2 px-3 py-2 text-left text-[13px] text-ink-2","children":"Интеграц, API түлхүүр"}]
+1a:["$","div","Мэдэгдлийн тохиргоо",{"className":"rounded-xs border border-line bg-paper-2 px-3 py-2 text-left text-[13px] text-ink-2","children":"Мэдэгдлийн тохиргоо"}]
+1b:["$","$L26",null,{"children":["$","$21",null,{"name":"Next.MetadataOutlet","children":"$@27"}]}]
+12:300
+27:null
+25:true
+12:C
+24:0
+14:"$undefined"
+11:"$undefined"
+23:"$undefined"
+1c:"$undefined"
