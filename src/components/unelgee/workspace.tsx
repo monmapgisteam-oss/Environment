@@ -1,5 +1,6 @@
 "use client";
 
+import * as React from "react";
 import dynamic from "next/dynamic";
 import {
   CloudSun,
@@ -17,6 +18,8 @@ import "./workspace.css";
 import type { LayerSet } from "@/lib/portal-layers";
 import { ECO, FLOOD, GAS, GREEN, WASTE } from "@/lib/unelgee-layers";
 import { TabAccess } from "@/components/auth/tab-access";
+import { UnelgeeLayers } from "@/components/unelgee/dept-layers";
+import type { MapOverlay } from "@/components/wells/map";
 
 /*
   Хэлтэс гурван эх сурвалжтай тул самбар хооронд сольж харна.
@@ -74,7 +77,20 @@ function group(set: LayerSet, tab: string) {
       ),
     { ssr: false, loading: spinner },
   );
-  const G = () => <D set={set} presentation="environment" access={{ scope: "unelgee-uur-amisgal", tab }} />;
+  /* Хэлтсийн бусад бүртгэлийн дүрс — суурь зургийн доорх "Давхарга" товчоор
+     ({@link UnelgeeLayers}); энэ цэсийн давхаргууд тэнд "Энэ самбар" */
+  const G = () => {
+    const [layers, setLayers] = React.useState<MapOverlay[]>([]);
+    return (
+      <D
+        set={set}
+        presentation="environment"
+        access={{ scope: "unelgee-uur-amisgal", tab }}
+        extraOverlays={layers}
+        mapTools={<UnelgeeLayers inline current={set.layers} value={layers} onChange={setLayers} />}
+      />
+    );
+  };
   G.displayName = `LayerGroup(${set.key})`;
   return G;
 }

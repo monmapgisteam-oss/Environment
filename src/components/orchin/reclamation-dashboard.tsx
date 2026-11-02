@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { AreaChart, RowChart, YearRange, type Datum } from "@/components/charts";
 import { BasemapGallery } from "@/components/map/basemap-gallery";
+import { MineralLayers } from "@/components/orchin/mineral-layers";
 import { MapTip, MapTipRow, useMapTip } from "@/components/map/hover-tip";
 import { FilterBar, FilterMenu, PickList } from "@/components/wells/filter-bar";
 import { Columns } from "@/components/ui/resizable-columns";
@@ -20,6 +21,7 @@ import {
   defaultBasemap,
   type Basemap,
   type Extent,
+  type MapOverlay,
   type MapPoints,
 } from "@/components/wells/map";
 import { Bounds } from "@/lib/extent";
@@ -85,6 +87,8 @@ export function ReclamationDashboard() {
   const tip = useMapTip();
 
   const [basemap, setBasemap] = React.useState<Basemap>(defaultBasemap);
+  /* Бүлгийн бусад дөрвөн бүртгэлийн дүрс — "Давхарга" товчоор (`MineralLayers`) */
+  const [layers, setLayers] = React.useState<MapOverlay[]>([]);
 
   React.useEffect(() => {
     let alive = true;
@@ -404,9 +408,11 @@ export function ReclamationDashboard() {
                   onSelect={(oid) => setPicked(sel === oid ? null : oid)}
                   onHover={tip.onHover}
                   focus={focus}
+                  overlays={layers}
                   cluster={false}
                 />
                 <BasemapGallery value={basemap} onChange={setBasemap} />
+                <MineralLayers current="reclamation" value={layers} onChange={setLayers} />
             
                 {/*
                   ХӨВӨГЧ ТАЙЛБАР. Он ба талбай нь энэ самбарын хос гол

@@ -29,6 +29,45 @@ import { esriModules } from "@/lib/arcgis-sdk";
 /** Esri-ийн суурь зургийн id — 3D-д ажилладаг, түлхүүргүй */
 const SCENE_BASEMAPS = ["satellite", "hybrid", "topo-vector", "streets-vector", "gray-vector", "dark-gray-vector"];
 
+/** Esri-ийн хэмжилтийн виджетийн англи бичвэр → монгол (4.33-ын бүтэн бичвэрээр) */
+const MEASURE_MN: Record<string, string> = {
+  Unit: "Нэгж",
+  Metric: "Метрийн систем",
+  Imperial: "Империйн систем",
+  Inches: "Инч",
+  Feet: "Фут",
+  Yards: "Ярд",
+  Miles: "Миль",
+  "Nautical miles": "Далайн миль",
+  "Feet (US)": "Фут (АНУ)",
+  Millimeters: "Миллиметр",
+  Centimeters: "Сантиметр",
+  Decimeter: "Дециметр",
+  Decimeters: "Дециметр",
+  Meters: "Метр",
+  Kilometers: "Километр",
+  "Square inches": "Квадрат инч",
+  "Square feet": "Квадрат фут",
+  "Square yards": "Квадрат ярд",
+  "Square miles": "Квадрат миль",
+  "Square nautical miles": "Квадрат далайн миль",
+  "Square feet (US)": "Квадрат фут (АНУ)",
+  "Square millimeters": "Квадрат миллиметр",
+  "Square centimeters": "Квадрат сантиметр",
+  "Square decimeters": "Квадрат дециметр",
+  "Square meters": "Квадрат метр",
+  "Square kilometers": "Квадрат километр",
+  Acres: "Акр",
+  Ares: "Ар",
+  Hectares: "Гектар",
+  Area: "Талбай",
+  Perimeter: "Периметр",
+  Direct: "Шулуун зай",
+  Horizontal: "Хэвтээ зай",
+  Vertical: "Босоо зай",
+  "New measurement": "Шинэ хэмжилт",
+};
+
 const MODULES = [
   "esri/widgets/Expand",
   "esri/widgets/BasemapGallery",
@@ -84,6 +123,39 @@ export async function addSceneTools(
   const host = document.createElement("div");
   box.append(bar, host);
   const measurement = new Measurement({ view, container: host, linearUnit: "metric", areaUnit: "metric" });
+  /*
+    Esri-ийн самбар доторх калцит элементүүд (нэгжийн шошго, унждаг цэс,
+    товч) `scale="m"`-ээр төрдөг — 16px бичвэр, 32px өндөр; тэдний хэмжээ
+    shadow DOM дотроо тул энгийн CSS хүрэхгүй. Хэрэгсэл сольж самбар дахин
+    зурагдах бүрд `s` масштаб тавина (хэрэглэгч 2026-11-02: "хэмжээг нь янзал").
+  */
+  const shrink = () => {
+    for (const el of host.querySelectorAll("calcite-label, calcite-select, calcite-button")) {
+      if (el.getAttribute("scale") !== "s") el.setAttribute("scale", "s");
+    }
+  };
+  /*
+    ⚠⚠ ДЭЛГЭЦ БҮХЭЛДЭЭ МОНГОЛ (хэрэглэгч 2026-11-02: "bugd mongol shu"). Esri-д
+    монгол орчуулга байхгүй тул виджетийн бичвэрийг DOM дээр нь толиор солино
+    (`MEASURE_MN`): нэгжийн шошго, сонголтууд, хэмжилтийн мөрийн нэр, товч.
+    Толинд байхгүй шинэ бичвэр АНГЛИАРАА үлдэнэ — хагас орчуулга гаргахгүй,
+    бүтэн өгүүлбэрээр таарна. Тоо, нэгжийн тэмдэг (m, km²) хөндөгдөхгүй.
+    `calcite-option`-ийн бичвэр солигдоход calcite-select дотоод `select`-ээ
+    өөрөө шинэчилнэ (толгойгүй Chrome-оор шалгасан).
+  */
+  const translate = () => {
+    const walker = document.createTreeWalker(host, NodeFilter.SHOW_TEXT);
+    for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+      const raw = n.nodeValue ?? "";
+      const mn = MEASURE_MN[raw.trim()];
+      if (mn && raw.trim() !== mn) n.nodeValue = raw.replace(raw.trim(), mn);
+    }
+  };
+  const tidy = () => {
+    shrink();
+    translate();
+  };
+  new MutationObserver(tidy).observe(host, { childList: true, subtree: true, characterData: true });
   const tools: [string, string][] = [
     ["direct-line", "Шулуун зай"],
     ["area", "Талбай"],

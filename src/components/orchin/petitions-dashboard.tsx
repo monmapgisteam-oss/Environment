@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { RowChart, type Datum } from "@/components/charts";
 import { BasemapGallery } from "@/components/map/basemap-gallery";
+import { MineralLayers } from "@/components/orchin/mineral-layers";
 import { MapTip, MapTipRow, useMapTip } from "@/components/map/hover-tip";
 import { FilterBar, FilterMenu, PickList } from "@/components/wells/filter-bar";
 import { Columns } from "@/components/ui/resizable-columns";
@@ -22,6 +23,7 @@ import {
   defaultBasemap,
   type Basemap,
   type Extent,
+  type MapOverlay,
   type MapPoints,
 } from "@/components/wells/map";
 import { Bounds } from "@/lib/extent";
@@ -66,12 +68,21 @@ export function PetitionsDashboard() {
   const [screening, setScreening] = React.useState<string | null>(null);
   const [stage, setStage] = React.useState<string | null>(null);
   const [district, setDistrict] = React.useState<string | null>(null);
+  /*
+    Жагсаалтын ХАЙЛТ (хэрэглэгч 2026-11-02: "Өргөдлийн жагсаалт хэсэгт хайх
+    хэсэг нэм"): аж ахуйн нэгж, бүртгэлийн дугаар, дүүрэг, хороо, байршлын
+    бичвэрээс. Бусад шүүлттэй НЭГ шугамд (`keep`) — тусгай зөвшөөрлийн
+    жагсаалттай ижил; идэвхтэй шүүлтийн тоонд орж, "Цэвэрлэх" цуцална.
+  */
+  const [query, setQuery] = React.useState("");
   const [picked, setPicked] = React.useState<number | null>(null);
   const [hover, setHover] = React.useState<number | null>(null);
   /** Хулгана дагасан хөвөгч тайлбар — байрлалыг өөрөө удирдана */
   const tip = useMapTip();
 
   const [basemap, setBasemap] = React.useState<Basemap>(defaultBasemap);
+  /* Бүлгийн бусад дөрвөн бүртгэлийн дүрс — "Давхарга" товчоор (`MineralLayers`) */
+  const [layers, setLayers] = React.useState<MapOverlay[]>([]);
 
   React.useEffect(() => {
     let alive = true;
@@ -85,14 +96,17 @@ export function PetitionsDashboard() {
 
   const rows = data?.rows;
 
+  const q = query.trim().toLowerCase();
   const keep = React.useCallback(
     (p: Petition, skip?: "screening" | "stage" | "district") => {
+      if (q && !`${p.company} ${p.reg} ${p.district} ${p.khoroo} ${p.place}`.toLowerCase().includes(q))
+        return false;
       if (skip !== "screening" && screening && p.screening !== screening) return false;
       if (skip !== "stage" && stage && p.stage !== stage) return false;
       if (skip !== "district" && district && p.district !== district) return false;
       return true;
     },
-    [screening, stage, district],
+    [q, screening, stage, district],
   );
 
   const shown = React.useMemo(() => (rows ?? []).filter((p) => keep(p)), [rows, keep]);
@@ -243,6 +257,7 @@ export function PetitionsDashboard() {
     setStage(null);
     setDistrict(null);
     setPicked(null);
+    setQuery("");
   }
 
   if (error || !data) {
@@ -264,7 +279,11 @@ export function PetitionsDashboard() {
   }
 
   const activeCount =
-    (screening ? 1 : 0) + (stage ? 1 : 0) + (district ? 1 : 0) + (sel != null ? 1 : 0);
+    (screening ? 1 : 0) +
+    (stage ? 1 : 0) +
+    (district ? 1 : 0) +
+    (q ? 1 : 0) +
+    (sel != null ? 1 : 0);
   const selected = sel == null ? null : (rows?.find((p) => p.oid === sel) ?? null);
 
   return (
@@ -356,6 +375,15 @@ export function PetitionsDashboard() {
                 <Head title="Өргөдлийн жагсаалт">
                   <span className="num text-[11.5px] text-ink-3">{num(shown.length)}</span>
                 </Head>
+                <div className="shrink-0 border-b border-line p-2">
+                  <input
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    placeholder="Аж ахуйн нэгж, дугаар, байршлаар хайх…"
+                    aria-label="Өргөдлийн жагсаалтаас хайх"
+                    className="h-7 w-full rounded-xs border border-line bg-paper px-2 text-[12px] text-ink outline-none placeholder:text-ink-3 focus:border-line-2"
+                  />
+                </div>
                 <div className="min-h-0 flex-1 divide-y divide-line overflow-y-auto">
                   {shown.map((p) => (
                     <button
@@ -415,9 +443,11 @@ export function PetitionsDashboard() {
                   onSelect={(oid) => setPicked(sel === oid ? null : oid)}
                   onHover={tip.onHover}
                   focus={focus}
+                  overlays={layers}
                   cluster={false}
                 />
                 <BasemapGallery value={basemap} onChange={setBasemap} />
+                <MineralLayers current="petitions" value={layers} onChange={setLayers} />
             
                 {/*
                   ХӨВӨГЧ ТАЙЛБАР. Анхан шатны шүүлт нь энэ самбарын гол

@@ -31,6 +31,8 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { BasemapGallery } from "@/components/map/basemap-gallery";
+import { UnelgeeLayers } from "@/components/unelgee/dept-layers";
+import type { MapOverlay } from "@/components/wells/map";
 import { MapTip, MapTipRow, useMapTip } from "@/components/map/hover-tip";
 import { Columns } from "@/components/ui/resizable-columns";
 import {
@@ -796,6 +798,8 @@ function StationMap({
 }) {
   const tip = useMapTip();
   const m = measureOf(measure);
+  /* Хэлтсийн бүртгэлийн дүрс — "Давхарга" товчоор ({@link UnelgeeLayers}) */
+  const [layers, setLayers] = React.useState<MapOverlay[]>([]);
 
   /* Энэ хэмжигдэхүүнийг мэдээлээгүй станцыг ЭНЭ зураг хасна. Жагсаалт
      нь бүтнээрээ үлдэх тул нөгөө зурагт харагдсаар байна */
@@ -883,6 +887,7 @@ function StationMap({
           onHover={tip.onHover}
           focus={focus}
           cluster={false}
+          overlays={layers}
           highlight={spot ? [spot.st.lon, spot.st.lat] : null}
         />
         <BasemapGallery
@@ -890,6 +895,7 @@ function StationMap({
           onChange={onBasemap}
           placement="top-left"
         />
+        <UnelgeeLayers placement="top-left" current={[]} value={layers} onChange={setLayers} />
         {!shown.length ? (
           <div className="absolute inset-x-12 top-20 rounded-lg border border-line bg-paper-2 p-4 text-center text-[12px] text-ink-2">
             Энэ хэмжигдэхүүнд тохирох заалт алга. Станцын хайлт, хугацааны

@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { AreaChart, RowChart, YearRange, type Datum } from "@/components/charts";
 import { BasemapGallery } from "@/components/map/basemap-gallery";
+import { MineralLayers } from "@/components/orchin/mineral-layers";
 import { MapTip, MapTipRow, useMapTip } from "@/components/map/hover-tip";
 import { FilterBar, FilterMenu, PickList } from "@/components/wells/filter-bar";
 import { Columns } from "@/components/ui/resizable-columns";
@@ -22,6 +23,7 @@ import {
   defaultBasemap,
   type Basemap,
   type Extent,
+  type MapOverlay,
   type MapPoints,
 } from "@/components/wells/map";
 import { Bounds } from "@/lib/extent";
@@ -65,6 +67,13 @@ export function LicensesDashboard() {
   const [mineral, setMineral] = React.useState<string | null>(null);
   const [district, setDistrict] = React.useState<string | null>(null);
   /*
+    Жагсаалтын ХАЙЛТ (хэрэглэгч 2026-11-02: "Зөвшөөрлийн жагсаалт — хайх хэсэг
+    нэм"): эзэмшигч, дугаар, ашигт малтмал, дүүрэг, хорооны бичвэрээс. Бусад
+    шүүлттэй НЭГ шугамд (`keep`) — жагсаалт, зураг, үзүүлэлт, диаграм бүгд
+    дагана; идэвхтэй шүүлтийн тоонд орж, "Цэвэрлэх" цуцална.
+  */
+  const [query, setQuery] = React.useState("");
+  /*
     Дуусах хугацааны МУЖ. "Аль нэг он" гэсэн тусдаа шүүлтүүр БАЙХГҮЙ —
     диаграм дээр он товшиход энэ муж [он, он] болж хумигдана. Хоёр
     тусдаа хугацааны шүүлтүүр байвал хоорондоо зөрчилдөнө.
@@ -76,6 +85,8 @@ export function LicensesDashboard() {
   const tip = useMapTip();
 
   const [basemap, setBasemap] = React.useState<Basemap>(defaultBasemap);
+  /* Бүлгийн бусад дөрвөн бүртгэлийн дүрс — "Давхарга" товчоор (`MineralLayers`) */
+  const [layers, setLayers] = React.useState<MapOverlay[]>([]);
 
   /*
     Одоогийн оныг НЭГ УДАА барина. Зурагдалт бүрд `new Date()` дуудвал
@@ -100,8 +111,11 @@ export function LicensesDashboard() {
 
   const rows = data?.rows;
 
+  const q = query.trim().toLowerCase();
   const keep = React.useCallback(
     (l: License, skip?: "term" | "mineral" | "district" | "expiry") => {
+      if (q && !`${l.holder} ${l.code} ${l.mineral} ${l.district} ${l.khoroo}`.toLowerCase().includes(q))
+        return false;
       if (skip !== "term" && term && termOf(l.expires, now) !== term) return false;
       /* Дуусах он бөглөгдөөгүй бичлэг нь муж хумигдсан үед хасагдана —
          "энэ хооронд дуусна" гэдэгт хамаарах эсэх нь тодорхойгүй */
@@ -115,7 +129,7 @@ export function LicensesDashboard() {
       if (skip !== "district" && district && l.district !== district) return false;
       return true;
     },
-    [term, mineral, district, range, now],
+    [q, term, mineral, district, range, now],
   );
 
   const shown = React.useMemo(() => (rows ?? []).filter((l) => keep(l)), [rows, keep]);
@@ -302,6 +316,7 @@ export function LicensesDashboard() {
     setMineral(null);
     setDistrict(null);
     setPicked(null);
+    setQuery("");
   }
 
   if (error || !data) {
@@ -327,6 +342,7 @@ export function LicensesDashboard() {
     (wholeRange ? 0 : 1) +
     (mineral ? 1 : 0) +
     (district ? 1 : 0) +
+    (q ? 1 : 0) +
     (sel != null ? 1 : 0);
 
   return (
@@ -410,6 +426,15 @@ export function LicensesDashboard() {
             <Head title="Зөвшөөрлийн жагсаалт">
               <span className="num text-[11.5px] text-ink-3">{num(listed.length)}</span>
             </Head>
+            <div className="shrink-0 border-b border-line p-2">
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Эзэмшигч, дугаар, ашигт малтмалаар хайх…"
+                aria-label="Зөвшөөрлийн жагсаалтаас хайх"
+                className="h-7 w-full rounded-xs border border-line bg-paper px-2 text-[12px] text-ink outline-none placeholder:text-ink-3 focus:border-line-2"
+              />
+            </div>
             <div className="min-h-0 flex-1 divide-y divide-line overflow-y-auto">
               {listed.map((l) => (
                 <button
@@ -475,9 +500,11 @@ export function LicensesDashboard() {
                   onSelect={(oid) => setPicked(sel === oid ? null : oid)}
                   onHover={tip.onHover}
                   focus={focus}
+                  overlays={layers}
                   cluster={false}
                 />
                 <BasemapGallery value={basemap} onChange={setBasemap} />
+                <MineralLayers current="licenses" value={layers} onChange={setLayers} />
             
                 {/*
                   ХӨВӨГЧ ТАЙЛБАР. Энэ самбарын гол асуулт нь "хаана" биш

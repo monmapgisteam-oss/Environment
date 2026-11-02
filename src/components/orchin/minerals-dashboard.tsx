@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { RowChart, YearRange, type Datum } from "@/components/charts";
 import { BasemapGallery } from "@/components/map/basemap-gallery";
+import { MineralLayers } from "@/components/orchin/mineral-layers";
 import { MapTip, MapTipRow, useMapTip } from "@/components/map/hover-tip";
 import { OverlayControl } from "@/components/map/overlay-control";
 import { FilterBar, FilterMenu, PickList } from "@/components/wells/filter-bar";
@@ -84,6 +85,9 @@ export function MineralsDashboard() {
 
   const [basemap, setBasemap] = React.useState<Basemap>(defaultBasemap);
   const [overlays, setOverlays] = React.useState<MapOverlay[]>([]);
+  /* Бүлгийн бусад дөрвөн бүртгэлийн дүрс — "Давхарга" товчоор (`MineralLayers`); хилийн дээр */
+  const [layers, setLayers] = React.useState<MapOverlay[]>([]);
+  const allOverlays = React.useMemo(() => [...overlays, ...layers], [overlays, layers]);
 
   /* Одоогийн оныг НЭГ УДАА барина — зурагдалт бүрд шинэчилбэл сервер ба
      хөтчийн зураг зөрнө */
@@ -399,11 +403,12 @@ export function MineralsDashboard() {
                 onSelect={(oid) => setPicked(sel === oid ? null : oid)}
                 onHover={tip.onHover}
                 focus={focus}
-                overlays={overlays}
+                overlays={allOverlays}
                 cluster={false}
               />
               <BasemapGallery value={basemap} onChange={setBasemap} />
               <OverlayControl value={overlays} onChange={setOverlays} />
+              <MineralLayers current="minerals" value={layers} onChange={setLayers} />
           
               {/*
                 ХӨВӨГЧ ТАЙЛБАР. Хугацаа нь дээд мөрөнд: зөвшөөрөл ХЭЗЭЭ

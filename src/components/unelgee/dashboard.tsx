@@ -17,6 +17,8 @@ import {
 } from "lucide-react";
 import type { Datum } from "@/components/charts";
 import { BasemapGallery } from "@/components/map/basemap-gallery";
+import { UnelgeeLayers } from "@/components/unelgee/dept-layers";
+import type { MapOverlay } from "@/components/wells/map";
 import { MapTip, MapTipRow, useMapTip } from "@/components/map/hover-tip";
 import { FilterBar, FilterMenu, PickList } from "@/components/wells/filter-bar";
 import { Columns } from "@/components/ui/resizable-columns";
@@ -139,6 +141,8 @@ export function UnelgeeDashboard() {
   const tip = useMapTip();
   const panel = useMapPanel("left");
   const [basemap, setBasemap] = React.useState<Basemap>(() => defaultBasemap());
+  /* Хэлтсийн бусад бүртгэлийн дүрс — "Давхарга" товчоор ({@link UnelgeeLayers}) */
+  const [layers, setLayers] = React.useState<MapOverlay[]>([]);
 
   React.useEffect(() => {
     const ac = new AbortController();
@@ -576,9 +580,11 @@ export function UnelgeeDashboard() {
               onSelect={(oid) => setPicked(sel === oid ? null : oid)}
               onHover={tip.onHover}
               focus={focus}
+              overlays={layers}
               cluster={false}
             />
             <BasemapGallery value={basemap} onChange={setBasemap} />
+            <UnelgeeLayers current={[`assess-${year}`]} value={layers} onChange={setLayers} />
 
             <MapLegend
               title="Нэгж талбарын ангилал"

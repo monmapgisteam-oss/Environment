@@ -11,6 +11,8 @@ import {
 } from "lucide-react";
 import { smoothPath } from "@/components/charts";
 import { BasemapGallery } from "@/components/map/basemap-gallery";
+import { UnelgeeLayers } from "@/components/unelgee/dept-layers";
+import type { MapOverlay } from "@/components/wells/map";
 import { MapTip, MapTipRow, useMapTip } from "@/components/map/hover-tip";
 import { Columns } from "@/components/ui/resizable-columns";
 import {
@@ -534,6 +536,8 @@ function ArchiveMap({
 }) {
   const tip = useMapTip();
   const [basemap, setBasemap] = React.useState<Basemap>(defaultBasemap);
+  /* Хэлтсийн бүртгэлийн дүрс — "Давхарга" товчоор ({@link UnelgeeLayers}) */
+  const [layers, setLayers] = React.useState<MapOverlay[]>([]);
 
   /* Координатгүй станц зурагт ОРОХГҮЙ — (0, 0) нь Гвинейн булан */
   const shown = React.useMemo(
@@ -606,6 +610,7 @@ function ArchiveMap({
           onSelect={(id) => onPick(String(id) === station ? "" : String(id))}
           onHover={tip.onHover}
           cluster={false}
+          overlays={layers}
           highlight={
             spot ? [spot.lon as number, spot.lat as number] : null
           }
@@ -615,6 +620,7 @@ function ArchiveMap({
           onChange={setBasemap}
           placement="top-left"
         />
+        <UnelgeeLayers placement="top-left" current={[]} value={layers} onChange={setLayers} />
         {hovered ? (
           <MapTip state={tip}>
             <MapTipRow icon={MapPin} text={hovered.name} />

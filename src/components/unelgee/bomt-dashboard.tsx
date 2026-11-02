@@ -17,6 +17,8 @@ import {
 } from "lucide-react";
 import type { Datum } from "@/components/charts";
 import { BasemapGallery } from "@/components/map/basemap-gallery";
+import { UnelgeeLayers } from "@/components/unelgee/dept-layers";
+import type { MapOverlay } from "@/components/wells/map";
 import { MapTip, MapTipRow, useMapTip } from "@/components/map/hover-tip";
 import { FilterBar, FilterMenu, PickList } from "@/components/wells/filter-bar";
 import { Columns } from "@/components/ui/resizable-columns";
@@ -107,6 +109,8 @@ export function BomtDashboard() {
   const [implementer, setImplementer] = React.useState<string | null>(null);
   const [picked, setPicked] = React.useState<number | null>(null);
   const [basemap, setBasemap] = React.useState<Basemap>(() => defaultBasemap());
+  /* Хэлтсийн бусад бүртгэлийн дүрс — "Давхарга" товчоор ({@link UnelgeeLayers}) */
+  const [layers, setLayers] = React.useState<MapOverlay[]>([]);
 
   const tip = useMapTip();
   const panel = useMapPanel("right");
@@ -458,9 +462,11 @@ export function BomtDashboard() {
               onSelect={(oid) => setPicked(sel === oid ? null : oid)}
               onHover={tip.onHover}
               focus={focus}
+              overlays={layers}
               cluster={false}
             />
             <BasemapGallery value={basemap} onChange={setBasemap} />
+            <UnelgeeLayers current={["bomt"]} value={layers} onChange={setLayers} />
             <MapLegend title="Мод тарих байршил" items={legend} selected={planting} onSelect={setPlanting} />
 
             {hovered ? (

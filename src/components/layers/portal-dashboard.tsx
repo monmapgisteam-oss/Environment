@@ -567,9 +567,15 @@ export function PortalLayersDashboard({
   set,
   presentation,
   access,
+  extraOverlays,
+  mapTools,
 }: {
   set: LayerSet;
   presentation?: "environment";
+  /** Дуудагчийн нэмэлт давхарга (хэлтсийн бусад бүртгэл) — самбарын өөрийн дүрсийн доор зурагдана */
+  extraOverlays?: MapOverlays;
+  /** Суурь зургийн доорх товчны баганад орох дуудагчийн удирдлага */
+  mapTools?: React.ReactNode;
   /** Эрхийн хязгаарыг унших хэсэг ба цэс (өгөөгүй бол хязгааргүй) */
   access?: { scope: string; tab: string };
 }) {
@@ -590,20 +596,28 @@ export function PortalLayersDashboard({
       presentation={presentation}
       noMap={!!views && !views.includes("map")}
       noRecord={!!views && !views.includes("record")}
+      extraOverlays={extraOverlays}
+      mapTools={mapTools}
     />
   );
 }
+
+type MapOverlays = NonNullable<React.ComponentProps<typeof LayerMap>["overlays"]>;
 
 function LayersBoard({
   set,
   presentation,
   noMap = false,
   noRecord = false,
+  extraOverlays,
+  mapTools,
 }: {
   set: LayerSet;
   presentation?: "environment";
   noMap?: boolean;
   noRecord?: boolean;
+  extraOverlays?: MapOverlays;
+  mapTools?: React.ReactNode;
 }) {
   const environment = presentation === "environment";
   const [showCharts, setShowCharts] = React.useState(true);
@@ -1080,6 +1094,11 @@ function LayersBoard({
       });
     return list.length ? list : undefined;
   }, [shownParcels, shownZoneParcels, parcelPick, shownPick, set.parcelLine]);
+  /* Дуудагчийн нэмэлт давхарга (үнэлгээний хэлтсийн "Давхарга" товч) самбарын өөрийнхийн ард */
+  const allOverlays = React.useMemo(
+    () => (extraOverlays && extraOverlays.length ? [...(overlays ?? []), ...extraOverlays] : overlays),
+    [overlays, extraOverlays],
+  );
   const tip = useMapTip();
 
   /*
@@ -6210,7 +6229,7 @@ function LayersBoard({
                   cluster={Boolean(set.cluster)}
                   clusterMaxZoom={set.clusterMaxZoom}
                   clusterRadius={set.clusterRadius}
-                  overlays={overlays}
+                  overlays={allOverlays}
                   onView={onView}
                 />
                 <BasemapGallery value={basemap} onChange={setBasemap} />
@@ -6257,6 +6276,7 @@ function LayersBoard({
                   >
                     <Tag size={14} strokeWidth={1.75} />
                   </button>
+                  {mapTools}
                   {mapIds.length ? (
                     <div>
                       <MapLayerPicker
