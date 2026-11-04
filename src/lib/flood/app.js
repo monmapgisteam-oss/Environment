@@ -51,7 +51,7 @@ export class App {
     this.factor = 2;
     this.scn = { i: 40, d: 60, shape: 'uniform', area: 'all', center: null, radiusKm: 6, soil: 0.25, manning: 1,
       tuulOn: false, tuulQ: 40, inflows: [], durH: 3, speed: 120, hortonK: 2 / 3600, drain: 10 };
-    this.display = { mode: 0, thr: 0.02, opacity: 0.85, hill: 0, particles: true, buildings: false, buildings3d: true, waterStyle: 0, arrows: false, affected: false };   // Өнгөт (гүн) анхдагч — Pro-гийн тунгалаг цайвар→бараан хөх шатлалтай адил (хэрэглэгч 2026-10-09)
+    this.display = { mode: 0, thr: 0.005, opacity: 0.85, hill: 0, particles: true, buildings: false, buildings3d: true, waterStyle: 0, arrows: false, affected: false };   // Өнгөт (гүн) анхдагч — Pro-гийн тунгалаг цайвар→бараан хөх шатлалтай адил (хэрэглэгч 2026-10-09)
     this.viewSnapshot = null;
     this.area = null;           // simulation area [xmin, ymin, xmax, ymax] EPSG:3857, null = whole data extent
     this.areaDraft = null;

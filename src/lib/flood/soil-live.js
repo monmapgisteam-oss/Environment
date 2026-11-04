@@ -37,7 +37,7 @@ const DRAIN = 10;            // мм/ц
 const SPEED = 120;           // 1 с = 2 мин
 const LIFT = 0.5;            // усны мешийн суурь блокийн оройгоос, м
 const R = 6378137;
-const DISPLAY = { mode: 0, thr: 0.02, opacity: 0.85, hill: 0, particles: false, buildings: false, waterStyle: 0, arrows: false, history: false };
+const DISPLAY = { mode: 0, thr: 0.005, opacity: 0.85, hill: 0, particles: false, buildings: false, waterStyle: 0, arrows: false, history: false };
 
 function mul4(a, b) {       // column-major 4x4: a * b
   const o = new Float64Array(16);
