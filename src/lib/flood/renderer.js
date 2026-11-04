@@ -229,7 +229,10 @@ vec4 gameWater(vec2 g, float d, vec2 v, vec3 V){
   F = clamp(F * 2.2 + 0.08, 0.0, 0.75);                   // top-down views need more reflection to read as a surface
   vec3 c = mix(body, sky, F);
   float facet = dot(N, normalize(vec3(-0.45, 0.55, 0.70)));
-  c *= 0.86 + 0.28 * facet;                               // light / dark ripple facets
+  // Урсгалын дагуу зөөгдөх долгион ХӨХ ДОТРОО тодорно (хэрэглэгч 2026-11-04: "2d deer yaj usuug ursgaj
+  // haruulah we"): цагаан руу холихгүй, цайвар хөх ↔ бараан хөх хэлбэлзэл. Урсаж буй усанд тод, тогтоол усанд сул.
+  float swing = 0.28 + 0.42 * moving;
+  c *= 0.86 + swing * facet;                              // light / dark ripple facets (blue only)
   vec3 L = normalize(vec3(0.42, 0.30, 0.86));            // fixed sun: glints sparkle on ripple crests
   vec3 H = normalize(L + V);
   float spec = pow(max(dot(N, H), 0.0), 220.0) * (0.9 + 0.8 * flow);
@@ -425,7 +428,7 @@ void main(){
   vec2 g = p.xy - (end == 1 ? v / uDx * uTail : vec2(0.0));
   float fade = min(p.z / 6.0, 1.0) * min((p.w - p.z) / 6.0, 1.0);
   // FlowRenderer-like streamline: bright head fading to nothing along the trail, faint where the water is slow
-  vA = alive ? (end == 0 ? 0.22 : 0.0) * fade * clamp(length(v) * 1.2, 0.15, 1.0) : 0.0;
+  vA = alive ? (end == 0 ? 0.34 : 0.0) * fade * clamp(length(v) * 1.2, 0.15, 1.0) : 0.0;
   vec2 local = vec2(g.x, -g.y) * uCell;
   if (!alive) gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
   else if (uIs3D == 1) {
@@ -434,7 +437,9 @@ void main(){
     gl_Position = uMVP * vec4(local, z, 1.0);
   } else gl_Position = vec4(local * uXf.xy + uXf.zw, 0.0, 1.0);
 }`;
-const FS_PART = HEAD + `in float vA; out vec4 o; void main(){ o = vec4(vec3(vA), vA); }`;
+// Урсгалын зураас ЦАГААН БИШ, ЦАЙВАР ХӨХ (хэрэглэгч 2026-11-04) — усны өнгөний гэр бүлд, бараан усан дээр
+// уншигдана, гүехэн тунгалаг усан дээр цагаан эргүүлэг болохгүй. Premultiplied.
+const FS_PART = HEAD + `in float vA; out vec4 o; void main(){ o = vec4(vec3(0.45, 0.78, 1.0) * vA, vA); }`;
 
 const VS_FULL = `#version 300 es
 void main(){ vec2 p = vec2(float((gl_VertexID << 1) & 2), float(gl_VertexID & 2)); gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0); }`;

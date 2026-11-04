@@ -350,9 +350,12 @@ const MARKUP = (
               <b id="sVol">0</b>
               <i>сая м³</i>
             </div>
+            {/* ⚠ "Усны дээд гүн" (хот даяарх хамгийн гүн нүд) БИШ — заагчийн доорх нүдний усны гүн, амьд
+                (хэрэглэгч 2026-11-04: "cursor haana ochino ter usnii gun baruun paneld haragdana").
+                Заагч зургаас гартал сүүлийн утга үлдэнэ; хуурай нүдэнд 0.00. */}
             <div className="tile">
-              <span>Усны дээд гүн</span>
-              <b id="sHmax">0</b>
+              <span>Усны гүн</span>
+              <b id="sDepth">—</b>
               <i>м</i>
             </div>
             <div className="tile">
@@ -396,6 +399,8 @@ export function FloodView() {
     void import("@/lib/flood/app").then(({ App }) => {
       if (gone) return;
       app = new App(el) as FloodApp;
+      /* Хөгжүүлэлтэд шийдэгчийг CDP-ээр шалгах холбоос (WellsMap-ийн `__engine`-тэй нэг зарчим; бүтээлтэд орохгүй) */
+      if (process.env.NODE_ENV !== "production") (el as unknown as { __floodApp?: FloodApp }).__floodApp = app;
       void app.start();
     });
     const theme = new MutationObserver(() => app?.applyTheme());

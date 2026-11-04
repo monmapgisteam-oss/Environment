@@ -25,8 +25,12 @@ export async function loadFloodData(onMsg = () => {}) {
   const lc = await bin('lc.u8.gz', 'Газрын бүрхэвч (WorldCover)');
   const bld = await bin('bld.u8.gz', 'Барилга');
   const riv = await bin('riv.u8.gz', 'Гол горхи');
+  // Барилгын хоорондох ЗАВСАР (нүүрний нээлттэй өргөн, 2.5 м-ийн растераас; `tools/build_walls.py`,
+  // 2026-11-04). Сонголттой: файл байхгүй бол шийдэгч хуучин дүрмээр (10 м-ийн нүдний аль нэг тал
+  // барилгатай бол нүүр битүү) ажиллана.
+  const wf = meta.wallSub ? await bin('wf.u8.gz', 'Барилгын завсар').catch(() => null) : null;
   onMsg('Тооцооны орчныг бэлтгэж байна…');
-  return { meta, dem, lc, bld, riv };
+  return { meta, dem, lc, bld, riv, wf };
 }
 
 /** Тооцооны тусдаа WebGL2 контекст (зургийн контекстоос ангид). Дэмжихгүй бол алдаа шиднэ. */

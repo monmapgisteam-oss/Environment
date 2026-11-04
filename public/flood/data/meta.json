@@ -25,9 +25,11 @@
   4493
  ],
  "sources": {
-  "dem": "Copernicus GLO-30 DSM (ESA/Airbus), building bias removed; noise pits filled, real depressions kept (urban ponds scaled to ≤ 1 m)",
+  "dem": "Copernicus GLO-30 DSM (ESA/Airbus), building bias removed; noise pits filled, real depressions kept (urban ponds scaled to \u2264 1 m)",
   "landcover": "ESA WorldCover 2021 v200 (10 m)",
   "buildings": "merged_buildings_arkhai FeatureServer (322,855 footprints, floors x 3 m)",
-  "rivers": "none burned (OpenStreetMap Tuul line locates the inflow only)"
- }
+  "rivers": "none burned (OpenStreetMap Tuul line locates the inflow only)",
+  "walls": "building footprints rasterised at 2.5 m (fence-like and oversized shapes dropped); open width of each fine-cell face in 1/6, building area share in 1/36"
+ },
+ "wallSub": 6
 }

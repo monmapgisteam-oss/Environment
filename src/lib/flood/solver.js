@@ -51,6 +51,8 @@ vec2 cellVel(vec2 qsum, float h){
 // ---- init: fine rasters -> solver grid (coarsened by F)
 const FS_INIT = HEAD + `
 uniform usampler2D uLC, uBld, uRiv;
+uniform usampler2D uWf2;       // нарийн нүд: R зүүн, G урд нүүрний нээлттэй өргөн (0..uWallSub), B барилгын талбайн хувь (0..uWallSub²) — wf.u8.gz
+uniform int uWallSub;          // 0 = растер байхгүй → хуучин дүрэм (барилгатай нүдний нүүр битүү)
 uniform sampler2D uDem;
 uniform int uF;
 uniform ivec2 uFine;
@@ -78,18 +80,32 @@ void main(){
     uint b = texelFetch(uBld, p, 0).r;
     burn = max(burn, float(texelFetch(uRiv, p, 0).r) * 0.1);
     cnt += 1.0; ns += prm.x; a0 += prm.y; ac += prm.z; st += prm.w;
-    if (b > 0u) { nb += 1.0; hb += float(b); }
+    // барилгын хувь: 2.5 м-ийн растер байвал нарийн нүдний БОДИТ талбайн хувиар (10 м-ийн "байна/байхгүй" нь
+    // завсартай нүдийг бүтэн барилга болгодог байв); өндөр нь bld.u8-аас хэвээр
+    float bf = uWallSub > 0 ? float(texelFetch(uWf2, p, 0).b) / float(uWallSub * uWallSub) : (b > 0u ? 1.0 : 0.0);
+    if (bf > 0.0) { nb += bf; hb += bf * float(b > 0u ? b : 3u); }
     if (b > 0u || lcv == 50u) nu += 1.0;       // served by street drainage (built-up)
   }
   cnt = max(cnt, 1.0);
   // A face is open along a fine row/column only where the fine cells on both sides are free: buildings
   // standing on the boundary between two cells block it, even when they cover little of either cell.
+  // ⚠⚠ 2026-11-04: барилгын олон өнцөгтөөс 2.5 м-ийн растераар бодсон нээлттэй өргөн байвал ТҮҮНИЙГ авна
+  // (wf.u8.gz): 10 м-ийн нүдээр шалгахад 3–8 м-ийн завсар бүгд битүүрч, барилгын эгнээ далан болж ард нь
+  // ус 9 м хүртэл тогтож байв (Яармагийн энгэр). Растергүй бол хуучин дүрэм.
   float oe = 0.0, os = 0.0;
   for (int k = 0; k < 8; k++) {
     if (k >= uF) continue;
     ivec2 e0 = uOff + c * uF + ivec2(uF - 1, k), s0 = uOff + c * uF + ivec2(k, uF - 1);
-    if (!bldAt(e0) && !bldAt(e0 + ivec2(1, 0))) oe += 1.0;
-    if (!bldAt(s0) && !bldAt(s0 + ivec2(0, 1))) os += 1.0;
+    if (uWallSub > 0) {
+      if (uBldOn < 0.5) { oe += 1.0; os += 1.0; continue; }
+      bool ie = e0.x >= 0 && e0.y >= 0 && e0.x < uFine.x && e0.y < uFine.y;
+      bool is = s0.x >= 0 && s0.y >= 0 && s0.x < uFine.x && s0.y < uFine.y;
+      oe += ie ? float(texelFetch(uWf2, e0, 0).r) / float(uWallSub) : 1.0;
+      os += is ? float(texelFetch(uWf2, s0, 0).g) / float(uWallSub) : 1.0;
+    } else {
+      if (!bldAt(e0) && !bldAt(e0 + ivec2(1, 0))) oe += 1.0;
+      if (!bldAt(s0) && !bldAt(s0 + ivec2(0, 1))) os += 1.0;
+    }
   }
   oW = vec2(oe, os) / float(uF);       // 0 = the face is a wall along its whole length
   // bilinear ground elevation at cell centre (DEM cell centres sit at (i+0.5)*demF fine cells)
@@ -424,6 +440,7 @@ const FORMATS = {
   RGBA16F: ['RGBA16F', 'RGBA', 'HALF_FLOAT'],
   RG16F: ['RG16F', 'RG', 'HALF_FLOAT'],
   R8UI: ['R8UI', 'RED_INTEGER', 'UNSIGNED_BYTE'],
+  RGBA8UI: ['RGBA8UI', 'RGBA_INTEGER', 'UNSIGNED_BYTE'],
 };
 
 export function texture(gl, w, h, fmt, data = null) {
@@ -524,7 +541,9 @@ export class FloodSolver {
       bld: texture(gl, m.W, m.H, 'R8UI', d.bld),
       riv: texture(gl, m.W, m.H, 'R8UI', d.riv),
       dem: texture(gl, m.demW, m.demH, 'R32F', d.dem),
+      wf: d.wf ? texture(gl, m.W, m.H, 'RGBA8UI', d.wf) : texture(gl, 1, 1, 'RGBA8UI'),   // растергүй үед шейдер уншихгүй (uWallSub = 0)
     };
+    this.wallSub = d.wf && m.wallSub ? m.wallSub : 0;
     this.fineBld = d.bld;
   }
 
@@ -565,7 +584,8 @@ export class FloodSolver {
     const gl = this.gl, pr = this.progs.init, m = this.meta;
     this.buildingsOn = buildings;
     this._begin();
-    this._bind(pr, { uLC: this.src.lc, uBld: this.src.bld, uRiv: this.src.riv, uDem: this.src.dem });
+    this._bind(pr, { uLC: this.src.lc, uBld: this.src.bld, uRiv: this.src.riv, uDem: this.src.dem, uWf2: this.src.wf });
+    gl.uniform1i(pr.u.uWallSub, this.wallSub);
     gl.uniform1i(pr.u.uF, this.F);
     gl.uniform2i(pr.u.uFine, m.W, m.H);
     gl.uniform2i(pr.u.uOff, this.off[0], this.off[1]);

@@ -129,8 +129,10 @@ export class App {
     // "хөдөлгөөнт дээр байгаа сумыг өнгөт гүн дээр бас оруул"); "Бодит" (1) усанд хэвээр үгүй
     // ⚠⚠ ЦАГААН ЗУРААС БҮХ УСАНД УНТАРСАН (хэрэглэгч 2026-10-12, зургаар: "gunii shatlal, hudulguunt
     // deer bgaa tsagaaniig del") — урсгалын цагаан зураас (FlowRenderer маяг) усыг цагаан эргүүлгээр
-    // бүрхэж байв. Кодод үлдсэн; дахин асаах бол энд.
-    const particles = false;
+    // бүрхэж байв.
+    // ⚠ 2026-11-04-нд ХӨХ өнгөөр буцаж асав (хэрэглэгч: "2d deer yaj usuug ursgaj haruulah we" → "hiichih"):
+    // "Хөдөлгөөнт" (2) ба "Гүний шатлал" (0) усанд цайвар хөх зураас (FS_PART), "Бодит" (1) усанд үгүй.
+    const particles = this.display.particles && this.display.waterStyle !== 1;
     return { ...this.display, particles, history: !!this.viewSnapshot, tmax: Math.max(this.solver ? this.solver.t : 60, 60) / 60 };
   }
 
@@ -936,7 +938,7 @@ export class App {
     $('sRainCum').textContent = cum.toFixed(1);
     $('sWet').textContent = ((st.wetArea || 0) / 1e6).toFixed(2);
     $('sVol').textContent = (st.vol / 1e6).toFixed(2);
-    $('sHmax').textContent = st.hmax.toFixed(2);
+    // ⚠ Хот даяарх дээд гүн самбарт ГАРАХГҮЙ (хэрэглэгч 2026-11-04) — `#sDepth` нь заагчийн доорх гүн, `updateTooltip` бичнэ.
     $('sVmax').textContent = st.vmax.toFixed(2);
     if (this.display.mode === 4 && Math.abs((this.legendT || 0) - s.t) > 30) this.updateLegend();
     const bal = s.rainVol + s.inflowVol;
@@ -967,6 +969,14 @@ export class App {
   updateTooltip() {
     const s = this.solver, c = this.hoverCell, tip = $('tip');
     const p = s.probe(...c);
+    // ⚠⚠ Баруун самбарын "Усны гүн" = ЗААГЧИЙН ДООРХ нүдний гүн (хэрэглэгч 2026-11-04: "cursor haana ochino
+    // ter usnii gun baruun paneld haragdana"). Хуурай нүдэнд 0.00, барилгын нүдэнд тэр барилгын дээд гүн;
+    // заагч зургаас гарахад сүүлийн утга үлдэнэ. Хөвөгч самбараас "Усны гүн" мөр ХАСАГДСАН (давхардал).
+    const depthEl = $('sDepth');
+    if (depthEl) {
+      const d = this.hoverBld != null ? this.impact?.depthOf(this.hoverBld) : (p.building ? null : p.h);
+      depthEl.textContent = d == null ? '—' : d.toFixed(2);
+    }
     tip.hidden = false;
     tip.style.left = this.hoverPx.x + 'px';
     tip.style.top = this.hoverPx.y + 'px';
@@ -994,7 +1004,6 @@ export class App {
     const k = hr < 0.75 ? 0 : hr < 1.25 ? 1 : hr < 2 ? 2 : 3;
     tip.classList.add('rich');
     tip.innerHTML = `<b class="ttl">Үерийн ус</b>` +
-      `<span class="kv"><span>Усны гүн</span><b>${p.h.toFixed(2)} м</b></span>` +
       `<span class="kv"><span>Урсгалын хурд</span><b>${p.v.toFixed(2)} м/с</b></span>` +
       (hr > 0 ? `<span class="kv"><span>Аюулын зэрэг</span><b><i style="background:${hz[k][0]}"></i>${['Бага', 'Дунд', 'Өндөр', 'Онц өндөр'][k]}</b></span>` : '');
   }
