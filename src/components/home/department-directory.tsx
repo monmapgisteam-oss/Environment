@@ -2,15 +2,22 @@
 
 import Link from "next/link";
 import { ArrowUpRight, Building2, Database } from "lucide-react";
-import { useAccess } from "@/components/auth/access";
 import { num } from "@/lib/utils";
 import { DepartmentPreview } from "./department-preview";
-import { SHORT_NAMES } from "@/lib/departments";
+import { DEPARTMENTS, SHORT_NAMES } from "@/lib/departments";
 import { SHORT_EN, useDeptName, useLang, useT } from "@/lib/i18n";
 
-/** Summary and directory use the same access-filtered department list. */
+/*
+  ⚠⚠ НҮҮР ХУУДАС БҮХ ХЭЛТЭСТ ИЖИЛ (хэрэглэгч 2026-11-09: "энэ нүүрийг бүх хэлтэс
+  яг энэ хэвээр нь харна"). Урьд нь тоон тойм, хэлтсийн картууд хандах эрхээр
+  шүүгддэг байсан тул хэлтсийн бүртгэлээр нэвтрэхэд ганц карт л гарч байв. Одоо
+  найман хэлтэс, бүх тоо хүн бүрт; картын урьдчилсан харагдац ч бүгдэд
+  (`DepartmentGate` нь preview iframe-ийг нэвтрүүлнэ). Хэлтсийн ХУУДАС руу орох
+  эрх хэвээр хязгаартай — эрхгүй хэлтсийн карт дарахад "эрх байхгүй".
+*/
+const departments = DEPARTMENTS;
+
 export function HomeSummary({ sourceCounts }: { sourceCounts: Record<string, number> }) {
-  const { departments } = useAccess();
   const t = useT();
   const deptName = useDeptName();
   const lang = useLang();
@@ -37,7 +44,6 @@ export function HomeSummary({ sourceCounts }: { sourceCounts: Record<string, num
 
 /** Department tiles fill the available height without stretching the page. */
 export function DepartmentDirectory() {
-  const { departments } = useAccess();
   const t = useT();
   const deptName = useDeptName();
   const lang = useLang();

@@ -1054,6 +1054,130 @@ html[data-department-preview="true"] .workspace-main { --workspace-gutter: 0px; 
 .pe-table th.num {
   text-align: right;
 }
+/* Тогтоосон багана — зүүн талд наалдана; зүүн зай нь хэмжигдэж DOM-д бичигдэнэ */
+.pe-table th.is-frozen,
+.pe-table td.is-frozen {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: var(--paper-2);
+  box-shadow: inset -1px 0 var(--line-2);
+}
+.pe-table th.is-frozen {
+  z-index: 3;
+}
+.pe-table th.is-frozen svg {
+  display: inline-block; /* Tailwind preflight нь svg-г block болгодог — тэмдэг тусдаа мөр болж байв */
+  vertical-align: -1px;
+  margin-right: 2px;
+  color: var(--moss);
+}
+.pe-table tbody tr.is-hot td.is-frozen,
+.pe-table tbody tr.is-picked td.is-frozen {
+  background: var(--paper-hi);
+}
+.pe-table th {
+  cursor: context-menu;
+}
+.pe-hidden-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 24px;
+  padding: 0 8px;
+  border: 1px dashed var(--line-2);
+  border-radius: 7px;
+  color: var(--ink-3);
+  font-size: 11px;
+}
+.pe-hidden-chip:hover {
+  color: var(--ink);
+  border-color: var(--ink-3);
+}
+/* Баганын баруун товшилтын цэс */
+.pe-colmenu {
+  position: fixed;
+  z-index: 240;
+  min-width: 208px;
+  padding: 4px;
+  border: 1px solid var(--line-2);
+  border-radius: 10px;
+  background: var(--paper-2);
+  box-shadow: var(--shadow);
+}
+.pe-colmenu-title {
+  overflow: hidden;
+  padding: 6px 10px 4px;
+  color: var(--ink-3);
+  font-size: 10.5px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pe-colmenu button {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 8px;
+  height: 30px;
+  padding: 0 10px;
+  border-radius: 7px;
+  color: var(--ink);
+  font-size: 12px;
+  text-align: left;
+}
+.pe-colmenu button:hover {
+  background: var(--paper-hi);
+}
+.pe-colmenu button svg {
+  color: var(--ink-3);
+}
+.pe-colmenu button.is-danger,
+.pe-colmenu button.is-danger svg {
+  color: var(--clay);
+}
+.pe-colmenu hr {
+  margin: 4px 6px;
+  border: 0;
+  border-top: 1px solid var(--line);
+}
+/* Талбар устгах цонх — хөшигтэй, голдоо */
+.pe-dialog-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 235;
+  display: grid;
+  place-items: center;
+  background: rgb(0 0 0 / 0.35);
+}
+.pe-addfield-card.pe-dialog {
+  position: static;
+  width: 360px;
+}
+.pe-addfield-card.pe-dialog.is-danger {
+  border-color: color-mix(in oklab, var(--clay) 55%, transparent);
+}
+.pe-dialog-text {
+  color: var(--ink-2);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.pe-dialog-warn {
+  display: flex;
+  gap: 8px;
+  padding: 9px 11px;
+  border: 1px solid color-mix(in oklab, var(--clay) 55%, transparent);
+  border-radius: 10px;
+  background: color-mix(in oklab, var(--clay) 10%, transparent);
+  color: var(--ink);
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+.pe-dialog-warn svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--clay);
+}
 .pe-table td.is-empty {
   color: var(--ink-3);
 }

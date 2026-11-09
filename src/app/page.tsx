@@ -7,7 +7,7 @@ import { T } from "@/components/ui/t";
 /**
  * Ерөнхий самбар — нэг хэсэг: тоон тойм, хэлтсийн картууд, хуанли.
  * Нэг дэлгэцэнд багтана; нарийн дэлгэцэд хэлтсийн жагсаалт дотроо гүйнэ.
- * Тоон тойм болон хэлтсийн жагсаалт нь ижил хандах эрхээр шүүгдэнэ.
+ * Тоон тойм, хэлтсийн жагсаалт БҮХ хэлтэст ижил — эрхээр шүүгдэхгүй (2026-11-09).
  */
 export default function Home() {
   const sourceCounts = Object.fromEntries(DEPARTMENTS.map((d) => [d.slug, SOURCES.filter((s) => s.slug === d.slug).length]));

@@ -53,7 +53,7 @@ export function fieldNameOf(alias: string, taken: Set<string>): string {
  * (ArcGIS Online-ийн `<нэр>.FeatureServer` хэлбэр энд "Invalid URL" өгдөг —
  * 2026-10-21-нд токеноор шалгасан).
  */
-function adminUrl(layerUrl: string): string {
+export function adminUrl(layerUrl: string): string {
   return layerUrl.replace("/rest/services/", "/rest/admin/services/");
 }
 
@@ -65,7 +65,8 @@ export function AddField({
   url: string;
   /** Давхаргын бүх талбарын нэр, alias — давхардлаас сэргийлнэ */
   fields: { name: string; alias: string }[];
-  onDone: (alias: string) => void;
+  /** Нэмэгдсэн талбарын alias ба системийн нэр — сүүлийнх нь "энэ сессэд нэмсэн" гэж тэмдэглэгдэнэ */
+  onDone: (alias: string, name: string) => void;
 }) {
   const [open, setOpen] = React.useState(false);
   /* Хүснэгтийн карт `overflow: hidden` тул цонх нь ТОГТМОЛ байрлалаар товчны дээр */
@@ -113,7 +114,7 @@ export function AddField({
       if (res.success === false) throw new Error(res.error?.message ?? "Хадгалагдсангүй");
       setOpen(false);
       reset();
-      onDone(field.alias as string);
+      onDone(field.alias as string, name);
     } catch (e) {
       const m = e instanceof Error ? e.message : String(e);
       setError(/403|permission|not authorized|эрх/i.test(m) ? "Давхаргын бүтцийг өөрчлөх эрх хүрэхгүй байна" : `Хадгалагдсангүй: ${m}`);

@@ -450,7 +450,7 @@ export function WasteDashboard() {
     <div className={cn("flex h-full min-h-0 flex-col gap-2.5", dashboardStyles.root)}>
       {/* ---- ТОЛГОЙ: гарчиг ба баруун самбарын товч ---- */}
       <div className="workspace-filterbar flex shrink-0 flex-wrap items-center gap-2 rounded-xl border border-line bg-paper-2 px-3 py-2.5">
-        <span className="shrink-0 text-[13px] font-semibold text-ink">Ландфилл</span>
+        <span className="shrink-0 text-[12px] font-semibold tracking-[0.02em] text-ink uppercase">Ландфилл</span>
 
         {district != null ? (
           <button

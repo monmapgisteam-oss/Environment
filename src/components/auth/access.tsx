@@ -80,8 +80,22 @@ function fetchRole(): Promise<string | null> {
   return selfRole;
 }
 
+/*
+  ⚠⚠ НҮҮРНИЙ УРЬДЧИЛСАН ХАРАГДАЦ (`?preview=1` iframe, `layout.tsx`-ийн boot
+  скрипт `data-department-preview` тавьдаг) БҮХ эрхтэй мэт уншигдана — нүүр
+  хуудас бүх хэлтэст ижил харагдах ёстой (хэрэглэгч 2026-11-09: "энэ нүүрийг бүх
+  хэлтэс яг энэ хэвээр нь харна"). Iframe нь `inert`, харилцдаггүй; давхарга нь
+  org даяар хуваалцсан тул энэ нь дэлгэцийн л хязгаарлалт. `admin` туг ХЭВЭЭР —
+  Эрх, Эх сурвалжийн хуудас preview-д ордоггүй. Серверийн HTML-д `document`
+  байхгүй тул `useSyncExternalStore`-оор (сервер талд `false`).
+*/
+const noSub = () => () => {};
+const previewNow = () => document.documentElement.dataset.departmentPreview === "true";
+const previewServer = () => false;
+
 export function useAccess() {
   const { session } = useAuth();
+  const preview = React.useSyncExternalStore(noSub, previewNow, previewServer);
   const username = session?.username;
   const stored = session?.role;
   const nameAdmin = isAdminName(username);
@@ -113,10 +127,12 @@ export function useAccess() {
     const grant: Grant | null = row ? (row.removed ? null : withHome(u, row.grant)) : defaultGrant(u);
     const pending =
       signed && !nameAdmin && (remote.status !== "ready" || (!grant && role === undefined));
-    const blocked = signed && !admin && !grant && !pending;
-    const allows = (scope: string) => admin || (!!grant && grantAllowsScope(grant, scope));
-    const allowsTab = (scope: string, tab: string) => admin || (!!grant && grantAllowsTab(grant, scope, tab));
-    const ruleOf = (scope: string, tab: string): TabRule => (admin || !grant ? FULL_RULE : tabRule(grant, scope, tab));
+    const blocked = signed && !admin && !preview && !grant && !pending;
+    /* Урьдчилсан харагдацад бүх хэсэг, цэс нээлттэй (дээрх тэмдэглэл) */
+    const open = admin || preview;
+    const allows = (scope: string) => open || (!!grant && grantAllowsScope(grant, scope));
+    const allowsTab = (scope: string, tab: string) => open || (!!grant && grantAllowsTab(grant, scope, tab));
+    const ruleOf = (scope: string, tab: string): TabRule => (open || !grant ? FULL_RULE : tabRule(grant, scope, tab));
     return {
       admin,
       pending,
@@ -130,7 +146,7 @@ export function useAccess() {
       analysis: allows(ANALYSIS),
       departments: DEPARTMENTS.filter((d) => allows(d.slug)),
     };
-  }, [username, nameAdmin, role, remote]);
+  }, [username, nameAdmin, role, remote, preview]);
 }
 
 /** Эрхгүй хуудсанд гарах блок */

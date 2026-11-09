@@ -7,6 +7,7 @@ import { createPortal } from "react-dom";
 import {
   Check,
   Crosshair,
+  EyeOff,
   Loader2,
   Lock,
   MapPin,
@@ -16,6 +17,7 @@ import {
   Plus,
   X,
   PenTool,
+  Pin,
   Search,
   Shapes,
   Trash2,
@@ -32,6 +34,7 @@ import { BasemapGallery } from "@/components/map/basemap-gallery";
 import { DISTRICT_CODE, installToken, layerUrl, loadMapData, placeAt, reason, type MapData, type Place } from "./esri-edit";
 import { EditorHead, type EditSource } from "./editor-head";
 import { AddField } from "./add-field";
+import { ColumnMenu, DeleteFieldDialog, type ColumnMenuState } from "./column-menu";
 import { DECOR, lookFor, type Look, type LookData, type MapProps } from "./looks";
 
 /*
@@ -113,6 +116,18 @@ type Draft = {
 };
 
 const TABLE_LIMIT = 500;
+/* Баганын тохиргоо — нуусан, тогтоосон; давхарга тус бүрээр `localStorage` */
+type ColPrefs = { hidden: string[]; frozen: string[] };
+const NO_PREFS: ColPrefs = { hidden: [], frozen: [] };
+function readColPrefs(key: string | null): ColPrefs {
+  if (!key) return NO_PREFS;
+  try {
+    const v = JSON.parse(localStorage.getItem(key) ?? "null");
+    return v && Array.isArray(v.hidden) && Array.isArray(v.frozen) ? v : NO_PREFS;
+  } catch {
+    return NO_PREFS;
+  }
+}
 const EDITOR_FIELD = /^(Creator|Editor|CreationDate|EditDate|created_(user|date)|last_edited_(user|date))$/i;
 /* Шейпфайлын 10 тэмдэгтэд тасарсан нэр ("уртра", "өргөр") ч орно */
 const LON_FIELD = /^(уртра(г)?|уртраг__x__wgs84_|longitude|lon_?dd)$/i;
@@ -410,6 +425,17 @@ export function DataEditor({
   const [basemapUser, setBasemapUser] = React.useState(false);
   /* "Мөр нэмэх"-ийн дараа давхаргыг дахин уншина */
   const [reload, setReload] = React.useState(0);
+  /*
+    Баганын тохиргоо (нуусан, тогтоосон) — давхарга тус бүрээр `localStorage`,
+    зурагдалтад шууд уншина (`readColPrefs`), өөрчлөлтийг `colOverride` барина;
+    баруун товшилтын цэс ({@link ColumnMenu}) ба талбар устгах цонх. Энэ сессэд
+    "Мөр нэмэх"-ээр нэмсэн талбарын нэр `added`-д — устгахад сануулгагүй.
+  */
+  const [colOverride, setColOverride] = React.useState<{ key: string; prefs: ColPrefs } | null>(null);
+  const [added, setAdded] = React.useState<string[]>([]);
+  const [menu, setMenu] = React.useState<ColumnMenuState | null>(null);
+  const [delField, setDelField] = React.useState<{ name: string; label: string } | null>(null);
+  const tableRef = React.useRef<HTMLTableElement>(null);
 
   /* Хадгалсан хэмжээ — эхний зурагдалтаас өмнө */
   React.useLayoutEffect(() => {
@@ -966,6 +992,23 @@ export function DataEditor({
     setFocus(around(dLon, dLat));
   };
 
+  /* Тогтоосон баганын зүүн зайг ХЭМЖИЖ тавина (өргөн нь агуулгаасаа) — төлөвт
+     барихгүй, шууд DOM руу (зурагдалт бүрд дахин) */
+  React.useLayoutEffect(() => {
+    const t = tableRef.current;
+    if (!t) return;
+    const ths = Array.from(t.querySelectorAll<HTMLTableCellElement>("thead th"));
+    let left = 0;
+    ths.forEach((th, i) => {
+      if (!th.classList.contains("is-frozen")) return;
+      const px = `${left}px`;
+      t.querySelectorAll<HTMLElement>(`tr > :nth-child(${i + 1})`).forEach((c) => {
+        if (c.style.left !== px) c.style.left = px;
+      });
+      left += th.offsetWidth;
+    });
+  });
+
   /* Хуучин дүрсийг засахад булангуудыг бүтэн геометрээс уншина */
   const unlockVerts = async (oid: number) => {
     const e = esri.current;
@@ -1074,6 +1117,35 @@ export function DataEditor({
   const pl = meta?.place;
   const placeCols = pl ? ([pl.district, pl.khoroo].filter(Boolean) as string[]) : [];
   const cols = meta ? meta.fields : [];
+  const colKey = meta ? `pe.cols.${meta.url}` : null;
+  const colPrefs = colOverride && colOverride.key === colKey ? colOverride.prefs : readColPrefs(colKey);
+  const setColPrefs = (fn: (p: ColPrefs) => ColPrefs) => {
+    if (!colKey) return;
+    const next = fn(colPrefs);
+    try {
+      localStorage.setItem(colKey, JSON.stringify(next));
+    } catch {}
+    setColOverride({ key: colKey, prefs: next });
+  };
+  const hiddenSet = new Set(colPrefs.hidden);
+  /* Тогтоосон багана ЗҮҮН талд, №-ийн ард цувна — sticky нь зэрэгцээ байж л ажиллана */
+  const frozenCols = colPrefs.frozen.map((n) => cols.find((f) => f.name === n)).filter((f): f is Field => !!f && !hiddenSet.has(f.name));
+  const frozenSet = new Set(frozenCols.map((f) => f.name));
+  const restCols = cols.filter((f) => !hiddenSet.has(f.name) && !frozenSet.has(f.name));
+  const hiddenCount = cols.filter((f) => hiddenSet.has(f.name)).length;
+  const anyFrozen = frozenCols.length > 0;
+  const colMenu = (f: Field) => (e: React.MouseEvent) => {
+    e.preventDefault();
+    setMenu({ x: e.clientX, y: e.clientY, name: f.name, label: f.label });
+  };
+  const cell = (r: Row, f: Field, frozen: boolean) => {
+    const v = text(r.a[f.name], f.kind);
+    return (
+      <td key={f.name} className={cn(f.kind !== "string" && "num", !v && "is-empty", frozen && "is-frozen")} title={v.length > 40 ? v : undefined}>
+        {v ? (f.kind === "select" ? (f.options?.find((o) => String(o.code) === v)?.name ?? v) : v) : "—"}
+      </td>
+    );
+  };
   const nameOf = (r: Row) => (meta?.displayField && r.a[meta.displayField] != null ? String(r.a[meta.displayField]) : `№ ${r.oid}`);
   const set = (name: string, v: string) => setDraft((d) => (d ? { ...d, values: { ...d.values, [name]: v } } : d));
   const heading = draft ? (isNew ? `Шинэ ${UNIT[geo]}` : nameOf(rowsByOid.get(draft.oid!) ?? { oid: draft.oid!, lon: null, lat: null, a: {} })) : null;
@@ -1195,7 +1267,8 @@ export function DataEditor({
                 <AddField
                   url={meta.url}
                   fields={meta.allFields}
-                  onDone={(alias) => {
+                  onDone={(alias, name) => {
+                    setAdded((a) => [...a, name]);
                     changed.current = true;
                     cancel();
                     setStatus("loading");
@@ -1207,22 +1280,34 @@ export function DataEditor({
                   }}
                 />
               )}
+              {hiddenCount > 0 && (
+                <button type="button" className="pe-hidden-chip" onClick={() => setColPrefs((p) => ({ ...p, hidden: [] }))} title="Нуусан баганыг харуулах">
+                  <EyeOff size={12} /> {hiddenCount} багана нуусан
+                </button>
+              )}
               <label className="pe-search">
                 <Search size={13} aria-hidden="true" />
                 <input type="search" placeholder="Хайх…" value={query} onChange={(e) => setQuery(e.target.value)} aria-label="Хүснэгтээс хайх" />
               </label>
             </header>
             <div className="pe-table-scroll" onMouseLeave={() => setHover(null)}>
-              <table>
+              <table ref={tableRef}>
                 <thead>
                   <tr>
-                    <th className="num">№</th>
+                    <th className={cn("num", anyFrozen && "is-frozen")}>№</th>
+                    {frozenCols.map((f) => (
+                      <th key={f.name} className="is-frozen" onContextMenu={colMenu(f)}>
+                        <Pin size={10} aria-hidden /> {f.label}
+                      </th>
+                    ))}
                     {isPoint && <th>Уртраг</th>}
                     {isPoint && <th>Өргөрөг</th>}
                     {pl?.district && <th>Дүүрэг</th>}
                     {pl?.khoroo && <th>Хороо</th>}
-                    {cols.map((f) => (
-                      <th key={f.name}>{f.label}</th>
+                    {restCols.map((f) => (
+                      <th key={f.name} onContextMenu={colMenu(f)}>
+                        {f.label}
+                      </th>
                     ))}
                   </tr>
                 </thead>
@@ -1234,26 +1319,58 @@ export function DataEditor({
                       onMouseEnter={() => setHover(r.oid)}
                       onClick={() => !busyEditing && select(r.oid, true)}
                     >
-                      <td className="num">{r.oid}</td>
+                      <td className={cn("num", anyFrozen && "is-frozen")}>{r.oid}</td>
+                      {frozenCols.map((f) => cell(r, f, true))}
                       {isPoint && <td className="num">{r.lon?.toFixed(6) ?? "—"}</td>}
                       {isPoint && <td className="num">{r.lat?.toFixed(6) ?? "—"}</td>}
                       {placeCols.map((c) => (
                         <td key={c}>{r.a[c] != null && r.a[c] !== "" ? String(r.a[c]) : "—"}</td>
                       ))}
-                      {cols.map((f) => {
-                        const v = text(r.a[f.name], f.kind);
-                        return (
-                          <td key={f.name} className={cn(f.kind !== "string" && "num", !v && "is-empty")} title={v.length > 40 ? v : undefined}>
-                            {v ? (f.kind === "select" ? (f.options?.find((o) => String(o.code) === v)?.name ?? v) : v) : "—"}
-                          </td>
-                        );
-                      })}
+                      {restCols.map((f) => cell(r, f, false))}
                     </tr>
                   ))}
                 </tbody>
               </table>
               {status === "ready" && !rows.length && <p className="pe-empty">{query ? "Тохирох бүртгэл олдсонгүй" : "Бүртгэл байхгүй байна"}</p>}
             </div>
+            {menu && (
+              <ColumnMenu
+                menu={menu}
+                hidden={hiddenSet.has(menu.name)}
+                frozen={frozenSet.has(menu.name)}
+                hiddenCount={hiddenCount}
+                onHide={() => setColPrefs((p) => ({ hidden: [...p.hidden, menu.name], frozen: p.frozen.filter((n) => n !== menu.name) }))}
+                onFreeze={() =>
+                  setColPrefs((p) => ({ ...p, frozen: p.frozen.includes(menu.name) ? p.frozen.filter((n) => n !== menu.name) : [...p.frozen, menu.name] }))
+                }
+                onShowAll={() => setColPrefs((p) => ({ ...p, hidden: [] }))}
+                onDelete={() => setDelField({ name: menu.name, label: menu.label })}
+                onClose={() => setMenu(null)}
+              />
+            )}
+            {delField && meta && (
+              <DeleteFieldDialog
+                url={meta.url}
+                name={delField.name}
+                label={delField.label}
+                fresh={added.includes(delField.name)}
+                onClose={() => setDelField(null)}
+                onDone={() => {
+                  const gone = delField;
+                  setDelField(null);
+                  setAdded((a) => a.filter((n) => n !== gone.name));
+                  setColPrefs((p) => ({ hidden: p.hidden.filter((n) => n !== gone.name), frozen: p.frozen.filter((n) => n !== gone.name) }));
+                  changed.current = true;
+                  cancel();
+                  setStatus("loading");
+                  setMapData(null);
+                  setDecor(null);
+                  setMapKey((k) => k + 1);
+                  setReload((k) => k + 1);
+                  setNotice({ ok: true, text: `“${gone.label}” талбар устгагдлаа` });
+                }}
+              />
+            )}
           </section>
         </div>
 
