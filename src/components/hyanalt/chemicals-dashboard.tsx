@@ -737,7 +737,7 @@ export function ChemicalsDashboard() {
                 зургийн доод ирмэгийн эх сурвалжийн бичигтэй ижил арга.
               */
               className="pointer-events-none absolute bottom-6 left-2.5 z-10 rounded-xs border border-line bg-paper/10 px-2 py-1.5 backdrop-blur-md"
-              style={{ filter: "drop-shadow(0 1px 2px rgba(0,0,0,.75))" }}
+              style={{ filter: "drop-shadow(0 0 1.5px var(--paper)) drop-shadow(0 0 1.5px var(--paper))" }}
             >
               <div className="flex items-center gap-1.5">
                 <span
@@ -809,7 +809,7 @@ export function ChemicalsDashboard() {
 
             <p
               className="pointer-events-none absolute bottom-1 left-2.5 z-10 text-[10px] leading-none text-ink-3"
-              style={{ filter: "drop-shadow(0 1px 2px rgba(0,0,0,.75))" }}
+              style={{ filter: "drop-shadow(0 0 1.5px var(--paper)) drop-shadow(0 0 1.5px var(--paper))" }}
             >
               Суурь зураг: Esri · Дата: ArcGIS FeatureServer
             </p>

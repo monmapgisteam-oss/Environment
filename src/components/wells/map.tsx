@@ -2291,11 +2291,13 @@ function WellsMapBody({
     <div ref={root} className="wells-esri relative h-full w-full">
       <div ref={holder} className="h-full w-full" />
       <div ref={markLayer} className="pointer-events-none absolute inset-0 z-[1] overflow-hidden" />
-      {/* Хайрцаггүй, шууд зураг дээр суух тул уншигдац нь сүүдрээс хамаарна */}
+      {/* Хайрцаггүй, шууд зураг дээр суух тул уншигдац нь ГЭРЭЛТ ХҮРЭЭНЭЭС (`paper`
+          өнгөт сүүдэр) хамаарна — хар сүүдэр нь гэрэл горимд бараан бичвэрийг
+          хиймэл дагуул дээр улам бараан болгож байв (хэрэглэгч 2026-11-09) */}
       <div
         ref={ratio}
-        className="num pointer-events-none absolute bottom-2.5 left-2.5 z-[2] text-[10px] leading-none text-ink-2"
-        style={{ filter: "drop-shadow(0 1px 2px rgba(0,0,0,.75))" }}
+        className="num pointer-events-none absolute bottom-2.5 left-2.5 z-[2] text-[10px] leading-none text-ink"
+        style={{ filter: "drop-shadow(0 0 1.5px var(--paper)) drop-shadow(0 0 1.5px var(--paper))" }}
       />
       {/*
         ТАСАЛДЛЫГ ИЛ ХЭЛНЭ — туван цагаан болоход хэрэглэгч зураг эвдэрсэн

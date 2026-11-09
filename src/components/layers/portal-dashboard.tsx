@@ -6270,7 +6270,7 @@ function LayersBoard({
                     className={cn(
                       "elevated flex size-8 items-center justify-center rounded-xs border backdrop-blur-md transition-colors",
                       showLabels
-                        ? "border-data/50 bg-data/15 text-ink"
+                        ? "map-tint border-data/50 text-ink"
                         : "border-line bg-paper/85 text-ink-3 hover:text-ink",
                     )}
                   >

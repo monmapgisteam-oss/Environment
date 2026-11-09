@@ -13,6 +13,8 @@ import {
   MapPinPlus,
   MousePointer2,
   PencilLine,
+  Plus,
+  X,
   PenTool,
   Search,
   Shapes,
@@ -84,6 +86,11 @@ type Meta = {
   /** Давхаргын БҮХ талбар — "Мөр нэмэх"-д давхардлаас сэргийлнэ */
   allFields: { name: string; alias: string }[];
 };
+type Vert = { lon: string; lat: string };
+/** Шинэ дүрсийн хоосон мөрийн тоо — талбайд дөрвөн булан, шугамд хоёр үзүүр */
+const EMPTY_VERTS: Record<Geo, number> = { point: 0, polygon: 4, polyline: 2 };
+const emptyVerts = (geo: Geo): Vert[] => Array.from({ length: EMPTY_VERTS[geo] }, () => ({ lon: "", lat: "" }));
+
 type Draft = {
   oid: number | null;
   values: Record<string, string>;
@@ -93,6 +100,11 @@ type Draft = {
   lat: string;
   /** Дүрс — зургийн (Web Mercator) Esri геометр */
   geom: any | null;
+  /**
+   * Дүрсийн БУЛАНГИЙН ЦЭГ (WGS84 бичвэр) — гараас бичихэд дүрс өөрөө
+   * зурагдана, зурахад эндээс уншигдана. Олон хэсэгтэй дүрст `null`.
+   */
+  verts: Vert[] | null;
   measure: string | null;
   moved: boolean;
   place: Place | null | "loading" | undefined;
@@ -472,7 +484,7 @@ export function DataEditor({
 
     (async () => {
       await getToken();
-      const [esriConfig, FeatureLayer, GraphicsLayer, SketchViewModel, projectOperator, areaOp, lengthOp, Point, Graphic] = await esriModules<any[]>([
+      const [esriConfig, FeatureLayer, GraphicsLayer, SketchViewModel, projectOperator, areaOp, lengthOp, Point, Graphic, Polygon, Polyline] = await esriModules<any[]>([
         "esri/config",
         "esri/layers/FeatureLayer",
         "esri/layers/GraphicsLayer",
@@ -482,6 +494,8 @@ export function DataEditor({
         "esri/geometry/operators/geodeticLengthOperator",
         "esri/geometry/Point",
         "esri/Graphic",
+        "esri/geometry/Polygon",
+        "esri/geometry/Polyline",
       ]);
       if (ac.signal.aborted) return;
       installToken(esriConfig);
@@ -514,7 +528,7 @@ export function DataEditor({
         pageSize: layer.sourceJSON?.maxRecordCount || 2000,
         allFields: (layer.fields ?? []).map((f: any) => ({ name: String(f.name), alias: String(f.alias ?? f.name) })),
       };
-      esri.current = { layer, projectOperator, areaOp, lengthOp, GraphicsLayer, SketchViewModel, Point, Graphic };
+      esri.current = { layer, projectOperator, areaOp, lengthOp, GraphicsLayer, SketchViewModel, Point, Graphic, Polygon, Polyline };
       setMeta(m);
       const lk = (await lookFor(target)) ?? null;
       if (ac.signal.aborted) return;
@@ -615,6 +629,7 @@ export function DataEditor({
         lon: r.lon != null ? r.lon.toFixed(6) : "",
         lat: r.lat != null ? r.lat.toFixed(6) : "",
         geom: null,
+        verts: null,
         measure: null,
         moved: false,
         place: district ? { district: abbr ?? district, khoroo: Number.isFinite(kn) ? kn : null, code: null } : undefined,
@@ -642,6 +657,67 @@ export function DataEditor({
     } catch {}
     return null;
   }, []);
+
+  /*
+    Булангийн цэг ↔ геометр (хэрэглэгч 2026-11-09: "булангийн цэг оруулах нь
+    зурахаасаа илүү чухал … оруулахад автоматаар зурагдаад хадгалагдах").
+    · `vertsOf` — зургийн геометрээс WGS84 булангууд (6 орон); хоёр ба түүнээс
+      олон хэсэгтэй дүрст `null` — хүснэгтээр засах нь дүрсийг эвдэнэ.
+    · `geomOf` — бичсэн булангуудаас зургийн SR-тэй геометр; талбайн цагираг
+      ЦАГИЙН ЗҮҮНИЙ дагуу (Esri-ийн гадна цагирагийн дүрэм), хаалттай.
+  */
+  const vertsOf = React.useCallback((g: any): Vert[] | null => {
+    const e = esri.current;
+    if (!e || !g) return null;
+    try {
+      const w = g.spatialReference?.wkid === 4326 ? g : e.projectOperator.execute(g, { wkid: 4326 });
+      const parts: number[][][] = w.type === "polygon" ? w.rings : w.type === "polyline" ? w.paths : [];
+      if (parts.length !== 1) return null;
+      let pts = parts[0];
+      if (w.type === "polygon" && pts.length > 1) {
+        const [a, b] = [pts[0], pts[pts.length - 1]];
+        if (a[0] === b[0] && a[1] === b[1]) pts = pts.slice(0, -1);
+      }
+      return pts.map(([x, y]) => ({ lon: x.toFixed(6), lat: y.toFixed(6) }));
+    } catch {
+      return null;
+    }
+  }, []);
+
+  const geomOf = React.useCallback(
+    (verts: Vert[]): any | null => {
+      const e = esri.current;
+      const eng = engineOf();
+      if (!e || !eng) return null;
+      const pts = verts.map((v) => [coord(v.lon, ...LON), coord(v.lat, ...LAT)]);
+      if (pts.some(([x, y]) => x == null || y == null)) return null;
+      const xy = pts as number[][];
+      const sr = { wkid: 4326 };
+      let g: any;
+      if (geo === "polygon") {
+        if (xy.length < 3) return null;
+        /* Shoelace — эерэг бол цагийн зүүний эсрэг, эргүүлнэ */
+        let area = 0;
+        for (let i = 0; i < xy.length; i++) {
+          const [x1, y1] = xy[i];
+          const [x2, y2] = xy[(i + 1) % xy.length];
+          area += x1 * y2 - x2 * y1;
+        }
+        const ring = area > 0 ? [...xy].reverse() : [...xy];
+        ring.push(ring[0]);
+        g = new e.Polygon({ rings: [ring], spatialReference: sr });
+      } else {
+        if (xy.length < 2) return null;
+        g = new e.Polyline({ paths: [xy], spatialReference: sr });
+      }
+      try {
+        return e.projectOperator.execute(g, eng.view.spatialReference);
+      } catch {
+        return null;
+      }
+    },
+    [geo],
+  );
 
   /* Байршил — дүүрэг, хороог асууна (засаг захиргааны талбартай давхаргад) */
   const locate = React.useCallback(
@@ -677,7 +753,7 @@ export function DataEditor({
       const take = (g: any) => {
         if (!g) return;
         const c = g.extent?.center;
-        setDraft((d) => (d ? { ...d, geom: g.clone(), measure: measureOf(g), moved: true } : d));
+        setDraft((d) => (d ? { ...d, geom: g.clone(), verts: vertsOf(g), measure: measureOf(g), moved: true } : d));
         if (c && Number.isFinite(c.longitude)) locate(c.longitude, c.latitude);
       };
       e.sketch.on("create", (ev: any) => {
@@ -696,7 +772,7 @@ export function DataEditor({
       e.sketchView = eng.view;
     }
     return e.sketch;
-  }, [locate, measureOf]);
+  }, [locate, measureOf, vertsOf]);
 
   const select = React.useCallback(
     (oid: number, zoom: boolean, list = rows) => {
@@ -750,7 +826,7 @@ export function DataEditor({
     const values: Record<string, string> = {};
     for (const f of meta?.fields ?? []) values[f.name] = "";
     clearSketch();
-    setDraft({ oid: null, values, orig: { ...values }, lon: "", lat: "", geom: null, measure: null, moved: false, place: undefined, locked: false });
+    setDraft({ oid: null, values, orig: { ...values }, lon: "", lat: "", geom: null, verts: emptyVerts(meta?.geo ?? "point"), measure: null, moved: false, place: undefined, locked: false });
     setErrors({});
     setConfirmDel(false);
     setNotice(null);
@@ -798,7 +874,7 @@ export function DataEditor({
     const sk = sketchOf();
     if (!sk) return;
     clearSketch();
-    setDraft((d) => (d ? { ...d, geom: null, measure: null } : d));
+    setDraft((d) => (d ? { ...d, geom: null, verts: emptyVerts(geo), measure: null } : d));
     sk.create(geo === "polyline" ? "polyline" : "polygon");
     setMode("draw");
   };
@@ -826,6 +902,46 @@ export function DataEditor({
     setMode("reshape");
   };
 
+  /* Булангийн цэг — мөр засах, нэмэх, хасах; бүгд бөглөгдмөгц дүрс өөрөө зурагдана */
+  const setVert = (i: number, k: keyof Vert, v: string) =>
+    setDraft((d) => (d?.verts ? { ...d, verts: d.verts.map((p, j) => (j === i ? { ...p, [k]: v } : p)) } : d));
+  const addVert = () => setDraft((d) => (d?.verts ? { ...d, verts: [...d.verts, { lon: "", lat: "" }] } : d));
+  const commitVerts = React.useCallback(
+    (verts: Vert[]) => {
+      const e = esri.current;
+      const g = geomOf(verts);
+      const sk = sketchOf();
+      if (!e || !sk) return;
+      if (mode === "draw" || mode === "reshape") sk.cancel?.();
+      e.sketchLayer?.removeAll?.();
+      if (!g) {
+        setDraft((d) => (d ? { ...d, geom: null, measure: null, moved: true } : d));
+        return;
+      }
+      e.sketchLayer.add(new e.Graphic({ geometry: g, symbol: geo === "polygon" ? sk.polygonSymbol : sk.polylineSymbol }));
+      setDraft((d) => (d ? { ...d, geom: g.clone(), measure: measureOf(g), moved: true } : d));
+      setMode("select");
+      const c = g.extent?.center;
+      if (c && Number.isFinite(c.longitude)) locate(c.longitude, c.latitude);
+      const x = g.extent;
+      if (x) {
+        try {
+          const w = e.projectOperator.execute(x, { wkid: 4326 });
+          const px = (w.xmax - w.xmin) * 0.25 || 0.001;
+          const py = (w.ymax - w.ymin) * 0.25 || 0.0007;
+          setFocus([w.xmin - px, w.ymin - py, w.xmax + px, w.ymax + py]);
+        } catch {}
+      }
+    },
+    [geo, geomOf, sketchOf, measureOf, locate, mode],
+  );
+  const removeVert = (i: number) => {
+    if (!draft?.verts) return;
+    const verts = draft.verts.filter((_, j) => j !== i);
+    setDraft({ ...draft, verts });
+    commitVerts(verts);
+  };
+
   /* Байршил сонгох горимд зураг дээрх товшилт цэг тавина / зөөнө */
   const placePoint = (lon: number, lat: number) => {
     setDraft((d) => (d ? { ...d, lon: lon.toFixed(6), lat: lat.toFixed(6), moved: true } : d));
@@ -848,6 +964,19 @@ export function DataEditor({
     if (!draft || dLon == null || dLat == null) return;
     locate(dLon, dLat);
     setFocus(around(dLon, dLat));
+  };
+
+  /* Хуучин дүрсийг засахад булангуудыг бүтэн геометрээс уншина */
+  const unlockVerts = async (oid: number) => {
+    const e = esri.current;
+    const eng = engineOf();
+    if (!e || !eng) return;
+    try {
+      const res = await e.layer.queryFeatures({ objectIds: [oid], returnGeometry: true, outSpatialReference: eng.view.spatialReference });
+      const g = res.features?.[0]?.geometry;
+      if (!g) return;
+      setDraft((d) => (d && d.oid === oid && !d.locked && !d.moved ? { ...d, geom: g.clone(), verts: vertsOf(g), measure: measureOf(g) } : d));
+    } catch {}
   };
 
   const dirty = !!draft && (draft.moved || Object.keys(draft.values).some((k) => draft.values[k] !== draft.orig[k]));
@@ -1216,6 +1345,57 @@ export function DataEditor({
                         {geo === "polygon" ? "Талбай" : "Урт"} <strong>{draft.measure}</strong>
                       </p>
                     )}
+                    {!draft.locked && draft.verts && (
+                      <div className="pe-verts">
+                        <div className="pe-vert is-head">
+                          <span>№</span>
+                          <span>Уртраг</span>
+                          <span>Өргөрөг</span>
+                          <span />
+                        </div>
+                        {draft.verts.map((v, i) => (
+                          <div key={i} className="pe-vert">
+                            <span className="num">{i + 1}</span>
+                            <input
+                              className="num"
+                              inputMode="decimal"
+                              value={v.lon}
+                              placeholder="106.917000"
+                              aria-label={`${i + 1}-р булангийн уртраг`}
+                              aria-invalid={v.lon !== "" && coord(v.lon, ...LON) == null}
+                              onChange={(e) => setVert(i, "lon", e.target.value)}
+                              onBlur={() => commitVerts(draft.verts!)}
+                              onKeyDown={(e) => e.key === "Enter" && commitVerts(draft.verts!)}
+                            />
+                            <input
+                              className="num"
+                              inputMode="decimal"
+                              value={v.lat}
+                              placeholder="47.918000"
+                              aria-label={`${i + 1}-р булангийн өргөрөг`}
+                              aria-invalid={v.lat !== "" && coord(v.lat, ...LAT) == null}
+                              onChange={(e) => setVert(i, "lat", e.target.value)}
+                              onBlur={() => commitVerts(draft.verts!)}
+                              onKeyDown={(e) => e.key === "Enter" && commitVerts(draft.verts!)}
+                            />
+                            <button
+                              type="button"
+                              className="pe-vert-del"
+                              title="Булан хасах"
+                              aria-label="Булан хасах"
+                              disabled={draft.verts!.length <= (geo === "polygon" ? 3 : 2)}
+                              onClick={() => removeVert(i)}
+                            >
+                              <X size={12} />
+                            </button>
+                          </div>
+                        ))}
+                        <button type="button" className="pe-vert-add" onClick={addVert}>
+                          <Plus size={12} /> Булан нэмэх
+                        </button>
+                      </div>
+                    )}
+                    {!draft.locked && !isNew && draft.verts === null && draft.geom && <p className="pe-place">Олон хэсэгтэй дүрс — булангуудыг зураг дээр засна</p>}
                     {!draft.locked &&
                       (isNew ? (
                         <button type="button" className={cn("pe-pick", mode === "draw" && "is-on")} onClick={redraw}>
@@ -1291,6 +1471,7 @@ export function DataEditor({
                           setDraft((d) => (d ? { ...d, locked: false } : d));
                           setConfirmEdit(false);
                           setNotice(null);
+                          if (!isPoint && draft.oid != null) void unlockVerts(draft.oid);
                         }}
                       >
                         <PencilLine size={14} /> Засварлах

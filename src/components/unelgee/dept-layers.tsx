@@ -231,7 +231,7 @@ export function UnelgeeLayers({
           "elevated pointer-events-auto relative flex items-center justify-center rounded-xs border transition-colors",
           inline ? "size-8 backdrop-blur-md" : "size-7 backdrop-blur",
           open || extra
-            ? "border-data/50 bg-data/15 text-data"
+            ? "map-tint border-data/50 text-data"
             : cn(inline ? "border-line bg-paper/85 text-ink-3" : "border-line-2 bg-paper/90 text-ink-2", "hover:bg-paper-hi hover:text-ink"),
         )}
       >

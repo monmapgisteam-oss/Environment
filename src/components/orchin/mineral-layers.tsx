@@ -153,7 +153,7 @@ export function MineralLayers({
         aria-expanded={open}
         className={cn(
           "elevated relative flex size-7 items-center justify-center rounded-xs border border-line-2 backdrop-blur transition-colors",
-          open || extra ? "bg-data/15 text-data" : "bg-paper/90 text-ink-2 hover:bg-paper-hi hover:text-ink",
+          open || extra ? "map-tint text-data" : "bg-paper/90 text-ink-2 hover:bg-paper-hi hover:text-ink",
         )}
       >
         <Layers size={14} strokeWidth={1.75} />

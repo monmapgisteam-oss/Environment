@@ -1,0 +1,37 @@
+/* Keep the page within the viewport; long lists scroll inside their panels. */
+:global(.workspace-main):has(.root) {
+  height: calc(100dvh - var(--head-h));
+  min-height: 0;
+  overflow: hidden;
+}
+:global(.workspace-main):has(.root) > div {
+  height: 100%;
+  min-height: 0;
+}
+:global(.department-workspace):has(.root) {
+  height: 100%;
+  min-height: 0;
+}
+:global(.department-workspace-content):has(.root) {
+  overflow: hidden;
+}
+.root { height: 100%; min-height: 0; overflow: hidden; }
+@media (max-width: 1279px) {
+  :global(.department-workspace-content):has(.root) {
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+  }
+  .root { height: auto; min-height: 100%; overflow: visible; }
+}
+@media (max-width: 1023px) {
+  :global(.department-workspace):has(.root) {
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+  :global(.department-workspace):has(.root) > :global(.dataset-column) {
+    max-height: min(30dvh, 240px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+  }
+}

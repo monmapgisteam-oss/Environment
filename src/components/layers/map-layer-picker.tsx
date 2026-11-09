@@ -69,10 +69,12 @@ export function MapLayerPicker({
         title={`Давхарга: ${num(shown)} / ${num(items.length)}`}
         onClick={() => setOpen((v) => !v)}
         className={cn(
-          "relative flex size-7 items-center justify-center transition-colors",
-          open ? "text-data" : "text-ink-2 hover:text-ink",
+          /* Хайрцагтай, шошгын унтраалгатай нэг хэв — урьд нь хайрцаггүй тэмдэг + хар
+             сүүдэр байсан нь гэрэл горимд хиймэл дагуул дээр бараан толбо болж байв
+             (хэрэглэгч 2026-11-09) */
+          "elevated relative flex size-8 items-center justify-center rounded-xs border backdrop-blur-md transition-colors",
+          open ? "map-tint border-data/50 text-data" : "border-line bg-paper/85 text-ink-3 hover:text-ink",
         )}
-        style={{ filter: "drop-shadow(0 1px 2px rgba(0,0,0,.75))" }}
       >
         <Layers3 size={16} strokeWidth={1.75} />
       </button>

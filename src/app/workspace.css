@@ -1166,6 +1166,14 @@ html[data-department-preview="true"] .workspace-main { --workspace-gutter: 0px; 
 .pe-warn strong {
   font-weight: 600;
 }
+/* Зураг дээрх ИДЭВХТЭЙ хэрэгслийн товч (шошго, давхарга, хэлтсийн давхарга) —
+   тинт нь `paper` СУУРЬТАЙ. Урьд нь тунгалаг `bg-data/15`-ийг хиймэл дагуулын
+   зургийн дээр бүдгэрүүлж тавьдаг байсан тул гэрэл горимд (бараан `--data`)
+   шаварлаг бараан дөрвөлжин болж байв (хэрэглэгч 2026-11-09: "light гормд dark
+   symbol харагдаад байна"). Платформын 2D/3D сэлгэгч `paper` эцэгтэй тул зөв байсан. */
+.map-tint {
+  background: color-mix(in oklab, var(--data) 15%, var(--paper));
+}
 .pe-loc {
   display: grid;
   gap: 9px;
@@ -1256,6 +1264,64 @@ html[data-department-preview="true"] .workspace-main { --workspace-gutter: 0px; 
   border-color: var(--moss);
   background: color-mix(in oklab, var(--moss) 14%, transparent);
   color: var(--moss);
+}
+/* Дүрсийн булангийн цэг — № · уртраг · өргөрөг · хасах, нэг мөрөнд */
+.pe-verts {
+  display: grid;
+  gap: 5px;
+}
+.pe-vert {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) minmax(0, 1fr) 22px;
+  gap: 6px;
+  align-items: center;
+}
+.pe-vert > span {
+  color: var(--ink-3);
+  font-size: 10.5px;
+  text-align: center;
+}
+.pe-vert.is-head > span {
+  font-weight: 500;
+}
+.pe-vert.is-head > span:nth-child(2),
+.pe-vert.is-head > span:nth-child(3) {
+  text-align: right;
+  padding-right: 9px;
+}
+.pe-loc .pe-vert input {
+  height: 28px;
+  padding: 0 7px;
+  font-size: 12px;
+}
+.pe-vert-del,
+.pe-vert-add {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  border: 1px solid var(--line-2);
+  border-radius: 6px;
+  color: var(--ink-3);
+}
+.pe-vert-del {
+  width: 22px;
+  height: 22px;
+  justify-self: center;
+}
+.pe-vert-del:hover:not(:disabled),
+.pe-vert-add:hover {
+  color: var(--ink);
+  background: var(--paper-3);
+}
+.pe-vert-del:disabled {
+  opacity: 0.35;
+}
+.pe-vert-add {
+  height: 26px;
+  font-size: 11px;
+  justify-self: start;
+  padding: 0 9px;
 }
 .pe-place {
   display: flex;

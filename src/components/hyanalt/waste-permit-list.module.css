@@ -1,0 +1,40 @@
+.panel { container: permit-list / inline-size; }
+.header { flex-shrink: 0; padding: 12px; border-bottom: 1px solid var(--line); }
+/* Гарчиг ТОМ ҮСГЭЭР — диаграмын гарчгийн ерөнхий дүрэм (хэрэглэгч 2026-11-09) */
+.header h2 { display: flex; align-items: flex-start; gap: 7px; color: var(--ink); font-size: 12px; font-weight: 600; letter-spacing: 0.02em; line-height: 1.5; text-transform: uppercase; }
+.header h2 > span { width: 6px; height: 6px; flex-shrink: 0; margin-top: 6px; border-radius: 50%; }
+.header p { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 10px; margin-top: 7px; color: var(--ink-3); font-size: 10px; line-height: 1.5; }
+.header strong { color: var(--ink-2); font-weight: 600; font-variant-numeric: tabular-nums; }
+.list { margin: 0; padding: 0; list-style: none; }
+.list > li + li { border-top: 1px solid var(--line); }
+.row { display: block; width: 100%; padding: 9px 10px 8px; border: 0; background: transparent; color: var(--ink); text-align: left; cursor: pointer; }
+.row:hover, .hot { background: var(--paper-hi); }
+.row:focus-visible { position: relative; outline: 2px solid var(--data); outline-offset: -2px; }
+.selected, .selected:hover { background: color-mix(in oklab, var(--data) 9%, var(--paper-2)); box-shadow: inset 3px 0 var(--data); }
+.summary { display: flex; align-items: center; gap: 8px; }
+.icon { display: grid; width: 33px; height: 34px; flex-shrink: 0; place-items: center; border-radius: 8px; background: color-mix(in oklab, currentColor 9%, var(--paper-2)); }
+.content { display: block; min-width: 0; flex: 1; }
+.name { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 3; font-size: 11px; font-weight: 600; line-height: 1.4; overflow-wrap: anywhere; }
+.place { display: flex; align-items: baseline; gap: 3px; margin-top: 3px; color: var(--ink-3); font-size: 10px; line-height: 1.4; overflow-wrap: anywhere; }
+.place svg { flex-shrink: 0; align-self: flex-start; margin-top: 2px; }
+.remaining { display: flex; width: 65px; flex-shrink: 0; align-items: center; justify-content: center; gap: 4px; padding: 5px 4px; border-radius: 7px; background: color-mix(in oklab, currentColor 9%, var(--paper-2)); font-size: 9px; line-height: 1.3; text-align: center; }
+.remaining svg { flex-shrink: 0; }
+.remaining > span { min-width: 0; overflow-wrap: anywhere; }
+.remaining strong { display: block; font-size: 10px; font-weight: 600; }
+.remaining > span > span { display: block; }
+.timeline { display: flex; align-items: center; gap: 6px; margin-top: 7px; }
+.date { flex-shrink: 0; color: var(--ink-3); font-size: 9px; line-height: 1.4; font-variant-numeric: tabular-nums; }
+.track { display: block; min-width: 0; height: 6px; flex: 1; overflow: hidden; border-radius: 5px; background: var(--line); }
+.track > span { display: block; height: 100%; border-radius: inherit; }
+.percent { width: 24px; flex-shrink: 0; color: var(--ink-2); font-size: 9px; font-weight: 600; line-height: 1.4; text-align: center; font-variant-numeric: tabular-nums; }
+.unknown { min-width: 0; flex: 1; color: var(--ink-3); font-size: 9px; line-height: 1.3; text-align: center; }
+@container permit-list (max-width: 260px) {
+  .summary { gap: 6px; flex-wrap: wrap; }
+  .icon { width: 27px; height: 30px; }
+  .content { flex-basis: calc(100% - 35px); }
+  .remaining { width: auto; max-width: calc(100% - 33px); margin-left: 33px; }
+  .remaining > span { display: flex; flex-wrap: wrap; gap: 3px; }
+  .timeline { gap: 4px; flex-wrap: wrap; }
+  .track { min-width: 25px; }
+  .percent { width: 22px; }
+}

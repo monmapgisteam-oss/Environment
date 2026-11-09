@@ -1,0 +1,36 @@
+.list { display: flex; min-width: 0; flex-direction: column; gap: 8px; padding: 8px; background: var(--paper-3); }
+.card { min-width: 0; overflow: hidden; border: 1px solid var(--line); border-radius: 11px; background: var(--paper-2); container: waste-site / inline-size; }
+.selected { border-color: var(--data); box-shadow: 0 0 0 1px color-mix(in oklab, var(--data) 20%, transparent); }
+.header { display: flex; align-items: flex-start; gap: 5px; padding: 9px; }
+.select { display: flex; min-width: 0; flex: 1; align-items: flex-start; gap: 8px; border: 0; background: none; color: var(--ink); text-align: left; cursor: pointer; }
+.select:hover .name { color: var(--data); }
+.select:focus-visible, .toggle:focus-visible { outline: 2px solid var(--data); outline-offset: 2px; border-radius: 5px; }
+.siteIcon { display: grid; width: 32px; height: 32px; flex-shrink: 0; place-items: center; border-radius: 8px; background: color-mix(in oklab, var(--moss) 12%, var(--paper-2)); color: var(--moss); }
+.heading { display: block; min-width: 0; flex: 1; }
+.name { display: block; color: var(--ink); font-size: 11.5px; font-weight: 600; line-height: 1.5; overflow-wrap: anywhere; }
+.place { display: flex; align-items: flex-start; gap: 3px; margin-top: 3px; color: var(--ink-3); font-size: 9.5px; line-height: 1.5; overflow-wrap: anywhere; }
+.place svg { flex-shrink: 0; margin-top: 2px; }
+.toggle { display: grid; width: 24px; height: 26px; flex-shrink: 0; place-items: center; padding: 0; border: 0; border-radius: 5px; background: none; color: var(--ink-3); cursor: pointer; }
+.toggle:hover { background: var(--paper-hi); color: var(--ink); }
+.body { min-width: 0; margin: 0 9px; padding: 9px 0; border-top: 1px solid var(--line); }
+.metrics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px; }
+.metrics > div { display: grid; grid-template-columns: 20px minmax(0, 1fr); column-gap: 5px; align-items: start; min-width: 0; padding: 7px; border-radius: 7px; background: color-mix(in oklab, var(--data) 9%, var(--paper-2)); }
+.metrics > div + div { background: color-mix(in oklab, var(--moss) 9%, var(--paper-2)); }
+.metrics svg { grid-row: span 2; margin-top: 1px; color: var(--data); }
+.metrics > div + div svg { color: var(--moss); }
+.metrics dt { color: var(--ink-2); font-size: 9px; line-height: 1.4; overflow-wrap: anywhere; }
+.metrics dd { grid-column: 2; margin-top: 3px; color: var(--ink); font-size: 15px; font-weight: 650; line-height: 1.35; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.metrics dd > span { font-size: 10px; font-weight: 500; }
+.fields { margin-top: 5px; }
+.fields > div { display: grid; grid-template-columns: minmax(0, 0.65fr) minmax(0, 1.35fr); gap: 5px; padding: 5px 0; border-top: 1px solid var(--line); }
+.fields dt { display: flex; min-width: 0; align-items: flex-start; gap: 4px; color: var(--ink-3); font-size: 9px; line-height: 1.5; overflow-wrap: anywhere; }
+.fields dt svg { flex-shrink: 0; margin-top: 1px; }
+.fields dd { min-width: 0; color: var(--ink-2); font-size: 10px; line-height: 1.5; overflow-wrap: anywhere; }
+@container waste-site (min-width: 450px) {
+  .metrics dd { font-size: 18px; }
+  .fields dt, .fields dd { font-size: 10.5px; }
+}
+@container waste-site (max-width: 220px) {
+  .metrics { grid-template-columns: minmax(0, 1fr); }
+  .fields > div { grid-template-columns: minmax(0, 1fr); }
+}

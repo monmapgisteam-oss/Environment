@@ -28,7 +28,8 @@ import { asset } from "@/lib/base-path";
  * бичигдсэн: тэр нь `.mjs` тул TypeScript-ээс импортлох боломжгүй.
  * Хаяг солигдвол ХОЁУЛАНГ нь засна.
  */
-export const CHEMSYSTEM_API = "https://b.sanbit.mn/api/v1";
+/* 2026-11-09: `b.sanbit.mn` гэрчилгээ нь хуучирч холбогдохоо больсон → `chemsystem.mn` (мөн `scripts/fetch-chemsystem.mjs`) */
+export const CHEMSYSTEM_API = "https://chemsystem.mn/api/v1";
 
 const SNAPSHOT = "/data/chemsystem.json";
 

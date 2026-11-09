@@ -74,10 +74,11 @@ export function OverlayControl({
         title="Нэмэлт давхарга"
         aria-label="Нэмэлт давхарга"
         className={cn(
-          "relative flex size-7 items-center justify-center transition-colors",
-          open || on.size ? "text-data" : "text-ink-2 hover:text-ink",
+          /* Хайрцагтай — давхарга сонгогчтой нэг хэв (хэрэглэгч 2026-11-09: гэрэл горимд
+             хайрцаггүй бараан тэмдэг хиймэл дагуул дээр бараан толбо болж байв) */
+          "elevated relative flex size-8 items-center justify-center rounded-xs border backdrop-blur-md transition-colors",
+          open || on.size ? "map-tint border-data/50 text-data" : "border-line bg-paper/85 text-ink-3 hover:text-ink",
         )}
-        style={{ filter: "drop-shadow(0 1px 2px rgba(0,0,0,.75))" }}
       >
         <Layers3 size={16} strokeWidth={1.75} />
         {on.size ? (

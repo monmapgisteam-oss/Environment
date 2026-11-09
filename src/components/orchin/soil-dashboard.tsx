@@ -785,7 +785,7 @@ export function SoilDashboard() {
                 */}
                 <div
                   className="pointer-events-none absolute right-2.5 bottom-2.5 z-10 w-[164px]"
-                  style={{ filter: "drop-shadow(0 1px 2px rgba(0,0,0,.75))" }}
+                  style={{ filter: "drop-shadow(0 0 1.5px var(--paper)) drop-shadow(0 0 1.5px var(--paper))" }}
                 >
                   <div className="eyebrow mb-1.5">PLI</div>
                   <div

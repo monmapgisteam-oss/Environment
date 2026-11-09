@@ -507,6 +507,14 @@ body {
   width: 21px;
   height: 21px;
 }
+/* Аюултай хог хаягдлын АНХААРУУЛАХ ИКОН УЛААН (`--clay`, хэрэглэгч 2026-11-09:
+   "dotorh anhaaruulah icon outline ulaan") — хүрээ cyan хэвээр: хүрээ нь давхаргыг,
+   икон нь аюулыг хэлнэ. Тайлбарын дөрвөлжин мөн; сонгосон тэмдэгт икон дэвсгэрийн
+   өнгөөр хэвээр (cyan дүүргэлт дээр улаан уншигдахгүй). */
+.species-pin:not(.is-picked):has(svg[data-pin="hazard"]) svg,
+.waste-swatch[data-kind="hazard"] svg {
+  color: var(--clay);
+}
 /* Сонгосон тэмдэг — томорч, өнгөөрөө дүүрнэ, икон нь бараан */
 .species-pin.is-picked:has(svg[data-pin="hazard"]),
 .species-pin.is-picked:has(svg[data-pin="landfill"]) {
@@ -519,6 +527,54 @@ body {
     0 0 0 1.5px #111a22,
     0 0 0 3px var(--waste-pin),
     0 0 12px -2px var(--waste-pin);
+}
+
+/*
+  ⚠⚠ ГЭРЭЛ ГОРИМД ТЭМДЭГЛЭГЭЭНИЙ ДЭВСГЭР ЦАЙВАР (хэрэглэгч 2026-11-09: "light
+  gorim deer symbol dark heweer bn" — ландфиллийн зургаар). Дээрх "дэвсгэр
+  ТОГТМОЛ бараан" шийдвэрийг ОРЛОВ: тэмдэглэгээ нь зургийн АГУУЛГА биш ХЭРЭГСЭЛ
+  мэт уншигддаг тул горимоо дагана. Цайвар дэвсгэр дээр цайвар cyan/номин икон
+  уусах тул `--waste-pin`-ийг гэрэлд ГҮНЗГИЙ хувилбараар (өнцөг хэвээр, L 0.5 —
+  дүрэм 4-ийн `--value-l` зарчим); сонгосон тэмдгийн цагираг ч `paper`.
+*/
+:root:not([data-theme="dark"]) .species-pin:has(svg[data-pin="place"]),
+:root:not([data-theme="dark"]) .species-pin:has(svg[data-pin="hazard"]),
+:root:not([data-theme="dark"]) .species-pin:has(svg[data-pin="landfill"]) {
+  background: var(--paper-2);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.22),
+    0 1px 4px rgba(0, 0, 0, 0.28);
+}
+:root:not([data-theme="dark"]) .species-pin:has(svg[data-pin="expired"]) {
+  background: color-mix(in oklab, var(--paper-2) 88%, transparent);
+}
+:root:not([data-theme="dark"]) .species-pin:has(svg[data-pin="hazard"]) {
+  --waste-pin: oklch(0.5 0.12 212);
+}
+:root:not([data-theme="dark"]) .species-pin:has(svg[data-pin="landfill"]) {
+  --waste-pin: oklch(0.5 0.12 168);
+}
+:root:not([data-theme="dark"]) .species-pin.is-picked:has(svg[data-pin="hazard"]),
+:root:not([data-theme="dark"]) .species-pin.is-picked:has(svg[data-pin="landfill"]) {
+  color: var(--paper-2);
+  box-shadow:
+    0 0 0 1.5px var(--paper-2),
+    0 0 0 3px var(--waste-pin),
+    0 0 12px -2px var(--waste-pin);
+}
+
+/* Ландфиллийн тайлбарын жижиг дөрвөлжин — зураг дээрх тэмдэглэгээтэй нэг дэвсгэр, нэг өнгө */
+.waste-swatch {
+  background: #111a22;
+}
+:root:not([data-theme="dark"]) .waste-swatch {
+  background: var(--paper-2);
+}
+:root:not([data-theme="dark"]) .waste-swatch[data-kind="hazard"] {
+  color: oklch(0.5 0.12 212) !important;
+}
+:root:not([data-theme="dark"]) .waste-swatch[data-kind="landfill"] {
+  color: oklch(0.5 0.12 168) !important;
 }
 
 .species-pin:has(svg[data-pin="from"]) {

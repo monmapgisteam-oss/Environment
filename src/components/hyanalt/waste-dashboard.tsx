@@ -3,13 +3,22 @@
 import * as React from "react";
 import dynamic from "next/dynamic";
 import {
+  ArrowLeft,
+  BatteryCharging,
+  Building2,
   CalendarClock,
   CalendarX2,
+  Check,
+  ChevronRight,
+  Cpu,
+  Factory,
   FileCheck2,
+  FlaskConical,
   Landmark,
   Loader2,
   MapPin,
   MousePointerClick,
+  Recycle,
   Trash2,
   TriangleAlert,
   X,
@@ -32,6 +41,11 @@ import {
 import { WASTE } from "@/lib/hyanalt-layers";
 import { Bounds } from "@/lib/extent";
 import { cn, num } from "@/lib/utils";
+import detailStyles from "./waste-permit-detail.module.css";
+import listStyles from "./waste-permit-list.module.css";
+import { WasteSiteCard } from "./waste-site-card";
+import siteStyles from "./waste-site-card.module.css";
+import dashboardStyles from "./waste-dashboard.module.css";
 
 const PointMap = dynamic(
   () => import("@/components/wells/map").then((m) => m.WellsMap),
@@ -57,11 +71,9 @@ const PointMap = dynamic(
    харагддаггүй байв.
 
    ⚠⚠ ДИАГРАМ БАЙХГҮЙ (хэрэглэгч: "чартын дизайн ерөөсөө таалагдахгүй").
-   Арван хоёр бичлэгийн дүүрэг, төлөвийн задаргаа нь хоёр, гурван
-   зурвастай диаграм болж юу ч хэлдэггүй байв. Зөвшөөрлийн ГОЛ асуулт
-   нь ХЭЗЭЭ — тиймээс жагсаалтын мөр бүр өөрөө хугацааны туузтай
-   (олгосноос дуусах хүртэл, өнөөдрийн зураастай). Арван хоёр мөр нийлээд
-   нэг Гант диаграм болно — тусдаа диаграм шаардлагагүй.
+   Зөвшөөрлүүдийг дуусах огноогоор эрэмбэлж, төсөл бүрийн байршил,
+   дуусах огноо, үлдсэн хугацааг нэртэй нь харуулна. Хугацааны дэлгэрэнгүй
+   зурвас нь сонгосон зөвшөөрлийн баруун панельд байна.
 
    БҮТЭЦ:
      · зүүн — аюултай хог хаягдлын зөвшөөрлүүд, дуусах огноогоор;
@@ -328,23 +340,6 @@ export function WasteDashboard() {
     return m;
   }, [all]);
 
-  /* Хугацааны туузны нийтлэг хуваарь — бүх мөр НЭГ тэнхлэгтэй */
-  const span = React.useMemo(() => {
-    let lo = Infinity;
-    let hi = -Infinity;
-    for (const r of permits) {
-      if (r.issued != null) lo = Math.min(lo, r.issued);
-      if (r.expires != null) hi = Math.max(hi, r.expires);
-    }
-    if (!Number.isFinite(lo) || !Number.isFinite(hi)) return null;
-    lo = Math.min(lo, today);
-    hi = Math.max(hi, today);
-    /* Бүтэн он руу тэлнэ — тэнхлэгийн шошго оны эхэнд сууна */
-    const from = Date.UTC(new Date(lo).getUTCFullYear(), 0, 1);
-    const to = Date.UTC(new Date(hi).getUTCFullYear() + 1, 0, 1);
-    return { from, to };
-  }, [permits, today]);
-
   /* Үзүүлэлт — дүүрэг ба сонголтыг дагана */
   const permitsS = React.useMemo(
     () => (sel == null ? permitsF : permitsF.filter((r) => r.uid === sel)),
@@ -452,7 +447,7 @@ export function WasteDashboard() {
   }, []);
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-2.5">
+    <div className={cn("flex h-full min-h-0 flex-col gap-2.5", dashboardStyles.root)}>
       {/* ---- ТОЛГОЙ: гарчиг ба баруун самбарын товч ---- */}
       <div className="workspace-filterbar flex shrink-0 flex-wrap items-center gap-2 rounded-xl border border-line bg-paper-2 px-3 py-2.5">
         <span className="shrink-0 text-[13px] font-semibold text-ink">Ландфилл</span>
@@ -480,7 +475,12 @@ export function WasteDashboard() {
       </div>
 
       {/* ---- ҮЗҮҮЛЭЛТ ---- */}
-      <div className="analytics-overview" aria-label="Өгөгдлийн тойм">
+      {/* Химийн бодисын үндэсний бүртгэлийн индикатортай НЭГ ХЭВ (хэрэглэгч 2026-11-09):
+          тусдаа карт, шошго дээр голлосон, доор нь тэмдэг + тоо зэрэгцэнэ. */}
+      {/* Баганын өргөн ШОШГЫН ХЭМЖСЭН өргөний харьцаагаар (276 · 239 · 303 · 203px, 10px
+          eyebrow) — тэнцүү хуваахад "Нэг жилийн дотор дуусах зөвшөөрөл" хоёр мөр болж
+          тоонууд зөрж байв (химийн бүртгэлийн 1.35fr-тай нэг арга). */}
+      <div className="grid shrink-0 grid-cols-2 gap-2 sm:grid-cols-[1.36fr_1.18fr_1.5fr_1fr]" aria-label="Өгөгдлийн тойм">
         <Stat icon={FileCheck2} label="Аюултай хог хаягдлын зөвшөөрөл" value={hazard ? num(permitsS.length) : "…"} />
         <Stat icon={CalendarClock} label="Хугацаа хүчинтэй зөвшөөрөл" value={hazard ? num(stats.valid) : "…"} />
         <Stat
@@ -492,15 +492,13 @@ export function WasteDashboard() {
         <Stat icon={Trash2} label="Энгийн хог хаягдлын цэг" value={common ? num(sitesS.length) : "…"} />
       </div>
 
-      <Columns id="hyanalt-waste" left={340} right={330} className="min-h-0 flex-1">
-        {/* ---- ЗҮҮН: зөвшөөрлүүд хугацааны туузтай ---- */}
-        <section className="data-surface flex min-h-0 min-w-0 flex-col overflow-hidden rounded-xl border border-line bg-paper-2 max-xl:max-h-[520px]">
-          <PanelHead
-            dot={HAZARD_HEX}
-            title="Аюултай хог хаягдлын зөвшөөрөл"
-            count={hazard ? permitsF.length : undefined}
-          />
-          {span ? <Axis from={span.from} to={span.to} today={today} /> : null}
+      <Columns id="hyanalt-waste" left={340} right={330} className="min-h-0 flex-1 xl:grid-rows-[minmax(0,1fr)]">
+        {/* ---- ЗҮҮН: зөвшөөрлүүд дуусах огноогоор ---- */}
+        <section className={cn("data-surface flex min-h-0 min-w-0 flex-col overflow-hidden rounded-xl border border-line bg-paper-2 max-xl:max-h-[520px]", listStyles.panel)}>
+          <header className={listStyles.header}>
+            <h2><span aria-hidden style={{ background: HAZARD_HEX }} />Аюултай хог хаягдлын зөвшөөрөл</h2>
+            <p><span><strong>{hazard ? num(permitsF.length) : "…"}</strong> зөвшөөрөл</span><span>Дуусах огноогоор</span></p>
+          </header>
           <div className="min-h-0 flex-1 overflow-y-auto">
             {failed.hazard ? (
               <Failed message={failed.hazard} />
@@ -509,19 +507,18 @@ export function WasteDashboard() {
             ) : permitsF.length === 0 ? (
               <Waiting />
             ) : (
-              <ul className="divide-y divide-line">
+              <ol className={listStyles.list} aria-label="Зөвшөөрлүүд, дуусах огноогоор">
                 {permitsF.map((r) => (
                   <PermitRow
                     key={r.uid}
                     rec={r}
-                    span={span}
                     today={today}
                     on={sel === r.uid}
                     hot={tip.oid === r.uid}
                     onPick={() => choose(r.uid)}
                   />
                 ))}
-              </ul>
+              </ol>
             )}
           </div>
         </section>
@@ -591,7 +588,7 @@ export function WasteDashboard() {
 
           <p
             className="pointer-events-none absolute bottom-1 left-2.5 z-10 text-[10px] leading-none text-ink-3"
-            style={{ filter: "drop-shadow(0 1px 2px rgba(0,0,0,.75))" }}
+            style={{ filter: "drop-shadow(0 0 1.5px var(--paper)) drop-shadow(0 0 1.5px var(--paper))" }}
           >
             Суурь зураг: Esri
           </p>
@@ -614,7 +611,7 @@ export function WasteDashboard() {
                 ) : sitesF.length === 0 ? (
                   <Waiting />
                 ) : (
-                  <div className="divide-y divide-line">
+                  <div className={siteStyles.list}>
                     {sitesF.map((r) => (
                       <SiteBlock
                         key={r.uid}
@@ -637,7 +634,7 @@ export function WasteDashboard() {
             />
           ) : (
             <>
-              <PanelHead dot={HAZARD_HEX} title="Дүүргээр" count={hazard ? permits.length : undefined} />
+              <PanelHead dot={HAZARD_HEX} title="Аюултай хог хаягдлын зөвшөөрөл дүүргээр" />
               <div className="min-h-0 flex-1 overflow-y-auto">
                 {failed.hazard ? (
                   <Failed message={failed.hazard} />
@@ -681,8 +678,10 @@ function Legend({
           <div key={it.kind} className="flex items-center gap-1 text-[8.5px] leading-[1.2] text-ink">
             <span
               aria-hidden
+              /* Дэвсгэр, иконы өнгө нь зураг дээрх тэмдэглэгээтэй НЭГ дүрмээр горимоо дагана (`.waste-swatch`, globals.css) */
+              data-kind={it.kind}
               className={cn(
-                "flex size-2.5 shrink-0 items-center justify-center border bg-[#111a22]",
+                "waste-swatch flex size-2.5 shrink-0 items-center justify-center border",
                 it.kind === "hazard" ? "rounded-full" : "rounded-[1.5px]",
               )}
               style={{ borderColor: hex, color: hex }}
@@ -711,23 +710,14 @@ function Stat({
   value: string;
   tone?: string;
 }) {
+  /* Химийн бүртгэлийн `Cell`-тэй ижил: `eyebrow` шошго голдоо, 22px тэмдэг (`--tone`,
+     анхааруулга бол `--ochre`) + 18px тоо. Гүн нь сүүдэр биш давхаргаар (`paper-2`). */
   return (
-    <div className="analytics-stat">
-      <span className="analytics-stat-icon" style={tone ? { color: tone } : undefined}>
-        <Icon size={20} strokeWidth={1.5} />
-      </span>
-      <div className="min-w-0">
-        {/* ⚠ Нэр нь ТОМ ҮСГЭЭР, 12px (хэрэглэгч, 2026-10-05). Нийтлэг
-            `.analytics-stat-label` (10px) нь давхаргаас гадуурх CSS тул
-            Tailwind-ийн анги түүнийг дарахгүй — `style`-ээр өгнө. Бусад
-            самбарын үзүүлэлтэд нөлөөлөхгүй. */}
-        <span
-          className="analytics-stat-label"
-          style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: "0.04em" }}
-        >
-          {label}
-        </span>
-        <span className="analytics-stat-value" style={tone ? { color: tone } : undefined}>
+    <div className="flex flex-col items-center justify-center rounded-xs border border-line bg-paper-2 px-2 py-1.5">
+      <div className="eyebrow text-center">{label}</div>
+      <div className="mt-1 flex items-center gap-2">
+        <Icon size={22} strokeWidth={1.4} className="shrink-0 text-(--tone)" style={tone ? { color: tone } : undefined} aria-hidden />
+        <span className="num text-[18px] leading-none font-semibold text-ink" style={tone ? { color: tone } : undefined}>
           {value}
         </span>
       </div>
@@ -749,123 +739,37 @@ function PanelHead({
   return (
     <div className="flex shrink-0 items-center gap-2 border-b border-line px-4 py-3">
       <span aria-hidden className="size-2 shrink-0 rounded-full" style={{ background: dot }} />
-      <h2 className="display min-w-0 flex-1 truncate text-[13px] leading-snug">{title}</h2>
+      {/* Гарчиг ТОМ ҮСГЭЭР — диаграмын гарчгийн ерөнхий дүрэм (хэрэглэгч 2026-11-09: "Аюултай хог хаягдлын зөвшөөрөл uppercase") */}
+      <h2 className="display min-w-0 flex-1 text-[12px] leading-snug tracking-[0.02em] uppercase">{title}</h2>
       {count != null ? <span className="num text-[11px] text-ink-3">{num(count)}</span> : null}
       {children}
     </div>
   );
 }
 
-/* ---------------- Хугацааны тэнхлэг ---------------- */
-
-function pos(t: number, span: { from: number; to: number }) {
-  return ((t - span.from) / (span.to - span.from)) * 100;
-}
-
-/**
- * Жагсаалтын дээрх оны тэнхлэг. Мөр бүрийн тууз ЯГ энэ хуваарьтай —
- * баганын толгойн үүрэгтэй: туузны байрлал юуг заахыг тайлбаргүйгээр
- * хэлнэ.
- */
-function Axis({ from, to, today }: { from: number; to: number; today: number }) {
-  const span = { from, to };
-  const y0 = new Date(from).getUTCFullYear();
-  const y1 = new Date(to).getUTCFullYear();
-  const years = y1 - y0;
-  /* Шошго давхцахгүй байх алхам — ойролцоогоор зургаа хүртэл */
-  const step = Math.max(1, Math.ceil(years / 6));
-  const ticks: number[] = [];
-  for (let y = y0; y <= y1; y += step) ticks.push(y);
-
-  return (
-    <div className="shrink-0 border-b border-line px-4 pt-2 pb-1.5">
-      <div className="relative h-3.5">
-        {ticks.map((y) => {
-          const left = pos(Date.UTC(y, 0, 1), span);
-          return (
-            <span
-              key={y}
-              className={cn(
-                "num absolute top-0 text-[10px] leading-none text-ink-3",
-                left > 92 ? "-translate-x-full" : left > 4 && "-translate-x-1/2",
-              )}
-              style={{ left: `${left}%` }}
-            >
-              {y}
-            </span>
-          );
-        })}
-      </div>
-      <div className="relative h-1.5">
-        <span
-          aria-hidden
-          className="absolute inset-y-0 w-px bg-ink"
-          style={{ left: `${pos(today, span)}%` }}
-        />
-      </div>
-    </div>
-  );
-}
-
-/** Олгосноос дуусах хүртэлх тууз, өнөөдрийн зураастай */
-function Track({
-  rec,
-  span,
-  today,
-}: {
-  rec: Rec;
-  span: { from: number; to: number } | null;
-  today: number;
-}) {
-  if (!span) return null;
-  const tone = expiryTone(rec.expires, today);
-  const a = rec.issued != null ? pos(rec.issued, span) : null;
-  const b = rec.expires != null ? pos(rec.expires, span) : null;
-  return (
-    <div className="relative h-2">
-      <span aria-hidden className="absolute inset-x-0 top-1/2 h-px -translate-y-1/2 bg-line" />
-      {a != null && b != null ? (
-        <span
-          aria-hidden
-          className="absolute top-0 h-full rounded-[1px]"
-          style={{
-            left: `${a}%`,
-            width: `${Math.max(b - a, 0.8)}%`,
-            background: `color-mix(in oklab, ${tone} 70%, transparent)`,
-          }}
-        />
-      ) : b != null ? (
-        <span
-          aria-hidden
-          className="absolute top-0 h-full w-[3px] -translate-x-1/2 rounded-[1px]"
-          style={{ left: `${b}%`, background: tone }}
-        />
-      ) : null}
-      <span
-        aria-hidden
-        className="absolute -inset-y-0.5 w-px bg-ink"
-        style={{ left: `${pos(today, span)}%` }}
-      />
-    </div>
-  );
-}
-
 function PermitRow({
   rec,
-  span,
   today,
   on,
   hot,
   onPick,
 }: {
   rec: Rec;
-  span: { from: number; to: number } | null;
   today: number;
   on: boolean;
   hot: boolean;
   onPick: () => void;
 }) {
   const tone = expiryTone(rec.expires, today);
+  const progress = rec.issued != null && rec.expires != null && rec.expires > rec.issued
+    ? Math.max(0, Math.min(100, ((today - rec.issued) / (rec.expires - rec.issued)) * 100))
+    : null;
+  const remaining = remainText(rec.expires, today);
+  const Icon = /батарей|аккумлятор|цэнэг хураагуур/i.test(rec.name) ? BatteryCharging
+    : /химийн|тэсрэх/i.test(rec.name) ? FlaskConical
+    : /электроник/i.test(rec.name) ? Cpu
+    : /дахивар|эрүүл мэнд/i.test(rec.name) ? Recycle
+    : /үйлдвэр/i.test(rec.name) ? Factory : Recycle;
   return (
     <li>
       <button
@@ -873,23 +777,36 @@ function PermitRow({
         onClick={onPick}
         aria-pressed={on}
         className={cn(
-          "relative block w-full px-4 py-2.5 text-left transition-colors",
-          on ? "bg-data/10" : hot ? "bg-paper-hi" : "hover:bg-paper-hi",
+          listStyles.row,
+          on && listStyles.selected,
+          hot && listStyles.hot,
         )}
       >
-        {on ? <span aria-hidden className="absolute inset-y-0 left-0 w-[2px] bg-data" /> : null}
-        <div className="line-clamp-2 text-[12px] leading-snug text-ink" title={rec.name}>
-          {rec.name}
-        </div>
-        <div className="mt-1 flex items-baseline justify-between gap-2 text-[10.5px] leading-none">
-          <span className="min-w-0 truncate text-ink-3">{rec.place || rec.status || " "}</span>
-          <span className="num shrink-0" style={{ color: tone }}>
-            {remainText(rec.expires, today)}
+        <span className={listStyles.summary}>
+          <span className={listStyles.icon} style={{ color: tone }} aria-hidden><Icon size={20} strokeWidth={1.7} /></span>
+          <span className={listStyles.content}>
+            <span className={listStyles.name} title={rec.name}>{rec.name}</span>
+            <span className={listStyles.place}><MapPin size={10} aria-hidden />{rec.place || "Байршил тодорхойгүй"}</span>
           </span>
-        </div>
-        <div className="mt-2">
-          <Track rec={rec} span={span} today={today} />
-        </div>
+          <span className={listStyles.remaining} style={{ color: tone }}>
+            {rec.expires != null ? <>
+              <CalendarClock size={12} aria-hidden />
+              <span><strong>{remaining.replace(/\s+үлдсэн$/, "")}</strong>{remaining.endsWith("үлдсэн") ? <span>үлдсэн</span> : null}</span>
+            </> : <span><strong>Огноо</strong><span>тодорхойгүй</span></span>}
+          </span>
+        </span>
+        <span className={listStyles.timeline}>
+          <span className={listStyles.date} title={`Олгосон огноо: ${dateText(rec.issued)}`}><span className="sr-only">Олгосон: </span>{rec.issued != null ? dateText(rec.issued) : "—"}</span>
+          {progress != null ? (
+            <>
+              <span className={listStyles.track} role="progressbar" aria-label="Зөвшөөрлийн хугацааны өнгөрсөн хувь" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(progress)} title={`${num(progress, 0)}% өнгөрсөн`}>
+                <span style={{ width: `${progress}%`, background: tone }} />
+              </span>
+              <span className={listStyles.percent} aria-hidden>{num(progress, 0)}%</span>
+            </>
+          ) : <span className={listStyles.unknown}>Хугацаа тодорхойгүй</span>}
+          <span className={listStyles.date} title={`Дуусах огноо: ${dateText(rec.expires)}`}><span className="sr-only">Дуусах: </span>{rec.expires != null ? dateText(rec.expires) : "—"}</span>
+        </span>
       </button>
     </li>
   );
@@ -937,7 +854,7 @@ function Districts({
         <div
           key={key}
           className={cn(
-            "relative px-4 py-2.5",
+            "relative px-3 py-3",
             active === key && "bg-data/6",
             active != null && active !== key && "opacity-55",
           )}
@@ -949,29 +866,45 @@ function Districts({
             type="button"
             aria-pressed={active === key}
             onClick={() => onDistrict(key)}
-            className="flex w-full items-baseline justify-between gap-2 text-left"
+            className="flex w-full flex-wrap items-center justify-between gap-2 rounded-md px-1 py-1 text-left hover:bg-paper-hi focus-visible:outline-2 focus-visible:outline-data"
           >
-            <span className="text-[12px] font-medium text-ink hover:text-data">{district}</span>
-            <span className="num text-[11px] text-ink-3">{num(list.length)}</span>
+            <span className="text-[12px] font-semibold text-ink">
+              {key ? `${district.replace(/\s*дүүрэг$/i, "")} дүүрэг` : district}
+            </span>
+            <span className={cn(
+              "shrink-0 rounded-md border px-2 py-1 text-[10.5px] leading-none",
+              active === key ? "border-data/35 bg-data/10 text-ink" : "border-line bg-paper-3 text-ink-2",
+            )}>
+              <span className="num font-semibold">{num(list.length)}</span> зөвшөөрөл
+            </span>
           </button>
-          <ul className="mt-1.5 space-y-1">
-            {list.map((r) => (
+          <ol aria-label={`${district} — зөвшөөрөлтэй төслүүд`} className="mt-2 divide-y divide-line rounded-lg border border-line bg-paper/40">
+            {list.map((r, index) => (
               <li key={r.uid}>
                 <button
                   type="button"
                   onClick={() => onPick(r.uid)}
-                  className="flex w-full items-start gap-2 text-left text-[11.5px] leading-snug text-ink-2 hover:text-ink"
+                  className="flex w-full items-start gap-2 rounded-md px-2.5 py-2.5 text-left hover:bg-paper-hi focus-visible:outline-2 focus-visible:outline-data"
                 >
-                  <span
-                    aria-hidden
-                    className="mt-[5px] size-1.5 shrink-0 rounded-full"
-                    style={{ background: expiryTone(r.expires, today) }}
-                  />
-                  <span className="min-w-0 flex-1">{r.name}</span>
+                  <span aria-hidden className="num mt-px flex size-5 shrink-0 items-center justify-center rounded border border-line bg-paper-3 text-[10px] text-ink-3">
+                    {index + 1}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-[11.5px] leading-relaxed text-ink">{r.name}</span>
+                    <span className="mt-1 block text-[10px] leading-snug text-ink-3">
+                      {r.expires != null ? <>Дуусах: <span className="num">{dateText(r.expires)}</span></> : "Дуусах огноо тодорхойгүй"}
+                    </span>
+                    {r.expires != null ? (
+                      <span className="mt-0.5 block text-[10px] leading-snug" style={{ color: expiryTone(r.expires, today) }}>
+                        {remainText(r.expires, today)}
+                      </span>
+                    ) : null}
+                  </span>
+                  <ChevronRight size={13} aria-hidden className="mt-1 shrink-0 text-ink-3" />
                 </button>
               </li>
             ))}
-          </ul>
+          </ol>
         </div>
       ))}
     </div>
@@ -990,40 +923,86 @@ function PermitDetail({
   onClose: () => void;
 }) {
   const tone = expiryTone(rec.expires, today);
+  const labelOf = (f: LayerInfo["fields"][number]) => f.alias.replace(/\s+/g, " ").trim();
+  const company = info.fields.filter((f) => /аж ахуйн нэгж.*нэр|байгууллаг.*нэр/i.test(labelOf(f)));
+  const location = info.fields.filter((f) =>
+    /^(aimag|niislel|duureg|horoo|hayag)$/i.test(f.name) || /аймаг|нийслэл|сум|дүүрэг|хороо|хаяг/i.test(labelOf(f)),
+  );
+  const featured = new Set([...company, ...location].map((f) => f.name));
+  const details = info.fields.filter((f) =>
+    !featured.has(f.name) && !["tosol_ner", "zov_avsan", "zov_duusah", "zov_tolov"].includes(f.name.toLowerCase()),
+  );
+  const valueOf = (f: LayerInfo["fields"][number]) => {
+    const raw = rec.row[f.name];
+    if (raw == null || text(raw) === "") return "—";
+    return f.type === "Date" ? dateText(dateOf(raw)) : text(raw);
+  };
+  const progress = rec.issued != null && rec.expires != null && rec.expires > rec.issued
+    ? Math.max(0, Math.min(100, ((today - rec.issued) / (rec.expires - rec.issued)) * 100))
+    : null;
+  const validStatus = /^хүчинтэй$/i.test(rec.status.trim());
+  const locationText = location.map(valueOf).filter((v) => v !== "—").join(", ") || rec.place;
   return (
-    <>
-      <PanelHead dot={HAZARD_HEX} title="Аюултай хог хаягдлын зөвшөөрөл">
-        <button
-          type="button"
-          onClick={onClose}
-          className="rounded-xs px-1.5 py-0.5 text-[11px] text-ink-3 hover:bg-paper-hi hover:text-ink"
-        >
-          Хаах
+    <div className={detailStyles.panel}>
+      <header className={detailStyles.header}>
+        <h2><span aria-hidden style={{ background: HAZARD_HEX }} />Зөвшөөрлийн дэлгэрэнгүй</h2>
+        <button type="button" onClick={onClose} aria-label="Дүүргийн жагсаалт руу буцах">
+          <ArrowLeft size={13} aria-hidden /> Буцах
         </button>
-      </PanelHead>
-      <div className="min-h-0 flex-1 overflow-y-auto">
-        <div className="border-b border-line px-4 py-3">
-          <div className="text-[13px] leading-snug font-medium text-ink">{rec.name}</div>
-          {rec.place ? <div className="mt-1 text-[11px] text-ink-3">{rec.place}</div> : null}
+      </header>
+      <div className={detailStyles.body}>
+        <section className={detailStyles.card} aria-label="Төслийн мэдээлэл">
+          <div className={detailStyles.project}>
+            <span className={detailStyles.projectIcon} aria-hidden><Recycle size={25} strokeWidth={1.8} /></span>
+            <div><p className={detailStyles.label}>Төслийн нэр</p><h3>{rec.name}</h3></div>
+          </div>
+          <div className={detailStyles.company}>
+            <div className={detailStyles.companyNames}>
+              {company.map((f) => <p key={f.name} title={labelOf(f)}><Building2 size={15} aria-hidden /><span>{valueOf(f)}</span></p>)}
+              {company.length === 0 ? <p className={detailStyles.label}>Зөвшөөрлийн төлөв</p> : null}
+            </div>
+            <span className={cn(detailStyles.status, validStatus && detailStyles.valid)}>
+              {validStatus ? <Check size={12} aria-hidden /> : null}{rec.status || "Төлөв тодорхойгүй"}
+            </span>
+          </div>
+        </section>
 
-          {/* Хугацаа — олгосон ба дуусах огноо, үлдсэн хугацаа */}
-          <div className="mt-3 grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-line bg-line">
-            <div className="bg-paper-2 px-3 py-2">
-              <div className="eyebrow">Олгосон</div>
-              <div className="num mt-1 text-[13px] text-ink">{dateText(rec.issued)}</div>
-            </div>
-            <div className="bg-paper-2 px-3 py-2">
-              <div className="eyebrow">Дуусах</div>
-              <div className="num mt-1 text-[13px] text-ink">{dateText(rec.expires)}</div>
-            </div>
+        <section className={detailStyles.card} aria-labelledby="waste-permit-dates">
+          <h3 id="waste-permit-dates" className={detailStyles.cardTitle}><CalendarClock size={16} aria-hidden />Хүчинтэй хугацаа</h3>
+          <div className={detailStyles.dates}>
+            <dl><dt>Олгосон огноо</dt><dd>{dateText(rec.issued)}</dd></dl>
+            <dl><dt>Дуусах огноо</dt><dd>{dateText(rec.expires)}</dd></dl>
+            <p className={detailStyles.remaining} style={{ color: tone }}><CalendarClock size={16} aria-hidden /><span>{remainText(rec.expires, today)}</span></p>
           </div>
-          <div className="num mt-2 text-[11.5px]" style={{ color: tone }}>
-            {remainText(rec.expires, today)}
-          </div>
-        </div>
-        <Fields info={info} row={rec.row} />
+          {progress != null ? (
+            <div className={detailStyles.timeline}>
+              <div role="progressbar" aria-label="Зөвшөөрлийн хугацааны өнгөрсөн хувь" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(progress)}>
+                <span style={{ width: `${progress}%`, background: tone }} />
+              </div>
+              <p><span>Эхэлсэн</span><strong>{num(progress, 0)}% өнгөрсөн</strong><span>Дуусах</span></p>
+            </div>
+          ) : null}
+        </section>
+
+        {details.length > 0 ? (
+          <section className={detailStyles.card} aria-labelledby="waste-permit-info">
+            <h3 id="waste-permit-info" className={detailStyles.cardTitle}><FileCheck2 size={16} aria-hidden />Зөвшөөрлийн мэдээлэл</h3>
+            <dl className={detailStyles.fields}>
+              {details.map((f) => <div key={f.name}><dt>{labelOf(f)}</dt><dd>{valueOf(f)}</dd></div>)}
+            </dl>
+          </section>
+        ) : null}
+        {location.length > 0 || locationText ? (
+          <section className={detailStyles.card} aria-labelledby="waste-permit-location">
+            <h3 id="waste-permit-location" className={detailStyles.cardTitle}><MapPin size={16} aria-hidden />Байршил</h3>
+            <p className={detailStyles.location}><MapPin size={17} aria-hidden /><span>{locationText || "Байршил тодорхойгүй"}</span></p>
+            {location.some((f) => valueOf(f) === "—") ? (
+              <dl className={detailStyles.fields}>{location.filter((f) => valueOf(f) === "—").map((f) => <div key={f.name}><dt>{labelOf(f)}</dt><dd>—</dd></div>)}</dl>
+            ) : null}
+          </section>
+        ) : null}
       </div>
-    </>
+    </div>
   );
 }
 
@@ -1039,63 +1018,7 @@ function SiteBlock({
   onPick: () => void;
 }) {
   return (
-    <div className={cn("relative", on && "bg-data/6")}>
-      {on ? <span aria-hidden className="absolute inset-y-0 left-0 w-[2px] bg-data" /> : null}
-      <button
-        type="button"
-        onClick={onPick}
-        className="block w-full px-4 pt-3 pb-1 text-left"
-      >
-        <div className="text-[12.5px] leading-snug font-medium text-ink">{rec.name}</div>
-        {rec.place ? <div className="mt-0.5 text-[11px] text-ink-3">{rec.place}</div> : null}
-      </button>
-      <Fields info={info} row={rec.row} compact />
-    </div>
-  );
-}
-
-/**
- * Бүх талбар — хоосон нь ч "—" гэж бүдэг өнгөөр (порталын бичлэгийн
- * цонхтой ижил шийдвэр: хоосон байдал нь өөрөө мэдээлэл).
- */
-function Fields({
-  info,
-  row,
-  compact,
-}: {
-  info: LayerInfo;
-  row: Record<string, unknown>;
-  compact?: boolean;
-}) {
-  return (
-    <dl className={cn(compact ? "pb-2" : "divide-y divide-line")}>
-      {info.fields.map((f) => {
-        const raw = row[f.name];
-        const v =
-          f.type === "Date" && raw != null && raw !== ""
-            ? dateText(dateOf(raw))
-            : typeof raw === "string"
-              ? raw.trim()
-              : raw;
-        const empty = v === "" || v == null;
-        return (
-          <div key={f.name} className={cn("flex gap-2 px-4", compact ? "py-1" : "py-1.5")}>
-            <dt className="w-[110px] shrink-0 text-[10px] leading-snug tracking-[0.06em] text-ink-3 uppercase">
-              {f.alias}
-            </dt>
-            <dd
-              className={cn(
-                "min-w-0 flex-1 text-[11.5px] leading-snug",
-                empty ? "text-ink-3" : "text-ink-2",
-                typeof v === "number" && "num",
-              )}
-            >
-              {empty ? "—" : String(v)}
-            </dd>
-          </div>
-        );
-      })}
-    </dl>
+    <WasteSiteCard rec={rec} info={info} selected={on} onPick={onPick} />
   );
 }
 
