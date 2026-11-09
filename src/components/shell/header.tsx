@@ -24,6 +24,7 @@ const PAGE_NAMES: [string, string, string][] = [
   ["/analysis", "Дүн шинжилгээ", "Analysis"],
   ["/sources", "Дата эх сурвалж", "Data sources"],
   ["/access", "Эрхийн зохицуулалт", "Access control"],
+  ["/log", "Лог бүртгэл", "Activity log"],
   ["/reports", "Тайлан", "Reports"],
   ["/alerts", "Дохиолол", "Alerts"],
   ["/map", "Газрын зураг", "Map"],

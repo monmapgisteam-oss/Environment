@@ -25,6 +25,7 @@ import {
 } from "lucide-react";
 import { esriModules } from "@/lib/arcgis-sdk";
 import { getToken } from "@/lib/auth";
+import { logEvent } from "@/lib/audit";
 import { getDepartment } from "@/lib/departments";
 import type { EditForm, EditTarget } from "@/lib/edit-targets";
 import { isSystemField, officialLabel } from "@/lib/portal-layers";
@@ -1077,6 +1078,22 @@ export function DataEditor({
       const r = (isNew ? res.addFeatureResults : res.updateFeatureResults)?.[0];
       if (!r || r.error) throw r?.error ?? new Error("Хадгалагдсангүй");
       changed.current = true;
+      /* Логт: зассан талбар хуучин → шинэ (шинэд бүгд), геометр хөдөлсөн эсэх */
+      logEvent({
+        kind: "edit",
+        scope: source.scope,
+        layer: meta.url,
+        oid: r.objectId,
+        action: isNew ? "add" : "update",
+        detail: {
+          fields: Object.fromEntries(
+            Object.entries(draft.values)
+              .filter(([k, v]) => isNew ? v !== "" : v !== draft.orig[k])
+              .map(([k, v]) => [k, isNew ? v : [draft.orig[k], v]]),
+          ),
+          ...(geometry ? { geometry: isPoint && at ? `${at[0].toFixed(6)}, ${at[1].toFixed(6)}` : draft.measure ?? true } : {}),
+        },
+      });
       clearSketch();
       const list = await loadRows(query, meta);
       if (geometry) {
@@ -1101,6 +1118,7 @@ export function DataEditor({
       const r = res.deleteFeatureResults?.[0];
       if (!r || r.error) throw r?.error ?? new Error("Устгагдсангүй");
       changed.current = true;
+      logEvent({ kind: "edit", scope: source.scope, layer: meta.url, oid: draft.oid, action: "delete", detail: { name: heading, fields: draft.orig } });
       await loadRows(query, meta);
       await loadMap(meta, new AbortController().signal, look).catch(() => undefined);
       cancel();

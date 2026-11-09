@@ -59,6 +59,7 @@
  */
 
 import { arcgisJson } from "@/lib/arcgis";
+import { logEvent } from "@/lib/audit";
 import { DEPARTMENTS, SHORT_NAMES } from "@/lib/departments";
 
 export const ZAHIRGAA_LAYERS = {
@@ -299,6 +300,20 @@ async function applyEdits(url: string, label: string, body: Record<string, strin
   });
   const r = res.addResults?.[0] ?? res.updateResults?.[0] ?? res.deleteResults?.[0];
   if (!r?.success) throw new Error(`${label} амжилтгүй${r?.error?.description ? ` (${r.error.description})` : ""}`);
+  /* Логт ({@link src/lib/audit.ts}): үйлдэл, илгээсэн атрибут */
+  let fields: unknown = undefined;
+  try {
+    const raw = body.adds ?? body.updates;
+    if (raw) fields = JSON.parse(raw)[0]?.attributes;
+  } catch {}
+  logEvent({
+    kind: "edit",
+    scope: "zahirgaa",
+    layer: url,
+    oid: (r as { objectId?: number }).objectId ?? (body.deletes ? Number(body.deletes) : null),
+    action: body.adds ? "add" : body.updates ? "update" : "delete",
+    detail: { label, ...(fields ? { fields } : {}) },
+  });
 }
 
 /** Шинээр нэмнэ (`id` байхгүй) эсвэл засна */

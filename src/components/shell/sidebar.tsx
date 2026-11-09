@@ -8,6 +8,7 @@ import {
   Database,
   LayoutGrid,
   Leaf,
+  ScrollText,
   ShieldCheck,
 } from "lucide-react";
 import { useAccess } from "@/components/auth/access";
@@ -58,6 +59,10 @@ export function Sidebar() {
             ЗӨВХӨН порталын админд (`org_admin`) */}
         {admin && <Link href="/access" title={t("Эрхийн зохицуулалт", "Access control")} className={cn("dock-link", isActivePath(path, "/access", true) && "active")} aria-current={isActivePath(path, "/access", true) ? "page" : undefined}>
           <ShieldCheck size={20} /><span>{t("Эрх", "Access")}</span>
+        </Link>}
+        {/* ЛОГ БҮРТГЭЛ — эрхийн ДООР, зөвхөн админд (хэрэглэгч 2026-11-09) */}
+        {admin && <Link href="/log" title={t("Лог бүртгэл", "Activity log")} className={cn("dock-link", isActivePath(path, "/log", true) && "active")} aria-current={isActivePath(path, "/log", true) ? "page" : undefined}>
+          <ScrollText size={20} /><span>{t("Лог", "Log")}</span>
         </Link>}
       </nav>}
       <span className="dock-end" aria-hidden="true"><ArrowUpRight size={18} /></span>

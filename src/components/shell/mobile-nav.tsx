@@ -3,7 +3,7 @@
 import type * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ChartNoAxesCombined, Database, LayoutGrid, ShieldCheck } from "lucide-react";
+import { ChartNoAxesCombined, Database, LayoutGrid, ScrollText, ShieldCheck } from "lucide-react";
 import { useAccess } from "@/components/auth/access";
 import { cn, isActivePath } from "@/lib/utils";
 import { useDeptName, useT } from "@/lib/i18n";
@@ -47,6 +47,11 @@ export function MobileNav() {
       {admin && (
         <Chip href="/access" active={isActivePath(pathname, "/access", true)}>
           <ShieldCheck size={13} strokeWidth={1.75} /> {t("Эрхийн зохицуулалт", "Access control")}
+        </Chip>
+      )}
+      {admin && (
+        <Chip href="/log" active={isActivePath(pathname, "/log", true)}>
+          <ScrollText size={13} strokeWidth={1.75} /> {t("Лог бүртгэл", "Activity log")}
         </Chip>
       )}
     </div>

@@ -4,6 +4,7 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { AlertTriangle, Loader2 } from "lucide-react";
 import { completeSignIn } from "@/lib/auth";
+import { logEvent, newSid } from "@/lib/audit";
 import { useAuth } from "@/components/auth/provider";
 
 /* --------------------------------------------------------------------------
@@ -44,6 +45,9 @@ export default function CallbackPage() {
            дахин ачаалагдахгүй — мэдэгдэхгүй бол токен амжилттай
            бичигдсэн хэрнээ хэрэглэгч нэвтрэх дэлгэц рүү буцна. */
         sync();
+        /* Нэвтрэлтийг логт — шинэ сессийн дугаартай ({@link src/lib/audit.ts}) */
+        newSid();
+        logEvent({ kind: "login", path: back || "/" });
 
         /* `replace` — буцах товчоор энэ хуудас руу эргэж орвол код нь
            аль хэдийн хэрэглэгдсэн тул алдаа гарна */

@@ -3,6 +3,7 @@
 import * as React from "react";
 import { usePathname } from "next/navigation";
 import { APP_ID } from "@/lib/portal";
+import { flushBeacon, logEvent } from "@/lib/audit";
 import {
   isLive,
   getToken,
@@ -133,6 +134,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         void signIn();
       },
       leave: () => {
+        /* Гаралтыг логт — сесс арилахаас ӨМНӨ, beacon-оор (хуудас солигдоно) */
+        logEvent({ kind: "logout" });
+        flushBeacon();
         forget();
         setSession(null);
         setState("out");

@@ -9,6 +9,7 @@
  */
 
 import { arcgisJson } from "@/lib/arcgis";
+import { logEvent } from "@/lib/audit";
 import { pointOf } from "@/lib/extent";
 import { layerService } from "@/lib/portal-layers";
 
@@ -194,6 +195,17 @@ function attributesOf(v: BearInput) {
 
 type EditResult = { success: boolean; objectId?: number; error?: { description?: string } };
 
+/** Логт ({@link src/lib/audit.ts}): үйлдэл ба илгээсэн атрибут — хуучин утгыг энд мэдэхгүй */
+function logEdit(layer: string, scope: string, body: Record<string, string>, oid?: number) {
+  const action = body.adds ? "add" : body.updates ? "update" : "delete";
+  let fields: unknown = undefined;
+  try {
+    const raw = body.adds ?? body.updates;
+    if (raw) fields = JSON.parse(raw)[0]?.attributes;
+  } catch {}
+  logEvent({ kind: "edit", scope, layer, oid: oid ?? (body.deletes ? Number(body.deletes) : null), action, detail: fields ? { fields } : undefined });
+}
+
 async function applyEdits(body: Record<string, string>, label: string) {
   const json = await arcgisJson<{
     addResults?: EditResult[];
@@ -207,6 +219,7 @@ async function applyEdits(body: Record<string, string>, label: string) {
   const r = [...(json.addResults ?? []), ...(json.updateResults ?? []), ...(json.deleteResults ?? [])][0];
   if (!r?.success)
     throw new Error(`${label} амжилтгүй${r?.error?.description ? ` (${r.error.description})` : ""}`);
+  logEdit(BEAR_LAYER, "amitan-urgamal", body, r.objectId);
   return r.objectId;
 }
 

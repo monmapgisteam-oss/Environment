@@ -19,6 +19,7 @@
 import { arcgisJson } from "@/lib/arcgis";
 import { ADMIN_USERNAME, normName, parseGrant, type Grant } from "@/lib/access";
 import { SHARING } from "@/lib/portal";
+import { logEvent } from "@/lib/audit";
 
 const TITLE = "Environment_Permissions";
 
@@ -184,6 +185,7 @@ export async function saveAccess(rows: AccessRow[]): Promise<void> {
     "Эрхийн тохиргоо хадгалах",
     form({ adds: JSON.stringify(adds), updates: JSON.stringify(updates), deletes: deletes.join(",") }),
   );
+  logEvent({ kind: "access", action: "save", detail: { accounts: rows.map((r) => ({ username: r.username, removed: r.removed, grant: r.grant })) } });
   /* Давхар мөр устгалт амжилтгүй байсан ч уншилт хамгийн сүүлийнхийг авдаг тул алдаа биш */
   const bad = [...(j.addResults ?? []), ...(j.updateResults ?? [])].find((r) => !r.success);
   if (bad) throw new Error(`Эрхийн тохиргоо хадгалагдсангүй${bad.error?.description ? ` (${bad.error.description})` : ""}`);

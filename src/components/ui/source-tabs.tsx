@@ -4,6 +4,7 @@ import * as React from "react";
 import { Check, ChevronDown, Database, ExternalLink, Search, X, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAccess } from "@/components/auth/access";
+import { logEvent } from "@/lib/audit";
 import { EditCard } from "@/components/edit/edit-card";
 
 export function useStored(key: string): string | null {
@@ -29,7 +30,9 @@ export function useStoredTab<T extends string>(key: string, options: readonly T[
   const pick = React.useCallback((v: T) => {
     setOverride(v);
     try { localStorage.setItem(key, v); } catch {}
-  }, [key]);
+    /* Цэс сонголтыг логт ({@link src/lib/audit.ts}) — хэлтэсгүй товч (`analysis.view`) түлхүүрээрээ */
+    logEvent({ kind: "tab", scope: scope ?? key, tab: v });
+  }, [key, scope]);
   return [value, pick];
 }
 

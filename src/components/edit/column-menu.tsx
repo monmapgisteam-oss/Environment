@@ -4,6 +4,7 @@ import * as React from "react";
 import { createPortal } from "react-dom";
 import { Eye, EyeOff, Loader2, Pin, PinOff, Trash2, TriangleAlert, X } from "lucide-react";
 import { arcgisJson } from "@/lib/arcgis";
+import { logEvent } from "@/lib/audit";
 import { cn } from "@/lib/utils";
 import { adminUrl } from "./add-field";
 
@@ -140,6 +141,7 @@ export function DeleteFieldDialog({
         body,
       });
       if (res.success === false) throw new Error(res.error?.message ?? "Устгагдсангүй");
+      logEvent({ kind: "schema", layer: url, action: "delete-field", detail: { name, alias: label, fresh } });
       onDone();
     } catch (e) {
       const m = e instanceof Error ? e.message : String(e);

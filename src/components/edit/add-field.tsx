@@ -3,6 +3,7 @@
 import * as React from "react";
 import { Check, Loader2, Plus, X } from "lucide-react";
 import { arcgisJson } from "@/lib/arcgis";
+import { logEvent } from "@/lib/audit";
 import { cn } from "@/lib/utils";
 
 /*
@@ -112,6 +113,7 @@ export function AddField({
         body,
       });
       if (res.success === false) throw new Error(res.error?.message ?? "Хадгалагдсангүй");
+      logEvent({ kind: "schema", layer: url, action: "add-field", detail: { name, alias: field.alias, type: field.type, length: field.length ?? null } });
       setOpen(false);
       reset();
       onDone(field.alias as string, name);

@@ -5,6 +5,7 @@ import "./workspace.css";
 import { Header } from "@/components/shell/header";
 import { Sidebar } from "@/components/shell/sidebar";
 import { AuthProvider } from "@/components/auth/provider";
+import { AuditTracker } from "@/components/auth/audit-tracker";
 import { AccountGate } from "@/components/auth/access";
 import { AutoTranslate } from "@/components/ui/auto-translate";
 
@@ -28,6 +29,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         {/* Гарын хэрэглэгч Tab дарахад эхэлж гарна — цэсийг алгасаж агуулга руу */}
         <a href="#main" className="skip-link">Агуулга руу шилжих</a>
         <AuthProvider>
+          <AuditTracker />
           <Sidebar />
           <div className="workspace-frame">
             <Header />
