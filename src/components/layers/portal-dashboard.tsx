@@ -20,6 +20,8 @@ import {
   MapPin,
   Spline,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   Layers3,
   Loader2,
   Palette,
@@ -702,6 +704,9 @@ function LayersBoard({
   const [timeView, setTimeView] = React.useState<
     Record<string, "year" | "month">
   >({});
+  /* Давхарласан картын сонгосон диаграм, `давхарга:нүүрний карт`-аар
+     ({@link Breakdown.behind}) */
+  const [stackView, setStackView] = React.useState<Record<string, number>>({});
   const [colorBy, setColorBy] = React.useState<Record<string, string | null>>(
     {},
   );
@@ -1579,6 +1584,8 @@ function LayersBoard({
     let total = 0;
     for (const v of views) {
       for (const b of v.charts) {
+        /* Сэлгэгчийн ард буй задаргаа нүүрний бүтцийг тогтоохгүй */
+        if (b.behind) continue;
         total += 1;
         if (!best || b.values.length > best.size)
           best = {
@@ -2577,6 +2584,7 @@ function LayersBoard({
           .filter(
             (b) =>
               b.kind === "count" &&
+              !b.behind &&
               !b.multi &&
               !b.top &&
               !isTime(b) &&
@@ -2609,6 +2617,7 @@ function LayersBoard({
         const fit = v.charts.filter(
           (b) =>
             b.kind === "count" &&
+            !b.behind &&
             !b.multi &&
             b.values.length >= 2 &&
             b.values.length <= 8,
@@ -2836,7 +2845,7 @@ function LayersBoard({
 
     for (const v of views)
       for (const b of v.charts) {
-        if (b.kind !== "sum" || b.top || !b.measure) continue;
+        if (b.behind || b.kind !== "sum" || b.top || !b.measure) continue;
         /* Хэмжилт тус бүр өөрийн карттай давхарга ({@link
            LayerSet.measureCards}) — нийлбэр нь картын толгойд аль
            хэдийн бий; индикаторт давтахгүй (хэрэглэгч 2026-10-06:
@@ -4548,8 +4557,52 @@ function LayersBoard({
 
       /* Туузан дор наалдах ЭХНИЙ карт — салгасан нэрийн тэнхлэгийг
          алгасна, тэр нь доор зурагддаг */
-      const leadId = cuts.find((b) => !named.includes(b))?.id;
-      const cards = cuts.map((b) => {
+      const leadId = cuts.find((b) => !named.includes(b) && !b.behind)?.id;
+      /*
+        ⚠⚠ ДАВХАРЛАСАН КАРТ ({@link Breakdown.behind}; хэрэглэгч 2026-11-11:
+        "pie chart бол pie chart-ийнхаа ард орох буюу хэрэглэгч сольж хардаг —
+        ArcGIS db шиг, давхарлагдсан 2 чартыг сольж хардаг"). Хязгаараас
+        хэтэрсэн задаргаа (шинээр нэмэгдэж бөглөгдсөн талбар) ИЖИЛ
+        ХЭЛБЭРИЙН (бөгж · зурвас) нүүрний СҮҮЛЧИЙН картын ард давхарлагдана;
+        тийм хэлбэрийнх байхгүй бол аль ч нүүрний сүүлчийнх, нүүрний карт
+        огт байхгүй бол өөрийн карт. Олон байвал ижил хэлбэрийн картуудад
+        сүүлчийнхээс урагш ЖИГД тархана. Толгойд пейжер ("‹ 1 / 3 ›"); гарчиг,
+        бие нь СОНГОСОН диаграмынх, карт нь (түлхүүр, тууз, жин) нүүрнийх
+        хэвээр — шинэ талбар хуучин картуудыг хөдөлгөхгүй.
+        ⚠ `tidy` бүрдэлд ардынх нь `AxisCard`-ийн тэнхлэг сэлгэгчид очно
+        (`inAxis`), энд орохгүй.
+      */
+      const special = (b: Breakdown) =>
+        named.includes(b) ||
+        (set.tidy && crossed(b)) ||
+        inAxis.has(b.id) ||
+        Boolean(kCut && b.id === kCut.id && placeGroups.length) ||
+        Boolean(dCut && kCut && b.id === dCut.id && placeGroups.length) ||
+        isTime(b) ||
+        b.kind === "compare";
+      const shapeOf = (b: Breakdown) =>
+        isPie(b) && !set.tidy ? "pie" : "rows";
+      const stacks = new Map<string, Breakdown[]>();
+      const hosts = cuts.filter((b) => !b.behind && !special(b));
+      /* Ижил хэлбэрийн нүүрний картуудад ЖИГД, сүүлчийнхээс урагш —
+         ердийн тохиолдолд карт бүр хоёр диаграмтай ("давхарлагдсан 2 чарт") */
+      const dealt = new Map<string, number>();
+      for (const b of cuts) {
+        if (!b.behind || special(b)) continue;
+        const same = hosts.filter((h) => shapeOf(h) === shapeOf(b));
+        const pool = same.length ? same : hosts;
+        if (!pool.length) continue;
+        const k = same.length ? shapeOf(b) : "*";
+        const n = dealt.get(k) ?? 0;
+        dealt.set(k, n + 1);
+        const host = pool[pool.length - 1 - (n % pool.length)];
+        const list = stacks.get(host.id) ?? [host];
+        list.push(b);
+        stacks.set(host.id, list);
+      }
+      const hosted = new Set([...stacks.values()].flat().map((b) => b.id));
+      const cards = cuts.map((b0) => {
+        let b = b0;
         if (named.includes(b)) return null;
         if (set.tidy && crossed(b)) return null;
         if (kCut && b.id === kCut.id && placeGroups.length) return null;
@@ -4587,6 +4640,13 @@ function LayersBoard({
           */
           const axis = axes.find((a) => a.list.some((x) => x.id === b.id));
           if (!axis || axis.list[0].id !== b.id) return null;
+          /* СЭЛГЭГЧИЙН АРД буй тэнхлэг ({@link Breakdown.behind}) өөрийн карт
+             авахгүй — нүүрний СҮҮЛЧИЙН картын тэнхлэг сэлгэгчид нэмэгдэнэ
+             (`AxisCard` хоёроос олон тэнхлэгтэй үед сэлгэгч гаргадаг) */
+          if (axis.list[0].behind) return null;
+          const frontAxes = axes.filter((a) => !a.list[0].behind);
+          const behindAxes = axes.filter((a) => a.list[0].behind);
+          const hosts = frontAxes[frontAxes.length - 1] === axis;
           const axisFill =
             axis.list[0].values.length > 12 &&
             axes.every(
@@ -4607,7 +4667,7 @@ function LayersBoard({
                  ⚠ `top`-оор таньдаг байсан нь жагсаалт хураагдахаа
                  болимогц унтарч, карт 11,695px болж БАГАНА гүйж байв */
               fill={axisFill}
-              axes={[axis]}
+              axes={hosts ? [axis, ...behindAxes] : [axis]}
               tone={tone}
               first={b.id === leadId && !crossCard}
               records={rows.length}
@@ -4654,6 +4714,15 @@ function LayersBoard({
             />
           );
         }
+        /* Давхарласан карт: ардынх нь нүүрний картынхаа ДОТОР зурагдана,
+           карт нь сонгосон диаграмаа харуулна ({@link Breakdown.behind}) */
+        const stack = stacks.get(b0.id);
+        if (b0.behind && hosted.has(b0.id)) return null;
+        const stackKey = `${id}:${b0.id}`;
+        const at = stack
+          ? Math.min(stackView[stackKey] ?? 0, stack.length - 1)
+          : 0;
+        if (stack) b = stack[at];
         /* Өнгийг зөвхөн ТООЛЛЫН диаграм жолоодно — нэг талбарын бүх
          диаграм ижил өнгө хуваалцдаг тул товчийг хаа сайгүй
          давтвал аль нь юуг сольж байгаа нь ойлгомжгүй болно */
@@ -4828,7 +4897,7 @@ function LayersBoard({
 
         return (
           <CutCard
-            key={`${id}:${b.id}`}
+            key={`${id}:${b0.id}`}
             title={environment ? topicChartTitle(b) : chartTitle(b)}
             /* Үнэлгээний хэлтэст харьцуулах картын гарчиг ("Дүүрэг") ГАРАХГҮЙ,
                тэр байранд диаграмын тайлбар (зүлэг · цэцэг · талбай) сууна
@@ -4838,11 +4907,19 @@ function LayersBoard({
                (хэрэглэгч, 2026-10-06: "ямар field-ээс авч байгаа юм") */
             source={`${hit.info.name} · талбар: ${b.field}${b.measure ? ` · хэмжилт: ${b.measure}` : ""}`}
             tone={tone}
-            first={b.id === leadId && !crossCard}
+            first={b0.id === leadId && !crossCard}
             /* Ойн хэлтэст хугацааны карт шахагдахгүй (хэрэглэгч
                2026-10-23: ТХГН-ийн "Он" баганын ёроолд шахагдсан) —
                шал нь 168px, илүүг нь нэрийн карт дотроо гүйлгэнэ */
-            weight={isTime(b) && set.fillSolo ? 5 : cardWeight(b)}
+            /* Давхарласан карт ХАМГИЙН ТОМ диаграмынхаа жинтэй — сэлгэхэд
+               өндөр нь үсрэхгүй */
+            weight={
+              stack
+                ? Math.max(...stack.map(cardWeight))
+                : isTime(b) && set.fillSolo
+                  ? 5
+                  : cardWeight(b)
+            }
             /* Хоёр талд хуваасан үед он үлдсэн өндрийг авна ({@link LayerSet.grid2}) */
             fill={solo || (Boolean(set.grid2) && isTime(b))}
             /* Дүүргийн карт доор нь байвал агуулгынхаа өндөртэй — үлдсэн
@@ -4862,7 +4939,21 @@ function LayersBoard({
                2026-10-05: устгуул) — толгой нь намхан, зураг нь
                давхаргынхаа ганц өнгөөр */
             action={
-              driver && !environment ? (
+              stack || (driver && !environment) ? (
+                <div className="flex shrink-0 items-center gap-1.5">
+                  {stack ? (
+                    <StackPager
+                      n={stack.length}
+                      at={at}
+                      titles={stack.map((x) =>
+                        environment ? topicChartTitle(x) : chartTitle(x),
+                      )}
+                      onChange={(i) =>
+                        setStackView((v) => ({ ...v, [stackKey]: i }))
+                      }
+                    />
+                  ) : null}
+                  {driver && !environment ? (
                 <button
                   type="button"
                   aria-pressed={lit}
@@ -4889,6 +4980,8 @@ function LayersBoard({
                 >
                   <Palette size={11} strokeWidth={1.8} />
                 </button>
+                  ) : null}
+                </div>
               ) : null
             }
           >
@@ -10420,6 +10513,56 @@ function ParcelCard({
         </p>
       )}
     </div>,
+  );
+}
+
+/**
+ * ДАВХАРЛАСАН КАРТЫН ПЕЙЖЕР ({@link Breakdown.behind}) — "‹ 1 / 3 ›".
+ *
+ * ArcGIS Dashboards-ийн stacked element-ийн сэлгэгч: нэг суудалд хэд
+ * хэдэн диаграм, хэрэглэгч эргүүлж харна. Бүх диаграмын нэр `title`-д —
+ * ард нь юу байгааг товшихгүйгээр уншина. Эргэлдэнэ: сүүлчийнхээс
+ * дараагийнх нь эхнийх. Тоо `.num`.
+ */
+function StackPager({
+  n,
+  at,
+  titles,
+  onChange,
+}: {
+  n: number;
+  at: number;
+  titles: string[];
+  onChange: (i: number) => void;
+}) {
+  const go = (d: number) => onChange((at + d + n) % n);
+  const btn =
+    "rounded-[2px] border border-line-2 p-[2px] text-ink-3 transition-colors hover:text-ink";
+  return (
+    <div
+      className="flex shrink-0 items-center gap-1"
+      title={titles.map((t, i) => `${i + 1}. ${t}`).join("\n")}
+    >
+      <button
+        type="button"
+        aria-label="Өмнөх диаграм"
+        className={btn}
+        onClick={() => go(-1)}
+      >
+        <ChevronLeft size={11} strokeWidth={1.8} />
+      </button>
+      <span className="num text-[10.5px] whitespace-nowrap text-ink-3">
+        {at + 1} / {n}
+      </span>
+      <button
+        type="button"
+        aria-label="Дараагийн диаграм"
+        className={btn}
+        onClick={() => go(1)}
+      >
+        <ChevronRight size={11} strokeWidth={1.8} />
+      </button>
+    </div>
   );
 }
 

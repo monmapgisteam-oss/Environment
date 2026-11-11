@@ -9,9 +9,9 @@ import { ANALYSIS } from "@/lib/access";
 import { VIEWS } from "@/components/analysis/workspace";
 import { TABS as HYANALT } from "@/components/hyanalt/workspace";
 import { TABS as NOGOON } from "@/components/nogoon-bus/workspace";
-import { TABS as OI } from "@/components/oi/workspace";
+import { GROUPS as OI_GROUPS, TABS as OI } from "@/components/oi/workspace";
 import { GROUPS as ORCHIN_GROUPS, TABS as ORCHIN } from "@/components/orchin/workspace";
-import { TABS as UNELGEE } from "@/components/unelgee/workspace";
+import { GROUPS as UNELGEE_GROUPS, TABS as UNELGEE } from "@/components/unelgee/workspace";
 import { GROUPS as WILDLIFE_GROUPS, TABS as WILDLIFE } from "@/components/wildlife/workspace";
 import { TABS as SANHUU } from "@/components/sanhuu/workspace";
 import { tabLayers, type TabLayer } from "@/lib/access-layers";
@@ -39,9 +39,9 @@ const TAB_LISTS: Record<string, CatalogTab[]> = {
   "sanhuu-monitoring": tabsOf(SANHUU),
   hyanalt: tabsOf(HYANALT, undefined, "hyanalt"),
   "nogoon-bus": tabsOf(NOGOON, undefined, "nogoon-bus"),
-  oi: tabsOf(OI, undefined, "oi"),
+  oi: tabsOf(OI, OI_GROUPS, "oi"),
   orchin: tabsOf(ORCHIN, ORCHIN_GROUPS, "orchin"),
-  "unelgee-uur-amisgal": tabsOf(UNELGEE, undefined, "unelgee-uur-amisgal"),
+  "unelgee-uur-amisgal": tabsOf(UNELGEE, UNELGEE_GROUPS, "unelgee-uur-amisgal"),
   "amitan-urgamal": tabsOf(WILDLIFE, WILDLIFE_GROUPS, "amitan-urgamal"),
 };
 

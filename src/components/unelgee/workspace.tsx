@@ -8,12 +8,14 @@ import {
   Flame,
   Leaf,
   Loader2,
+  ShieldAlert,
   Trash2,
   TreePine,
   Waves,
   Route,
 } from "lucide-react";
-import { SourceTabs, useStoredTab } from "@/components/ui/source-tabs";
+import { SourceTabs, TabGroups, useStoredTab } from "@/components/ui/source-tabs";
+import { useAccess } from "@/components/auth/access";
 import "./workspace.css";
 import type { LayerSet } from "@/lib/portal-layers";
 import { ECO, FLOOD, GAS, GREEN, WASTE } from "@/lib/unelgee-layers";
@@ -101,15 +103,40 @@ const GreenDashboard = group(GREEN, "green");
 const WasteDashboard = group(WASTE, "waste");
 const EcoDashboard = group(ECO, "eco");
 
+/*
+  ДӨРВӨН БҮЛЭГ — агуулгаар (хэрэглэгч 2026-11-11: "бүлэглэх, чи агуулгаар нь
+  бүлэглэчих"; амьтан ургамал, ой, орчны хэлтэстэй нэг загвар — дээд талын
+  товч, 2 × 2 тор):
+  · ҮНЭЛГЭЭ — нөлөөллийн ерөнхий үнэлгээ, менежментийн төлөвлөгөө (нэгж
+    талбар тутмын баримт);
+  · ЭРСДЭЛ — үер, хог хаягдлын цэг, хийн тоног төхөөрөмж (аюулын эх үүсвэр,
+    эрсдэлтэй газар);
+  · НОГООН БАЙГУУЛАМЖ — ногоон байгууламж, эко-инфраструктур;
+  · УУР АМЬСГАЛ — цаг агаарын ажиглалт.
+  Бүлэг нь сонгосон сэдвээс гарна; бүлэг товшиход эхний нээлттэй сэдэв нээгдэнэ.
+*/
+export const GROUPS = [
+  { id: "unelgee", label: "Үнэлгээ", note: "2 сэдэв", icon: FileCheck2 },
+  { id: "ersdel", label: "Эрсдэл", note: "3 сэдэв", icon: ShieldAlert },
+  /* Товчинд "Ногоон байгууламж" 127px-д багтахгүй (тэмдэг тасарч байв) —
+     товч нэр, бүтэн нь `title`-д */
+  { id: "nogoon", label: "Ногоон", note: "Ногоон байгууламж, эко-инфраструктур · 2 сэдэв", icon: Leaf },
+  { id: "uur_amisgal", label: "Уур амьсгал", note: "1 сэдэв", icon: CloudSun },
+] as const;
+
+type GroupId = (typeof GROUPS)[number]["id"];
+
 export const TABS = [
   {
     id: "unelgee",
+    group: "unelgee",
     label: "Байгаль орчны нөлөөллийн ерөнхий үнэлгээ",
     note: "2025, 2026 оны үнэлгээний бүртгэл",
     icon: FileCheck2,
   },
   {
     id: "bomt",
+    group: "unelgee",
     label: "Байгаль орчны менежментийн төлөвлөгөө",
     note: "2026 оны нэгтгэл · мод тарих үүрэг",
     full: "Байгаль орчны менежментийн төлөвлөгөөний 2026 оны нэгтгэл",
@@ -117,36 +144,42 @@ export const TABS = [
   },
   {
     id: "flood",
+    group: "ersdel",
     label: "Үерийн эрсдэл",
     note: "Долоон давхарга · эрсдэлт талбай, барилга, айл өрх",
     icon: Waves,
   },
   {
     id: "green",
+    group: "nogoon",
     label: "Ногоон байгууламж",
     note: "Ногоон байгууламж, цэцэрлэгт хүрээлэн",
     icon: Leaf,
   },
   {
     id: "eco",
+    group: "nogoon",
     label: "Эко-инфраструктур",
     note: "Найман давхарга · бичил цэцэрлэг, зам, оршуулга",
     icon: Route,
   },
   {
     id: "waste",
+    group: "ersdel",
     label: "Хог хаягдлын цэг",
     note: "Байршил, талбайн бүртгэл",
     icon: Trash2,
   },
   {
     id: "gas",
+    group: "ersdel",
     label: "Хийн тоног төхөөрөмж",
     note: "Байршил, тоног төхөөрөмжийн бүртгэл",
     icon: Flame,
   },
   {
     id: "weather",
+    group: "uur_amisgal",
     label: "Цаг агаарын ажиглалт",
     note: "Ажиглалтын сүлжээ · таван хоногийн урьдчилсан мэдээ",
     full: "Ус цаг уур, орчны шинжилгээний газрын ажиглалтын сүлжээ",
@@ -163,10 +196,29 @@ export function UnelgeeWorkspace() {
      хамгийн сүүлд харж байсан самбар нээгдэнэ */
   const [tab, pick] = useStoredTab<TabId>("unelgee.tab", IDS, "unelgee", "unelgee-uur-amisgal");
 
+  /* Бүлэг нь сонгосон сэдвээс гарна; нээлттэй сэдэвгүй бүлэг ГАРАХГҮЙ */
+  const group: GroupId = TABS.find((t) => t.id === tab)?.group ?? GROUPS[0].id;
+  const shown = React.useMemo(() => TABS.filter((t) => t.group === group), [group]);
+  const { allowsTab } = useAccess();
+  const groups = GROUPS.filter((g) => TABS.some((t) => t.group === g.id && allowsTab("unelgee-uur-amisgal", t.id)));
+  const pickGroup = React.useCallback(
+    (id: GroupId) => {
+      const first = TABS.find((t) => t.group === id && allowsTab("unelgee-uur-amisgal", t.id));
+      if (first) pick(first.id);
+    },
+    [pick, allowsTab],
+  );
+
   return (
     <div className="department-workspace ue-workspace">
       <SourceTabs
-        scope="unelgee-uur-amisgal" tabs={TABS} value={tab} onChange={pick} label="Сэдэв" />
+        scope="unelgee-uur-amisgal"
+        groupControl={<TabGroups groups={groups} value={group} onChange={pickGroup} />}
+        tabs={shown}
+        value={tab}
+        onChange={pick}
+        label="Сэдэв"
+      />
 
       <div id="ue-topic-panel" className="department-workspace-content" role="region" aria-label={TABS.find((topic) => topic.id === tab)?.label}>
         <TabAccess scope="unelgee-uur-amisgal" tab={tab}>

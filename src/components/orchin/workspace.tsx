@@ -12,8 +12,10 @@ import {
   Sprout,
   Toilet,
 } from "lucide-react";
-import { SourceTabs, useStoredTab } from "@/components/ui/source-tabs";
+import * as React from "react";
+import { SourceTabs, TabGroups, useStoredTab } from "@/components/ui/source-tabs";
 import { TabAccess } from "@/components/auth/tab-access";
+import { useAccess } from "@/components/auth/access";
 
 /*
   Хэлтсийн сэдвүүд. Самбар хооронд сольж харна.
@@ -82,18 +84,22 @@ const MineralsDashboard = dynamic(
 );
 
 /*
-  ХОЁР БҮЛЭГ (хэрэглэгч 2026-10-16: "ene hesgiig 2 group bolgomoor bn"),
-  жагсаалт ДОТОР задардаг мөр (`SourceTabs sections`) — дээд талын товч
-  (`TabGroups`) БИШ, хэрэглэгч түүнийг буцаав:
-  · ХӨРС, АРИУН ЦЭВЭР — бохирдлын хэмжилт ба түүний эх үүсвэр (жорлон,
-    хөрсний мониторинг, саармагжуулалт);
-  · ГАЗАР, АШИГТ МАЛТМАЛ — газрын эвдрэл, нөхөн сэргээлт, өргөдөл,
-    тусгай зөвшөөрөл.
-  Бүлгийн мөр дарахад сэдвүүд нь доор нь задарна/хумигдана.
+  ХОЁР БҮЛЭГ (хэрэглэгч 2026-10-16: "ene hesgiig 2 group bolgomoor bn"):
+  · ХӨРС — бохирдлын хэмжилт ба түүний эх үүсвэр (жорлон, хөрсний
+    мониторинг, саармагжуулалт);
+  · ТҮГЭЭМЭЛ ТАРХАЦТАЙ АШИГТ МАЛТМАЛ — газрын эвдрэл, нөхөн сэргээлт,
+    өргөдөл, тусгай зөвшөөрөл.
+  ⚠ Бүлэг нь жагсаалтын ДЭЭД талын товчны эгнээ (`TabGroups`) — амьтан
+  ургамал, ойн хэлтэстэй НЭГ загвар (хэрэглэгч 2026-11-11: "өгөгдлийн
+  багцыг нэг загвартай болгох"). 2026-10-16-нд жагсаалт дотор задардаг
+  мөрийг (`SourceTabs sections`) сонгосон байсныг энэ шийдвэр орлосон.
+  Бүлэг нь сонгосон сэдвээс гарна; бүлэг товшиход эхний нээлттэй сэдэв нээгдэнэ.
 */
 export const GROUPS = [
   { id: "pollution", label: "Хөрс", note: "3 сэдэв", icon: FlaskConical },
-  { id: "land", label: "Түгээмэл тархацтай ашигт малтмал", note: "6 сэдэв", icon: Pickaxe },
+  /* ТОВЧЛОЛ хэрэглэгчийн шийдвэр (2026-11-11: "товчил ТТАМ гээд") — бүтэн нэр
+     нь товчны `title`, доорх сэдвүүдийн тайлбарт */
+  { id: "land", label: "ТТАМ", note: "Түгээмэл тархацтай ашигт малтмал · 6 сэдэв", icon: Pickaxe },
 ] as const;
 
 export const TABS = [
@@ -188,6 +194,7 @@ export const TABS = [
 ] as const;
 
 type TabId = (typeof TABS)[number]["id"];
+type GroupId = (typeof GROUPS)[number]["id"];
 
 /* Гадаад холбоостой мөр сонгогдохгүй — хадгалсан утга нь анхдагч руу буцна */
 const IDS = TABS.filter((t) => !("href" in t)).map((t) => t.id);
@@ -197,12 +204,25 @@ export function OrchinWorkspace() {
      сүүлд харж байсан самбар нээгдэнэ */
   const [tab, pick] = useStoredTab<TabId>("orchin.tab", IDS, "sanitation", "orchin");
 
+  /* Бүлэг нь сонгосон сэдвээс гарна; нээлттэй сэдэвгүй бүлэг ГАРАХГҮЙ */
+  const group: GroupId = TABS.find((t) => t.id === tab)?.group ?? GROUPS[0].id;
+  const shown = React.useMemo(() => TABS.filter((t) => t.group === group), [group]);
+  const { allowsTab } = useAccess();
+  const groups = GROUPS.filter((g) => TABS.some((t) => t.group === g.id && !("href" in t) && allowsTab("orchin", t.id)));
+  const pickGroup = React.useCallback(
+    (id: GroupId) => {
+      const first = TABS.find((t) => t.group === id && !("href" in t) && allowsTab("orchin", t.id));
+      if (first) pick(first.id);
+    },
+    [pick, allowsTab],
+  );
+
   return (
     <div className="department-workspace">
       <SourceTabs
         scope="orchin"
-        sections={GROUPS}
-        tabs={TABS}
+        groupControl={<TabGroups groups={groups} value={group} onChange={pickGroup} />}
+        tabs={shown}
         value={tab}
         onChange={pick}
         label="Сэдэв"

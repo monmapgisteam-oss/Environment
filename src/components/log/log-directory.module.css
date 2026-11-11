@@ -408,6 +408,26 @@ only the lists scroll. */
   overflow-wrap:anywhere;
   line-height:1.6;
 }
+.groupTitle {
+  display:flex;
+  flex-wrap:wrap;
+  align-items:center;
+  gap:6px 10px;
+}
+.repeatCount {
+  flex-shrink:0;
+  padding:1px 7px;
+  border-radius:5px;
+  background:var(--paper-3);
+  color:var(--ink-2);
+  font-size:11px;
+  font-variant-numeric:tabular-nums;
+}
+.groupDetails {
+  margin:0 12px 10px;
+  border-left:2px solid var(--line-2);
+  background:color-mix(in oklab,var(--paper-3) 45%,var(--paper-2));
+}
 .session {
   display:flex;
   flex-wrap:wrap;

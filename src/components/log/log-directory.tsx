@@ -262,7 +262,6 @@ export function LogDirectory() {
 /* ---------- Бүгд — өдрөөр ---------- */
 
 function AllView({ rows, allRows, empty }: { rows: AuditRow[]; allRows: AuditRow[]; empty: (m: string) => React.ReactNode }) {
-  const [open, setOpen] = React.useState<number | null>(null);
   if (!rows.length) return <>{empty("Сонгосон нөхцөлд тохирох бүртгэл олдсонгүй.")}</>;
   const end = sessionEnds(allRows);
   const groups: { day: string; rows: AuditRow[] }[] = [];
@@ -281,9 +280,7 @@ function AllView({ rows, allRows, empty }: { rows: AuditRow[]; allRows: AuditRow
             <span className="num">{g.day}</span>
             <span className={styles.dayCount}>{num(g.rows.length)} үйлдэл</span>
           </div>
-          {g.rows.map((r) => (
-            <EventRow key={r.id} row={r} who end={end.get(r.sid ?? "")} open={open === r.id} onToggle={() => setOpen(open === r.id ? null : r.id)} />
-          ))}
+          <ActivityRows rows={g.rows} who ends={end} />
         </div>
       ))}
     </div>
@@ -305,7 +302,6 @@ function sessionEnds(rows: AuditRow[]): Map<string, { at: number; out: boolean }
 function AccountView({ rows, matches, empty }: { rows: AuditRow[]; matches: (r: AuditRow) => boolean; empty: (m: string) => React.ReactNode }) {
   const sessions = sessionsOf(rows).filter((s) => s.rows.some(matches));
   const [openSid, setOpenSid] = React.useState<string | null>(null);
-  const [openRow, setOpenRow] = React.useState<number | null>(null);
   const activeSid = openSid === "" ? "" : sessions.some((s) => s.sid === openSid) ? openSid : sessions[0]?.sid;
   const topViews = new Map<string, number>();
   for (const r of rows.filter(matches)) {
@@ -335,7 +331,7 @@ function AccountView({ rows, matches, empty }: { rows: AuditRow[]; matches: (r: 
               </span>
               <span className={styles.sessionCount}><b className="num">{num(shown.length)}</b> үйлдэл</span>
             </button>
-            {isOpen && <><ColumnHead />{shown.map((r) => <EventRow key={r.id} row={r} day={date !== endDate} open={openRow === r.id} onToggle={() => setOpenRow(openRow === r.id ? null : r.id)} />)}</>}
+            {isOpen && <><ColumnHead /><ActivityRows rows={shown} day={date !== endDate} /></>}
           </section>
         );
       })}
@@ -363,10 +359,55 @@ function ColumnHead({ who = false }: { who?: boolean }) {
 
 /* ---------- Мөр ---------- */
 
+/** Collapse repeated page/tab views without removing any audit records.
+ * Different users, dates and destinations remain separate; edits never merge. */
+function ActivityRows({ rows, who, day, ends }: { rows: AuditRow[]; who?: boolean; day?: boolean; ends?: Map<string, { at: number; out: boolean }> }) {
+  const [openRow, setOpenRow] = React.useState<number | null>(null);
+  const groups = new Map<string, AuditRow[]>();
+  for (const row of rows) {
+    const key = row.kind === "view" || row.kind === "tab"
+      ? JSON.stringify([row.username, dayKey(row.at), row.kind, row.path, row.scope, row.tab])
+      : `event:${row.id}`;
+    const group = groups.get(key);
+    if (group) group.push(row);
+    else groups.set(key, [row]);
+  }
+  const renderRow = (row: AuditRow) => (
+    <EventRow key={row.id} row={row} who={who} day={day} end={ends?.get(row.sid ?? "")} open={openRow === row.id} onToggle={() => setOpenRow(openRow === row.id ? null : row.id)} />
+  );
+  return <>{[...groups.entries()].map(([key, group]) => group.length === 1
+    ? renderRow(group[0])
+    : <ViewGroup key={key} rows={group} who={who} day={day}>{group.map(renderRow)}</ViewGroup>
+  )}</>;
+}
+
+function ViewGroup({ rows, who, day, children }: { rows: AuditRow[]; who?: boolean; day?: boolean; children: React.ReactNode }) {
+  const [open, setOpen] = React.useState(false);
+  const contentId = React.useId();
+  const row = rows[0];
+  const K = KIND[row.kind];
+  return (
+    <div className={styles.viewGroup}>
+      <div className={cn(styles.row, open && styles.rowOpen, !who && styles.rowNarrow)}>
+        <button type="button" className={styles.rowMain} onClick={() => setOpen(!open)} aria-expanded={open} aria-controls={contentId}>
+          <span className={cn("num", styles.time)}>{day ? `${dayKey(row.at)} ${hhmm(row.at)}` : hhmmss(row.at)}</span>
+          {who && <span className={styles.who} title={row.username}>{userName(row.username)}</span>}
+          <span className={cn(styles.kind, K.cls)}><K.icon size={11} aria-hidden /> {K.label}</span>
+          <span className={cn(styles.what, styles.groupTitle)}><span>{describe(row)}</span><span className={styles.repeatCount}>{num(rows.length)} удаа</span></span>
+          <span className={styles.caret}>{open ? <ChevronDown size={13} /> : <ChevronRight size={13} />}</span>
+        </button>
+      </div>
+      {open && <div id={contentId} className={styles.groupDetails}>{children}</div>}
+    </div>
+  );
+}
+
 function EventRow({ row: r, who, day, end, open, onToggle }: { row: AuditRow; who?: boolean; day?: boolean; end?: { at: number; out: boolean }; open: boolean; onToggle: () => void }) {
   const K = KIND[r.kind];
   const sessionEnd = r.kind === "login" && end && end.at > r.at ? end : undefined;
-  const hasDetail = !!r.detail || !!r.path || !!r.layer || !!r.sid;
+  /* Зам, сессийн дугаар дэлгэрэнгүйд ГАРАХГҮЙ (хэрэглэгч 2026-11-11: "харагдах шаардлагагүй") —
+     зам нь мөрөнд хуудасны нэрээр, сесс нь бүртгэлийн задаргаанд бий */
+  const hasDetail = !!r.detail || !!r.layer;
   return (
     <div className={cn(styles.row, open && styles.rowOpen, !who && styles.rowNarrow)}>
       <button type="button" className={styles.rowMain} onClick={() => hasDetail && onToggle()} aria-expanded={hasDetail ? open : undefined} disabled={!hasDetail}>
@@ -420,12 +461,6 @@ function Detail({ row }: { row: AuditRow }) {
   const show = (v: unknown) => (v == null || v === "" ? "—" : typeof v === "object" ? JSON.stringify(v) : String(v));
   return (
     <div className={styles.detail}>
-      {row.path && (
-        <div className={styles.kv}>
-          <span>Хуудасны хаяг</span>
-          <span className="num">{row.path}</span>
-        </div>
-      )}
       {row.layer && (
         <div className={styles.kv}>
           <span>Өгөгдлийн эх сурвалж</span>
@@ -463,12 +498,6 @@ function Detail({ row }: { row: AuditRow }) {
           </div>
         ))}
       {typeof parsed === "string" && <p className={styles.raw}>{parsed}</p>}
-      {row.sid && (
-        <div className={styles.kv}>
-          <span>Сессийн дугаар</span>
-          <span className="num">{row.sid}</span>
-        </div>
-      )}
     </div>
   );
 }

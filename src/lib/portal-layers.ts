@@ -1969,6 +1969,29 @@ export type Breakdown = {
    * диаграм өөрөө худал хэлнэ.
    */
   top?: number;
+  /**
+   * СЭЛГЭГЧИЙН АРД — суудал эзлэхгүй задаргаа (2026-11-11).
+   *
+   * Хэрэглэгч засварлагчаар давхаргад ШИНЭ ТАЛБАР нэмж ("Мөр нэмэх"),
+   * түүнийг бөглөх тусам самбарт тэр талбарын диаграм ГАРАХ ёстой
+   * (хэрэглэгч 2026-11-11: "тухайн field-ийн доторх мэдээлэл нэмэгдвэл
+   * db шинэ chart үүсэх ёстой"). Урьд нь ангиллын диаграм дөрвөөр
+   * ({@link MAX_CATEGORIES}), хэмжилтийнх дөрвөөр ({@link MAX_MEASURES})
+   * хязгаарлагдаж, илүү гарсан нь ЧИМЭЭГҮЙ хасагддаг байв — шинэ талбар
+   * оноогоор хуучныг түрэх, эсвэл огт гарахгүй үлдэх хоёрын аль нэг.
+   *
+   * Одоо хязгаараас хэтэрсэн задаргаа ХАСАГДАХГҮЙ, `behind` тэмдэгтэй
+   * үлдэнэ: самбар түүнийг ижил хэлбэрийн нүүрний картын АРД давхарлаж
+   * (ArcGIS Dashboards-ийн stacked element — хэрэглэгчийн санал: "pie
+   * chart бол pie chart-ийнхаа ард орох, сэлгээд хардаг"), `tidy`
+   * бүрдэлд тэнхлэгийн сэлгэгчид нэмнэ. Нүүрний картууд тогтвортой:
+   * шинэ талбар хуучин диаграмыг хөдөлгөхгүй.
+   *
+   * ⚠ Хуваалт (`split`), хөндлөн хүснэгт, нэмэлт үзүүлэлт нь `behind`
+   * задаргааг ТООЦОХГҮЙ — тэдгээр нүүрний бүтцийг тогтооно. Шүүлтүүрийн
+   * цэс харин тооцно: шинэ талбараар шүүх боломж нээлттэй.
+   */
+  behind?: boolean;
   /** Мөрүүд — `compare`-аас бусад бүх төрөлд */
   values: Datum[];
   /**
@@ -2060,6 +2083,15 @@ const MAX_DATES = 2;
  * болж, ГОЛ задаргаа нь тэдний дунд алдагдана.
  */
 const MAX_CATEGORIES = 4;
+
+/**
+ * СЭЛГЭГЧИЙН АРД үлдэх ангиллын диаграмын дээд тоо ({@link Breakdown.behind}).
+ *
+ * Паспорт зэрэг дөч гаруй талбартай давхаргад шалгуур давсан ангилал
+ * арав гаруй байж болно; найм нь пейжерт уншигдах хязгаар. Оноогоор
+ * эрэмбэлэгдсэн тул сайн бөглөгдсөн шинэ талбар сул хуучныг түрнэ.
+ */
+const MAX_BEHIND = 8;
 
 /**
  * Нэрээр задалсан диаграмын дээд мөр.
@@ -3574,8 +3606,9 @@ function measureCharts(
 
   for (const m of usable) {
     if (merged.has(m.field.name)) continue;
-    /* Харьцуулалтууд аль хэдийн суудлаа эзэлсэн байж болно */
-    if (out.length >= cap) break;
+    /* Харьцуулалтууд аль хэдийн суудлаа эзэлсэн байж болно — илүү нь
+       СЭЛГЭГЧИЙН АРД ({@link Breakdown.behind}), хасагдахгүй */
+    if (out.length >= (limit ? cap : cap + MAX_BEHIND)) break;
 
     const count = (rs: Row[]): Counted => {
       const vs = rollUp(m, rs, keyOf);
@@ -3595,7 +3628,10 @@ function measureCharts(
     });
   }
 
-  return out.slice(0, cap);
+  /* Хязгаараас хойшхи нь нүүрэнд биш АРД ({@link Breakdown.behind}).
+     ⚠ Нэрээр хэмжсэн (`limit`) диаграмд ҮГҮЙ: тэр нь задаргаа биш утгын
+     эрэмбэлсэн жагсаалт — нэг нь жишээ болоход хангалттай (`tidyCharts`) */
+  return limit ? out.slice(0, cap) : out.map((b, i) => (i < cap ? b : { ...b, behind: true }));
 }
 
 /**
@@ -4061,10 +4097,20 @@ function autoBreakdowns(full: LayerInfo, data: LayerFeatures): Breakdown[] {
     Эрэмбэ нь оноогоор тул хосоос ҮРГЭЛЖ илүү сайн задалдаг нь үлдэнэ.
   */
   const kept: Candidate[] = [];
+  /* Хязгаараас хэтэрсэн нь СЭЛГЭГЧИЙН АРД ({@link Breakdown.behind}) —
+     хуулбарын шалгуур нүүр, ар хоёрт нэг. Бүртгэлийн тэргүүлэх талбар
+     ({@link LayerSet.lead}) үргэлж нүүрэнд: түүнийг зүүн багана руу
+     зөөх дүрэм ард хоцорсон картыг олохгүй */
+  const behind: Candidate[] = [];
+  const cap = info.set.maxCategories ?? MAX_CATEGORIES;
+  const lead = info.set.lead ?? [];
+  const leads = (c: Candidate) =>
+    lead.includes(c.field.name) ||
+    lead.some((x) => x.trim().toLowerCase() === c.field.alias.trim().toLowerCase());
   for (const c of cats) {
-    if (kept.length >= (info.set.maxCategories ?? MAX_CATEGORIES)) break;
-    if (kept.some((k) => samePartition(k, c))) continue;
-    kept.push(c);
+    if ([...kept, ...behind].some((k) => samePartition(k, c))) continue;
+    if (kept.length < cap || leads(c)) kept.push(c);
+    else if (behind.length < MAX_BEHIND) behind.push(c);
   }
 
   /*
@@ -4125,6 +4171,8 @@ function autoBreakdowns(full: LayerInfo, data: LayerFeatures): Breakdown[] {
 
   /* ---- 3. Үлдсэн ангиллууд ---- */
   for (const c of kept) if (c !== primary) out.push(countOf(c));
+  /* ---- 3б. Сэлгэгчийн ард ({@link Breakdown.behind}) ---- */
+  for (const c of behind) out.push({ ...countOf(c), behind: true });
 
   /*
     ---- 4. Хугацаа ----

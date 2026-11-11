@@ -1803,26 +1803,49 @@ html[data-department-preview="true"] .workspace-main { --workspace-gutter: 0px; 
   line-height: 1.7;
 }
 .dataset-groups {
-  display: flex;
+  /* ХОЁР БАГАНАТ ТОР (хэрэглэгч 2026-11-11, ойн гурван товчоор: "1 row биш
+     2 row болго — дээшээ 2, доороо 1"): хоёр бүлэг нэг мөрөнд, гурав дахь нь
+     доороо бүтэн өргөнөөр */
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   flex-shrink: 0;
   gap: 4px;
   padding: 0 10px 8px;
 }
+.dataset-groups button:nth-child(3):last-child {
+  grid-column: 1 / -1;
+}
 .dataset-groups button {
   display: flex;
-  flex: 1;
+  min-width: 0;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  padding: 8px 4px;
+  gap: 5px;
+  padding: 8px 3px;
   border-radius: 7px;
+  /* ХҮРЭЭТЭЙ, дүүргэлтгүй (хэрэглэгч 2026-11-11: "дээд талын бүлгийн
+     товчийг outline болго") — сонгосон нь accent хүрээ, бусад нь зураас */
+  border: 1px solid var(--line-2);
+  background: transparent;
+  white-space: nowrap;
+  overflow: hidden;
   font-size: 11px;
   color: var(--ink-3);
+  transition: border-color 0.15s, color 0.15s;
+}
+.dataset-groups button:hover {
+  color: var(--ink);
 }
 .dataset-groups button[aria-pressed="true"] {
-  background: var(--paper-3);
+  border-color: var(--moss);
   color: var(--moss);
   font-weight: 600;
+}
+.dataset-groups button > span:first-of-type {
+  /* Урт нэр тэмдгээ тасалж гаргахгүй — нэр нь "…"-ээр, бүтэн нь `title`-д */
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .dataset-group-note {
   display: none;

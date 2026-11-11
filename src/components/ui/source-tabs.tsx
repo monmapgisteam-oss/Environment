@@ -174,7 +174,7 @@ export function TabGroups<T extends string>({ groups, value, onChange, label = "
 }) {
   return (
     <div role="group" aria-label={label} className="dataset-groups">
-      {groups.map((group) => <button type="button" key={group.id} aria-pressed={group.id === value} onClick={() => onChange(group.id)}><group.icon size={16} strokeWidth={1.6} /><span>{group.label}</span><span className="dataset-group-note">{group.note}</span></button>)}
+      {groups.map((group) => <button type="button" key={group.id} title={group.note} aria-pressed={group.id === value} onClick={() => onChange(group.id)}><group.icon size={16} strokeWidth={1.6} /><span>{group.label}</span><span className="dataset-group-note">{group.note}</span></button>)}
     </div>
   );
 }
