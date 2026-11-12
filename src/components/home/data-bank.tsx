@@ -20,6 +20,7 @@ import {
   dataLayers,
   defaultBasemap,
   esriBasemaps,
+  familyOf,
   fillPoints,
   fillShapes,
   geoLayer,
@@ -93,10 +94,45 @@ const TOOL_GROUP = "data-bank-tools";
 const WIDGETS = [
   "esri/widgets/Expand",
   "esri/widgets/Measurement",
+  "esri/symbols/support/symbolUtils",
 ];
 
 type Target = EditTarget & { dept: Department };
-type LegendRow = { key: string; title: string; dept: string; color: string };
+type LegendRow = { key: string; title: string; dept: string; color: string; swatches: HTMLElement[] };
+
+/*
+  ТАНИХ ТЭМДГИЙН ДЭЭЖ — газрын зураг дээрх ЯГ ТЭР тэмдэг (хэрэглэгч 2026-11-12:
+  "point bol yag map deer haragdaj bga heweer, polygon durwuljin dotor unguur fill
+  outline, line zuraas"). Давхаргын бодит рендерерээс тэмдгийг авч Esri-ийн
+  `symbolUtils.renderPreviewHTML`-ээр зурна — цэг нь гэрэлтэй дискээрээ, олон
+  өнцөгт нь дүүргэлт + хүрээтэй дөрвөлжин, шугам нь зураас. DOM тэмдэглэгээтэй
+  (дохиолол, хог хаягдлын тэмдэг) давхаргад тэр тэмдэглэгээ өөрөө.
+  Олон өнгөтэй (ангилал, зэрэглэл) давхаргад жигд түүвэрлэсэн `SWATCH_MAX` хүртэл.
+*/
+const SWATCH_MAX = 4;
+function sampled<T>(all: T[], n = SWATCH_MAX): T[] {
+  /* Ижил тэмдэг (зэрэглэл нь зөвхөн хэмжээгээр ялгардаг) нэг л удаа */
+  const seen = new Set<string>();
+  const xs = all.filter((x: any) => {
+    const k = JSON.stringify(x?.toJSON?.() ?? x);
+    return seen.has(k) ? false : (seen.add(k), true);
+  });
+  if (xs.length <= n) return xs;
+  return Array.from({ length: n }, (_, i) => xs[Math.round((i * (xs.length - 1)) / (n - 1))]);
+}
+/** Рендерерийн тэмдгүүд; `only` өгвөл тэр утгатай (өнгө) ангилал л */
+function rendererSymbols(r: any, only?: Set<string>, base = false): any[] {
+  if (!r) return [];
+  const seen = (s: any) => s && !(s.type === "simple-marker" && !s.size);
+  if (r.type === "unique-value") {
+    const infos = (r.uniqueValueInfos?.toArray?.() ?? r.uniqueValueInfos ?? []).filter((i: any) => !only || only.has(String(i.value)));
+    const out = infos.map((i: any) => i.symbol);
+    if ((base || !out.length) && r.defaultSymbol) out.push(r.defaultSymbol);
+    return out.filter(seen);
+  }
+  if (r.type === "class-breaks") return (r.classBreakInfos?.toArray?.() ?? r.classBreakInfos ?? []).map((i: any) => i.symbol).filter(seen);
+  return [r.symbol].filter(seen);
+}
 type Rec = { title: string; dept: string } & ({ rows: [string, string][] } | { error: string } | { loading: true });
 
 /** Каталогийн хэлтэс × цэс бүрийн засварлагчийн давхарга — хаягаар давхардалгүй */
@@ -221,6 +257,19 @@ async function mountTarget(
     });
   if (shapeData) fillShapes(E, view, L, mode, shapeData, new Map());
 
+  /* Таних тэмдгийн тэмдгүүд — дүрслэгдэж буй рендерерээс (дээрх тайлбар) */
+  const symbols: { s: any; kind: "point" | "polygon" | "polyline" }[] = [];
+  if (shapeData) {
+    for (const [fam, layer] of [["polygon", L.shapePoly], ["polyline", L.shapeLine]] as const) {
+      const fs = shapeData.features.filter((f) => familyOf(f.geometry) === fam);
+      if (!fs.length || !layer) continue;
+      const cs = new Set(fs.map((f) => f.properties?.c).filter((c): c is string => typeof c === "string"));
+      symbols.push(...sampled(rendererSymbols(layer.renderer, cs, fs.some((f) => typeof f.properties?.c !== "string"))).map((s) => ({ s, kind: fam })));
+    }
+  }
+  if (isPoint && !(pp.marks || pp.pulse))
+    symbols.push(...sampled(rendererSymbols(mode.weighted ? L.dotRenderer : L.points?.renderer)).map((s) => ({ s, kind: "point" as const })));
+
   /* Нягтралын горим (нүхэн жорлон): хол — дулааны зураг, ойр — цэг */
   if (mode.weighted) {
     const zone = scaleAt(L.zDot - 0.3);
@@ -258,7 +307,19 @@ async function mountTarget(
     E.reactive.watch(() => [group.visible, group.parent?.visible, view.zoom], show, { initial: true });
     placeMarks(view, markHost);
   }
-  return { mode, count: data.points.oid.length || own.length };
+  /* DOM тэмдэглэгээтэй давхарга — тэмдэглэгээний дээж (товшигдохгүй) */
+  const markSample: HTMLElement[] = [];
+  if (isPoint && (pp.marks || pp.pulse)) {
+    const id = pp.pulse ? data.points.oid[0] : Number(Object.keys(pp.marks ?? {})[0]);
+    const mark = pp.pulse ? "pulse" : pp.marks?.[id];
+    if (mark) {
+      const el = markerEl(mark, () => {}, undefined, pp.pulse ? pp.pulseColor?.(id) : undefined);
+      el.tabIndex = -1;
+      el.setAttribute("aria-hidden", "true");
+      markSample.push(el);
+    }
+  }
+  return { mode, count: data.points.oid.length || own.length, symbols, markSample };
 }
 
 /** Бүртгэлийн цонхонд тухайн давхаргын нэг мөр */
@@ -324,7 +385,7 @@ export function DataBank() {
     const legendRows = new Map<string, LegendRow>();
 
     Promise.all([loadEsri(), esriModules<any[]>(WIDGETS)])
-      .then(async ([E, [Expand, Measurement]]) => {
+      .then(async ([E, [Expand, Measurement, symbolUtils]]) => {
         if (ac.signal.aborted) return;
         const map = new E.Map();
         const basemaps = esriBasemaps(E, map);
@@ -419,7 +480,15 @@ export function DataBank() {
           try {
             const r = await mountTarget(E, view, g, t, host, ac.signal, pick);
             if (r && !ac.signal.aborted) {
-              legendRows.set(t.url, { key: t.url, title: t.title, dept: t.dept.name, color: t.color ?? r.mode.fire.mid });
+              const previews = await Promise.all(
+                /* Олон өнцөгт — ДӨРВӨЛЖИН дүүргэлт + хүрээ; шугам — зураас; цэг — зурагтай ижил хэмжээтэй дээж */
+                r.symbols.map(({ s, kind }) =>
+                  (symbolUtils.renderPreviewHTML(s, kind === "polygon" ? { size: 16, symbolConfig: { isSquareFill: true } } : kind === "polyline" ? { size: 22 } : { size: 12, maxSize: 22 }) as Promise<HTMLElement>).catch(() => null),
+                ),
+              );
+              if (ac.signal.aborted) return;
+              const swatches = [...r.markSample, ...previews.filter((x): x is HTMLElement => Boolean(x))];
+              legendRows.set(t.url, { key: t.url, title: t.title, dept: t.dept.name, color: t.color ?? r.mode.fire.mid, swatches });
               setLegend([...legendRows.values()]);
             }
           } catch (e) {
@@ -577,7 +646,16 @@ export function DataBank() {
       {[...legendByDept].map(([dept, rows]) => (
         <section key={dept}>
           <h4>{dept}<span className="num">{rows.length}</span></h4>
-          {rows.map((r) => <div key={r.key}><i style={{ background: r.color }} aria-hidden />{r.title}</div>)}
+          {rows.map((r) => (
+            <div key={r.key}>
+              {r.swatches.length ? (
+                <span className="data-bank-swatch" aria-hidden ref={(n) => { if (n) n.replaceChildren(...r.swatches); }} />
+              ) : (
+                <i style={{ background: r.color }} aria-hidden />
+              )}
+              <span className="min-w-0">{r.title}</span>
+            </div>
+          ))}
         </section>
       ))}
     </>, legendHost)}

@@ -167,3 +167,10 @@
 .data-bank-datasets .dataset-panel-section + .dataset-panel-section { margin-top: 6px; }
 .data-bank-datasets .dataset-panel-group { padding-left: 16px; border-color: var(--line-2); }
 .data-bank-datasets .dataset-panel-group.is-holding { border-color: color-mix(in oklab, var(--moss) 28%, transparent); }
+/* Таних тэмдгийн дээж — газрын зургийн тэмдэг өөрөө (Esri-ийн урьдчилсан харагдац, DOM тэмдэглэгээ) */
+.data-bank-legend .data-bank-swatch { display: inline-flex; flex-shrink: 0; align-items: center; gap: 2px; min-width: 30px; min-height: 22px; justify-content: center; }
+.data-bank-legend .data-bank-swatch > * { flex-shrink: 0; }
+.data-bank-legend .data-bank-swatch .species-pin { width: 18px; height: 18px; cursor: default; pointer-events: none; }
+.data-bank-legend .data-bank-swatch .species-pin svg { width: 10px; height: 10px; }
+.data-bank-legend .data-bank-swatch .pulse-pin { cursor: default; pointer-events: none; margin: 0 7px; }
+.data-bank-legend .data-bank-swatch .pulse-pin .ring { display: none; }
