@@ -1,9 +1,12 @@
 .source-catalog { max-width: 1440px; margin-inline: auto; padding-block: 10px 24px; color: var(--ink); }
-.source-catalog-intro { display: flex; align-items: center; justify-content: space-between; gap: 24px; margin-bottom: 24px; }
-.source-catalog-kicker { display: flex; align-items: center; gap: 7px; color: var(--ink-3); font-size: 10px; font-weight: 600; letter-spacing: .08em; }
-.source-catalog-kicker svg { color: var(--moss); }
-.source-catalog-intro h1 { margin-top: 10px; font-size: clamp(22px, 2.5vw, 30px); font-weight: 600; line-height: 1.35; letter-spacing: -.025em; }
-.source-catalog-intro p { max-width: 630px; margin-top: 8px; font-size: 12px; line-height: 1.7; color: var(--ink-3); }
+.source-catalog-intro { display: flex; align-items: center; justify-content: space-between; gap: 24px; margin-bottom: 14px; }
+/* Хоёр харагдацын товч — хуучин тэмдэглэгээний (eyebrow) хэв: 10px, том үсэг, өргөн зай; сонгосон нь төрлийн товчтой нэг тинт */
+.source-catalog-views { display: flex; flex-wrap: wrap; gap: 6px; }
+.source-catalog-views button { display: flex; align-items: center; gap: 7px; padding: 5px 9px; border: 1px solid var(--line-2); border-radius: 2px; font-size: 10px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); }
+.source-catalog-views button svg { color: var(--ink-3); }
+.source-catalog-views button:hover { background: var(--paper-hi); color: var(--ink); }
+.source-catalog-views button[aria-pressed="true"] { border-color: color-mix(in srgb, var(--moss) 35%, var(--line)); background: color-mix(in srgb, var(--moss) 9%, var(--paper-2)); color: var(--ink); }
+.source-catalog-views button[aria-pressed="true"] svg { color: var(--moss); }
 .source-catalog-controls { border: 1px solid var(--line-2); border-radius: 10px; background: var(--paper-2); }
 .source-catalog-search-row { display: grid; grid-template-columns: minmax(200px, 1fr) minmax(250px, 390px); align-items: stretch; gap: 12px; padding: 14px; }
 .source-catalog-search { display: flex; align-items: center; gap: 9px; min-width: 0; padding: 10px 12px; border: 1px solid var(--line-2); border-radius: 6px; color: var(--ink-3); background: var(--paper); }
@@ -79,3 +82,88 @@
   .source-catalog-entry { flex-direction: column; gap: 10px; padding: 13px 12px; }
   .source-catalog-reset { padding: 5px; }
 }
+
+/* ── Мэдээллийн сан — зүүн талд өгөгдлийн багц, зураг дээр баруун дээд хэрэгслүүд ── */
+.source-catalog[data-view="database"] { max-width: none; padding-bottom: 0; }
+.source-catalog[data-view="database"] .source-catalog-intro { margin-bottom: 12px; }
+.data-bank-workspace { display: grid; grid-template-columns: 280px minmax(0, 1fr); gap: 10px; height: calc(100dvh - var(--head-h) - 7.5rem); min-height: 440px; }
+.data-bank-datasets { min-width: 0; max-height: none; }
+.data-bank-datasets-body { display: flex; flex: 1; flex-direction: column; min-height: 0; overflow: hidden; }
+.data-bank-datasets .dataset-panel-list { max-height: none; overscroll-behavior: contain; scrollbar-width: thin; }
+.data-bank-datasets .dataset-panel-children[hidden] { display: none; }
+.data-bank-datasets .dataset-panel-search > button { display: grid; place-items: center; flex-shrink: 0; width: 22px; height: 22px; }
+.data-bank-layer-row { display: flex; align-items: flex-start; gap: 8px; width: 100%; padding: 9px 8px 9px 16px; text-align: left; cursor: pointer; }
+.data-bank-layer-row:disabled { cursor: wait; }
+.data-bank-datasets-expand { display: none; }
+.data-bank { position: relative; min-width: 0; min-height: 0; isolation: isolate; overflow: hidden; border: 1px solid var(--line-2); border-radius: 2px; background: var(--paper-3); }
+.data-bank .esri-ui { z-index: 3; }
+.data-bank .esri-ui-top-left { top: 16px; left: 16px; }
+.data-bank .esri-ui .esri-zoom { overflow: hidden; border: 1px solid var(--line-2); border-radius: 2px; box-shadow: 0 3px 12px rgb(0 0 0 / 12%); }
+.data-bank .esri-zoom .esri-widget--button { width: 36px; height: 36px; }
+.data-bank-status { position: absolute; bottom: 28px; left: 16px; z-index: 4; display: flex; align-items: center; gap: 10px; max-width: calc(100% - 32px); overflow: hidden; padding: 10px 14px; border: 1px solid var(--line-2); border-radius: 2px; background: var(--paper-2); color: var(--ink-2); font-size: 11px; line-height: 1.5; }
+.data-bank-status > svg { flex-shrink: 0; color: var(--moss); }
+.data-bank-status[data-error="true"] > svg { color: var(--ochre); }
+.data-bank-status .num { margin-left: 10px; color: var(--ink); }
+.data-bank-status small { display: block; margin-top: 2px; font-size: 10px; color: var(--ink-3); }
+.data-bank-status small .num { margin-left: 0; }
+.data-bank-progress { position: absolute; bottom: 0; left: 0; height: 2px; background: var(--moss); transition: width 200ms ease; }
+.data-bank-panel { width: 300px; max-width: calc(100vw - 80px); max-height: min(420px, 45dvh); overflow: auto; overscroll-behavior: contain; scrollbar-width: thin; background: var(--paper-2); color: var(--ink); }
+.data-bank .esri-basemap-gallery { width: 300px; max-width: calc(100vw - 90px); max-height: min(420px, 45dvh); overflow: auto; }
+.data-bank-record header button { display: grid; place-items: center; flex-shrink: 0; width: 32px; height: 32px; border: 1px solid var(--line); border-radius: 2px; background: var(--paper-2); color: var(--ink-3); }
+.data-bank-record header button:hover { background: var(--paper-hi); color: var(--ink); }
+.data-bank-panel .esri-widget { background: var(--paper-2); color: var(--ink); }
+.data-bank .esri-view .esri-popup { font-size: 11.5px; }
+.data-bank-empty { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 28px 20px; font-size: 12px; line-height: 1.6; text-align: center; color: var(--ink-3); }
+.data-bank-hint { position: absolute; bottom: 30px; left: 16px; z-index: 2; display: flex; align-items: center; gap: 7px; max-width: 240px; padding: 8px 10px; border: 1px solid var(--line-2); border-radius: 2px; background: var(--paper-2); color: var(--ink-2); font-size: 10px; line-height: 1.5; }
+.data-bank-hint svg { flex-shrink: 0; color: var(--moss); }
+/* Бүртгэлийн цонх (товшилт) — баруун дээд буланд, агуулгаараа өндөртэй */
+.data-bank-record { position: absolute; top: 10px; right: 52px; z-index: 6; width: 340px; max-width: calc(100% - 68px); max-height: calc(100% - 38px); overflow: auto; overscroll-behavior: contain; border: 1px solid var(--line-2); border-radius: 2px; background: var(--paper-2); color: var(--ink); scrollbar-width: thin; }
+.data-bank-record header { position: sticky; top: 0; display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 14px 12px 14px 16px; border-bottom: 1px solid var(--line-2); background: var(--paper); }
+.data-bank-record-dept { display: block; margin-bottom: 5px; font-size: 10px; line-height: 1.5; color: var(--ink-3); }
+.data-bank-record h3 { font-size: 14px; font-weight: 600; line-height: 1.5; }
+.data-bank-record dl > div { display: grid; grid-template-columns: 44% minmax(0, 1fr); gap: 12px; padding: 9px 16px; font-size: 12px; line-height: 1.5; }
+.data-bank-record dl > div + div { border-top: 1px solid var(--line); }
+.data-bank-record dl > div:nth-child(even) { background: color-mix(in srgb, var(--paper) 50%, var(--paper-2)); }
+.data-bank-record dt { overflow-wrap: anywhere; color: var(--ink-3); }
+.data-bank-record dd { overflow-wrap: anywhere; color: var(--ink); }
+/* Таних тэмдэг — асаалттай давхарга бүр нэр, өнгөөрөө, хэлтсээр бүлэглэсэн */
+.data-bank-legend-title { padding: 12px 16px; border-bottom: 1px solid var(--line); font-size: 13px; font-weight: 600; }
+.data-bank-legend section { padding-bottom: 10px; }
+.data-bank-legend section + section { border-top: 1px solid var(--line); }
+.data-bank-legend h4 { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding: 12px 16px 8px; font-size: 11px; font-weight: 600; line-height: 1.5; color: var(--ink-3); }
+.data-bank-legend h4 span { font-size: 10px; font-weight: 400; }
+.data-bank-legend section > div { display: flex; align-items: center; gap: 10px; padding: 6px 16px; font-size: 12px; line-height: 1.5; color: var(--ink); }
+.data-bank-legend i { width: 12px; height: 12px; flex-shrink: 0; border: 1px solid rgb(8 14 20 / 45%); border-radius: 2px; }
+@media (max-width: 1200px) {
+  .data-bank-hint { display: none; }
+}
+/* Доод үндсэн цэсийн 76px өндрийг нөөцөлж, хоёр мөр болсон харагдацын
+   товчны дараах үлдсэн зайг газрын зурагт өгнө. */
+@media (max-width: 900px) {
+  .source-catalog[data-view="database"] { display: flex; flex-direction: column; height: calc(100dvh - var(--head-h) - 112px - env(safe-area-inset-bottom, 0px)); min-height: 420px; }
+  .source-catalog[data-view="database"] .source-catalog-intro { flex-shrink: 0; }
+  .source-catalog[data-view="database"] .data-bank-workspace { flex: 1; height: auto; min-height: 320px; }
+}
+@media (max-width: 760px) {
+  .data-bank-workspace { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(260px, 1fr); }
+  .source-catalog[data-view="database"]:has(.data-bank-datasets[data-open="true"]) { height: auto; }
+  .source-catalog[data-view="database"] .data-bank-workspace:has(.data-bank-datasets[data-open="true"]) { flex: none; height: auto; grid-template-rows: auto 320px; }
+  .data-bank-datasets { max-height: 280px; }
+  .data-bank-datasets[data-open="false"] .data-bank-datasets-body { display: none; }
+  .data-bank-datasets-expand { display: grid; place-items: center; flex-shrink: 0; width: 32px; height: 32px; border: 1px solid var(--line); border-radius: 7px; color: var(--ink-2); }
+  .data-bank-datasets-expand[aria-expanded="true"] svg { transform: rotate(180deg); }
+  .data-bank-datasets .dataset-panel-list { max-height: 150px; }
+  .data-bank-datasets .dataset-panel-heading { padding-block: 10px; }
+}
+@media (max-width: 640px) {
+  .data-bank .esri-ui-top-left { top: 10px; left: 10px; }
+  .data-bank-status { left: 8px; max-width: calc(100% - 16px); padding: 9px 10px; }
+  .data-bank-record header button { width: 36px; height: 36px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .data-bank-progress { transition: none; }
+}
+/* Хэлтсийн мөр бүр хүрээтэй карт (хэрэглэгч 2026-11-12: "tus burd ni huree nem") — давхаргын мөртэй нэг хэв */
+.data-bank-datasets .dataset-panel-section + .dataset-panel-section { margin-top: 6px; }
+.data-bank-datasets .dataset-panel-group { padding-left: 16px; border-color: var(--line-2); }
+.data-bank-datasets .dataset-panel-group.is-holding { border-color: color-mix(in oklab, var(--moss) 28%, transparent); }

@@ -33,7 +33,7 @@ const RANGES = [
   { days: 90, label: "90 хоног" },
 ];
 const ACTION: Record<string, string> = { add: "Нэмсэн", update: "Зассан", delete: "Устгасан", "add-field": "Талбар нэмсэн", "delete-field": "Талбар устгасан" };
-const PAGES: Record<string, string> = { "/": "Ерөнхий самбар", "/analysis": "Дүн шинжилгээ", "/sources": "Дата эх сурвалж", "/access": "Эрхийн зохицуулалт", "/log": "Лог бүртгэл", "/reports": "Тайлан", "/alerts": "Дохиолол", "/map": "Газрын зураг", "/settings": "Тохиргоо" };
+const PAGES: Record<string, string> = { "/": "Ерөнхий самбар", "/analysis": "Дүн шинжилгээ", "/sources": "Өгөгдлийн сан", "/access": "Эрхийн зохицуулалт", "/log": "Лог бүртгэл", "/reports": "Тайлан", "/alerts": "Дохиолол", "/map": "Газрын зураг", "/settings": "Тохиргоо" };
 
 const dept = (slug: string | null) => DEPARTMENTS.find((d) => d.slug === slug);
 const account = (u: string) => ACCOUNTS.find((a) => a.username === u);

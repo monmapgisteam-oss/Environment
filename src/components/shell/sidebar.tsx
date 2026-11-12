@@ -52,8 +52,8 @@ export function Sidebar() {
           <ChartNoAxesCombined size={20} /><span>{t("Дүн шинжилгээ", "Analysis")}</span>
         </Link>}
         {/* Эх сурвалж, Эрх хоёр ЗӨВХӨН порталын админд (хэрэглэгч 2026-10-20) */}
-        {admin && <Link href="/sources" title={t("Дата эх сурвалж", "Data sources")} className={cn("dock-link", isActivePath(path, "/sources", true) && "active")} aria-current={isActivePath(path, "/sources", true) ? "page" : undefined}>
-          <Database size={20} /><span>{t("Эх сурвалж", "Sources")}</span>
+        {admin && <Link href="/sources" title={t("Өгөгдлийн сан", "Database")} className={cn("dock-link", isActivePath(path, "/sources", true) && "active")} aria-current={isActivePath(path, "/sources", true) ? "page" : undefined}>
+          <Database size={20} /><span>{t("Өгөгдлийн сан", "Database")}</span>
         </Link>}
         {/* ЭРХИЙН ЗОХИЦУУЛАЛТ — эх сурвалжийн ДООР (хэрэглэгч 2026-10-16);
             ЗӨВХӨН порталын админд (`org_admin`) */}

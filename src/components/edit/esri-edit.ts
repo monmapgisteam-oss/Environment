@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any -- Esri SDK нь CDN-ээс AMD-ээр ирдэг тул төрөлгүй */
 
 import { arcgisJson } from "@/lib/arcgis";
+import { clipToRegion } from "@/lib/extent";
 import { layerService } from "@/lib/portal-layers";
 import { readSession } from "@/lib/auth";
 import type { EditTarget } from "@/lib/edit-targets";
@@ -187,13 +188,31 @@ export async function loadMapData(
     shapes: { type: "FeatureCollection", features: [] },
     bbox: new Map(),
   };
+  /*
+    ⚠⚠ ЭВДЭРСЭН ОРОЙ — самбартай НЭГ дүрэм ({@link clipToRegion}, `loadLayerShapes`).
+    Ойн ялгарлын нэг дүрс Монголын мужаас гадуур оройтой: самбар түүнийг хасдаг
+    байсан ч энэ татац хасдаггүй тул засварлагч, "Мэдээллийн сан"-д тэр дүрс хотыг
+    бүхэлд нь бүрхсэн ногоон талбай болж зурагдаж байв (хэрэглэгч 2026-11-12:
+    "basemap deer dahiad burhsenmet nogoon dawharga bn ene yu we"). Хэт том
+    (0.5°-аас өргөн) үлдсэн дүрсийг консолд дугаараар нь нэрлэнэ — ямар ч тохиолдолд
+    зургийг бүрхэх дүрс аль нь болох нь мэдэгдэнэ.
+  */
+  let bad = 0;
+  const huge: number[] = [];
   for (const page of feats)
     for (const f of page ?? []) {
       const oid = Number(f.id ?? f.properties?.[o.oid]);
       if (!Number.isFinite(oid) || !f.geometry) continue;
+      if (!o.point) {
+        const c = clipToRegion(f.geometry);
+        if (c.dropped) bad++;
+        if (!c.geometry) continue;
+        f.geometry = c.geometry;
+      }
       const label = o.label ? f.properties?.[o.label] : null;
       const t = label == null || label === "" ? "" : String(label).trim();
       const box = boxOf(f.geometry);
+      if (box && !o.point && (box[2] - box[0] > 0.5 || box[3] - box[1] > 0.5)) huge.push(oid);
       if (box) out.bbox.set(oid, box);
       if (o.point) {
         if (f.geometry.type !== "Point") continue;
@@ -208,5 +227,8 @@ export async function loadMapData(
         out.shapes.features.push({ type: "Feature", id: oid, geometry: f.geometry, properties: { ...f.properties, oid, t: t || null } });
       }
     }
+  const name = url.split("/Hosted/")[1]?.split("/")[0] ?? url;
+  if (bad) console.warn(`${name}: ${bad} дүрсийн солбицол Монголын мужаас гадуур — тэдгээр оройг хассан`);
+  if (huge.length) console.warn(`${name}: ${huge.length} дүрс 0.5°-аас өргөн (хотыг бүрхэж болзошгүй) — дугаар ${huge.slice(0, 8).join(", ")}`);
   return out;
 }

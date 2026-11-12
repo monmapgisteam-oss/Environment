@@ -3144,7 +3144,8 @@ html[data-department-preview="true"] .workspace-main { --workspace-gutter: 0px; 
 .soil-scene-view .esri-ui,
 .soil-scene-view [class*="calcite-mode-"],
 .wells-esri .esri-ui,
-.wells-esri [class*="calcite-mode-"] {
+.wells-esri [class*="calcite-mode-"],
+.data-bank-panel {
   --calcite-color-foreground-1: var(--paper-2);
   --calcite-color-foreground-2: var(--paper-hi);
   --calcite-color-foreground-3: var(--paper-hi);

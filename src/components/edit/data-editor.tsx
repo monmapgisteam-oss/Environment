@@ -36,7 +36,7 @@ import { DISTRICT_CODE, installToken, layerUrl, loadMapData, placeAt, reason, ty
 import { EditorHead, type EditSource } from "./editor-head";
 import { AddField } from "./add-field";
 import { ColumnMenu, DeleteFieldDialog, type ColumnMenuState } from "./column-menu";
-import { DECOR, lookFor, type Look, type LookData, type MapProps } from "./looks";
+import { DECOR, lookDataOf, lookFor, type Look, type MapProps } from "./looks";
 
 /*
   ӨГӨГДӨЛ ЗАСАХ ЦОНХ — зургаан хэлтсийн бүх давхаргад нэг загвар (хэрэглэгч
@@ -365,17 +365,6 @@ const padBox = ([w, s, e, n]: Extent): Extent => {
 const placeText = (p: Place) => [`${p.district} дүүрэг`, p.khoroo != null ? `${p.khoroo}-р хороо` : null].filter(Boolean).join(" · ");
 
 const UNIT: Record<Geo, string> = { point: "цэг", polygon: "талбай", polyline: "шугам" };
-
-/** Зургийн дата → самбарын хэвд өгөх оролт ({@link LookData}) */
-function lookDataOf(m: MapData): LookData {
-  if (m.kind === "point") return { oid: m.points.oid, attrs: m.attrs, lon: m.points.lon, lat: m.points.lat };
-  return {
-    oid: m.shapes.features.map((f) => Number(f.properties?.oid)),
-    attrs: m.shapes.features.map((f) => f.properties ?? {}),
-    lon: [],
-    lat: [],
-  };
-}
 
 /** SQL-ийн бичвэр — хашилтыг давхарлана */
 const sq = (s: string) => s.replace(/'/g, "''");

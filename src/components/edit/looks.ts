@@ -26,6 +26,7 @@ import { BEAR_LAYER } from "@/lib/bears";
 import { BIOTECH_SERVICE } from "@/lib/biotech";
 import { ECO_SERVICE } from "@/lib/eco-corridors";
 import type { EditTarget } from "@/lib/edit-targets";
+import type { MapData } from "./esri-edit";
 import { FLORA } from "@/lib/flora";
 import { LICHENS_SERVICE } from "@/lib/lichens";
 import { fetchMarmots, MARMOT_SERVICES } from "@/lib/marmots";
@@ -49,6 +50,17 @@ type Attrs = Record<string, unknown>;
 
 /** Зурагт өгөх бүх бүртгэл — `oid`, атрибут, (цэгт) байршил нэг дараалалтай */
 export type LookData = { oid: number[]; attrs: Attrs[]; lon: number[]; lat: number[] };
+
+/** Зургийн дата → самбарын хэвд өгөх оролт ({@link LookData}); засварлагч ба "Мэдээллийн сан" хоёулаа */
+export function lookDataOf(m: MapData): LookData {
+  if (m.kind === "point") return { oid: m.points.oid, attrs: m.attrs, lon: m.points.lon, lat: m.points.lat };
+  return {
+    oid: m.shapes.features.map((f) => Number(f.properties?.oid)),
+    attrs: m.shapes.features.map((f) => f.properties ?? {}),
+    lon: [],
+    lat: [],
+  };
+}
 
 /** Засварлагддаггүй ЧИМЭГЛЭЛ дүрс (булангийн цэгээс угсарсан талбай) — дугаар нь `DECOR`-оос дээш */
 export const DECOR = 1_000_000_000;
@@ -349,11 +361,11 @@ const poles: Look = {
 const stickers: Look = {
   fields: ["ner", "stiker"],
   points: (d) => {
-    const done = new Set(d.oid.filter((_, i) => s(d.attrs[i].stiker) === "tiim"));
+    /* Самбар (2026-10-23): цохилт БИШ, firefly цэг төлөвөөр (`STATE_HEX`) */
+    const hex = (v: string) => (v === "tiim" ? "#5fa8ff" : v === "ugui" ? "#e5b75a" : "#8d99a6");
     return {
       cluster: false,
-      pulse: true,
-      pulseColor: (oid: number) => (done.has(oid) ? "var(--water)" : "var(--ochre)"),
+      colors: d.attrs.map((a) => hex(s(a.stiker))),
       labels: { text: d.attrs.map((a) => s(a.ner) || "—"), minzoom: 13 },
     };
   },
@@ -403,9 +415,11 @@ const lichens: Look = {
     for (const a of d.attrs) if (s(a.rec_type) === "species") per.set(s(a.site_code), (per.get(s(a.site_code)) ?? 0) + 1);
     const values = Float32Array.from(d.attrs, (a) => per.get(s(a.site_code)) ?? 0);
     const hi = values.reduce((m, v) => Math.max(m, v), 0);
+    /* ⚠ Цохилтын тэмдэглэгээ (`pulse`) самбараас 2026-10-23-нд ХАСАГДСАН — энд ч
+       мөн (2026-11-12: "Мэдээллийн сан"-д 2,391 бүртгэлийн 250 цагираг 40 цэгт
+       давхарлаж бараан том дугуй болж байв) */
     return {
       cluster: false,
-      pulse: true,
       grades: { values, stops: [[0, DATA_COLOR], [Math.max(hi, 1), DATA_COLOR]] },
       labels: { text: d.attrs.map((a) => s(a.site_name) || s(a.site_code)), minzoom: 9 },
     };
@@ -426,9 +440,9 @@ const flora: Look = {
           .filter(Boolean).length,
     );
     const hi = values.reduce((m, v) => Math.max(m, v), 0);
+    /* `pulse` самбараас 2026-10-23-нд хасагдсан — зэрэглэсэн firefly цэг */
     return {
       cluster: false,
-      pulse: true,
       grades: { values, stops: [[0, DATA_COLOR], [Math.max(hi, 1), DATA_COLOR]] },
       labels: { text: d.attrs.map((a) => s(a.site_name) || "Тодорхойгүй"), minzoom: 9 },
     };
@@ -436,9 +450,21 @@ const flora: Look = {
 };
 
 /* ---------------- Биотехник (wildlife/biotech-dashboard.tsx) ---------------- */
+/* Самбар (2026-10-23): цохилт БИШ, цэг ДҮҮРГЭЭР өнгөтэй — хүснэгтийн мөрийн ирмэгтэй нэг
+   өнцөг (`DISTRICT_HUES`, бүх мөрөөс цагаан толгойн дарааллаар) */
+const BIOTECH_HUES = [255, 330, 165, 75, 205, 300];
 const biotech: Look = {
-  fields: ["газрын_нэр"],
-  points: (d) => ({ cluster: false, pulse: true, labels: { text: d.attrs.map((a) => s(a["газрын_нэр"]) || "Тодорхойгүй"), minzoom: 8 } }),
+  fields: ["газрын_нэр", "дүүрэг"],
+  points: (d) => {
+    const district = (a: Attrs) => s(a["дүүрэг"]) || "Бүртгэгдээгүй";
+    const names = [...new Set(d.attrs.map(district))].sort((a, b) => a.localeCompare(b, "mn"));
+    const idx = new Map(names.map((name, i) => [name, i]));
+    return {
+      cluster: false,
+      colors: d.attrs.map((a) => oklchHex(0.75, 0.16, BIOTECH_HUES[(idx.get(district(a)) ?? 0) % BIOTECH_HUES.length])),
+      labels: { text: d.attrs.map((a) => s(a["газрын_нэр"]) || "Тодорхойгүй"), minzoom: 8 },
+    };
+  },
 };
 
 /* ---------------- Минж (wildlife/beaver-dashboard.tsx) ---------------- */

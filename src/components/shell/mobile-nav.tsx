@@ -41,7 +41,7 @@ export function MobileNav() {
       )}
       {admin && (
         <Chip href="/sources" active={isActivePath(pathname, "/sources", true)}>
-          <Database size={13} strokeWidth={1.75} /> {t("Дата эх сурвалж", "Data sources")}
+          <Database size={13} strokeWidth={1.75} /> {t("Өгөгдлийн сан", "Database")}
         </Chip>
       )}
       {admin && (

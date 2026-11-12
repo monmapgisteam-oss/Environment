@@ -57,9 +57,9 @@ export function zoomForScale(denominator: number, lat = 47.9) {
 /** Web Mercator-ын 0-р түвшний номинал масштаб (256px, 96 dpi) */
 const S0 = 591_657_527.591555;
 /** MapLibre zoom → Esri-ийн номинал масштаб (`view.scale`-тэй ижил хуваарь) */
-const scaleAt = (ml: number) => S0 / 2 ** (ml + 1);
+export const scaleAt = (ml: number) => S0 / 2 ** (ml + 1);
 /** Esri-ийн түвшин → MapLibre zoom */
-const mlOf = (esriZoom: number) => esriZoom - 1;
+export const mlOf = (esriZoom: number) => esriZoom - 1;
 /** Зургийн дээд ойртолт, MapLibre-ийн хуваарьт */
 const MAX_ML = 18;
 
@@ -221,7 +221,7 @@ function parseColor(c: string): [number, number, number, number] {
 }
 
 /** Энгийн тэмдгийн өнгө — тунгалаг нь 0…1 */
-function col(c: string, a?: number) {
+export function col(c: string, a?: number) {
   const [r, g, b, al] = parseColor(c);
   return [r, g, b, a ?? al];
 }
@@ -262,9 +262,9 @@ const toLonLat = (x: number, y: number): [number, number] => [
   ((2 * Math.atan(Math.exp(y / R_EARTH)) - Math.PI / 2) * 180) / Math.PI,
 ];
 
-type Family = "point" | "polyline" | "polygon";
+export type Family = "point" | "polyline" | "polygon";
 
-function familyOf(g: GeoJSON.Geometry | null | undefined): Family | null {
+export function familyOf(g: GeoJSON.Geometry | null | undefined): Family | null {
   if (!g) return null;
   switch (g.type) {
     case "Point":
@@ -288,7 +288,7 @@ function familyOf(g: GeoJSON.Geometry | null | undefined): Family | null {
   зураг бүхэлдээ гараагүй (2026-10-12). Дутуу цагираг, хоосон хэсгийг
   хасаж, юу ч үлдээгүй бол дүрсийг алгасна.
 */
-function cleanGeom(g: GeoJSON.Geometry | null | undefined): GeoJSON.Geometry | null {
+export function cleanGeom(g: GeoJSON.Geometry | null | undefined): GeoJSON.Geometry | null {
   if (!g) return null;
   const okPos = (p: GeoJSON.Position | undefined) => !!p && Number.isFinite(p[0]) && Number.isFinite(p[1]);
   const ring = (r: GeoJSON.Position[] | undefined) => (r ?? []).filter(okPos);
@@ -438,7 +438,7 @@ function cimPoint(layers: any[]) {
   };
 }
 
-type Fire = { glow: string; mid: string; core: string };
+export type Fire = { glow: string; mid: string; core: string };
 
 /** Анхдагч firefly: сарнисан гэрэл → (цагираг) → бие → цөм */
 function fireSymbol(f: Fire, tint: string | null, ring: boolean) {
@@ -506,7 +506,7 @@ function gradedMultiSymbol(color: string) {
  * орлогч. `stops` нь [MapLibre zoom, ТЭМДГИЙН ХАМГИЙН ТОМ давхаргын
  * радиус px].
  */
-function sizeByZoom(stops: [number, number][]) {
+export function sizeByZoom(stops: [number, number][]) {
   return {
     type: "size",
     valueExpression: "$view.scale",
@@ -561,14 +561,14 @@ function gradeRenderer(stops: [number, string][], symbol: (hex: string) => any, 
 }
 
 /** Үл үзэгдэх тэмдэг — зөвхөн шошго үүрэх давхаргад */
-const INVISIBLE = {
+export const INVISIBLE = {
   type: "simple",
   symbol: { type: "simple-marker", size: 0, color: [0, 0, 0, 0], outline: null },
 };
 
 /** Шошгын фонт — Esri-ийн фонтын үйлчилгээнд кирилл үсэгтэй гэр бүл */
-const FONT = { family: "Noto Sans", weight: "bold" } as const;
-const HALO = [8, 14, 20, 0.85];
+export const FONT = { family: "Noto Sans", weight: "bold" } as const;
+export const HALO = [8, 14, 20, 0.85];
 
 /** Харилцдаг давхаргын хамгийн их тэмдэглэгээ — DOM элемент бүр зураг татна */
 const MARKER_CAP = 250;
@@ -577,7 +577,7 @@ const MARKER_CAP = 250;
    SDK модулиуд
    -------------------------------------------------------------------------- */
 
-type Esri = {
+export type Esri = {
   Map: any;
   MapView: any;
   Basemap: any;
@@ -593,7 +593,7 @@ type Esri = {
 };
 
 let esriP: Promise<Esri> | null = null;
-function loadEsri() {
+export function loadEsri() {
   esriP ??= esriModules<any[]>([
     "esri/Map",
     "esri/views/MapView",
@@ -709,7 +709,7 @@ type Field = { name: string; type: "double" | "string" | "integer" };
   (2026-10-12-нд хэмжсэн). `GeoJSONLayer` нь өгөгдлөө WORKER дээр
   задлах, проекцлох тул үндсэн урсгал чөлөөтэй.
 */
-function geoLayer(E: Esri, geometryType: Family, fields: Field[], extra: Record<string, unknown>, features: GeoJSON.Feature[] = []) {
+export function geoLayer(E: Esri, geometryType: Family, fields: Field[], extra: Record<string, unknown>, features: GeoJSON.Feature[] = []) {
   const url = URL.createObjectURL(
     new Blob([JSON.stringify({ type: "FeatureCollection", features })], { type: "application/json" }),
   );
@@ -729,7 +729,7 @@ function geoLayer(E: Esri, geometryType: Family, fields: Field[], extra: Record<
   return layer;
 }
 
-const clientLayer = (E: Esri, geometryType: Family, fields: Field[], extra: Record<string, unknown> = {}) =>
+export const clientLayer = (E: Esri, geometryType: Family, fields: Field[], extra: Record<string, unknown> = {}) =>
   geoLayer(E, geometryType, fields, extra);
 
 /** Давхаргын байрлал — `get` нь одоогийн давхаргыг, `set` нь шинийг бүртгэнэ */
@@ -744,7 +744,7 @@ type Slot = { key: string; get: () => any; set: (l: any) => void };
 */
 const queues = new Map<string, Promise<void>>();
 const latest = new Map<string, number>();
-function refill(E: Esri, view: any, slot: Slot, make: () => GeoJSON.Feature[]) {
+export function refill(E: Esri, view: any, slot: Slot, make: () => GeoJSON.Feature[]) {
   const turn = (latest.get(slot.key) ?? 0) + 1;
   latest.set(slot.key, turn);
   const prev = queues.get(slot.key) ?? Promise.resolve();
@@ -794,12 +794,12 @@ function refill(E: Esri, view: any, slot: Slot, make: () => GeoJSON.Feature[]) {
 
 let slotSeq = 0;
 /** `layers` обьектын нэг талбарын байрлал */
-function slotOf(layers: any, key: string): Slot {
+export function slotOf(layers: any, key: string): Slot {
   layers.__id ??= ++slotSeq;
   return { key: `${layers.__id}:${key}`, get: () => layers[key], set: (l) => (layers[key] = l) };
 }
 
-const pointFeature = (lon: number, lat: number, properties: Record<string, unknown>): GeoJSON.Feature => ({
+export const pointFeature = (lon: number, lat: number, properties: Record<string, unknown>): GeoJSON.Feature => ({
   type: "Feature",
   geometry: { type: "Point", coordinates: [lon, lat] },
   properties,
@@ -809,11 +809,502 @@ const pointFeature = (lon: number, lat: number, properties: Record<string, unkno
 const CLUSTER_TEXT = `var n = $feature.cluster_count;
 When(n >= 10000, Text(Round(n / 1000)) + "k", n >= 1000, Text(Round(n / 1000, 1)) + "k", Text(n))`;
 
+/** `WellsMap`-ийн пропоос зургийн ГОРИМ — эх сурвалж үүсгэх үед л уншигдана */
+export type ModeInput = {
+  cluster?: boolean;
+  clusterMaxZoom?: number;
+  clusterRadius?: number;
+  clusterLabel?: "inside" | "badge";
+  weights?: number[];
+  grades?: { stops: [number, string][]; firefly?: boolean | "graded" };
+  shapes?: {
+    glow?: boolean;
+    crisp?: boolean;
+    color?: string;
+    labelZoom?: number;
+    flow?: boolean;
+    labelPlacement?: "point" | "line-center";
+    edge?: "thin" | "hair";
+    outline?: boolean;
+    hollow?: string[];
+    labelUnique?: boolean;
+  };
+  firefly?: Fire;
+  colors?: ArrayLike<string | undefined>;
+  dots?: { rank?: Record<string, number> };
+  esriFirefly?: boolean;
+  pointScale?: number;
+  labels?: { minzoom?: number; offset?: number; size?: number; colors?: Record<string, string>; halo?: number };
+  values?: { maxzoom?: number };
+  scale?: number;
+};
+export function modeOf({
+  cluster = true,
+  clusterMaxZoom = 15,
+  clusterRadius = 48,
+  clusterLabel = "inside",
+  weights,
+  grades,
+  shapes,
+  firefly,
+  colors,
+  dots,
+  esriFirefly = false,
+  pointScale,
+  labels,
+  values,
+  scale,
+}: ModeInput): Mode {
+  return {
+    cluster,
+    clusterMaxZoom,
+    clusterRadius,
+    clusterLabel,
+    weighted: Boolean(weights),
+    graded: grades?.stops,
+    gradedFire: Boolean(grades?.firefly),
+    gradedFireColor: grades?.firefly === "graded",
+    shaped: Boolean(shapes),
+    shapeGlow: Boolean(shapes?.glow) && !shapes?.crisp,
+    shapeCrisp: Boolean(shapes?.crisp),
+    shapeColor: shapes?.color,
+    fire: firefly ?? FIREFLY,
+    tinted: Boolean(colors),
+    dots: dots ?? null,
+    esriFire: esriFirefly,
+    pointScale: pointScale ?? 1,
+    shapeLabelZoom: shapes?.labelZoom ?? 0,
+    shapeFlow: Boolean(shapes?.flow),
+    shapeLabelOnLine: shapes?.labelPlacement === "line-center",
+    shapeThin: shapes?.edge === "thin",
+    shapeHair: shapes?.edge === "hair",
+    shapeHollow: shapes?.hollow ?? [],
+    shapeOutline: shapes?.outline !== false,
+    shapeLabelUnique: Boolean(shapes?.labelUnique),
+    labeled: Boolean(labels),
+    labelZoom: labels?.minzoom ?? 12,
+    labelOffset: labels?.offset ?? 0.7,
+    labelSize: labels?.size ?? 8,
+    labelColors: labels?.colors ?? null,
+    labelHalo: labels?.halo ?? 0.9,
+    valued: Boolean(values),
+    valueZoom: values?.maxzoom ?? 13,
+    scale,
+  };
+}
+
+/**
+ * ДАТАНЫ ДАВХАРГУУД — дүрс (олон өнцөгт · шугам · тэдний шошго) ба цэг,
+ * горимоос. `WellsMap` ба "Мэдээллийн сан" ({@link src/components/home/data-bank.tsx})
+ * НЭГ функцээр үүсгэнэ — тэмдэглэгээ хоёр газар зөрөхгүй.
+ */
+export function dataLayers(E: Esri, mode: Mode) {
+  const shapeFields: Field[] = [
+    { name: "oid", type: "double" },
+    { name: "c", type: "string" },
+    { name: "t", type: "string" },
+  ];
+  const shapePoly = mode.shaped
+    ? clientLayer(E, "polygon", shapeFields, {
+        renderer: shapeRenderer(mode, [], polySymbol),
+        ...(mode.shapeGlow ? { effect: "bloom(1.4, 2px, 0)" } : {}),
+      })
+    : null;
+  const lineLabels = mode.shaped && mode.shapeLabelOnLine;
+  const shapeLine = mode.shaped
+    ? clientLayer(E, "polyline", shapeFields, {
+        renderer: shapeRenderer(mode, [], lineSymbol),
+        ...(mode.shapeGlow ? { effect: "bloom(1.4, 2px, 0)" } : {}),
+      })
+    : null;
+  /*
+    ⚠ ХЭРЧМИЙН ШОШГО ч мөн ЦЭГЭН давхаргад (шугамын жинхэнэ дунд цэг):
+    Esri-ийн `center-along` нь бичвэр хэрчимдээ багтахгүй бол огт
+    тавьдаггүй — 60 м-ийн шонгийн хэрчим дээр нэг ч шошго гарахгүй байв.
+  */
+  const shapeLabels =
+    mode.shaped
+      ? clientLayer(E, "point", [{ name: "t", type: "string" }, { name: "s", type: "double" }], {
+          renderer: INVISIBLE,
+          labelingInfo: [
+            {
+              /*
+                ⚠⚠ ШОШГО ДҮРСЭЭСЭЭ ТОМ БАЙХГҮЙ (хэрэглэгч 2026-10-23, ТХГН-ийн
+                зургаар: "label zasay"). Хол байхад хотын төвийн жижиг
+                дүрсүүдийн урт нэр бие биен дээгүүр давхцаж уншигдахгүй
+                байв. Одоо дүрсийн хэмжээ (`s`, метр) дэлгэц дээр 48px-ээс
+                бага бол шошго гарахгүй — ойртоход өөрөө гарна; урт нэр
+                хоёр мөрөнд залгагдаж, 46 тэмдэгтээс хэтэрвэл тасарна
+                (бүтэн нэр нь цонх, диаграмд). Шугамд `s` хоосон тул
+                хязгааргүй.
+              */
+              labelExpressionInfo: {
+                expression: `var t = $feature.t;
+                  var s = $feature.s;
+                  if (!IsEmpty(s) && s * 3779.5 / $view.scale < 48) return "";
+                  return IIF(Count(t) > 46, Left(t, 45) + "…", t);`,
+              },
+              labelPlacement: "center-center",
+              deconflictionStrategy: lineLabels ? "none" : "static",
+              minScale: mode.shapeLabelZoom ? scaleAt(mode.shapeLabelZoom) * 1.01 : 0,
+              symbol: {
+                type: "text",
+                color: "#ffffff",
+                haloColor: HALO,
+                haloSize: 0.9,
+                lineWidth: 130,
+                font: { ...FONT, size: 8 },
+              },
+            },
+          ],
+        })
+      : null;
+
+  const pointFields: Field[] = [
+    { name: "oid", type: "double" },
+    { name: "w", type: "double" },
+    { name: "g", type: "double" },
+    { name: "c", type: "string" },
+    { name: "t", type: "string" },
+    { name: "r", type: "integer" },
+  ];
+
+  /*
+    НЯГТРАЛЫН горим: 1:20 000 хүртэл дулааны зураг, түүнээс ойр бодит
+    цэг. Заагт 0.6 түвшний давхцал — нэг нь алга болоод нөгөө нь
+    гарах хооронд зураг хоосрохгүй.
+  */
+  const zDot = zoomForScale(20_000);
+  /*
+    ⚠ НЭГ ДАВХАРГА, ХОЁР РЕНДЕРЕР: дулааны зураг ба бодит цэг ижил
+    145 мянган цэгийг хоёр давхаргад хуулбарлавал хөтөч хоёр дахин
+    ачаална. Масштаб заагийг давах бүрд рендерер солигдоно.
+  */
+  const heatRenderer = {
+    type: "heatmap",
+    radius: 9,
+    maxDensity: 3,
+    minDensity: 0,
+    /* Өнгө нь цэгийн палитраас (`firefly`) — самбар өөрийн
+       диаграмтай нэг өнгөний гэр бүл өгч болно. Анхдагч нь cyan. */
+    colorStops: [
+      { ratio: 0, color: col(mode.fire.glow, 0) },
+      { ratio: 0.25, color: col(mode.fire.glow, 0.32) },
+      { ratio: 0.6, color: col(mode.fire.mid, 0.62) },
+      { ratio: 1, color: col(mode.fire.core, 0.92) },
+    ],
+  };
+  const dotRenderer = {
+    type: "simple",
+    symbol: {
+      type: "simple-marker",
+      color: col(mode.fire.glow, 0.9),
+      outline: { color: [0, 0, 0, 0.5], width: 0.3 },
+    },
+    visualVariables: [
+      sizeByZoom([
+        [zDot - 0.6, 1.2],
+        [15, 1.8],
+        [18, 2.6],
+      ]),
+    ],
+  };
+  const heat = null;
+
+  const valueScale = mode.valued ? scaleAt(mode.valueZoom) : 0;
+
+  const pointRendererNow = mode.weighted ? heatRenderer : pointRenderer(mode, []);
+
+  const badge = mode.clusterLabel === "badge";
+  const points = clientLayer(E, "point", pointFields, {
+    renderer: pointRendererNow,
+    ...(mode.valued ? { minScale: valueScale } : {}),
+    ...(mode.dots ? { orderBy: [{ field: "r", order: "ascending" }] } : {}),
+    ...(mode.cluster && !mode.weighted
+      ? {
+          featureReduction: {
+            type: "cluster",
+            /* ⚠ "badge" горим (аврагдсан амьтан, авто засвар): булангийн
+               хайрцагтай тоо Esri дээр хөршийнхөө дээгүүр давхцаж зураг
+               замбараагүй харагдаж байв (2026-10-23). Одоо cyan дүүргэлттэй
+               дугуй (42%), тоо нь ДОТОРОО, бөөгнөрлийн радиус илүү өргөн.
+               Бараан цул дүүргэлт "онцгүй" гэж буцаагдсан. */
+            clusterRadius: badge ? "72px" : `${mode.clusterRadius}px`,
+            clusterMinSize: `${pt(badge ? 12 : 10)}pt`,
+            clusterMaxSize: `${pt(badge ? 28 : 38)}pt`,
+            maxScale: scaleAt(mode.clusterMaxZoom),
+            /* ⚠ `renderer` БИШ `symbol`: өөрийн рендерер өгвөл НЭГ гишүүнтэй
+               бөөгнөрөл ч цагираг болж зурагддаг байв */
+            symbol: {
+              type: "simple-marker",
+              color: col(mode.fire.glow, badge ? 0.42 : 0.22),
+              outline: { color: col(mode.fire.glow, 0.95), width: (badge ? 1.6 : 1.4) * 0.75 },
+            },
+            labelingInfo: [
+              {
+                deconflictionStrategy: "none",
+                labelExpressionInfo: { expression: CLUSTER_TEXT },
+                labelPlacement: "center-center",
+                symbol: {
+                  type: "text",
+                  color: "#ffffff",
+                  haloColor: [0, 0, 0, 0.7],
+                  haloSize: 0.9,
+                  font: { ...FONT, size: 8 },
+                },
+              },
+            ],
+          },
+        }
+      : {}),
+    ...(mode.labeled
+      ? {
+          labelingInfo: (() => {
+            /* Бичвэр тус бүрийн өнгө — анги тутамд НЭГ шошгын класс */
+            const q = (t: string) => `'${t.replace(/'/g, "''")}'`;
+            const cls = (where: string, color: string) => ({
+              labelExpressionInfo: { expression: "$feature.t" },
+              where,
+              labelPlacement: "below-center",
+              deconflictionStrategy: "static",
+              minScale: scaleAt(mode.labelZoom) * 1.01,
+              symbol: {
+                type: "text",
+                color,
+                haloColor: HALO,
+                haloSize: mode.labelHalo,
+                lineWidth: 80,
+                yoffset: -mode.labelOffset * 6,
+                font: { ...FONT, size: mode.labelSize },
+              },
+            });
+            const pairs = Object.entries(mode.labelColors ?? {});
+            if (!pairs.length) return [cls("t IS NOT NULL", "#eef4f8")];
+            return [
+              ...pairs.map(([t, c]) => cls(`t = ${q(t)}`, c)),
+              cls(`t IS NOT NULL AND t NOT IN (${pairs.map(([t]) => q(t)).join(", ")})`, "#eef4f8"),
+            ];
+          })(),
+        }
+      : {}),
+  });
+
+  /* ХЭМЖИЛТИЙН УТГА — цэгийн ОРОНД, зөвхөн шошго үүрэх давхарга */
+  const valuesLayer = mode.valued
+    ? clientLayer(
+        E,
+        "point",
+        [
+          { name: "v", type: "string" },
+          { name: "vc", type: "string" },
+        ],
+        { renderer: INVISIBLE, maxScale: valueScale },
+      )
+    : null;
+
+  return { shapePoly, shapeLine, shapeLabels, points, values: valuesLayer, heat, heatRenderer, dotRenderer, zDot };
+}
+
+/** Цэгийн давхаргыг дүүргэнэ — өнгө (`colors`), зэрэглэл, жин, шошго, хэмжилтийн утга */
+export function fillPoints(
+  E: Esri,
+  view: any,
+  layers: { points: any; values?: any | null },
+  mode: Mode,
+  d: {
+    points: MapPoints;
+    visible: ArrayLike<number>;
+    weights?: number[];
+    grades?: { values: ArrayLike<number> };
+    labels?: { text: string[] };
+    values?: { text: string[]; color?: string[] };
+    colors?: ArrayLike<string | undefined>;
+    dotRank: string;
+  },
+) {
+  const { points, visible, weights, grades, labels, values, colors, dotRank } = d;
+  const { lon, lat, oid } = points;
+  const text = labels?.text;
+  const rank = dotRank ? (JSON.parse(dotRank) as Record<string, number>) : null;
+
+  const tints = new Set<string>();
+  const features: GeoJSON.Feature[] = new Array(visible.length);
+  for (let k = 0; k < visible.length; k++) {
+    const i = visible[k];
+    const c = colors?.[i];
+    if (c) tints.add(c);
+    features[k] = pointFeature(lon[i], lat[i], {
+      oid: oid[i],
+      w: weights ? weights[i] : null,
+      g: grades ? grades.values[i] : null,
+      c: c ?? null,
+      /* Хоосон шошгыг ОГТ бичихгүй — `t IS NOT NULL` шүүлт */
+      t: text?.[i] || null,
+      r: c && rank ? (rank[c] ?? 0) : 0,
+    });
+  }
+  if (!mode.weighted && !mode.graded) {
+    const list = [...tints].sort();
+    const key = list.join("|");
+    if (layers.points.__tints !== key) {
+      layers.points.__tints = key;
+      layers.points.renderer = pointRenderer(mode, list);
+    }
+  }
+  refill(E, view, slotOf(layers, "points"), () => features);
+
+  if (layers.values && values) {
+    const groups = new Set<string>();
+    const vals: GeoJSON.Feature[] = [];
+    for (let k = 0; k < visible.length; k++) {
+      const i = visible[k];
+      const v = values.text[i];
+      if (!v) continue;
+      const vc = values.color?.[i] ?? "#eef4f8";
+      groups.add(vc);
+      vals.push(pointFeature(lon[i], lat[i], { v, vc }));
+    }
+    /* Шошгын өнгө нь УТГЫНХ — Esri-ийн шошго атрибутаас өнгө авдаггүй
+       тул өнгө тус бүрд нэг анги */
+    layers.values.labelingInfo = [...groups].map((vc) => ({
+      labelExpressionInfo: { expression: "$feature.v" },
+      where: `vc = '${vc}'`,
+      labelPlacement: "center-center",
+      deconflictionStrategy: "static",
+      symbol: {
+        type: "text",
+        color: vc,
+        haloColor: [8, 14, 20, 0.9],
+        haloSize: 1.2,
+        font: { ...FONT, size: 10 },
+      },
+    }));
+    refill(E, view, slotOf(layers, "values"), () => vals);
+  }
+
+}
+
+/** Дүрсийн давхаргуудыг дүүргэнэ — `geoms` нь oid → геометр (тодруулахад) */
+export function fillShapes(
+  E: Esri,
+  view: any,
+  layers: { shapePoly?: any | null; shapeLine?: any | null; shapeLabels?: any | null },
+  mode: Mode,
+  shapeData: GeoJSON.FeatureCollection,
+  geoms: Map<number, { geojson: GeoJSON.Geometry; c: string | null; esri?: any }>,
+) {
+  geoms.clear();
+  const polys: GeoJSON.Feature[] = [];
+  const lines: GeoJSON.Feature[] = [];
+  const colorSet = new Set<string>();
+  for (const f of shapeData.features) {
+    const geometry = cleanGeom(f.geometry);
+    const fam = familyOf(geometry);
+    if (!geometry || (fam !== "polygon" && fam !== "polyline")) continue;
+    const p = f.properties ?? {};
+    const o = Number(p.oid ?? f.id);
+    const c = typeof p.c === "string" ? p.c : null;
+    if (c) colorSet.add(c);
+    /* Esri геометр нь ЗӨВХӨН тодруулах үед хөрвүүлэгдэнэ (`redrawLit`) */
+    geoms.set(o, { geojson: geometry, c });
+    (fam === "polygon" ? polys : lines).push({
+      type: "Feature",
+      geometry,
+      properties: { oid: o, c, t: typeof p.t === "string" && p.t ? p.t : null },
+    });
+  }
+  const list = [...colorSet].sort();
+  const key = list.join("|");
+  if (layers.shapePoly && layers.shapePoly.__tints !== key) {
+    layers.shapePoly.__tints = key;
+    layers.shapePoly.renderer = shapeRenderer(mode, list, polySymbol);
+    layers.shapeLine.renderer = shapeRenderer(mode, list, lineSymbol);
+  }
+  if (layers.shapePoly) refill(E, view, slotOf(layers, "shapePoly"), () => polys);
+  if (layers.shapeLine) refill(E, view, slotOf(layers, "shapeLine"), () => lines);
+  /* Шошгын цэгүүд дүрстэйгээ ХАМТ шинэчлэгдэнэ */
+  if (layers.shapeLabels) {
+    const lp = mode.shapeLabelOnLine ? lineMidpoints(shapeData) : labelPoints(shapeData, mode.shapeLabelUnique);
+    refill(E, view, slotOf(layers, "shapeLabels"), () =>
+      lp.features.flatMap((f) => {
+        const geometry = cleanGeom(f.geometry);
+        return geometry
+          ? [{ type: "Feature" as const, geometry, properties: { t: f.properties?.t ?? null, s: f.properties?.s ?? null } }]
+          : [];
+      }),
+    );
+  }
+}
+
+/** Нэмэлт давхаргын (хил, бүс) рендерер, шошго, дүрсүүд — `WellsMap` ба "Мэдээллийн сан" нэг дүрмээр */
+export function overlayParts(o: MapOverlay, fam: Family) {
+  const line = { type: "simple-line", color: col(o.line.color, o.line.opacity), width: o.line.width * 0.75, join: "round", style: o.line.style ?? "solid" };
+  const fillOpacity = o.fill?.opacity ?? 0.08;
+  const renderer =
+    fam === "polygon"
+      ? o.fill?.byGrid
+        ? {
+            type: "unique-value",
+            field: "gridcode",
+            defaultSymbol: { type: "simple-fill", color: col(o.fill.color, o.fill.byGrid[0]), outline: line },
+            uniqueValueInfos: o.fill.byGrid.map((v, i) => ({
+              value: i + 1,
+              symbol: { type: "simple-fill", color: col(o.fill!.color, v), outline: line },
+            })),
+          }
+        : {
+            type: "simple",
+            symbol: { type: "simple-fill", color: o.fill ? col(o.fill.color, fillOpacity) : [0, 0, 0, 0], outline: line },
+          }
+      : fam === "polyline"
+        ? { type: "simple", symbol: line }
+        : { type: "simple", symbol: { type: "simple-marker", size: 4, color: col(o.line.color, o.line.opacity), outline: null } };
+  const feats = () =>
+    o.data.features.flatMap((f) => {
+      const geometry = cleanGeom(f.geometry);
+      if (!geometry || familyOf(geometry) !== fam) return [];
+      const gc = Number(f.properties?.gridcode);
+      const t = o.label ? f.properties?.[o.label.field] : null;
+      return [
+        {
+          type: "Feature" as const,
+          geometry,
+          properties: {
+            gridcode: Number.isFinite(gc) ? gc : null,
+            t: typeof t === "string" && t.trim() ? t.trim() : null,
+          },
+        },
+      ];
+    });
+  const labelingInfo = o.label
+    ? [
+        {
+          labelExpressionInfo: { expression: "$feature.t" },
+          where: "t IS NOT NULL",
+          labelPlacement: fam === "polygon" ? "always-horizontal" : "center-along",
+          deconflictionStrategy: "static",
+          minScale: o.label.minzoom != null ? scaleAt(o.label.minzoom) * 1.01 : 0,
+          symbol: {
+            type: "text",
+            color: o.label.color ?? "#eef4f8",
+            haloColor: HALO,
+            haloSize: 0.8,
+            font: { ...FONT, size: o.label.size ?? 8 },
+          },
+        },
+      ]
+    : null;
+  return { renderer, feats, labelingInfo };
+}
+export function overlayFamily(o: MapOverlay): Family {
+  return familyOf(o.data.features.find((f) => f.geometry)?.geometry) ?? "polygon";
+}
+
 /* ==========================================================================
    Бүрэлдэхүүн
    ========================================================================== */
 
-type Mode = {
+export type Mode = {
   cluster: boolean;
   clusterMaxZoom: number;
   clusterRadius: number;
@@ -882,7 +1373,7 @@ function strokes(m: Mode, lit: boolean) {
   return { line: lit ? 2.2 : 0.85, cas: lit ? 5.5 : 3.5, fill };
 }
 
-function polySymbol(m: Mode, color: string, lit: boolean) {
+export function polySymbol(m: Mode, color: string, lit: boolean) {
   if (m.shapeHollow.includes(color)) {
     /* Нарийн хүрээ, дүүргэлтгүй; сонгосон үед л бүдэг дүүргэлт */
     const layers: any[] = [
@@ -930,7 +1421,7 @@ const ARROW = {
   respectFrame: true,
 };
 
-function lineSymbol(m: Mode, color: string, lit: boolean) {
+export function lineSymbol(m: Mode, color: string, lit: boolean) {
   const s = strokes(m, lit);
   const layers: any[] = [];
   if (m.shapeFlow) layers.push(ARROW);
@@ -939,7 +1430,7 @@ function lineSymbol(m: Mode, color: string, lit: boolean) {
   return { type: "cim", data: { type: "CIMSymbolReference", symbol: { type: "CIMLineSymbol", symbolLayers: layers } } };
 }
 
-function shapeRenderer(m: Mode, colors: string[], sym: (m: Mode, c: string, lit: boolean) => any) {
+export function shapeRenderer(m: Mode, colors: string[], sym: (m: Mode, c: string, lit: boolean) => any) {
   const base = m.shapeColor ?? FIREFLY.glow;
   return {
     type: "unique-value",
@@ -955,7 +1446,7 @@ function pointSymbolFor(m: Mode): (tint: string | null) => any {
   return (t) => fireSymbol(m.fire, t, m.tinted);
 }
 
-function pointRenderer(m: Mode, colors: string[]) {
+export function pointRenderer(m: Mode, colors: string[]) {
   if (m.graded) {
     const stops = m.graded;
     const lo = stops[0][0];
@@ -1265,42 +1756,7 @@ function WellsMapBody({
   const basemapRef = React.useRef(basemap);
 
   /** Эх сурвалж үүсгэх үед л уншигдах тохиргоо */
-  const modeRef = React.useRef<Mode>({
-    cluster,
-    clusterMaxZoom,
-    clusterRadius,
-    clusterLabel,
-    weighted: Boolean(weights),
-    graded: grades?.stops,
-    gradedFire: Boolean(grades?.firefly),
-    gradedFireColor: grades?.firefly === "graded",
-    shaped: Boolean(shapes),
-    shapeGlow: Boolean(shapes?.glow) && !shapes?.crisp,
-    shapeCrisp: Boolean(shapes?.crisp),
-    shapeColor: shapes?.color,
-    fire: firefly ?? FIREFLY,
-    tinted: Boolean(colors),
-    dots: dots ?? null,
-    esriFire: esriFirefly,
-    pointScale: pointScale ?? 1,
-    shapeLabelZoom: shapes?.labelZoom ?? 0,
-    shapeFlow: Boolean(shapes?.flow),
-    shapeLabelOnLine: shapes?.labelPlacement === "line-center",
-    shapeThin: shapes?.edge === "thin",
-    shapeHair: shapes?.edge === "hair",
-    shapeHollow: shapes?.hollow ?? [],
-    shapeOutline: shapes?.outline !== false,
-    shapeLabelUnique: Boolean(shapes?.labelUnique),
-    labeled: Boolean(labels),
-    labelZoom: labels?.minzoom ?? 12,
-    labelOffset: labels?.offset ?? 0.7,
-    labelSize: labels?.size ?? 8,
-    labelColors: labels?.colors ?? null,
-    labelHalo: labels?.halo ?? 0.9,
-    valued: Boolean(values),
-    valueZoom: values?.maxzoom ?? 13,
-    scale,
-  });
+  const modeRef = React.useRef<Mode>(modeOf({ cluster, clusterMaxZoom, clusterRadius, clusterLabel, weights, grades, shapes, firefly, colors, dots, esriFirefly, pointScale, labels, values, scale }));
 
   /* ---------------- Газрын зураг үүсгэх ---------------- */
   React.useEffect(() => {
@@ -1325,212 +1781,10 @@ function WellsMapBody({
           });
         const bnd = { country: bndLayer("country"), aimag: bndLayer("aimag"), soum: bndLayer("soum") };
 
-        const shapeFields: Field[] = [
-          { name: "oid", type: "double" },
-          { name: "c", type: "string" },
-          { name: "t", type: "string" },
-        ];
-        const shapePoly = mode.shaped
-          ? clientLayer(E, "polygon", shapeFields, {
-              renderer: shapeRenderer(mode, [], polySymbol),
-              ...(mode.shapeGlow ? { effect: "bloom(1.4, 2px, 0)" } : {}),
-            })
-          : null;
-        const lineLabels = mode.shaped && mode.shapeLabelOnLine;
-        const shapeLine = mode.shaped
-          ? clientLayer(E, "polyline", shapeFields, {
-              renderer: shapeRenderer(mode, [], lineSymbol),
-              ...(mode.shapeGlow ? { effect: "bloom(1.4, 2px, 0)" } : {}),
-            })
-          : null;
+        const { shapePoly, shapeLine, shapeLabels, points, values: valuesLayer, heat, heatRenderer, dotRenderer, zDot } = dataLayers(E, mode);
         /* Сонгосон, хулганы доорх дүрс — тод хувилбараар давхарлана */
         const lit = mode.shaped ? new E.GraphicsLayer({ title: "lit" }) : null;
         const above = new E.GroupLayer({ title: "above" });
-        /*
-          ⚠ ХЭРЧМИЙН ШОШГО ч мөн ЦЭГЭН давхаргад (шугамын жинхэнэ дунд цэг):
-          Esri-ийн `center-along` нь бичвэр хэрчимдээ багтахгүй бол огт
-          тавьдаггүй — 60 м-ийн шонгийн хэрчим дээр нэг ч шошго гарахгүй байв.
-        */
-        const shapeLabels =
-          mode.shaped
-            ? clientLayer(E, "point", [{ name: "t", type: "string" }, { name: "s", type: "double" }], {
-                renderer: INVISIBLE,
-                labelingInfo: [
-                  {
-                    /*
-                      ⚠⚠ ШОШГО ДҮРСЭЭСЭЭ ТОМ БАЙХГҮЙ (хэрэглэгч 2026-10-23, ТХГН-ийн
-                      зургаар: "label zasay"). Хол байхад хотын төвийн жижиг
-                      дүрсүүдийн урт нэр бие биен дээгүүр давхцаж уншигдахгүй
-                      байв. Одоо дүрсийн хэмжээ (`s`, метр) дэлгэц дээр 48px-ээс
-                      бага бол шошго гарахгүй — ойртоход өөрөө гарна; урт нэр
-                      хоёр мөрөнд залгагдаж, 46 тэмдэгтээс хэтэрвэл тасарна
-                      (бүтэн нэр нь цонх, диаграмд). Шугамд `s` хоосон тул
-                      хязгааргүй.
-                    */
-                    labelExpressionInfo: {
-                      expression: `var t = $feature.t;
-                        var s = $feature.s;
-                        if (!IsEmpty(s) && s * 3779.5 / $view.scale < 48) return "";
-                        return IIF(Count(t) > 46, Left(t, 45) + "…", t);`,
-                    },
-                    labelPlacement: "center-center",
-                    deconflictionStrategy: lineLabels ? "none" : "static",
-                    minScale: mode.shapeLabelZoom ? scaleAt(mode.shapeLabelZoom) * 1.01 : 0,
-                    symbol: {
-                      type: "text",
-                      color: "#ffffff",
-                      haloColor: HALO,
-                      haloSize: 0.9,
-                      lineWidth: 130,
-                      font: { ...FONT, size: 8 },
-                    },
-                  },
-                ],
-              })
-            : null;
-
-        const pointFields: Field[] = [
-          { name: "oid", type: "double" },
-          { name: "w", type: "double" },
-          { name: "g", type: "double" },
-          { name: "c", type: "string" },
-          { name: "t", type: "string" },
-          { name: "r", type: "integer" },
-        ];
-
-        /*
-          НЯГТРАЛЫН горим: 1:20 000 хүртэл дулааны зураг, түүнээс ойр бодит
-          цэг. Заагт 0.6 түвшний давхцал — нэг нь алга болоод нөгөө нь
-          гарах хооронд зураг хоосрохгүй.
-        */
-        const zDot = zoomForScale(20_000);
-        /*
-          ⚠ НЭГ ДАВХАРГА, ХОЁР РЕНДЕРЕР: дулааны зураг ба бодит цэг ижил
-          145 мянган цэгийг хоёр давхаргад хуулбарлавал хөтөч хоёр дахин
-          ачаална. Масштаб заагийг давах бүрд рендерер солигдоно.
-        */
-        const heatRenderer = {
-          type: "heatmap",
-          radius: 9,
-          maxDensity: 3,
-          minDensity: 0,
-          /* Өнгө нь цэгийн палитраас (`firefly`) — самбар өөрийн
-             диаграмтай нэг өнгөний гэр бүл өгч болно. Анхдагч нь cyan. */
-          colorStops: [
-            { ratio: 0, color: col(mode.fire.glow, 0) },
-            { ratio: 0.25, color: col(mode.fire.glow, 0.32) },
-            { ratio: 0.6, color: col(mode.fire.mid, 0.62) },
-            { ratio: 1, color: col(mode.fire.core, 0.92) },
-          ],
-        };
-        const dotRenderer = {
-          type: "simple",
-          symbol: {
-            type: "simple-marker",
-            color: col(mode.fire.glow, 0.9),
-            outline: { color: [0, 0, 0, 0.5], width: 0.3 },
-          },
-          visualVariables: [
-            sizeByZoom([
-              [zDot - 0.6, 1.2],
-              [15, 1.8],
-              [18, 2.6],
-            ]),
-          ],
-        };
-        const heat = null;
-
-        const valueScale = mode.valued ? scaleAt(mode.valueZoom) : 0;
-
-        const pointRendererNow = mode.weighted ? heatRenderer : pointRenderer(mode, []);
-
-        const badge = mode.clusterLabel === "badge";
-        const points = clientLayer(E, "point", pointFields, {
-          renderer: pointRendererNow,
-          ...(mode.valued ? { minScale: valueScale } : {}),
-          ...(mode.dots ? { orderBy: [{ field: "r", order: "ascending" }] } : {}),
-          ...(mode.cluster && !mode.weighted
-            ? {
-                featureReduction: {
-                  type: "cluster",
-                  /* ⚠ "badge" горим (аврагдсан амьтан, авто засвар): булангийн
-                     хайрцагтай тоо Esri дээр хөршийнхөө дээгүүр давхцаж зураг
-                     замбараагүй харагдаж байв (2026-10-23). Одоо cyan дүүргэлттэй
-                     дугуй (42%), тоо нь ДОТОРОО, бөөгнөрлийн радиус илүү өргөн.
-                     Бараан цул дүүргэлт "онцгүй" гэж буцаагдсан. */
-                  clusterRadius: badge ? "72px" : `${mode.clusterRadius}px`,
-                  clusterMinSize: `${pt(badge ? 12 : 10)}pt`,
-                  clusterMaxSize: `${pt(badge ? 28 : 38)}pt`,
-                  maxScale: scaleAt(mode.clusterMaxZoom),
-                  /* ⚠ `renderer` БИШ `symbol`: өөрийн рендерер өгвөл НЭГ гишүүнтэй
-                     бөөгнөрөл ч цагираг болж зурагддаг байв */
-                  symbol: {
-                    type: "simple-marker",
-                    color: col(mode.fire.glow, badge ? 0.42 : 0.22),
-                    outline: { color: col(mode.fire.glow, 0.95), width: (badge ? 1.6 : 1.4) * 0.75 },
-                  },
-                  labelingInfo: [
-                    {
-                      deconflictionStrategy: "none",
-                      labelExpressionInfo: { expression: CLUSTER_TEXT },
-                      labelPlacement: "center-center",
-                      symbol: {
-                        type: "text",
-                        color: "#ffffff",
-                        haloColor: [0, 0, 0, 0.7],
-                        haloSize: 0.9,
-                        font: { ...FONT, size: 8 },
-                      },
-                    },
-                  ],
-                },
-              }
-            : {}),
-          ...(mode.labeled
-            ? {
-                labelingInfo: (() => {
-                  /* Бичвэр тус бүрийн өнгө — анги тутамд НЭГ шошгын класс */
-                  const q = (t: string) => `'${t.replace(/'/g, "''")}'`;
-                  const cls = (where: string, color: string) => ({
-                    labelExpressionInfo: { expression: "$feature.t" },
-                    where,
-                    labelPlacement: "below-center",
-                    deconflictionStrategy: "static",
-                    minScale: scaleAt(mode.labelZoom) * 1.01,
-                    symbol: {
-                      type: "text",
-                      color,
-                      haloColor: HALO,
-                      haloSize: mode.labelHalo,
-                      lineWidth: 80,
-                      yoffset: -mode.labelOffset * 6,
-                      font: { ...FONT, size: mode.labelSize },
-                    },
-                  });
-                  const pairs = Object.entries(mode.labelColors ?? {});
-                  if (!pairs.length) return [cls("t IS NOT NULL", "#eef4f8")];
-                  return [
-                    ...pairs.map(([t, c]) => cls(`t = ${q(t)}`, c)),
-                    cls(`t IS NOT NULL AND t NOT IN (${pairs.map(([t]) => q(t)).join(", ")})`, "#eef4f8"),
-                  ];
-                })(),
-              }
-            : {}),
-        });
-
-        /* ХЭМЖИЛТИЙН УТГА — цэгийн ОРОНД, зөвхөн шошго үүрэх давхарга */
-        const valuesLayer = mode.valued
-          ? clientLayer(
-              E,
-              "point",
-              [
-                { name: "v", type: "string" },
-                { name: "vc", type: "string" },
-              ],
-              { renderer: INVISIBLE, maxScale: valueScale },
-            )
-          : null;
-
         const hl = new E.GraphicsLayer({ title: "hl" });
         const hot = new E.GraphicsLayer({ title: "hot" });
 
@@ -1786,65 +2040,8 @@ function WellsMapBody({
     const sig = [live, points, visible, weights, grades, labels, values, colors, dotRank];
     if (applied.current.length === sig.length && sig.every((v, i) => v === applied.current[i])) return;
     applied.current = sig;
-    const { lon, lat, oid } = points;
-    const text = labels?.text;
-    const rank = dotRank ? (JSON.parse(dotRank) as Record<string, number>) : null;
-
-    const tints = new Set<string>();
-    const features: GeoJSON.Feature[] = new Array(visible.length);
-    for (let k = 0; k < visible.length; k++) {
-      const i = visible[k];
-      const c = colors?.[i];
-      if (c) tints.add(c);
-      features[k] = pointFeature(lon[i], lat[i], {
-        oid: oid[i],
-        w: weights ? weights[i] : null,
-        g: grades ? grades.values[i] : null,
-        c: c ?? null,
-        /* Хоосон шошгыг ОГТ бичихгүй — `t IS NOT NULL` шүүлт */
-        t: text?.[i] || null,
-        r: c && rank ? (rank[c] ?? 0) : 0,
-      });
-    }
-    if (!mode.weighted && !mode.graded) {
-      const list = [...tints].sort();
-      const key = list.join("|");
-      if (layers.points.__tints !== key) {
-        layers.points.__tints = key;
-        layers.points.renderer = pointRenderer(mode, list);
-      }
-    }
-    refill(E, view, slotOf(layers, "points"), () => features);
-
-    if (layers.values && values) {
-      const groups = new Set<string>();
-      const vals: GeoJSON.Feature[] = [];
-      for (let k = 0; k < visible.length; k++) {
-        const i = visible[k];
-        const v = values.text[i];
-        if (!v) continue;
-        const vc = values.color?.[i] ?? "#eef4f8";
-        groups.add(vc);
-        vals.push(pointFeature(lon[i], lat[i], { v, vc }));
-      }
-      /* Шошгын өнгө нь УТГЫНХ — Esri-ийн шошго атрибутаас өнгө авдаггүй
-         тул өнгө тус бүрд нэг анги */
-      layers.values.labelingInfo = [...groups].map((vc) => ({
-        labelExpressionInfo: { expression: "$feature.v" },
-        where: `vc = '${vc}'`,
-        labelPlacement: "center-center",
-        deconflictionStrategy: "static",
-        symbol: {
-          type: "text",
-          color: vc,
-          haloColor: [8, 14, 20, 0.9],
-          haloSize: 1.2,
-          font: { ...FONT, size: 10 },
-        },
-      }));
-      refill(E, view, slotOf(layers, "values"), () => vals);
-    }
-
+    fillPoints(E, view, layers, mode, { points, visible, weights, grades, labels, values, colors, dotRank });
+    const { lon, lat } = points;
     /*
       Эхний удаа өгөгдлийн гол бөөгнөрөл рүү тааруулна — 1–99 хувийн муж:
       улс даяар тархсан ~2% нь харагдацыг сунгаж, өтгөн хэсэг цэг болж
@@ -1904,47 +2101,7 @@ function WellsMapBody({
     if (!ready || !live || !shapeData) return;
     const { E, layers, mode } = live;
     const geoms = shapeGeoms.current;
-    geoms.clear();
-    const polys: GeoJSON.Feature[] = [];
-    const lines: GeoJSON.Feature[] = [];
-    const colorSet = new Set<string>();
-    for (const f of shapeData.features) {
-      const geometry = cleanGeom(f.geometry);
-      const fam = familyOf(geometry);
-      if (!geometry || (fam !== "polygon" && fam !== "polyline")) continue;
-      const p = f.properties ?? {};
-      const o = Number(p.oid ?? f.id);
-      const c = typeof p.c === "string" ? p.c : null;
-      if (c) colorSet.add(c);
-      /* Esri геометр нь ЗӨВХӨН тодруулах үед хөрвүүлэгдэнэ (`redrawLit`) */
-      geoms.set(o, { geojson: geometry, c });
-      (fam === "polygon" ? polys : lines).push({
-        type: "Feature",
-        geometry,
-        properties: { oid: o, c, t: typeof p.t === "string" && p.t ? p.t : null },
-      });
-    }
-    const list = [...colorSet].sort();
-    const key = list.join("|");
-    if (layers.shapePoly && layers.shapePoly.__tints !== key) {
-      layers.shapePoly.__tints = key;
-      layers.shapePoly.renderer = shapeRenderer(mode, list, polySymbol);
-      layers.shapeLine.renderer = shapeRenderer(mode, list, lineSymbol);
-    }
-    if (layers.shapePoly) refill(E, live.view, slotOf(layers, "shapePoly"), () => polys);
-    if (layers.shapeLine) refill(E, live.view, slotOf(layers, "shapeLine"), () => lines);
-    /* Шошгын цэгүүд дүрстэйгээ ХАМТ шинэчлэгдэнэ */
-    if (layers.shapeLabels) {
-      const lp = mode.shapeLabelOnLine ? lineMidpoints(shapeData) : labelPoints(shapeData, mode.shapeLabelUnique);
-      refill(E, live.view, slotOf(layers, "shapeLabels"), () =>
-        lp.features.flatMap((f) => {
-          const geometry = cleanGeom(f.geometry);
-          return geometry
-            ? [{ type: "Feature" as const, geometry, properties: { t: f.properties?.t ?? null, s: f.properties?.s ?? null } }]
-            : [];
-        }),
-      );
-    }
+    fillShapes(E, live.view, layers, mode, shapeData, geoms);
     redrawLit(live, geoms);
   }, [ready, shapeData]);
 
@@ -1974,69 +2131,14 @@ function WellsMapBody({
     }
     for (const o of list) {
       const group = o.above ? layers.above : layers.under;
-      const fam = familyOf(o.data.features.find((f) => f.geometry)?.geometry) ?? "polygon";
+      const fam = overlayFamily(o);
       let layer = group.layers.find((l: any) => l.__ovId === o.id);
-      const line = { type: "simple-line", color: col(o.line.color, o.line.opacity), width: o.line.width * 0.75, join: "round", style: o.line.style ?? "solid" };
-      const fillOpacity = o.fill?.opacity ?? 0.08;
-      const renderer =
-        fam === "polygon"
-          ? o.fill?.byGrid
-            ? {
-                type: "unique-value",
-                field: "gridcode",
-                defaultSymbol: { type: "simple-fill", color: col(o.fill.color, o.fill.byGrid[0]), outline: line },
-                uniqueValueInfos: o.fill.byGrid.map((v, i) => ({
-                  value: i + 1,
-                  symbol: { type: "simple-fill", color: col(o.fill!.color, v), outline: line },
-                })),
-              }
-            : {
-                type: "simple",
-                symbol: { type: "simple-fill", color: o.fill ? col(o.fill.color, fillOpacity) : [0, 0, 0, 0], outline: line },
-              }
-          : fam === "polyline"
-            ? { type: "simple", symbol: line }
-            : { type: "simple", symbol: { type: "simple-marker", size: 4, color: col(o.line.color, o.line.opacity), outline: null } };
-      const feats = () =>
-        o.data.features.flatMap((f) => {
-          const geometry = cleanGeom(f.geometry);
-          if (!geometry || familyOf(geometry) !== fam) return [];
-          const gc = Number(f.properties?.gridcode);
-          const t = o.label ? f.properties?.[o.label.field] : null;
-          return [
-            {
-              type: "Feature" as const,
-              geometry,
-              properties: {
-                gridcode: Number.isFinite(gc) ? gc : null,
-                t: typeof t === "string" && t.trim() ? t.trim() : null,
-              },
-            },
-          ];
-        });
+      const { renderer, feats, labelingInfo } = overlayParts(o, fam);
       if (!layer || layer.geometryType !== fam) {
         if (layer) {
           group.remove(layer);
           layer.destroy();
         }
-        const labelingInfo = o.label
-          ? [
-              {
-                labelExpressionInfo: { expression: "$feature.t" },
-                where: "t IS NOT NULL",
-                labelPlacement: fam === "polygon" ? "always-horizontal" : "center-along",
-                deconflictionStrategy: "static",
-                minScale: o.label.minzoom != null ? scaleAt(o.label.minzoom) * 1.01 : 0,
-                symbol: {
-                  type: "text",
-                  color: o.label.color ?? "#eef4f8",
-                  haloColor: HALO,
-                  haloSize: 0.8,
-                  font: { ...FONT, size: o.label.size ?? 8 },
-                },
-              },
-            ]
-          : null;
         layer = geoLayer(
           E,
           fam,
@@ -2332,7 +2434,7 @@ function haversine(lon1: number, lat1: number, lon2: number, lat2: number) {
 }
 
 /** Шугамын УРТЫН дунд цэг — хэрчмийн шошгонд */
-function lineMidpoints(fc: GeoJSON.FeatureCollection): GeoJSON.FeatureCollection {
+export function lineMidpoints(fc: GeoJSON.FeatureCollection): GeoJSON.FeatureCollection {
   const features: GeoJSON.Feature[] = [];
   for (const f of fc.features) {
     const t = f.properties?.t;
@@ -2367,7 +2469,7 @@ function extentOf(view: any): Extent | null {
 }
 
 /** Газарзүйн цэгийн дэлгэцийн байрлал (эргүүлэлтгүй зураг) */
-function screenOf(view: any, [lon, lat]: [number, number]): [number, number] | null {
+export function screenOf(view: any, [lon, lat]: [number, number]): [number, number] | null {
   const e = view?.extent;
   if (!e) return null;
   const [x, y] = toMerc(lon, lat);
@@ -2375,7 +2477,7 @@ function screenOf(view: any, [lon, lat]: [number, number]): [number, number] | n
 }
 
 /** Тэмдэглэгээнүүдийг зургийн одоогийн байрлалд тааруулна */
-function placeMarks(view: any, host: HTMLElement | null) {
+export function placeMarks(view: any, host: HTMLElement | null) {
   if (!host) return;
   for (const el of host.children as unknown as Iterable<HTMLElement>) {
     const at = screenOf(view, [Number(el.dataset.lon), Number(el.dataset.lat)]);
@@ -2530,7 +2632,7 @@ function bindPointer(
  * Дугуй тэмдэглэгээ — зургийн хаяг, SVG тэмдэг эсвэл дохиоллын цохилт.
  * Хоёулаа өөрийн кодоос гаралтай тул `innerHTML` аюулгүй.
  */
-function markerEl(mark: string, onClick: () => void, onHover?: (over: boolean) => void, tint?: string) {
+export function markerEl(mark: string, onClick: () => void, onHover?: (over: boolean) => void, tint?: string) {
   const el = document.createElement("button");
   el.type = "button";
   if (tint) el.style.setProperty("--pin", tint);

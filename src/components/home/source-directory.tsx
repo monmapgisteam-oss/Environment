@@ -1,10 +1,11 @@
 ﻿"use client";
 
 import { useState } from "react";
-import { Archive, ChevronRight, Database, Globe, Layers, Search, Webhook, X } from "lucide-react";
+import { Archive, ChevronRight, Database, Globe, Layers, ListTree, Search, Webhook, X } from "lucide-react";
 import { DEPARTMENTS as ALL_DEPARTMENTS } from "@/lib/departments";
 import { useAccess } from "@/components/auth/access";
 import { SOURCES, type Source } from "@/lib/sources";
+import { DataBank } from "@/components/home/data-bank";
 import "./source-directory.css";
 
 const SOURCE_TYPES = [
@@ -15,6 +16,21 @@ const SOURCE_TYPES = [
   { id: "snapshot", label: "Хадгалсан хуулбар" },
 ] as const;
 type SourceType = (typeof SOURCE_TYPES)[number]["id"];
+
+/*
+  ХУУДСЫН ХОЁР ХАРАГДАЦ (хэрэглэгч 2026-11-12: "ЭХ СУРВАЛЖИЙН БҮРТГЭЛ-ийг
+  товч болгоод ард нь дахиад шинээр товч хий, нэр нь Мэдээллийн сан").
+  Урьд нь толгойн тэмдэглэгээ (eyebrow) байсан бичвэр нь одоо эхний товч;
+  гарчиг ("Мэдээллийн эх сурвалжууд") ба тайлбар мөр ХАСАГДСАН (хэрэглэгч мөн
+  өдөр: "del") — товч өөрөө харагдацаа нэрлэнэ;
+  хоёр дахь нь "Мэдээллийн сан" — төслийн бүх давхарга нэг Esri зурагт
+  ({@link ./data-bank}). Сонголт `localStorage`-д хадгалагдахгүй.
+*/
+const VIEWS = [
+  { id: "sources", label: "Эх сурвалжийн бүртгэл", icon: ListTree },
+  { id: "database", label: "Мэдээллийн сан", icon: Database },
+] as const;
+type View = (typeof VIEWS)[number]["id"];
 
 /**
  * Эх сурвалжийн төрлийг `kind` бичвэрээс таана.
@@ -43,6 +59,7 @@ export function SourceDirectory() {
   const [query, setQuery] = useState("");
   const [department, setDepartment] = useState("");
   const [type, setType] = useState<SourceType>("all");
+  const [view, setView] = useState<View>("sources");
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   /* Хэлтсийн бүртгэл зөвхөн өөрийн хэлтсийн эх сурвалжийг харна */
   const { departments: DEPARTMENTS, allows } = useAccess();
@@ -76,7 +93,7 @@ export function SourceDirectory() {
   const filtered = Boolean(query || department || activeType !== "all");
   const reset = () => { setQuery(""); setDepartment(""); setType("all"); setExpanded({}); };
   return (
-    <section className="source-catalog" aria-labelledby="source-catalog-title">
+    <section className="source-catalog" data-view={view} aria-label="Өгөгдлийн сан">
       {/*
         ⚠ НИЙЛБЭРИЙН БЛОК ХАСАГДСАН (хэрэглэгчийн шийдвэр, 2026-09-25).
         "Эх сурвалж 82 · Хэлтэс 6" гэсэн хоёр том тоо нь доорх
@@ -86,11 +103,17 @@ export function SourceDirectory() {
       */}
       <header className="source-catalog-intro">
         <div>
-          <span className="source-catalog-kicker"><Database size={13} aria-hidden />ЭХ СУРВАЛЖИЙН БҮРТГЭЛ</span>
-          <h1 id="source-catalog-title">Мэдээллийн эх сурвалжууд</h1>
-          <p>Хэлтсээ дэлгэж, ашиглаж буй өгөгдлийн эх сурвалжийн мэдээллийг харна.</p>
+          <div className="source-catalog-views" role="group" aria-label="Харагдац">
+            {VIEWS.map((item) => <button key={item.id} type="button" aria-pressed={view === item.id} onClick={() => setView(item.id)}>
+              <item.icon size={13} aria-hidden />{item.label}
+            </button>)}
+          </div>
         </div>
       </header>
+
+      {view === "database" && <DataBank />}
+
+      {view === "sources" && <>
 
       <div className="source-catalog-controls">
         <div className="source-catalog-search-row">
@@ -162,6 +185,7 @@ export function SourceDirectory() {
         <p>{department && !entries.some((source) => source.slug === department) ? "Энэ хэлтэст эх сурвалжийн холбоос бүртгээгүй байна." : "Хайлтын үг, хэлтэс эсвэл төрлийн шүүлтээ өөрчилнө үү."}</p>
         <button type="button" onClick={reset}>Бүх эх сурвалжийг харах<ChevronRight size={14} aria-hidden /></button>
       </div>}
+      </>}
     </section>
   );
 }

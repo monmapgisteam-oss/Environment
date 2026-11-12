@@ -30,7 +30,7 @@ import { esriModules } from "@/lib/arcgis-sdk";
 const SCENE_BASEMAPS = ["satellite", "hybrid", "topo-vector", "streets-vector", "gray-vector", "dark-gray-vector"];
 
 /** Esri-ийн хэмжилтийн виджетийн англи бичвэр → монгол (4.33-ын бүтэн бичвэрээр) */
-const MEASURE_MN: Record<string, string> = {
+export const MEASURE_MN: Record<string, string> = {
   Unit: "Нэгж",
   Metric: "Метрийн систем",
   Imperial: "Империйн систем",
@@ -66,6 +66,21 @@ const MEASURE_MN: Record<string, string> = {
   Horizontal: "Хэвтээ зай",
   Vertical: "Босоо зай",
   "New measurement": "Шинэ хэмжилт",
+  Distance: "Зай",
+  Layers: "Давхарга",
+  Legend: "Таних тэмдэг",
+  /* Өндрийн зүсэлт (`ElevationProfile`, "Мэдээллийн сан") */
+  "Draw or select line to generate an elevation profile.": "Өндрийн зүсэлт гаргахын тулд шугам зурна уу, эсвэл сонгоно уу.",
+  "Select line": "Шугам сонгох",
+  "New profile": "Шинэ зүсэлт",
+  Cancel: "Цуцлах",
+  Elevation: "Өндөр",
+  "Ground": "Газрын гадарга",
+  "Min elevation": "Хамгийн бага өндөр",
+  "Max elevation": "Хамгийн их өндөр",
+  "Elevation gain": "Өндрийн өсөлт",
+  "Elevation loss": "Өндрийн бууралт",
+  "Total length": "Нийт урт",
 };
 
 const MODULES = [
@@ -76,6 +91,92 @@ const MODULES = [
   "esri/widgets/LayerList",
   "esri/widgets/Measurement",
 ];
+
+/**
+ * Esri-ийн бичвэрийг монгол болгож, калцит элементийг жижиг масштабад (`s`)
+ * барина — `host` дотор ямар ч виджет (хэмжилт, давхаргын жагсаалт, таних
+ * тэмдэг). Толинд байхгүй бичвэр АНГЛИАРАА үлдэнэ.
+ */
+export function localize(host: HTMLElement) {
+  const shrink = () => {
+    for (const el of host.querySelectorAll("calcite-label, calcite-select, calcite-button")) {
+      if (el.getAttribute("scale") !== "s") el.setAttribute("scale", "s");
+    }
+  };
+  const translate = () => {
+    const walker = document.createTreeWalker(host, NodeFilter.SHOW_TEXT);
+    for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+      const raw = n.nodeValue ?? "";
+      const mn = MEASURE_MN[raw.trim()];
+      if (mn && raw.trim() !== mn) n.nodeValue = raw.replace(raw.trim(), mn);
+    }
+  };
+  const tidy = () => {
+    shrink();
+    translate();
+  };
+  new MutationObserver(tidy).observe(host, { childList: true, subtree: true, characterData: true });
+  tidy();
+}
+
+/**
+ * Хэмжилтийн самбар — хэрэгсэл сонгох мөр + Esri `Measurement`-ийн идэвхтэй
+ * хэрэгслийн самбар. 3D-д `direct-line` · `area`, 2D-д `distance` · `area`
+ * (дуудагч нь `tools`-оор өгнө). "Мэдээллийн сан"-ийн 2D зураг
+ * ({@link src/components/home/data-bank.tsx}) мөн энийг хэрэглэнэ.
+ */
+export function measurePanel(view: any, Measurement: any, tools: [string, string][]): HTMLDivElement {
+  const box = document.createElement("div");
+  box.className = "scene-measure";
+  const bar = document.createElement("div");
+  bar.className = "scene-measure-bar";
+  const host = document.createElement("div");
+  box.append(bar, host);
+  const measurement = new Measurement({ view, container: host, linearUnit: "metric", areaUnit: "metric" });
+  /*
+    Esri-ийн самбар доторх калцит элементүүд (нэгжийн шошго, унждаг цэс,
+    товч) `scale="m"`-ээр төрдөг — 16px бичвэр, 32px өндөр; тэдний хэмжээ
+    shadow DOM дотроо тул энгийн CSS хүрэхгүй. Хэрэгсэл сольж самбар дахин
+    зурагдах бүрд `s` масштаб тавина (хэрэглэгч 2026-11-02: "хэмжээг нь янзал").
+    ⚠⚠ ДЭЛГЭЦ БҮХЭЛДЭЭ МОНГОЛ (хэрэглэгч 2026-11-02: "bugd mongol shu"). Esri-д
+    монгол орчуулга байхгүй тул виджетийн бичвэрийг DOM дээр нь толиор солино
+    (`MEASURE_MN`): нэгжийн шошго, сонголтууд, хэмжилтийн мөрийн нэр, товч.
+    Толинд байхгүй шинэ бичвэр АНГЛИАРАА үлдэнэ — хагас орчуулга гаргахгүй,
+    бүтэн өгүүлбэрээр таарна. Тоо, нэгжийн тэмдэг (m, km²) хөндөгдөхгүй.
+    `calcite-option`-ийн бичвэр солигдоход calcite-select дотоод `select`-ээ
+    өөрөө шинэчилнэ (толгойгүй Chrome-оор шалгасан).
+  */
+  localize(host);
+  const btns = tools.map(([tool, label]) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.textContent = label;
+    b.onclick = () => {
+      measurement.activeTool = measurement.activeTool === tool ? null : tool;
+      paint();
+    };
+    bar.append(b);
+    return { tool, b };
+  });
+  const clear = document.createElement("button");
+  clear.type = "button";
+  clear.textContent = "Цэвэрлэх";
+  clear.className = "is-clear";
+  clear.onclick = () => {
+    measurement.clear();
+    paint();
+  };
+  bar.append(clear);
+  function paint() {
+    for (const { tool, b } of btns) {
+      const on = measurement.activeTool === tool;
+      b.classList.toggle("is-on", on);
+      b.setAttribute("aria-pressed", String(on));
+    }
+  }
+  paint();
+  return box;
+}
 
 export async function addSceneTools(
   view: any,
@@ -115,79 +216,10 @@ export async function addSceneTools(
     );
   const layers = opts.layers ?? expand(new LayerList({ view }), "layers", "Давхарга");
 
-  /* Хэмжилт — хэрэгсэл сонгох мөр + Esri-ийн идэвхтэй хэрэгслийн самбар */
-  const box = document.createElement("div");
-  box.className = "scene-measure";
-  const bar = document.createElement("div");
-  bar.className = "scene-measure-bar";
-  const host = document.createElement("div");
-  box.append(bar, host);
-  const measurement = new Measurement({ view, container: host, linearUnit: "metric", areaUnit: "metric" });
-  /*
-    Esri-ийн самбар доторх калцит элементүүд (нэгжийн шошго, унждаг цэс,
-    товч) `scale="m"`-ээр төрдөг — 16px бичвэр, 32px өндөр; тэдний хэмжээ
-    shadow DOM дотроо тул энгийн CSS хүрэхгүй. Хэрэгсэл сольж самбар дахин
-    зурагдах бүрд `s` масштаб тавина (хэрэглэгч 2026-11-02: "хэмжээг нь янзал").
-  */
-  const shrink = () => {
-    for (const el of host.querySelectorAll("calcite-label, calcite-select, calcite-button")) {
-      if (el.getAttribute("scale") !== "s") el.setAttribute("scale", "s");
-    }
-  };
-  /*
-    ⚠⚠ ДЭЛГЭЦ БҮХЭЛДЭЭ МОНГОЛ (хэрэглэгч 2026-11-02: "bugd mongol shu"). Esri-д
-    монгол орчуулга байхгүй тул виджетийн бичвэрийг DOM дээр нь толиор солино
-    (`MEASURE_MN`): нэгжийн шошго, сонголтууд, хэмжилтийн мөрийн нэр, товч.
-    Толинд байхгүй шинэ бичвэр АНГЛИАРАА үлдэнэ — хагас орчуулга гаргахгүй,
-    бүтэн өгүүлбэрээр таарна. Тоо, нэгжийн тэмдэг (m, km²) хөндөгдөхгүй.
-    `calcite-option`-ийн бичвэр солигдоход calcite-select дотоод `select`-ээ
-    өөрөө шинэчилнэ (толгойгүй Chrome-оор шалгасан).
-  */
-  const translate = () => {
-    const walker = document.createTreeWalker(host, NodeFilter.SHOW_TEXT);
-    for (let n = walker.nextNode(); n; n = walker.nextNode()) {
-      const raw = n.nodeValue ?? "";
-      const mn = MEASURE_MN[raw.trim()];
-      if (mn && raw.trim() !== mn) n.nodeValue = raw.replace(raw.trim(), mn);
-    }
-  };
-  const tidy = () => {
-    shrink();
-    translate();
-  };
-  new MutationObserver(tidy).observe(host, { childList: true, subtree: true, characterData: true });
-  const tools: [string, string][] = [
+  const box = measurePanel(view, Measurement, [
     ["direct-line", "Шулуун зай"],
     ["area", "Талбай"],
-  ];
-  const btns = tools.map(([tool, label]) => {
-    const b = document.createElement("button");
-    b.type = "button";
-    b.textContent = label;
-    b.onclick = () => {
-      measurement.activeTool = measurement.activeTool === tool ? null : tool;
-      paint();
-    };
-    bar.append(b);
-    return { tool, b };
-  });
-  const clear = document.createElement("button");
-  clear.type = "button";
-  clear.textContent = "Цэвэрлэх";
-  clear.className = "is-clear";
-  clear.onclick = () => {
-    measurement.clear();
-    paint();
-  };
-  bar.append(clear);
-  function paint() {
-    for (const { tool, b } of btns) {
-      const on = measurement.activeTool === tool;
-      b.classList.toggle("is-on", on);
-      b.setAttribute("aria-pressed", String(on));
-    }
-  }
-  paint();
+  ]);
   const measure = expand(box, "measure", "Хэмжих");
 
   [basemap, layers, measure].forEach((component, index) =>

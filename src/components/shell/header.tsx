@@ -22,7 +22,7 @@ import { WorkspaceSearch } from "./workspace-search";
 */
 const PAGE_NAMES: [string, string, string][] = [
   ["/analysis", "Дүн шинжилгээ", "Analysis"],
-  ["/sources", "Дата эх сурвалж", "Data sources"],
+  ["/sources", "Өгөгдлийн сан", "Database"],
   ["/access", "Эрхийн зохицуулалт", "Access control"],
   ["/log", "Лог бүртгэл", "Activity log"],
   ["/reports", "Тайлан", "Reports"],

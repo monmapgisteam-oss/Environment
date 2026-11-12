@@ -246,6 +246,7 @@ export const DICT: Record<string, string> = {
   "Хайсан хуудас байхгүй эсвэл шилжсэн байна.": "The page does not exist or has moved.",
   "Дүн шинжилгээ": "Analysis",
   "Дата эх сурвалж": "Data sources",
+  "Өгөгдлийн сан": "Database",
   "Эрхийн зохицуулалт": "Access management",
   "Эрх": "Access",
   "Хажуугийн зурвасыг хураах": "Collapse sidebar",
@@ -277,6 +278,7 @@ export const DICT: Record<string, string> = {
   "Хариу арга хэмжээний бүртгэл": "Response log",
   "Түүх, статистик": "History and statistics",
   "Орон зайн мэдээлэл": "Spatial data",
+  "Давхаргууд": "Layers",
   "Ойн сан, тусгай хамгаалалттай газар, мониторингийн цэг, зөрчлийн байршлыг нэгдсэн давхаргаар харуулах GIS модуль.":
     "A GIS module that shows the forest fund, protected areas, monitoring points and violation locations on combined layers.",
   "Ойн сангийн давхарга": "Forest fund layer",
@@ -396,6 +398,11 @@ export const DICT: Record<string, string> = {
   "Хадгалсан хуулбар": "Stored copy",
   "хуулбар": "copy",
   "Эх сурвалжийн бүртгэл": "Source registry",
+  "Мэдээллийн сан": "Database",
+  "Давхарга ачаалж байна": "Loading layers",
+  "Бүртгэл": "Record",
+  "Өндрийн зүсэлт": "Elevation profile",
+  "Зургийн хэрэгсэл": "Map tools",
   "Мэдээллийн эх сурвалжууд": "Data sources",
   "Хэлтсээ дэлгэж, ашиглаж буй өгөгдлийн эх сурвалжийн мэдээллийг харна.":
     "Expand a division to view the data sources it uses.",
