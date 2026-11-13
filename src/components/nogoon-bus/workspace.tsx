@@ -11,6 +11,7 @@ import {
   Gauge,
   Layers,
   Loader2,
+  Microscope,
   Mountain,
   Recycle,
   Scale,
@@ -55,6 +56,13 @@ const spinner = () => (
   Бүтцээ эх сурвалжаас өөрөө уншдаг тул энэ арван таван сэдэвт
   зориулж тусдаа код бичих шаардлагагүй: ялгаа нь зөвхөн `LayerSet`-д.
 */
+/* "Судалгаа" — Байгаль хамгаалагчийн аппликейшнаар (Survey123) бөглөсөн
+   ногоон бүсийн хэлтсийн судалгааны бүртгэл (`lib/nogoon-survey.ts`) */
+const SurveyDashboard = dynamic(
+  () => import("./survey-dashboard").then((m) => m.NogoonSurveyDashboard),
+  { ssr: false, loading: spinner },
+);
+
 const PortalLayers = dynamic(
   () =>
     import("@/components/layers/portal-dashboard").then(
@@ -200,6 +208,16 @@ export const TABS = [
     icon: Building2,
   },
   {
+    /* Байгаль хамгаалагчийн аппликейшны "Судалгаа" ангилал, бөглөгчийн хэлтэс
+       нь ногоон бүс (хэрэглэгч 2026-11-13). Тайлбарт тоо бичихгүй — маягт
+       бөглөгдсөөр байна. */
+    id: "sudalgaa",
+    label: "Судалгаа",
+    note: "Хөрсний судалгаа · байгаль орчны үнэлгээ",
+    full: "Байгаль хамгаалагчийн аппликейшнаар бүртгэсэн судалгаа",
+    icon: Microscope,
+  },
+  {
     /* Лавлах баримт бичиг — газрын зураггүй (хэрэглэгч 2026-10-30).
        Холбоосууд нь `lib/water-law.ts`-д. */
     id: "huuli",
@@ -215,7 +233,7 @@ type TabId = (typeof TABS)[number]["id"];
 const IDS = TABS.map((t) => t.id);
 
 /** Таб → давхаргын бүрдэл. `TABS`-ийн `id` нь `NOGOON_TABS`-ийн түлхүүр */
-const SETS: Record<Exclude<TabId, "huuli">, (typeof NOGOON_TABS)[keyof typeof NOGOON_TABS]> = {
+const SETS: Record<Exclude<TabId, "huuli" | "sudalgaa">, (typeof NOGOON_TABS)[keyof typeof NOGOON_TABS]> = {
   hamgaalagch: NOGOON_TABS.hamgaalagch,
   bus: NOGOON_TABS.bus,
   bulag: NOGOON_TABS.bulag,
@@ -236,7 +254,7 @@ export function NogoonBusWorkspace() {
      сүүлд харж байсан самбар нээгдэнэ */
   const [tab, pick] = useStoredTab<TabId>("nogoon-bus.tab", IDS, "hamgaalagch", "nogoon-bus");
 
-  const set = tab === "huuli" ? null : SETS[tab];
+  const set = tab === "huuli" || tab === "sudalgaa" ? null : SETS[tab];
 
   return (
     <div className="department-workspace">
@@ -251,6 +269,8 @@ export function NogoonBusWorkspace() {
       <div className="department-workspace-content">
         {set ? (
           <PortalLayers key={set.key} set={set} access={{ scope: "nogoon-bus", tab }} />
+        ) : tab === "sudalgaa" ? (
+          <SurveyDashboard />
         ) : (
           <WaterLaw />
         )}
