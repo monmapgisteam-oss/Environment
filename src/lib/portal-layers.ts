@@ -1166,6 +1166,19 @@ export type LayerSet = {
    */
   unions?: Readonly<Record<string, LayerUnion>>;
   /**
+   * ДАВХАРГЫН МӨРИЙН ШҮҮЛТ (SQL, давхарга → нөхцөл). Олон хэлтсийн НЭГ маягт
+   * (Байгаль хамгаалагчийн аппликейшн) дотроос зөвхөн нэг төрлийг авахад —
+   * гадаргын усны бүртгэлд `turul = 'gadargiin_us'` (хэрэглэгч 2026-11-13).
+   * Тоолол, атрибут, геометр гурвуулаа энэ нөхцөлөөр; кэшийн түлхүүрт орно.
+   */
+  where?: Readonly<Record<string, string>>;
+  /**
+   * ТАЛБАРЫН ЦАГААН ЖАГСААЛТ (давхарга → нэрийн загвар). Өгвөл зөвхөн эдгээр
+   * талбар татагдана — олон зорилгын маягтад бөглөгчийн нэр, регистр, утас
+   * зэрэг хувь хүний талбар хөтөч рүү ОГТ ирэхгүй.
+   */
+  onlyFields?: Readonly<Record<string, RegExp>>;
+  /**
    * ШҮҮЛТҮҮРИЙН МӨРИЙН ЭХЭНД УТГЫН ТОВЧ ("Бүгд · 2021 · … · 2026").
    * Талбар нь диаграмгүй байж болно ({@link chartSkip}) — шүүлт нь
    * мөрийн утгаар шууд ажиллана.
@@ -1357,6 +1370,17 @@ type LayerMeta = {
  * давхаргын дэлгэрэнгүй. Бичлэгийн тоог гурав дахь хүсэлтээр авна —
  * `count` нь тодорхойлолтод байдаггүй.
  */
+/** Давхаргын мөрийн нөхцөл ({@link LayerSet.where}) */
+function whereOf(set: LayerSet, id: string): string {
+  return set.where?.[id] ?? "1=1";
+}
+
+/** Кэшийн түлхүүр — нөхцөлтэй давхарга өөрийн түлхүүртэй */
+function layerKey(set: LayerSet, id: string): string {
+  const w = set.where?.[id];
+  return w ? `${serviceOf(set, id)}?${w}` : serviceOf(set, id);
+}
+
 async function loadLayerInfo(
   set: LayerSet,
   id: string,
@@ -1386,7 +1410,7 @@ async function loadLayerInfo(
     arcgisJson<{ count?: number }>(
       `${service}/${first.id}/query?` +
         new URLSearchParams({
-          where: "1=1",
+          where: whereOf(set, id),
           returnCountOnly: "true",
           f: "json",
         }),
@@ -1404,10 +1428,12 @@ async function loadLayerInfo(
   const all = meta.fields ?? [];
 
   const skip = set.skipField;
+  const only = set.onlyFields?.[id];
 
   const fields: LayerField[] = all
     .filter(
       (f) =>
+        (!only || only.test(f.name)) &&
         !SKIP_FIELDS.test(f.name) &&
         !KML_NOISE.test(f.name) &&
         !EDITOR_FIELDS.test(f.name) &&
@@ -1670,7 +1696,7 @@ async function pagesOf(
     arcgisJson<{ features?: Raw[] }>(
       `${service}/${info.layerId}/query?` +
         new URLSearchParams({
-          where: "1=1",
+          where: whereOf(info.set, info.id),
           outSR: "4326",
           resultOffset: String(offset),
           resultRecordCount: String(size),
@@ -4598,7 +4624,7 @@ export function fetchLayerInfo(
       signal,
     );
   return abortable(
-    memo(infoCache, serviceOf(set, id), () => loadLayerInfo(set, id)),
+    memo(infoCache, layerKey(set, id), () => loadLayerInfo(set, id)),
     signal,
   );
 }
@@ -4633,7 +4659,7 @@ async function loadUnionInfo(
 
 /** Нэг давхаргын атрибут, геометр — хоёр үе шат тус тусдаа кэштэй */
 function stagesOf(info: LayerInfo) {
-  const key = `${serviceOf(info.set, info.id)}/${info.layerId}`;
+  const key = `${layerKey(info.set, info.id)}/${info.layerId}`;
   return {
     rows: memo(rowsCache, key, () => loadLayerRows(info)),
     shapes: memo(shapesCache, key, () => loadLayerShapes(info)),

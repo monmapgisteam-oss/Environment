@@ -81,6 +81,47 @@ const SURVEY_URL =
   "https://services-ap1.arcgis.com/ACqsMOmNLi5wIdIh/arcgis/rest/services/" +
   `${SURVEY}/FeatureServer`;
 
+/*
+  БАЙГАЛЬ ХАМГААЛАГЧИЙН АППЛИКЕЙШН (Survey123, портал) — бүх хэлтсийн НЭГ маягт.
+  "Гадаргын усны тооллого" төрлийн (`turul = 'gadargiin_us'`) бүртгэл нь
+  гадаргын усны бүртгэлд ГУРАВ ДАХЬ эх болж орно (хэрэглэгч 2026-11-13:
+  "gadargiin usnii burtgel heseg n ene deer orno shuu"). Бөглөгчийн хэлтсээр
+  шүүхгүй — аль хэлтэс тоолсон ч гадаргын ус нэг бүртгэл.
+  ⚠⚠ ХУВЬ ХҮНИЙ ТАЛБАР ТАТАХГҮЙ: маягтад бөглөгчийн нэр, регистр, утас бий —
+  `onlyFields` нь цагаан жагсаалт ({@link RANGER_ONLY}).
+  ⚠ Утгууд нь домэйны КОД (`bulag`, `bainga`, `khan_uul`) — {@link SURFACE}-ийн
+  `pick` нь давхаргын домэйны нэрээр буулгана ({@link RANGER_CODES}).
+*/
+const RANGER = "service_d29bedb4ee344a5593146769b0b02f73";
+const RANGER_URL = `https://environment.ub.gov.mn/hosting/rest/services/Hosted/${RANGER}/FeatureServer`;
+const RANGER_WHERE = "turul = 'gadargiin_us'";
+const RANGER_ONLY = /^(objectid|duureg|horoo|ognoo|bs_gu_\w+)$/;
+
+/** Маягтын домэйны код → нэр (давхаргын `codedValues`-аас, 2026-11-13) */
+const RANGER_CODES: Record<string, string> = {
+  /* Усны объектын төрөл — бүртгэлийн ангилалтай нэг нэрээр */
+  bulag: "Булаг",
+  rashaan: "Рашаан",
+  gol: "Гол, горхи",
+  nuur: "Нуур, тойром",
+  /* Урсацын горим */
+  bainga: "Байнгын урсацтай",
+  tur_zuur: "Түр зуурын урсацтай",
+  /* Хамгаалалтын бүс */
+  togtooson: "Тогтоосон",
+  togtoogoogui: "Тогтоогоогүй",
+  /* Дүүрэг */
+  bayanzurkh: "Баянзүрх",
+  khan_uul: "Хан-Уул",
+  baganuur: "Багануур",
+  bagakhangai: "Багахангай",
+  nalaikh: "Налайх",
+  songinokhairkhan: "Сонгинохайрхан",
+  bayangol: "Баянгол",
+  chingeltei: "Чингэлтэй",
+  sukhbaatar: "Сүхбаатар",
+};
+
 const NAMES: Record<string, string> = {
   N15_Baigali_hamgaalagchiin_bus: "Байгаль хамгаалагчийн бүс",
   N14_Tejeegdliin_muj: "Тэжээгдлийн муж",
@@ -421,10 +462,18 @@ function yearOf(row: Row, fields: readonly LayerField[]): string | null {
   return null;
 }
 
+/** Аппликейшны кодыг нэр рүү — бусад эхийн бичвэр хөндөгдөхгүй */
+const decoded = (v: unknown, part: { layer: string }) => {
+  const t = text(v);
+  return part.layer === RANGER && t ? (RANGER_CODES[t] ?? t) : t;
+};
+
 const SURFACE: LayerUnion = {
   parts: [
     { layer: "N01_Gadargiin_usnii_burtgel_21_23" },
     { layer: SURVEY, year: "2026" },
+    /* Он нь бүртгэлийн огнооноос (`ognoo`) */
+    { layer: RANGER },
   ],
   fields: [
     {
@@ -438,8 +487,8 @@ const SURFACE: LayerUnion = {
       name: "усны_төрөл",
       alias: "Усны төрөл",
       type: "String",
-      pick: (get) => {
-        const v = text(get(/усны_төрөл|усны төрөл|^type$/i))?.replace(
+      pick: (get, part) => {
+        const v = decoded(get(/усны_төрөл|усны төрөл|^type$|^bs_gu_turul$/i), part)?.replace(
           /^ТО\d+-/,
           "",
         );
@@ -450,15 +499,15 @@ const SURFACE: LayerUnion = {
       name: "нэр",
       alias: "Нэр",
       type: "String",
-      pick: (get) => text(get(/^нэр$|^(bulag|rashaan|gol|nuur)_ner$/i)),
+      pick: (get) => text(get(/^нэр$|^(bulag|rashaan|gol|nuur)_ner$|^bs_gu_ner$/i)),
     },
     {
       name: "сум_дүүрэг",
       alias: "Сум, дүүрэг",
       type: "String",
       /* Маягт "Хан Уул", бүртгэл "Хан-Уул" гэж бичдэг — нэг дүүрэг */
-      pick: (get) =>
-        text(get(/сум__дүүрэг|^sum$/i))
+      pick: (get, part) =>
+        decoded(get(/сум__дүүрэг|^sum$|^duureg$/i), part)
           ?.replace(/\s+дүүрэг$/i, "")
           .replace(/^Хан Уул$/i, "Хан-Уул") ?? null,
     },
@@ -466,25 +515,29 @@ const SURFACE: LayerUnion = {
       name: "баг_хороо",
       alias: "Баг, хороо",
       type: "String",
-      pick: (get) => text(get(/баг__хороо|^bag$/i)),
+      pick: (get, part) => {
+        /* Аппликейшн хороог ТОО-гоор хадгална */
+        const h = part.layer === RANGER ? get(/^horoo$/i) : null;
+        return typeof h === "number" ? `${h}-р хороо` : text(get(/баг__хороо|^bag$/i));
+      },
     },
     {
       name: "газар_нутгийн_нэр",
       alias: "Газар нутгийн нэр",
       type: "String",
-      pick: (get) => text(get(/газар_нутгийн_нэр|gazar_nutgiin_ner/i)),
+      pick: (get) => text(get(/газар_нутгийн_нэр|gazar_nutgiin_ner|^bs_gu_gazar_ner$/i)),
     },
     {
       name: "горим",
       alias: "Урсацын горим",
       type: "String",
-      pick: (get) => text(get(/горим|gorim/i)),
+      pick: (get, part) => decoded(get(/горим|gorim/i), part),
     },
     {
       name: "хамгаалалтын_бүс",
       alias: "Хамгаалалтын бүс тогтоосон эсэх",
       type: "String",
-      pick: (get) => text(get(/хамгаалалтын.?бүс|hamgaalaltiin_bus/i)),
+      pick: (get, part) => decoded(get(/хамгаалалтын.?бүс|hamgaalaltiin_bus/i), part),
     },
     {
       name: "өндөр",
@@ -885,6 +938,9 @@ export const NOGOON_TABS = {
     names: { ...NAMES, [SURFACE_ID]: "Гадаргын ус" },
     hues: [HUES[AT.N01_Gadargiin_usnii_burtgel_21_23 ?? 0]],
     unions: { [SURFACE_ID]: SURFACE },
+    services: { [SURVEY]: SURVEY_URL, [RANGER]: RANGER_URL },
+    where: { [RANGER]: RANGER_WHERE },
+    onlyFields: { [RANGER]: RANGER_ONLY },
     pickBar: { layer: SURFACE_ID, field: "он", label: "Он" },
     /* Задаргаа бүр "… × Он" хүснэгт (хэрэглэгчийн сонголт, 2026-10-22).
        ⚠ Хуудасны горимд (`sheet`) ГАРАХГҮЙ — туг нь буцаахад үлдсэн */
