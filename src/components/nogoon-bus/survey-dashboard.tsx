@@ -97,6 +97,42 @@ function keyOf(r: RangerRecord, axis: Axis): string {
   return axis === "type" ? r.type : r.district || "Бүртгэгдээгүй";
 }
 
+/**
+ * Талбарын утгын ангилал — диаграм, шүүлт хоёр НЭГ дүрмээр. Цаг ("11:54") нь
+ * цагаараа бүлэглэнэ ("11 цаг"), хоосон нь "Бүртгэгдээгүй".
+ */
+function bucketOf(value: string): string {
+  const hm = /^(\d{1,2}):\d{2}$/.exec(value);
+  if (hm) return `${Number(hm[1])} цаг`;
+  return value || "Бүртгэгдээгүй";
+}
+
+function factOf(r: RangerRecord, key: string) {
+  return r.facts.find((f) => f.key === key);
+}
+
+/** Үзүүлэлтийн утгын тоо ба нэгж ("25 мг/кг" → 25, "мг/кг") */
+function numberOf(value: string): { n: number; unit: string } | null {
+  const m = /^(-?\d+(?:[.,]\d+)?)\s*(.*)$/.exec(value.trim());
+  if (!m || /^\d{4}[.-]\d{2}/.test(value)) return null;
+  return { n: Number(m[1].replace(",", ".")), unit: m[2].trim() };
+}
+
+const countData = (counts: Map<string, number>): Datum[] =>
+  [...counts.entries()]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .map(([key, value]) => ({ key, label: key, value }));
+
+/** Талбарын диаграм — тоололт (шүүнэ), нэгжээр нийлбэр, бүртгэл тус бүрээр (сонгоно) */
+type FactChart = {
+  key: string;
+  title: string;
+  kind: "count" | "unit" | "record";
+  data: Datum[];
+  measure: string;
+  meta: string;
+};
+
 function dateText(ms: number | null): string {
   if (ms == null) return "";
   const d = new Date(ms);
@@ -110,6 +146,8 @@ export function RangerDashboard({ kind }: { kind: RangerKind }) {
   const [error, setError] = React.useState<string | null>(null);
   const [type, setType] = React.useState<string | null>(null);
   const [district, setDistrict] = React.useState<string | null>(null);
+  /* Цонхны талбар бүрийн шүүлт (талбар → утгын ангилал) */
+  const [factPick, setFactPick] = React.useState<Record<string, string>>({});
   const [picked, setPicked] = React.useState<number | null>(null);
   const [basemap, setBasemap] = React.useState<Basemap>(() => defaultBasemap());
   /* Томруулж харж буй зураг */
@@ -127,10 +165,13 @@ export function RangerDashboard({ kind }: { kind: RangerKind }) {
 
   /* Шүүлт — тэнхлэг бүр өөрийгөө алгасна (өөр утга руу шилжих зам) */
   const passes = React.useCallback(
-    (r: RangerRecord, skip?: Axis) =>
+    (r: RangerRecord, skip?: string) =>
       (skip === "type" || !type || r.type === type) &&
-      (skip === "district" || !district || keyOf(r, "district") === district),
-    [type, district],
+      (skip === "district" || !district || keyOf(r, "district") === district) &&
+      Object.entries(factPick).every(
+        ([k, v]) => k === skip || bucketOf(factOf(r, k)?.value ?? "") === v,
+      ),
+    [type, district, factPick],
   );
 
   const shown = React.useMemo(() => (rows ?? []).filter((r) => passes(r)), [rows, passes]);
@@ -169,6 +210,80 @@ export function RangerDashboard({ kind }: { kind: RangerKind }) {
   const byDistrict = React.useMemo(() => tally("district"), [tally]);
   const menuType = React.useMemo(() => tally("type", false), [tally]);
   const menuDistrict = React.useMemo(() => tally("district", false), [tally]);
+
+  /*
+    ЦОНХНЫ ТАЛБАР БҮР ДИАГРАМ (хэрэглэгч 2026-11-13: "pop up deer bga buh medeelel
+    chartaar haragdana"), маягтын дарааллаар:
+    · бичвэр, сонголт — утгаар тоолно, мөр дарахад шүүнэ (өөрийгөө алгасна);
+    · нэгжтэй тоо (хогны хэмжээ) — нэгж бүрээр нийлбэр (тн · кг · га … холихгүй);
+    · нэгжгүй тоо (торгуулийн дүн) — бүртгэл тус бүрээр, толгойд нийт; мөр дарахад сонгоно.
+  */
+  const factCharts = React.useMemo<FactChart[]>(() => {
+    const all = rows ?? [];
+    const keys = all[0]?.facts.map((f) => ({ key: f.key, label: f.label })) ?? [];
+    return keys.map(({ key, label }) => {
+      const pool = all.filter((r) => passes(r, key) && (sel == null || r.oid === sel));
+      const numeric = all.some((r) => factOf(r, key)?.num != null);
+      if (numeric) {
+        const vals = pool
+          .map((r) => ({ r, f: factOf(r, key) }))
+          .filter((x): x is { r: RangerRecord; f: NonNullable<typeof x.f> } => x.f?.num != null);
+        if (vals.some((x) => x.f.unit)) {
+          const sums = new Map<string, number>();
+          for (const { f } of vals) sums.set(f.unit || "Нэгжгүй", (sums.get(f.unit || "Нэгжгүй") ?? 0) + f.num!);
+          return { key, title: label, kind: "unit", data: countData(sums), measure: "Нийлбэр, нэгжээр", meta: `${num(vals.length)} ${t.unit}` };
+        }
+        const total = vals.reduce((s, x) => s + x.f.num!, 0);
+        return {
+          key,
+          title: label,
+          kind: "record",
+          data: vals
+            .sort((a, b) => b.f.num! - a.f.num!)
+            .map(({ r, f }) => ({ key: String(r.oid), label: [r.name, r.district].filter(Boolean).join(" · "), value: f.num! })),
+          measure: "Бүртгэл тус бүрээр",
+          meta: `Нийт ${num(total, Number.isInteger(total) ? 0 : 2)}`,
+        };
+      }
+      const counts = new Map<string, number>();
+      for (const r of pool) {
+        const b = bucketOf(factOf(r, key)?.value ?? "");
+        counts.set(b, (counts.get(b) ?? 0) + 1);
+      }
+      const data = countData(counts);
+      return { key, title: label, kind: "count", data, measure: t.measure, meta: catMeta(data.length) };
+    });
+  }, [rows, passes, sel, t]);
+
+  /* Үзүүлэлт тус бүр — тоон бол бүртгэл тус бүрийн утга, эс бөгөөс утгаар тоолол */
+  const indicatorCharts = React.useMemo(() => {
+    const by = new Map<string, { r: RangerRecord; value: string }[]>();
+    for (const r of scope)
+      for (const i of r.indicators) by.set(i.name, [...(by.get(i.name) ?? []), { r, value: i.value }]);
+    return [...by].map(([name, list]) => {
+      const nums = list.map((x) => ({ ...x, p: numberOf(x.value) }));
+      if (nums.every((x) => x.p)) {
+        const units = [...new Set(nums.map((x) => x.p!.unit).filter(Boolean))];
+        return {
+          name,
+          record: true,
+          measure: units.length === 1 ? `Утга, ${units[0]}` : "Утга",
+          data: nums
+            .sort((a, b) => b.p!.n - a.p!.n)
+            .map((x) => ({ key: String(x.r.oid), label: [x.r.name, x.r.district].filter(Boolean).join(" · "), value: x.p!.n })),
+        };
+      }
+      const counts = new Map<string, number>();
+      for (const x of list) counts.set(x.value || "Бүртгэгдээгүй", (counts.get(x.value || "Бүртгэгдээгүй") ?? 0) + 1);
+      return { name, record: false, measure: t.measure, data: countData(counts) };
+    });
+  }, [scope, t]);
+
+  /* Бүх бүртгэлийн хавсралт зураг (хэрэглэгч мөн өдөр: "Zurag bas") */
+  const gallery = React.useMemo(
+    () => scope.flatMap((r) => r.attachments.filter((a) => a.image).map((a) => ({ r, a }))),
+    [scope],
+  );
 
   /* Үзүүлэлтийн нэр бүр хэдэн судалгаанд хэмжигдсэн бэ */
   const byIndicator = React.useMemo<Datum[]>(() => {
@@ -231,7 +346,7 @@ export function RangerDashboard({ kind }: { kind: RangerKind }) {
       b.add(detail.lon, detail.lat);
       return b.get();
     }
-    if (!(type || district)) return null;
+    if (!(type || district || Object.keys(factPick).length)) return null;
     let any = false;
     for (const r of shown)
       if (r.lon != null && r.lat != null) {
@@ -239,7 +354,7 @@ export function RangerDashboard({ kind }: { kind: RangerKind }) {
         any = true;
       }
     return any ? b.get() : null;
-  }, [detail, type, district, shown]);
+  }, [detail, type, district, factPick, shown]);
 
   if (error) {
     return (
@@ -259,7 +374,8 @@ export function RangerDashboard({ kind }: { kind: RangerKind }) {
   /* Ганц төрөлтэй цэс — төрлийн хэсэг, тайлбар, шүүлт утгагүй */
   const typed = typeColor.size > 1;
   const indicatorTotal = scope.reduce((s, r) => s + r.indicators.length, 0);
-  const activeCount = (type ? 1 : 0) + (district ? 1 : 0) + (sel != null ? 1 : 0);
+  const activeCount =
+    (type ? 1 : 0) + (district ? 1 : 0) + Object.keys(factPick).length + (sel != null ? 1 : 0);
   const listed = shown
     .slice()
     .sort((a, b) => (b.date ?? 0) - (a.date ?? 0) || b.oid - a.oid);
@@ -272,6 +388,7 @@ export function RangerDashboard({ kind }: { kind: RangerKind }) {
         onReset={() => {
           setType(null);
           setDistrict(null);
+          setFactPick({});
           setPicked(null);
         }}
       >
@@ -373,9 +490,57 @@ export function RangerDashboard({ kind }: { kind: RangerKind }) {
             <SheetSection title="Дүүргээр" meta={catMeta(byDistrict.length)}>
               <SheetBars data={byDistrict} measure={t.measure} selected={district} onSelect={setDistrict} />
             </SheetSection>
+            {factCharts.map((c) => (
+              <SheetSection key={c.key} title={c.title} meta={c.meta}>
+                <SheetBars
+                  data={c.data}
+                  measure={c.measure}
+                  selected={
+                    c.kind === "count" ? (factPick[c.key] ?? null) : c.kind === "record" && sel != null ? String(sel) : null
+                  }
+                  onSelect={
+                    c.kind === "count"
+                      ? (v) =>
+                          setFactPick((p) => {
+                            const next = { ...p };
+                            if (v == null) delete next[c.key];
+                            else next[c.key] = v;
+                            return next;
+                          })
+                      : c.kind === "record"
+                        ? (v) => setPicked(v == null ? null : Number(v))
+                        : undefined
+                  }
+                />
+              </SheetSection>
+            ))}
             {byIndicator.length ? (
               <SheetSection title="Үзүүлэлтээр" meta={catMeta(byIndicator.length)}>
                 <SheetBars data={byIndicator} measure={t.measured} />
+              </SheetSection>
+            ) : null}
+            {indicatorCharts.map((c) => (
+              <SheetSection key={`uz-${c.name}`} title={c.name} meta={c.record ? `${num(c.data.length)} ${t.unit}` : catMeta(c.data.length)}>
+                <SheetBars
+                  data={c.data}
+                  measure={c.measure}
+                  selected={c.record && sel != null ? String(sel) : null}
+                  onSelect={c.record ? (v) => setPicked(v == null ? null : Number(v)) : undefined}
+                />
+              </SheetSection>
+            ))}
+            {gallery.length ? (
+              <SheetSection title="Зураг" meta={`${num(gallery.length)} зураг`}>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {gallery.map(({ r, a }) => (
+                    <div key={`${r.oid}/${a.id}`} className="min-w-0">
+                      <Thumb oid={r.oid} a={a} onView={setViewing} />
+                      <p className="mt-0.5 truncate text-[10px] text-ink-3" title={r.name}>
+                        {r.name}
+                      </p>
+                    </div>
+                  ))}
+                </div>
               </SheetSection>
             ) : null}
             <SheetSection title={t.list} meta={`${num(listed.length)} ${t.unit}`}>
@@ -601,7 +766,7 @@ function Detail({
     ["Огноо", dateText(r.date)],
     ["Дүүрэг", r.district],
     ["Хороо", r.khoroo],
-    ...r.facts,
+    ...r.facts.map((f): [string, string] => [f.label, f.value]),
   ];
   return (
     <div className="elevated absolute right-2.5 bottom-8 z-10 flex max-h-[calc(100%-2.5rem)] w-[320px] flex-col rounded-xs border border-line-2 bg-paper/95 backdrop-blur-md">

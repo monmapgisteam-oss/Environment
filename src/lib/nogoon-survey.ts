@@ -95,6 +95,22 @@ type AttachQuery = {
   }[];
 };
 
+/**
+ * Маягтын нэг талбар. Диаграм ({@link RangerDashboard}) нь `key`-ээр бүлэглэнэ:
+ * `num`-тэй нь хэмжилт (нэгжээр нийлбэр / бүртгэл тус бүрээр), бусад нь утгаар тоолол.
+ */
+export type RangerFact = {
+  /** Талбарын нэр (`bs_hog_hemjee`) */
+  key: string;
+  label: string;
+  /** Дэлгэцийн утга — хоосон бол "" */
+  value: string;
+  /** Тоон талбарын утга, эс бөгөөс `null` */
+  num: number | null;
+  /** Хэмжих нэгж (хогны хэмжээнд "тн", "га" …) */
+  unit: string;
+};
+
 export type RangerRecord = {
   oid: number;
   /** Байршилгүй, эсвэл нийслэлээс гадуурх (бичилтийн алдаа) бол `null` */
@@ -106,8 +122,8 @@ export type RangerRecord = {
   khoroo: string;
   /** UTC огноо, мс — бөглөөгүй бол `null` */
   date: number | null;
-  /** Маягтын тухайн хэсгийн талбарууд — шошго · утга (хоосон нь "") */
-  facts: [string, string][];
+  /** Маягтын тухайн хэсгийн талбарууд, маягтын дарааллаар */
+  facts: RangerFact[];
   indicators: RangerIndicator[];
   attachments: RangerAttachment[];
 };
@@ -285,9 +301,17 @@ export async function fetchRangerRecords(
     /* Нэр ба төрөл нь толгойд — баримтын жагсаалтад давтахгүй */
     const merged = section
       .filter((f) => f.name !== "st_ner" && f.name !== spec.typeField && f !== unitField)
-      .map((f): [string, string] => {
+      .map((f): RangerFact => {
         const v = valueOf(f, a);
-        return [label(f), f.name === `${spec.prefix}hemjee` && v && unit ? `${v} ${unit}` : v];
+        const raw = a[f.name];
+        const hasUnit = f.name === `${spec.prefix}hemjee` && Boolean(unit);
+        return {
+          key: f.name,
+          label: label(f),
+          value: hasUnit && v ? `${v} ${unit}` : v,
+          num: typeof raw === "number" && f.type !== "esriFieldTypeDate" ? raw : null,
+          unit: hasUnit ? unit : "",
+        };
       });
     const code = text(a.turul);
     const typeField = spec.typeField ? fields.find((f) => f.name === spec.typeField) : null;
