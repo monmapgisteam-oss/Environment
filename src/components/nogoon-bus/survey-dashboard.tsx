@@ -3,11 +3,11 @@
 import * as React from "react";
 import dynamic from "next/dynamic";
 import { createPortal } from "react-dom";
-import { Camera, FileText, Loader2, MapPin, Microscope, X } from "lucide-react";
+import { Camera, FileText, Loader2, X } from "lucide-react";
 import type { Datum } from "@/components/charts";
 import { BasemapGallery } from "@/components/map/basemap-gallery";
 import { categoryHex } from "@/components/wells/colors";
-import { FilterBar, FilterMenu, PickList } from "@/components/wells/filter-bar";
+import { FilterBar, type FilterChip } from "@/components/wells/filter-bar";
 import { defaultBasemap, type Basemap, type Extent } from "@/components/wells/map";
 import { Columns } from "@/components/ui/resizable-columns";
 import { MapLegend } from "@/components/wildlife/map-legend";
@@ -211,8 +211,6 @@ export function RangerDashboard({ kind }: { kind: RangerKind }) {
 
   const byType = React.useMemo(() => tally("type"), [tally]);
   const byDistrict = React.useMemo(() => tally("district"), [tally]);
-  const menuType = React.useMemo(() => tally("type", false), [tally]);
-  const menuDistrict = React.useMemo(() => tally("district", false), [tally]);
 
   /*
     ЦОНХНЫ ТАЛБАР БҮР ДИАГРАМ (хэрэглэгч 2026-11-13: "pop up deer bga buh medeelel
@@ -394,46 +392,59 @@ export function RangerDashboard({ kind }: { kind: RangerKind }) {
   /* Ганц төрөлтэй цэс — төрлийн хэсэг, тайлбар, шүүлт утгагүй */
   const typed = typeColor.size > 1;
   const indicatorTotal = scope.reduce((s, r) => s + r.indicators.length, 0);
-  const activeCount =
-    (type ? 1 : 0) + (district ? 1 : 0) + Object.keys(factPick).length + (sel != null ? 1 : 0);
+  const pickFact = (key: string, v: string | null) =>
+    setFactPick((p) => {
+      const next = { ...p };
+      if (v == null) delete next[key];
+      else next[key] = v;
+      return next;
+    });
+  const resetAll = () => {
+    setType(null);
+    setDistrict(null);
+    setFactPick({});
+    setPicked(null);
+  };
+  const factLabel = (key: string) => rows[0]?.facts.find((f) => f.key === key)?.label ?? key;
+  const chips: FilterChip[] = [
+    ...(type ? [{ key: "type", label: t.type, value: type, onRemove: () => setType(null) }] : []),
+    ...(district ? [{ key: "district", label: "Дүүрэг", value: district, onRemove: () => setDistrict(null) }] : []),
+    ...Object.entries(factPick).map(([k, v]) => ({
+      key: `f:${k}`,
+      label: factLabel(k),
+      value: v,
+      onRemove: () => pickFact(k, null),
+    })),
+    ...(detail
+      ? [{ key: "sel", label: "Сонгосон", value: detail.name, onRemove: () => setPicked(null) }]
+      : []),
+  ];
+  /* Шүүлттэй хэсгийн толгойд — тэр шүүлтийг л авна */
+  const clear = (on: boolean, onClick: () => void) =>
+    on ? (
+      <button
+        type="button"
+        onClick={onClick}
+        className="flex shrink-0 items-center gap-1 rounded-xs px-1 text-[10.5px] text-ink-3 hover:text-ink"
+      >
+        <X size={11} />
+        Цэвэрлэх
+      </button>
+    ) : undefined;
   const listed = shown
     .slice()
     .sort((a, b) => (b.date ?? 0) - (a.date ?? 0) || b.oid - a.oid);
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-2.5">
-      <FilterBar
-        title={t.title}
-        activeCount={activeCount}
-        onReset={() => {
-          setType(null);
-          setDistrict(null);
-          setFactPick({});
-          setPicked(null);
-        }}
-      >
-        {typed ? (
-          <FilterMenu
-            label={t.type}
-            icon={Microscope}
-            value={type}
-            active={Boolean(type)}
-            onClear={() => setType(null)}
-            width={250}
-          >
-            <PickList items={menuType} selected={type} onPick={setType} />
-          </FilterMenu>
-        ) : null}
-        <FilterMenu
-          label="Дүүрэг"
-          icon={MapPin}
-          value={district}
-          active={Boolean(district)}
-          onClear={() => setDistrict(null)}
-          width={230}
-        >
-          <PickList items={menuDistrict} selected={district} onPick={setDistrict} />
-        </FilterMenu>
+      {/*
+        ШҮҮЛТ ЭНГИЙН (хэрэглэгч 2026-11-13: "chart filteruud engiin oilgomjtoi ajildag
+        bolgooroi"): шүүлт ЗӨВХӨН диаграмаас (мөр, хэсэг дарахад тавигдаж, дахин дарахад
+        авагдана); мөрөнд шүүлт бүр нэрээрээ "Хогны төрөл: Бохир ✕". Диаграмтай давхардсан
+        унждаг цэс (төрөл, дүүрэг) хасагдсан.
+      */}
+      <FilterBar title={t.title} activeCount={chips.length} onReset={resetAll} chips={chips}>
+        {null}
       </FilterBar>
 
       {rows.length === 0 ? (
@@ -497,7 +508,7 @@ export function RangerDashboard({ kind }: { kind: RangerKind }) {
               ]}
             />
             {typed ? (
-              <SheetSection title={t.byType} meta={catMeta(byType.length)}>
+              <SheetSection title={t.byType} meta={catMeta(byType.length)} action={clear(Boolean(type), () => setType(null))}>
                 <SheetBars
                   data={byType}
                   colorOf={(d) => typeColor.get(d.key)}
@@ -506,11 +517,16 @@ export function RangerDashboard({ kind }: { kind: RangerKind }) {
                 />
               </SheetSection>
             ) : null}
-            <SheetSection title="Дүүргээр" meta={catMeta(byDistrict.length)}>
+            <SheetSection title="Дүүргээр" meta={catMeta(byDistrict.length)} action={clear(Boolean(district), () => setDistrict(null))}>
               <SheetBars data={byDistrict} selected={district} onSelect={setDistrict} />
             </SheetSection>
             {factCharts.map((c) => (
-              <SheetSection key={c.key} title={c.title} meta={c.meta}>
+              <SheetSection
+                key={c.key}
+                title={c.title}
+                meta={c.meta}
+                action={clear(c.kind === "count" && c.key in factPick, () => pickFact(c.key, null))}
+              >
                 <SheetBars
                   data={c.data}
                   measure={c.measure || undefined}
@@ -519,13 +535,7 @@ export function RangerDashboard({ kind }: { kind: RangerKind }) {
                   }
                   onSelect={
                     c.kind === "count"
-                      ? (v) =>
-                          setFactPick((p) => {
-                            const next = { ...p };
-                            if (v == null) delete next[c.key];
-                            else next[c.key] = v;
-                            return next;
-                          })
+                      ? (v) => pickFact(c.key, v)
                       : c.kind === "record"
                         ? (v) => setPicked(v == null ? null : Number(v))
                         : undefined
@@ -534,19 +544,14 @@ export function RangerDashboard({ kind }: { kind: RangerKind }) {
               </SheetSection>
             ))}
             {yesNoRows.length ? (
-              <SheetSection title="Тийм / үгүй" meta={`${num(yesNoRows.length)} асуулт`}>
-                <YesNo
-                  rows={yesNoRows}
-                  picked={factPick}
-                  onPick={(key, v) =>
-                    setFactPick((p) => {
-                      const next = { ...p };
-                      if (v == null) delete next[key];
-                      else next[key] = v;
-                      return next;
-                    })
-                  }
-                />
+              <SheetSection
+                title="Тийм / үгүй"
+                meta={`${num(yesNoRows.length)} асуулт`}
+                action={clear(yesNoRows.some((y) => y.key in factPick), () =>
+                  setFactPick((p) => Object.fromEntries(Object.entries(p).filter(([k]) => !yesNoRows.some((y) => y.key === k)))),
+                )}
+              >
+                <YesNo rows={yesNoRows} picked={factPick} onPick={pickFact} />
               </SheetSection>
             ) : null}
             {indicatorRows.length ? (
@@ -831,7 +836,7 @@ function Viewer({ url, name, onClose }: { url: string; name: string; onClose: ()
 const YES_NO = [
   { key: "Тийм", color: "var(--data)" },
   { key: "Үгүй", color: "var(--ochre)" },
-  { key: "Бүртгэгдээгүй", color: "var(--ink-3)" },
+  { key: "Бүртгэгдээгүй", color: "var(--line-2)" },
 ] as const;
 
 function YesNo({
@@ -865,7 +870,7 @@ function YesNo({
                 </span>
                 <span className="num shrink-0 text-[11px] text-ink-3">
                   {YES_NO.filter((y) => row.counts[y.key])
-                    .map((y) => num(row.counts[y.key]))
+                    .map((y) => `${y.key} ${num(row.counts[y.key])}`)
                     .join(" · ")}
                 </span>
               </div>

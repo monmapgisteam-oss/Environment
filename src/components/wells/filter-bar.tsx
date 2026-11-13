@@ -89,8 +89,9 @@ export function FilterBar({
                   aria-label={`${c.label}: ${c.value} шүүлтийг авах`}
                   className="group flex max-w-[280px] items-center gap-1.5 rounded-xs border border-data/40 bg-data/10 py-[3px] pr-1 pl-2 text-[11px] transition-colors hover:border-data/70"
                 >
-                  <span className="shrink-0 text-ink-3">{c.label}:</span>
-                  <span className="min-w-0 truncate font-medium text-ink">
+                  {/* Урт нэр тасарна, УТГА үргэлж харагдана */}
+                  <span className="min-w-0 truncate text-ink-3">{c.label}:</span>
+                  <span className="max-w-[160px] shrink-0 truncate font-medium text-ink">
                     {c.value}
                   </span>
                   <X
