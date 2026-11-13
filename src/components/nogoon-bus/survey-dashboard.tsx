@@ -302,7 +302,8 @@ export function RangerDashboard({ kind }: { kind: RangerKind }) {
           const counts = new Map<string, number>();
           for (const x of list) counts.set(x.value, (counts.get(x.value) ?? 0) + 1);
           const [top] = countData(counts);
-          summary = counts.size > 1 ? `${top.label} +${counts.size - 1}` : top.label;
+          /* Ганц богино утга л — бусад нь "2 утга" (задлахад бүгд) */
+          summary = counts.size === 1 && top.label.length <= 18 ? top.label : `${num(counts.size)} утга`;
         }
         return { name, list, summary };
       })
@@ -405,16 +406,16 @@ export function RangerDashboard({ kind }: { kind: RangerKind }) {
     colorOf?: (k: string) => string | undefined,
   ): SumRow => {
     const filled = data.filter((d) => d.key !== "Бүртгэгдээгүй");
+    /* Нэг мөрөнд багтах богино бичвэр л — урт бол нэрийг шахна */
+    const joined = filled.map((d) => `${d.label} ${num(d.value)}`).join(" · ");
+    const short = filled.length && filled.length <= 2 && joined.length <= 18 ? joined : null;
     return {
       id,
       label,
-      /* Эхний хоёр утга тоотойгоо ("Тийм 2 · Үгүй 2"), үлдсэн нь "+N" */
-      summary: filled.length
-        ? filled
-            .slice(0, 2)
-            .map((d) => `${d.label} ${num(d.value)}`)
-            .join(" · ") + (filled.length > 2 ? ` +${filled.length - 2}` : "")
-        : "—",
+      /* НЭГ МӨРӨНД БАГТАНА (хэрэглэгч 2026-11-13: "oilgomjtoi harhad tsewerhen"): хоёр хүртэл
+         утга тоотойгоо ("Тийм 2 · Үгүй 2"), олон бол "4 ангилал" — задлахад бүгд */
+      summary: !filled.length ? "—" : short ?? catMeta(filled.length),
+      muted: !short,
       n: filled.reduce((sum, d) => sum + d.value, 0),
       values: data.map((d) => ({ key: d.key, label: d.label, text: num(d.value), color: colorOf?.(d.key) })),
       selected,
@@ -430,7 +431,13 @@ export function RangerDashboard({ kind }: { kind: RangerKind }) {
         return {
           id: c.key,
           label: c.title,
-          summary: c.data.map((d) => `${num(d.value, Number.isInteger(d.value) ? 0 : 1)} ${d.label}`).join(" · ") || "—",
+          summary:
+            c.data.length === 1
+              ? `${num(c.data[0].value, Number.isInteger(c.data[0].value) ? 0 : 1)} ${c.data[0].label}`
+              : c.data.length
+                ? `${num(c.data.length)} нэгж`
+                : "—",
+          muted: c.data.length !== 1,
           n: c.n,
           values: c.data.map((d) => ({ key: d.key, label: d.label, text: num(d.value, Number.isInteger(d.value) ? 0 : 1) })),
           selected: null,
@@ -460,6 +467,7 @@ export function RangerDashboard({ kind }: { kind: RangerKind }) {
         label: row.name,
         group: "Үзүүлэлт",
         summary: row.summary,
+        muted: /^\d+ утга$/.test(row.summary),
         n: row.list.length,
         values: row.list.map((x) => ({
           key: String(x.r.oid),
@@ -821,6 +829,8 @@ type SumRow = {
   summary: string;
   /** Бөглөгдсөн бүртгэлийн тоо */
   n: number;
+  /** Хураангуй нь утга биш тоо ("4 ангилал") — бүдэг */
+  muted?: boolean;
   values: SumValue[];
   selected: string | null;
   /** Утга дарахад — тоололд шүүлт, бүртгэл тус бүрийн утгад сонголт */
@@ -840,12 +850,12 @@ function SummaryTable({
   noun: string;
 }) {
   /* Нэр хоёр мөр хүртэл бүтэн — тасарсан нэр ("Хогны хэмжээг х…") уншигдахгүй */
-  const cols = "grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)_2.5rem]";
+  const cols = "grid-cols-[minmax(0,1fr)_auto_3.25rem]";
   return (
     <>
       <div className={cn("mb-1 grid gap-x-3 px-1.5 text-[10.5px] text-ink-3", cols)}>
         <span>Талбар</span>
-        <span className="text-right">Давамгай утга</span>
+        <span className="text-right">Утга</span>
         <span className="text-right">{noun}</span>
       </div>
       <ul className="divide-y divide-line">
@@ -878,7 +888,13 @@ function SummaryTable({
                     {row.label}
                   </span>
                 </span>
-                <span className="num line-clamp-2 text-right leading-snug font-semibold text-ink" title={row.summary}>
+                <span
+                  className={cn(
+                    "num max-w-[9rem] truncate text-right whitespace-nowrap",
+                    row.muted ? "text-ink-3" : "font-semibold text-ink",
+                  )}
+                  title={row.summary}
+                >
                   {row.summary}
                 </span>
                 <span className="num text-right text-ink-3">{num(row.n)}</span>
