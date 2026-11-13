@@ -3,7 +3,7 @@
 import * as React from "react";
 import dynamic from "next/dynamic";
 import { createPortal } from "react-dom";
-import { Camera, ChevronRight, FileText, Loader2, X } from "lucide-react";
+import { Camera, FileText, Loader2, X } from "lucide-react";
 import type { Datum } from "@/components/charts";
 import { BasemapGallery } from "@/components/map/basemap-gallery";
 import { categoryHex } from "@/components/wells/colors";
@@ -302,8 +302,8 @@ export function RangerDashboard({ kind }: { kind: RangerKind }) {
           const counts = new Map<string, number>();
           for (const x of list) counts.set(x.value, (counts.get(x.value) ?? 0) + 1);
           const [top] = countData(counts);
-          /* Ганц богино утга л — бусад нь "2 утга" (задлахад бүгд) */
-          summary = counts.size === 1 && top.label.length <= 18 ? top.label : `${num(counts.size)} утга`;
+          /* Ганц утга бол өөрөө (картанд тасарна), олон бол "2 утга" — задлахад бүгд */
+          summary = counts.size === 1 ? top.label : `${num(counts.size)} утга`;
         }
         return { name, list, summary };
       })
@@ -396,7 +396,7 @@ export function RangerDashboard({ kind }: { kind: RangerKind }) {
   /* Ганц төрөлтэй цэс — төрлийн хэсэг, тайлбар, шүүлт утгагүй */
   const typed = typeColor.size > 1;
 
-  /* Тоолол → хүснэгтийн мөр */
+  /* Тоолол → карт: ≤ 2 утгатай бол давамгай утга ("Тийм", 2 / 4), олон бол "4 ангилал" */
   const countRow = (
     id: string,
     label: string,
@@ -406,22 +406,24 @@ export function RangerDashboard({ kind }: { kind: RangerKind }) {
     colorOf?: (k: string) => string | undefined,
   ): SumRow => {
     const filled = data.filter((d) => d.key !== "Бүртгэгдээгүй");
-    /* Нэг мөрөнд багтах богино бичвэр л — урт бол нэрийг шахна */
-    const joined = filled.map((d) => `${d.label} ${num(d.value)}`).join(" · ");
-    const short = filled.length && filled.length <= 2 && joined.length <= 18 ? joined : null;
+    const total = data.reduce((sum, d) => sum + d.value, 0);
+    const top = filled[0];
     return {
       id,
       label,
-      /* НЭГ МӨРӨНД БАГТАНА (хэрэглэгч 2026-11-13: "oilgomjtoi harhad tsewerhen"): хоёр хүртэл
-         утга тоотойгоо ("Тийм 2 · Үгүй 2"), олон бол "4 ангилал" — задлахад бүгд */
-      summary: !filled.length ? "—" : short ?? catMeta(filled.length),
-      muted: !short,
-      n: filled.reduce((sum, d) => sum + d.value, 0),
+      main: !top ? "—" : filled.length <= 2 ? top.label : catMeta(filled.length),
+      sub: !top
+        ? "Бүртгэгдээгүй"
+        : filled.length <= 2
+          ? `${num(top.value)} / ${num(total)}`
+          : `Хамгийн олон: ${top.label} (${num(top.value)})`,
+      segments: data.map((d, i) => ({ key: d.key, value: d.value, color: colorOf?.(d.key) ?? segColor(d.key, i) })),
       values: data.map((d) => ({ key: d.key, label: d.label, text: num(d.value), color: colorOf?.(d.key) })),
       selected,
       onPick,
     };
   };
+  const fmt = (v: number) => num(v, Number.isInteger(v) ? 0 : 1);
   const summary: SumRow[] = [
     ...(typed ? [countRow("type", t.type, byType, type, setType, (k) => typeColor.get(k))] : []),
     countRow("district", "Дүүрэг", byDistrict, district, setDistrict),
@@ -431,23 +433,18 @@ export function RangerDashboard({ kind }: { kind: RangerKind }) {
         return {
           id: c.key,
           label: c.title,
-          summary:
-            c.data.length === 1
-              ? `${num(c.data[0].value, Number.isInteger(c.data[0].value) ? 0 : 1)} ${c.data[0].label}`
-              : c.data.length
-                ? `${num(c.data.length)} нэгж`
-                : "—",
-          muted: c.data.length !== 1,
-          n: c.n,
-          values: c.data.map((d) => ({ key: d.key, label: d.label, text: num(d.value, Number.isInteger(d.value) ? 0 : 1) })),
+          main: c.data.length ? `${fmt(c.data[0].value)} ${c.data[0].label}` : "—",
+          sub: c.data.length > 1 ? `+ ${num(c.data.length - 1)} өөр нэгжээр` : `${num(c.n)} ${t.unit}`,
+          values: c.data.map((d) => ({ key: d.key, label: d.label, text: fmt(d.value) })),
           selected: null,
         };
+      const total = c.data.reduce((sum, d) => sum + d.value, 0);
       return {
         id: c.key,
         label: c.title,
-        summary: c.n ? c.meta : "—",
-        n: c.n,
-        values: c.data.map((d) => ({ key: d.key, label: d.label, text: num(d.value, Number.isInteger(d.value) ? 0 : 2) })),
+        main: c.n ? fmt(total) : "—",
+        sub: `Нийт · ${num(c.n)} ${t.unit}`,
+        values: c.data.map((d) => ({ key: d.key, label: d.label, text: fmt(d.value) })),
         selected: sel != null ? String(sel) : null,
         onPick: (v) => setPicked(v == null ? null : Number(v)),
       };
@@ -456,7 +453,7 @@ export function RangerDashboard({ kind }: { kind: RangerKind }) {
       countRow(
         y.key,
         y.label,
-        countData(new Map(Object.entries(y.counts))),
+        YES_ORDER.filter((k) => y.counts[k]).map((k) => ({ key: k, label: k, value: y.counts[k] })),
         factPick[y.key] ?? null,
         (v) => pickFact(y.key, v),
       ),
@@ -466,9 +463,8 @@ export function RangerDashboard({ kind }: { kind: RangerKind }) {
         id: `uz:${row.name}`,
         label: row.name,
         group: "Үзүүлэлт",
-        summary: row.summary,
-        muted: /^\d+ утга$/.test(row.summary),
-        n: row.list.length,
+        main: row.summary,
+        sub: `${num(row.list.length)} ${t.unit}`,
         values: row.list.map((x) => ({
           key: String(x.r.oid),
           label: [x.r.name, x.r.district].filter(Boolean).join(" · "),
@@ -584,18 +580,12 @@ export function RangerDashboard({ kind }: { kind: RangerKind }) {
               ]}
             />
             {/*
-              НЭГ ТОВЧ ХҮСНЭГТ (хэрэглэгч 2026-11-13: "chartuud neg l oilgomjgui bndaa" →
-              гурван хувилбараас "Нэг товч хүснэгт"). Мөр бүр нэг талбар: нэр · давамгай
-              утга · бөглөгдсөн бүртгэлийн тоо; мөр дарахад бүх утга задарна, утга дарахад
-              шүүнэ (дахин дарахад авагдана). Хэмжээ нэгжээр, дүн бүртгэл тус бүрээр.
+              КАРТ ТОР (хэрэглэгч 2026-11-13: "dahiad uuruur" → дөрвөн хувилбараас "Карт тор").
+              Талбар бүр жижиг карт: нэр · гол утга (том) · тайлбар мөр · утгуудын харьцааны
+              зурвас. Карт дарахад торын ДООР утгууд задарч, утга дарахад шүүнэ.
             */}
             <SheetSection title="Товч мэдээлэл" meta={`${num(summary.length)} талбар`}>
-              <SummaryTable
-                rows={summary}
-                open={openRow}
-                onOpen={setOpenRow}
-                noun={t.noun}
-              />
+              <SummaryTiles rows={summary} open={openRow} onOpen={setOpenRow} />
             </SheetSection>
             {gallery.length ? (
               <SheetSection title="Зураг" meta={`${num(gallery.length)} зураг`}>
@@ -823,121 +813,155 @@ type SumValue = { key: string; label: string; text: string; color?: string };
 type SumRow = {
   id: string;
   label: string;
-  /** Бүлгийн гарчиг — эхний мөрийн өмнө нэг удаа ("Үзүүлэлт") */
+  /** Бүлгийн гарчиг — эхний картын өмнө нэг удаа ("Үзүүлэлт") */
   group?: string;
-  /** Давамгай утга, хэмжээний нийлбэр эсвэл муж */
-  summary: string;
-  /** Бөглөгдсөн бүртгэлийн тоо */
-  n: number;
-  /** Хураангуй нь утга биш тоо ("4 ангилал") — бүдэг */
-  muted?: boolean;
+  /** Гол утга — том үсгээр */
+  main: string;
+  /** Тайлбар мөр — "2 / 4", "Хамгийн олон: …", "Нийт · 2 бүртгэл" */
+  sub: string;
+  /** Утгуудын харьцааны зурвас (тоололд) */
+  segments?: { key: string; value: number; color: string }[];
   values: SumValue[];
   selected: string | null;
   /** Утга дарахад — тоололд шүүлт, бүртгэл тус бүрийн утгад сонголт */
   onPick?: (key: string | null) => void;
 };
 
-/** Товч мэдээллийн хүснэгт — нэг мөр нэг талбар, дарахад задарна */
-function SummaryTable({
+/** Тийм / үгүй — тогтмол дараалал, өнгө */
+const YES_ORDER = ["Тийм", "Үгүй", "Бүртгэгдээгүй"];
+
+/** Зурвасын хэсгийн өнгө — тийм/үгүй дохиогоор, бусад нь нэг өнгөний шатлал */
+function segColor(key: string, i: number): string {
+  if (key === "Бүртгэгдээгүй") return "var(--line-2)";
+  if (key === "Тийм") return "color-mix(in srgb, var(--data) 70%, transparent)";
+  if (key === "Үгүй") return "color-mix(in srgb, var(--ochre) 60%, transparent)";
+  return `color-mix(in srgb, var(--data) ${Math.max(22, 75 - i * 15)}%, transparent)`;
+}
+
+/** Товч мэдээллийн карт тор — дарахад торын доор утгууд задарна */
+function SummaryTiles({
   rows,
   open,
   onOpen,
-  noun,
 }: {
   rows: SumRow[];
   open: string | null;
   onOpen: (id: string | null) => void;
-  noun: string;
 }) {
-  /* Нэр хоёр мөр хүртэл бүтэн — тасарсан нэр ("Хогны хэмжээг х…") уншигдахгүй */
-  const cols = "grid-cols-[minmax(0,1fr)_auto_3.25rem]";
+  const active = rows.find((r) => r.id === open) ?? null;
+  const groups: { title: string | null; rows: SumRow[] }[] = [];
+  for (const r of rows) {
+    const title = r.group ?? null;
+    const last = groups[groups.length - 1];
+    if (last && last.title === title) last.rows.push(r);
+    else groups.push({ title, rows: [r] });
+  }
   return (
     <>
-      <div className={cn("mb-1 grid gap-x-3 px-1.5 text-[10.5px] text-ink-3", cols)}>
-        <span>Талбар</span>
-        <span className="text-right">Утга</span>
-        <span className="text-right">{noun}</span>
-      </div>
-      <ul className="divide-y divide-line">
-        {rows.map((row, i) => {
-          const isOpen = open === row.id;
-          const filtered = row.selected != null && row.onPick != null;
-          const heading = row.group && row.group !== rows[i - 1]?.group ? row.group : null;
-          return (
-            <li key={row.id}>
-              {heading ? <p className="eyebrow px-1.5 pt-2.5 pb-1">{heading}</p> : null}
-              <button
-                type="button"
-                onClick={() => onOpen(isOpen ? null : row.id)}
-                aria-expanded={isOpen}
-                className={cn(
-                  "grid w-full items-center gap-x-3 rounded-xs px-1.5 py-1.5 text-left text-[12px] hover:bg-paper-hi",
-                  cols,
-                  isOpen && "bg-paper-hi",
-                )}
-              >
-                <span className="flex min-w-0 items-start gap-1">
-                  <ChevronRight
-                    size={12}
-                    className={cn("mt-[3px] shrink-0 text-ink-3 transition-transform", isOpen && "rotate-90")}
-                  />
+      {groups.map((g) => (
+        <div key={g.title ?? "main"} className={g.title ? "mt-2.5" : undefined}>
+          {g.title ? <p className="eyebrow mb-1.5">{g.title}</p> : null}
+          <div className="grid grid-cols-2 gap-1.5">
+            {g.rows.map((row) => {
+              const isOpen = open === row.id;
+              const filtered = row.selected != null && row.onPick != null;
+              const total = row.segments?.reduce((sum, x) => sum + x.value, 0) ?? 0;
+              return (
+                <button
+                  key={row.id}
+                  type="button"
+                  onClick={() => onOpen(isOpen ? null : row.id)}
+                  aria-expanded={isOpen}
+                  className={cn(
+                    "flex min-w-0 flex-col rounded-xs border bg-paper px-2.5 py-2 text-left transition-colors hover:border-line-2",
+                    isOpen || filtered ? "border-data/60" : "border-line",
+                  )}
+                >
                   <span
-                    className={cn("line-clamp-2 leading-snug", filtered ? "font-medium text-data" : "text-ink")}
+                    className={cn(
+                      "line-clamp-2 min-h-[2.5em] text-[10px] leading-[1.25] font-semibold tracking-[0.04em] uppercase",
+                      filtered ? "text-data" : "text-ink-3",
+                    )}
                     title={row.label}
                   >
                     {row.label}
                   </span>
-                </span>
-                <span
-                  className={cn(
-                    "num max-w-[9rem] truncate text-right whitespace-nowrap",
-                    row.muted ? "text-ink-3" : "font-semibold text-ink",
-                  )}
-                  title={row.summary}
-                >
-                  {row.summary}
-                </span>
-                <span className="num text-right text-ink-3">{num(row.n)}</span>
-              </button>
-              {isOpen ? (
-                <ul className="mb-1.5 ml-4 border-l border-line pl-2">
-                  {row.values.map((v) => {
-                    const on = row.selected === v.key;
-                    const Tag = row.onPick ? "button" : "div";
-                    return (
-                      <li key={v.key}>
-                        <Tag
-                          {...(row.onPick
-                            ? {
-                                type: "button" as const,
-                                onClick: () => row.onPick!(on ? null : v.key),
-                                "aria-pressed": on,
-                              }
-                            : {})}
+                  <span className="num mt-1 truncate text-[15px] leading-tight font-semibold text-ink" title={row.main}>
+                    {row.main}
+                  </span>
+                  <span className="num mt-0.5 truncate text-[10.5px] text-ink-3" title={row.sub}>
+                    {row.sub}
+                  </span>
+                  {row.segments && total ? (
+                    <span className="mt-1.5 flex h-1.5 w-full overflow-hidden rounded-[1px] bg-line">
+                      {row.segments.map((x) => (
+                        <span
+                          key={x.key}
                           className={cn(
-                            "flex w-full items-baseline gap-2 rounded-xs px-1 py-0.5 text-left text-[11.5px]",
-                            row.onPick && "hover:bg-paper-hi",
-                            on && "bg-data/10",
-                            row.selected != null && row.onPick && !on && "opacity-50",
+                            "h-full",
+                            row.selected != null && row.selected !== x.key && "opacity-35",
                           )}
-                        >
-                          {v.color ? (
-                            <span aria-hidden className="h-2 w-2 shrink-0 rounded-[1px]" style={{ background: v.color }} />
-                          ) : null}
-                          <span className={cn("min-w-0 flex-1 truncate", on ? "font-medium text-ink" : "text-ink-2")} title={v.label}>
-                            {v.label}
-                          </span>
-                          <span className="num shrink-0 font-medium text-ink">{v.text}</span>
-                        </Tag>
-                      </li>
-                    );
-                  })}
-                </ul>
-              ) : null}
-            </li>
-          );
-        })}
-      </ul>
+                          style={{ width: `${(x.value / total) * 100}%`, background: x.color }}
+                        />
+                      ))}
+                    </span>
+                  ) : null}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+
+      {/* Сонгосон картын утгууд — торын доор, бүтэн өргөнөөр */}
+      {active ? (
+        <div className="mt-2 rounded-xs border border-data/40 bg-paper px-2.5 py-2">
+          <div className="mb-1 flex items-start justify-between gap-2">
+            <span className="text-[11.5px] font-semibold text-ink">{active.label}</span>
+            <button
+              type="button"
+              onClick={() => onOpen(null)}
+              aria-label="Хаах"
+              className="shrink-0 rounded-xs p-0.5 text-ink-3 hover:bg-paper-hi hover:text-ink"
+            >
+              <X size={12} />
+            </button>
+          </div>
+          <ul className="divide-y divide-line">
+            {active.values.map((v) => {
+              const on = active.selected === v.key;
+              const Tag = active.onPick ? "button" : "div";
+              return (
+                <li key={v.key}>
+                  <Tag
+                    {...(active.onPick
+                      ? {
+                          type: "button" as const,
+                          onClick: () => active.onPick!(on ? null : v.key),
+                          "aria-pressed": on,
+                        }
+                      : {})}
+                    className={cn(
+                      "flex w-full items-baseline gap-2 rounded-xs px-1 py-1 text-left text-[12px]",
+                      active.onPick && "hover:bg-paper-hi",
+                      on && "bg-data/10",
+                      active.selected != null && active.onPick && !on && "opacity-50",
+                    )}
+                  >
+                    {v.color ? (
+                      <span aria-hidden className="h-2 w-2 shrink-0 rounded-[1px]" style={{ background: v.color }} />
+                    ) : null}
+                    <span className={cn("min-w-0 flex-1 truncate", on ? "font-medium text-ink" : "text-ink-2")} title={v.label}>
+                      {v.label}
+                    </span>
+                    <span className="num shrink-0 font-medium text-ink">{v.text}</span>
+                  </Tag>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      ) : null}
     </>
   );
 }
