@@ -3,7 +3,7 @@
 import * as React from "react";
 import dynamic from "next/dynamic";
 import { createPortal } from "react-dom";
-import { Camera, FileText, Loader2, X } from "lucide-react";
+import { Camera, ChevronRight, FileText, Loader2, X } from "lucide-react";
 import type { Datum } from "@/components/charts";
 import { BasemapGallery } from "@/components/map/basemap-gallery";
 import { categoryHex } from "@/components/wells/colors";
@@ -11,7 +11,7 @@ import { FilterBar, type FilterChip } from "@/components/wells/filter-bar";
 import { defaultBasemap, type Basemap, type Extent } from "@/components/wells/map";
 import { Columns } from "@/components/ui/resizable-columns";
 import { MapLegend } from "@/components/wildlife/map-legend";
-import { SheetBars, SheetSection, SheetStats, catMeta, sheetFade } from "@/components/wildlife/sheet";
+import { SheetSection, SheetStats, catMeta } from "@/components/wildlife/sheet";
 import { Bounds } from "@/lib/extent";
 import { arcgisBlobUrl } from "@/lib/arcgis";
 import {
@@ -134,6 +134,8 @@ type FactChart = {
   data: Datum[];
   measure: string;
   meta: string;
+  /** Бөглөгдсөн бүртгэлийн тоо */
+  n: number;
 };
 
 function dateText(ms: number | null): string {
@@ -236,7 +238,7 @@ export function RangerDashboard({ kind }: { kind: RangerKind }) {
         if (vals.some((x) => x.f.unit)) {
           const sums = new Map<string, number>();
           for (const { f } of vals) sums.set(f.unit || "Нэгжгүй", (sums.get(f.unit || "Нэгжгүй") ?? 0) + f.num!);
-          return { key, title: label, kind: "unit", data: countData(sums), measure: "Нийлбэр, нэгжээр", meta: `${num(vals.length)} ${t.unit}` };
+          return { key, title: label, kind: "unit", data: countData(sums), measure: "Нийлбэр, нэгжээр", meta: `${num(vals.length)} ${t.unit}`, n: vals.length };
         }
         const total = vals.reduce((s, x) => s + x.f.num!, 0);
         return {
@@ -248,6 +250,7 @@ export function RangerDashboard({ kind }: { kind: RangerKind }) {
             .map(({ r, f }) => ({ key: String(r.oid), label: [r.name, r.district].filter(Boolean).join(" · "), value: f.num! })),
           measure: "Бүртгэл тус бүрээр",
           meta: `Нийт ${num(total, Number.isInteger(total) ? 0 : 2)}`,
+          n: vals.length,
         };
       }
       const counts = new Map<string, number>();
@@ -256,7 +259,7 @@ export function RangerDashboard({ kind }: { kind: RangerKind }) {
         counts.set(b, (counts.get(b) ?? 0) + 1);
       }
       const data = countData(counts);
-      return { key, title: label, kind: "count", data, measure: "", meta: catMeta(data.length) };
+      return { key, title: label, kind: "count", data, measure: "", meta: catMeta(data.length), n: pool.length };
     });
   }, [rows, passes, sel, t]);
 
@@ -305,7 +308,7 @@ export function RangerDashboard({ kind }: { kind: RangerKind }) {
       })
       .sort((a, b) => b.list.length - a.list.length || a.name.localeCompare(b.name));
   }, [scope]);
-  const [openIndicator, setOpenIndicator] = React.useState<string | null>(null);
+  const [openRow, setOpenRow] = React.useState<string | null>(null);
   const [allPhotos, setAllPhotos] = React.useState(false);
 
   /* Бүх бүртгэлийн хавсралт зураг (хэрэглэгч мөн өдөр: "Zurag bas") */
@@ -391,6 +394,83 @@ export function RangerDashboard({ kind }: { kind: RangerKind }) {
 
   /* Ганц төрөлтэй цэс — төрлийн хэсэг, тайлбар, шүүлт утгагүй */
   const typed = typeColor.size > 1;
+
+  /* Тоолол → хүснэгтийн мөр */
+  const countRow = (
+    id: string,
+    label: string,
+    data: Datum[],
+    selected: string | null,
+    onPick: (v: string | null) => void,
+    colorOf?: (k: string) => string | undefined,
+  ): SumRow => {
+    const filled = data.filter((d) => d.key !== "Бүртгэгдээгүй");
+    return {
+      id,
+      label,
+      /* Эхний хоёр утга тоотойгоо ("Тийм 2 · Үгүй 2"), үлдсэн нь "+N" */
+      summary: filled.length
+        ? filled
+            .slice(0, 2)
+            .map((d) => `${d.label} ${num(d.value)}`)
+            .join(" · ") + (filled.length > 2 ? ` +${filled.length - 2}` : "")
+        : "—",
+      n: filled.reduce((sum, d) => sum + d.value, 0),
+      values: data.map((d) => ({ key: d.key, label: d.label, text: num(d.value), color: colorOf?.(d.key) })),
+      selected,
+      onPick,
+    };
+  };
+  const summary: SumRow[] = [
+    ...(typed ? [countRow("type", t.type, byType, type, setType, (k) => typeColor.get(k))] : []),
+    countRow("district", "Дүүрэг", byDistrict, district, setDistrict),
+    ...factCharts.map((c): SumRow => {
+      if (c.kind === "count") return countRow(c.key, c.title, c.data, factPick[c.key] ?? null, (v) => pickFact(c.key, v));
+      if (c.kind === "unit")
+        return {
+          id: c.key,
+          label: c.title,
+          summary: c.data.map((d) => `${num(d.value, Number.isInteger(d.value) ? 0 : 1)} ${d.label}`).join(" · ") || "—",
+          n: c.n,
+          values: c.data.map((d) => ({ key: d.key, label: d.label, text: num(d.value, Number.isInteger(d.value) ? 0 : 1) })),
+          selected: null,
+        };
+      return {
+        id: c.key,
+        label: c.title,
+        summary: c.n ? c.meta : "—",
+        n: c.n,
+        values: c.data.map((d) => ({ key: d.key, label: d.label, text: num(d.value, Number.isInteger(d.value) ? 0 : 2) })),
+        selected: sel != null ? String(sel) : null,
+        onPick: (v) => setPicked(v == null ? null : Number(v)),
+      };
+    }),
+    ...yesNoRows.map((y) =>
+      countRow(
+        y.key,
+        y.label,
+        countData(new Map(Object.entries(y.counts))),
+        factPick[y.key] ?? null,
+        (v) => pickFact(y.key, v),
+      ),
+    ),
+    ...indicatorRows.map(
+      (row): SumRow => ({
+        id: `uz:${row.name}`,
+        label: row.name,
+        group: "Үзүүлэлт",
+        summary: row.summary,
+        n: row.list.length,
+        values: row.list.map((x) => ({
+          key: String(x.r.oid),
+          label: [x.r.name, x.r.district].filter(Boolean).join(" · "),
+          text: x.value,
+        })),
+        selected: sel != null ? String(sel) : null,
+        onPick: (v) => setPicked(v == null ? null : Number(v)),
+      }),
+    ),
+  ];
   const indicatorTotal = scope.reduce((s, r) => s + r.indicators.length, 0);
   const pickFact = (key: string, v: string | null) =>
     setFactPick((p) => {
@@ -419,18 +499,6 @@ export function RangerDashboard({ kind }: { kind: RangerKind }) {
       ? [{ key: "sel", label: "Сонгосон", value: detail.name, onRemove: () => setPicked(null) }]
       : []),
   ];
-  /* Шүүлттэй хэсгийн толгойд — тэр шүүлтийг л авна */
-  const clear = (on: boolean, onClick: () => void) =>
-    on ? (
-      <button
-        type="button"
-        onClick={onClick}
-        className="flex shrink-0 items-center gap-1 rounded-xs px-1 text-[10.5px] text-ink-3 hover:text-ink"
-      >
-        <X size={11} />
-        Цэвэрлэх
-      </button>
-    ) : undefined;
   const listed = shown
     .slice()
     .sort((a, b) => (b.date ?? 0) - (a.date ?? 0) || b.oid - a.oid);
@@ -507,109 +575,20 @@ export function RangerDashboard({ kind }: { kind: RangerKind }) {
                 },
               ]}
             />
-            {typed ? (
-              <SheetSection title={t.byType} meta={catMeta(byType.length)} action={clear(Boolean(type), () => setType(null))}>
-                <SheetBars
-                  data={byType}
-                  colorOf={(d) => typeColor.get(d.key)}
-                  selected={type}
-                  onSelect={setType}
-                />
-              </SheetSection>
-            ) : null}
-            <SheetSection title="Дүүргээр" meta={catMeta(byDistrict.length)} action={clear(Boolean(district), () => setDistrict(null))}>
-              <SheetBars data={byDistrict} selected={district} onSelect={setDistrict} />
+            {/*
+              НЭГ ТОВЧ ХҮСНЭГТ (хэрэглэгч 2026-11-13: "chartuud neg l oilgomjgui bndaa" →
+              гурван хувилбараас "Нэг товч хүснэгт"). Мөр бүр нэг талбар: нэр · давамгай
+              утга · бөглөгдсөн бүртгэлийн тоо; мөр дарахад бүх утга задарна, утга дарахад
+              шүүнэ (дахин дарахад авагдана). Хэмжээ нэгжээр, дүн бүртгэл тус бүрээр.
+            */}
+            <SheetSection title="Товч мэдээлэл" meta={`${num(summary.length)} талбар`}>
+              <SummaryTable
+                rows={summary}
+                open={openRow}
+                onOpen={setOpenRow}
+                noun={t.noun}
+              />
             </SheetSection>
-            {factCharts.map((c) => (
-              <SheetSection
-                key={c.key}
-                title={c.title}
-                meta={c.meta}
-                action={clear(c.kind === "count" && c.key in factPick, () => pickFact(c.key, null))}
-              >
-                <SheetBars
-                  data={c.data}
-                  measure={c.measure || undefined}
-                  selected={
-                    c.kind === "count" ? (factPick[c.key] ?? null) : c.kind === "record" && sel != null ? String(sel) : null
-                  }
-                  onSelect={
-                    c.kind === "count"
-                      ? (v) => pickFact(c.key, v)
-                      : c.kind === "record"
-                        ? (v) => setPicked(v == null ? null : Number(v))
-                        : undefined
-                  }
-                />
-              </SheetSection>
-            ))}
-            {yesNoRows.length ? (
-              <SheetSection
-                title="Тийм / үгүй"
-                meta={`${num(yesNoRows.length)} асуулт`}
-                action={clear(yesNoRows.some((y) => y.key in factPick), () =>
-                  setFactPick((p) => Object.fromEntries(Object.entries(p).filter(([k]) => !yesNoRows.some((y) => y.key === k)))),
-                )}
-              >
-                <YesNo rows={yesNoRows} picked={factPick} onPick={pickFact} />
-              </SheetSection>
-            ) : null}
-            {indicatorRows.length ? (
-              <SheetSection title="Үзүүлэлт" meta={`${num(indicatorRows.length)} үзүүлэлт`}>
-                <div className="mb-1 grid grid-cols-[minmax(0,1fr)_auto_auto] gap-x-3 px-1.5 text-[10.5px] text-ink-3">
-                  <span>Нэр</span>
-                  <span className="text-right">{t.noun}</span>
-                  <span className="w-[7.5rem] text-right">Утга</span>
-                </div>
-                <ul className="divide-y divide-line">
-                  {indicatorRows.map((row) => {
-                    const open = openIndicator === row.name;
-                    return (
-                      <li key={row.name}>
-                        <button
-                          type="button"
-                          onClick={() => setOpenIndicator(open ? null : row.name)}
-                          aria-expanded={open}
-                          className={cn(
-                            "grid w-full grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-x-3 rounded-xs px-1.5 py-1 text-left text-[12px] hover:bg-paper-hi",
-                            open && "bg-paper-hi",
-                          )}
-                        >
-                          <span className="truncate text-ink" title={row.name}>
-                            {row.name}
-                          </span>
-                          <span className="num text-right text-ink-3">{num(row.list.length)}</span>
-                          <span className="num w-[7.5rem] truncate text-right font-semibold text-ink" title={row.summary}>
-                            {row.summary}
-                          </span>
-                        </button>
-                        {open ? (
-                          <ul className="mb-1 ml-3 border-l border-line pl-2">
-                            {row.list.map((x) => (
-                              <li key={x.r.oid}>
-                                <button
-                                  type="button"
-                                  onClick={() => setPicked(sel === x.r.oid ? null : x.r.oid)}
-                                  className={cn(
-                                    "flex w-full items-baseline gap-2 rounded-xs px-1 py-0.5 text-left text-[11px] hover:bg-paper-hi",
-                                    sel === x.r.oid && "bg-paper-hi",
-                                  )}
-                                >
-                                  <span className="min-w-0 flex-1 truncate text-ink-2">
-                                    {[x.r.name, x.r.district].filter(Boolean).join(" · ")}
-                                  </span>
-                                  <span className="num shrink-0 font-medium text-ink">{x.value}</span>
-                                </button>
-                              </li>
-                            ))}
-                          </ul>
-                        ) : null}
-                      </li>
-                    );
-                  })}
-                </ul>
-              </SheetSection>
-            ) : null}
             {gallery.length ? (
               <SheetSection title="Зураг" meta={`${num(gallery.length)} зураг`}>
                 <div className="grid grid-cols-4 gap-1.5">
@@ -832,70 +811,117 @@ function Viewer({ url, name, onClose }: { url: string; name: string; onClose: ()
   );
 }
 
-/** Тийм / үгүй асуултууд — мөр бүр хуваагдсан зурвас; хэсэг дээр дарахад шүүнэ */
-const YES_NO = [
-  { key: "Тийм", color: "var(--data)" },
-  { key: "Үгүй", color: "var(--ochre)" },
-  { key: "Бүртгэгдээгүй", color: "var(--line-2)" },
-] as const;
+type SumValue = { key: string; label: string; text: string; color?: string };
+type SumRow = {
+  id: string;
+  label: string;
+  /** Бүлгийн гарчиг — эхний мөрийн өмнө нэг удаа ("Үзүүлэлт") */
+  group?: string;
+  /** Давамгай утга, хэмжээний нийлбэр эсвэл муж */
+  summary: string;
+  /** Бөглөгдсөн бүртгэлийн тоо */
+  n: number;
+  values: SumValue[];
+  selected: string | null;
+  /** Утга дарахад — тоололд шүүлт, бүртгэл тус бүрийн утгад сонголт */
+  onPick?: (key: string | null) => void;
+};
 
-function YesNo({
+/** Товч мэдээллийн хүснэгт — нэг мөр нэг талбар, дарахад задарна */
+function SummaryTable({
   rows,
-  picked,
-  onPick,
+  open,
+  onOpen,
+  noun,
 }: {
-  rows: { key: string; label: string; counts: Record<string, number> }[];
-  picked: Record<string, string>;
-  onPick: (key: string, value: string | null) => void;
+  rows: SumRow[];
+  open: string | null;
+  onOpen: (id: string | null) => void;
+  noun: string;
 }) {
+  /* Нэр хоёр мөр хүртэл бүтэн — тасарсан нэр ("Хогны хэмжээг х…") уншигдахгүй */
+  const cols = "grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)_2.5rem]";
   return (
     <>
-      <div className="mb-1.5 flex gap-3 px-1.5 text-[10.5px] text-ink-3">
-        {YES_NO.map((y) => (
-          <span key={y.key} className="flex items-center gap-1">
-            <span aria-hidden className="h-2 w-2 rounded-[1px]" style={{ background: sheetFade(y.color) }} />
-            {y.key}
-          </span>
-        ))}
+      <div className={cn("mb-1 grid gap-x-3 px-1.5 text-[10.5px] text-ink-3", cols)}>
+        <span>Талбар</span>
+        <span className="text-right">Давамгай утга</span>
+        <span className="text-right">{noun}</span>
       </div>
-      <div className="flex flex-col gap-1.5">
-        {rows.map((row) => {
-          const total = YES_NO.reduce((s, y) => s + (row.counts[y.key] ?? 0), 0);
-          const sel = picked[row.key] ?? null;
+      <ul className="divide-y divide-line">
+        {rows.map((row, i) => {
+          const isOpen = open === row.id;
+          const filtered = row.selected != null && row.onPick != null;
+          const heading = row.group && row.group !== rows[i - 1]?.group ? row.group : null;
           return (
-            <div key={row.key} className="px-1.5">
-              <div className="flex items-baseline justify-between gap-2">
-                <span className="min-w-0 truncate text-[12px] text-ink" title={row.label}>
-                  {row.label}
+            <li key={row.id}>
+              {heading ? <p className="eyebrow px-1.5 pt-2.5 pb-1">{heading}</p> : null}
+              <button
+                type="button"
+                onClick={() => onOpen(isOpen ? null : row.id)}
+                aria-expanded={isOpen}
+                className={cn(
+                  "grid w-full items-center gap-x-3 rounded-xs px-1.5 py-1.5 text-left text-[12px] hover:bg-paper-hi",
+                  cols,
+                  isOpen && "bg-paper-hi",
+                )}
+              >
+                <span className="flex min-w-0 items-start gap-1">
+                  <ChevronRight
+                    size={12}
+                    className={cn("mt-[3px] shrink-0 text-ink-3 transition-transform", isOpen && "rotate-90")}
+                  />
+                  <span
+                    className={cn("line-clamp-2 leading-snug", filtered ? "font-medium text-data" : "text-ink")}
+                    title={row.label}
+                  >
+                    {row.label}
+                  </span>
                 </span>
-                <span className="num shrink-0 text-[11px] text-ink-3">
-                  {YES_NO.filter((y) => row.counts[y.key])
-                    .map((y) => `${y.key} ${num(row.counts[y.key])}`)
-                    .join(" · ")}
+                <span className="num line-clamp-2 text-right leading-snug font-semibold text-ink" title={row.summary}>
+                  {row.summary}
                 </span>
-              </div>
-              <div className="mt-0.5 flex h-2 overflow-hidden rounded-[1px] bg-line">
-                {YES_NO.map((y) => {
-                  const n = row.counts[y.key] ?? 0;
-                  if (!n || !total) return null;
-                  const on = sel === y.key;
-                  return (
-                    <button
-                      key={y.key}
-                      type="button"
-                      title={`${y.key} · ${num(n)}`}
-                      aria-pressed={on}
-                      onClick={() => onPick(row.key, on ? null : y.key)}
-                      className={cn("h-full", sel != null && !on && "opacity-35")}
-                      style={{ width: `${(n / total) * 100}%`, background: sheetFade(y.color) }}
-                    />
-                  );
-                })}
-              </div>
-            </div>
+                <span className="num text-right text-ink-3">{num(row.n)}</span>
+              </button>
+              {isOpen ? (
+                <ul className="mb-1.5 ml-4 border-l border-line pl-2">
+                  {row.values.map((v) => {
+                    const on = row.selected === v.key;
+                    const Tag = row.onPick ? "button" : "div";
+                    return (
+                      <li key={v.key}>
+                        <Tag
+                          {...(row.onPick
+                            ? {
+                                type: "button" as const,
+                                onClick: () => row.onPick!(on ? null : v.key),
+                                "aria-pressed": on,
+                              }
+                            : {})}
+                          className={cn(
+                            "flex w-full items-baseline gap-2 rounded-xs px-1 py-0.5 text-left text-[11.5px]",
+                            row.onPick && "hover:bg-paper-hi",
+                            on && "bg-data/10",
+                            row.selected != null && row.onPick && !on && "opacity-50",
+                          )}
+                        >
+                          {v.color ? (
+                            <span aria-hidden className="h-2 w-2 shrink-0 rounded-[1px]" style={{ background: v.color }} />
+                          ) : null}
+                          <span className={cn("min-w-0 flex-1 truncate", on ? "font-medium text-ink" : "text-ink-2")} title={v.label}>
+                            {v.label}
+                          </span>
+                          <span className="num shrink-0 font-medium text-ink">{v.text}</span>
+                        </Tag>
+                      </li>
+                    );
+                  })}
+                </ul>
+              ) : null}
+            </li>
           );
         })}
-      </div>
+      </ul>
     </>
   );
 }
