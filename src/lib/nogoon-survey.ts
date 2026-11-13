@@ -109,6 +109,13 @@ export type RangerFact = {
   num: number | null;
   /** Хэмжих нэгж (хогны хэмжээнд "тн", "га" …) */
   unit: string;
+  /**
+   * Сонголтын талбар (домэйнтэй эсвэл `…_ner` хостой) — диаграм болно.
+   * Чөлөөт бичвэр (тайлбар, арга хэмжээ, цаг) нь `false` — зөвхөн цонхонд.
+   */
+  choice: boolean;
+  /** Тийм / Үгүй домэйн — нэг нэгдсэн картад */
+  yesNo: boolean;
 };
 
 export type RangerRecord = {
@@ -311,6 +318,8 @@ export async function fetchRangerRecords(
           value: hasUnit && v ? `${v} ${unit}` : v,
           num: typeof raw === "number" && f.type !== "esriFieldTypeDate" ? raw : null,
           unit: hasUnit ? unit : "",
+          choice: codes.has(f.name) || names.has(`${f.name}_ner`),
+          yesNo: [...(codes.get(f.name)?.keys() ?? [])].sort().join() === "tiim,ugui",
         };
       });
     const code = text(a.turul);

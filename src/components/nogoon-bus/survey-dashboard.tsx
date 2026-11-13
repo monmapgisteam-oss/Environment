@@ -11,7 +11,7 @@ import { FilterBar, FilterMenu, PickList } from "@/components/wells/filter-bar";
 import { defaultBasemap, type Basemap, type Extent } from "@/components/wells/map";
 import { Columns } from "@/components/ui/resizable-columns";
 import { MapLegend } from "@/components/wildlife/map-legend";
-import { SheetBars, SheetSection, SheetStats, catMeta } from "@/components/wildlife/sheet";
+import { SheetBars, SheetSection, SheetStats, catMeta, sheetFade } from "@/components/wildlife/sheet";
 import { Bounds } from "@/lib/extent";
 import { arcgisBlobUrl } from "@/lib/arcgis";
 import {
@@ -118,6 +118,9 @@ function numberOf(value: string): { n: number; unit: string } | null {
   return { n: Number(m[1].replace(",", ".")), unit: m[2].trim() };
 }
 
+/** Зургийн цомогт эхэндээ харуулах тоо — үлдсэн нь "Бүгдийг харах" */
+const GALLERY_ROWS = 8;
+
 const countData = (counts: Map<string, number>): Datum[] =>
   [...counts.entries()]
     .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
@@ -220,11 +223,15 @@ export function RangerDashboard({ kind }: { kind: RangerKind }) {
   */
   const factCharts = React.useMemo<FactChart[]>(() => {
     const all = rows ?? [];
-    const keys = all[0]?.facts.map((f) => ({ key: f.key, label: f.label })) ?? [];
+    const first = all[0]?.facts ?? [];
+    const numeric = (key: string) => all.some((r) => factOf(r, key)?.num != null);
+    /* Чөлөөт бичвэр (тайлбар, арга хэмжээ, цаг …) диаграм БОЛОХГҮЙ — утга нь бараг
+       давтагддаггүй тул мөр бүр 1 гэсэн жагсаалт болно; цонхонд хэвээр.
+       Тийм/үгүй талбарууд нэг нэгдсэн картад ({@link yesNoRows}). */
+    const keys = first.filter((f) => numeric(f.key) || (f.choice && !f.yesNo));
     return keys.map(({ key, label }) => {
       const pool = all.filter((r) => passes(r, key) && (sel == null || r.oid === sel));
-      const numeric = all.some((r) => factOf(r, key)?.num != null);
-      if (numeric) {
+      if (numeric(key)) {
         const vals = pool
           .map((r) => ({ r, f: factOf(r, key) }))
           .filter((x): x is { r: RangerRecord; f: NonNullable<typeof x.f> } => x.f?.num != null);
@@ -251,50 +258,63 @@ export function RangerDashboard({ kind }: { kind: RangerKind }) {
         counts.set(b, (counts.get(b) ?? 0) + 1);
       }
       const data = countData(counts);
-      return { key, title: label, kind: "count", data, measure: t.measure, meta: catMeta(data.length) };
+      return { key, title: label, kind: "count", data, measure: "", meta: catMeta(data.length) };
     });
   }, [rows, passes, sel, t]);
 
-  /* Үзүүлэлт тус бүр — тоон бол бүртгэл тус бүрийн утга, эс бөгөөс утгаар тоолол */
-  const indicatorCharts = React.useMemo(() => {
+  /* ТИЙМ / ҮГҮЙ талбарууд НЭГ картад — мөр бүр хуваагдсан зурвас (тусдаа карт
+     бүрд хоёр мөр байсан нь баганыг нүсэр болгож байв; хэрэглэгч мөн өдөр:
+     "chartuudiig tsegtsley het nurshuu ih bn") */
+  const yesNoRows = React.useMemo(() => {
+    const all = rows ?? [];
+    return (all[0]?.facts ?? [])
+      .filter((f) => f.yesNo)
+      .map(({ key, label }) => {
+        const counts: Record<string, number> = {};
+        for (const r of all) {
+          if (!passes(r, key) || (sel != null && r.oid !== sel)) continue;
+          const b = bucketOf(factOf(r, key)?.value ?? "");
+          counts[b] = (counts[b] ?? 0) + 1;
+        }
+        return { key, label, counts };
+      });
+  }, [rows, passes, sel]);
+
+  /* ҮЗҮҮЛЭЛТ НЭГ ХҮСНЭГТЭД — мөр бүр нэг үзүүлэлт: судалгааны тоо, утга (тоон бол
+     муж, эс бөгөөс давамгай утга); мөр дарахад судалгаа тус бүрийн утга задарна */
+  const indicatorRows = React.useMemo(() => {
     const by = new Map<string, { r: RangerRecord; value: string }[]>();
     for (const r of scope)
       for (const i of r.indicators) by.set(i.name, [...(by.get(i.name) ?? []), { r, value: i.value }]);
-    return [...by].map(([name, list]) => {
-      const nums = list.map((x) => ({ ...x, p: numberOf(x.value) }));
-      if (nums.every((x) => x.p)) {
-        const units = [...new Set(nums.map((x) => x.p!.unit).filter(Boolean))];
-        return {
-          name,
-          record: true,
-          measure: units.length === 1 ? `Утга, ${units[0]}` : "Утга",
-          data: nums
-            .sort((a, b) => b.p!.n - a.p!.n)
-            .map((x) => ({ key: String(x.r.oid), label: [x.r.name, x.r.district].filter(Boolean).join(" · "), value: x.p!.n })),
-        };
-      }
-      const counts = new Map<string, number>();
-      for (const x of list) counts.set(x.value || "Бүртгэгдээгүй", (counts.get(x.value || "Бүртгэгдээгүй") ?? 0) + 1);
-      return { name, record: false, measure: t.measure, data: countData(counts) };
-    });
-  }, [scope, t]);
+    return [...by]
+      .map(([name, list]) => {
+        const parsed = list.map((x) => numberOf(x.value));
+        let summary: string;
+        if (parsed.every(Boolean)) {
+          const ns = parsed.map((q) => q!.n);
+          const units = [...new Set(parsed.map((q) => q!.unit).filter(Boolean))];
+          const lo = Math.min(...ns);
+          const hi = Math.max(...ns);
+          const fmt = (v: number) => num(v, Number.isInteger(v) ? 0 : 1);
+          summary = `${lo === hi ? fmt(lo) : `${fmt(lo)}–${fmt(hi)}`}${units.length === 1 ? ` ${units[0]}` : ""}`;
+        } else {
+          const counts = new Map<string, number>();
+          for (const x of list) counts.set(x.value, (counts.get(x.value) ?? 0) + 1);
+          const [top] = countData(counts);
+          summary = counts.size > 1 ? `${top.label} +${counts.size - 1}` : top.label;
+        }
+        return { name, list, summary };
+      })
+      .sort((a, b) => b.list.length - a.list.length || a.name.localeCompare(b.name));
+  }, [scope]);
+  const [openIndicator, setOpenIndicator] = React.useState<string | null>(null);
+  const [allPhotos, setAllPhotos] = React.useState(false);
 
   /* Бүх бүртгэлийн хавсралт зураг (хэрэглэгч мөн өдөр: "Zurag bas") */
   const gallery = React.useMemo(
     () => scope.flatMap((r) => r.attachments.filter((a) => a.image).map((a) => ({ r, a }))),
     [scope],
   );
-
-  /* Үзүүлэлтийн нэр бүр хэдэн судалгаанд хэмжигдсэн бэ */
-  const byIndicator = React.useMemo<Datum[]>(() => {
-    const counts = new Map<string, number>();
-    for (const r of scope)
-      for (const n of new Set(r.indicators.map((i) => i.name)))
-        counts.set(n, (counts.get(n) ?? 0) + 1);
-    return [...counts.entries()]
-      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
-      .map(([key, value]) => ({ key, label: key, value }));
-  }, [scope]);
 
   /* Төрлийн өнгө — шүүгдээгүй тооллоор (шүүлтэд солигдохгүй) */
   const typeColor = React.useMemo(() => {
@@ -480,7 +500,6 @@ export function RangerDashboard({ kind }: { kind: RangerKind }) {
               <SheetSection title={t.byType} meta={catMeta(byType.length)}>
                 <SheetBars
                   data={byType}
-                  measure={t.measure}
                   colorOf={(d) => typeColor.get(d.key)}
                   selected={type}
                   onSelect={setType}
@@ -488,13 +507,13 @@ export function RangerDashboard({ kind }: { kind: RangerKind }) {
               </SheetSection>
             ) : null}
             <SheetSection title="Дүүргээр" meta={catMeta(byDistrict.length)}>
-              <SheetBars data={byDistrict} measure={t.measure} selected={district} onSelect={setDistrict} />
+              <SheetBars data={byDistrict} selected={district} onSelect={setDistrict} />
             </SheetSection>
             {factCharts.map((c) => (
               <SheetSection key={c.key} title={c.title} meta={c.meta}>
                 <SheetBars
                   data={c.data}
-                  measure={c.measure}
+                  measure={c.measure || undefined}
                   selected={
                     c.kind === "count" ? (factPick[c.key] ?? null) : c.kind === "record" && sel != null ? String(sel) : null
                   }
@@ -514,33 +533,96 @@ export function RangerDashboard({ kind }: { kind: RangerKind }) {
                 />
               </SheetSection>
             ))}
-            {byIndicator.length ? (
-              <SheetSection title="Үзүүлэлтээр" meta={catMeta(byIndicator.length)}>
-                <SheetBars data={byIndicator} measure={t.measured} />
-              </SheetSection>
-            ) : null}
-            {indicatorCharts.map((c) => (
-              <SheetSection key={`uz-${c.name}`} title={c.name} meta={c.record ? `${num(c.data.length)} ${t.unit}` : catMeta(c.data.length)}>
-                <SheetBars
-                  data={c.data}
-                  measure={c.measure}
-                  selected={c.record && sel != null ? String(sel) : null}
-                  onSelect={c.record ? (v) => setPicked(v == null ? null : Number(v)) : undefined}
+            {yesNoRows.length ? (
+              <SheetSection title="Тийм / үгүй" meta={`${num(yesNoRows.length)} асуулт`}>
+                <YesNo
+                  rows={yesNoRows}
+                  picked={factPick}
+                  onPick={(key, v) =>
+                    setFactPick((p) => {
+                      const next = { ...p };
+                      if (v == null) delete next[key];
+                      else next[key] = v;
+                      return next;
+                    })
+                  }
                 />
               </SheetSection>
-            ))}
+            ) : null}
+            {indicatorRows.length ? (
+              <SheetSection title="Үзүүлэлт" meta={`${num(indicatorRows.length)} үзүүлэлт`}>
+                <div className="mb-1 grid grid-cols-[minmax(0,1fr)_auto_auto] gap-x-3 px-1.5 text-[10.5px] text-ink-3">
+                  <span>Нэр</span>
+                  <span className="text-right">{t.noun}</span>
+                  <span className="w-[7.5rem] text-right">Утга</span>
+                </div>
+                <ul className="divide-y divide-line">
+                  {indicatorRows.map((row) => {
+                    const open = openIndicator === row.name;
+                    return (
+                      <li key={row.name}>
+                        <button
+                          type="button"
+                          onClick={() => setOpenIndicator(open ? null : row.name)}
+                          aria-expanded={open}
+                          className={cn(
+                            "grid w-full grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-x-3 rounded-xs px-1.5 py-1 text-left text-[12px] hover:bg-paper-hi",
+                            open && "bg-paper-hi",
+                          )}
+                        >
+                          <span className="truncate text-ink" title={row.name}>
+                            {row.name}
+                          </span>
+                          <span className="num text-right text-ink-3">{num(row.list.length)}</span>
+                          <span className="num w-[7.5rem] truncate text-right font-semibold text-ink" title={row.summary}>
+                            {row.summary}
+                          </span>
+                        </button>
+                        {open ? (
+                          <ul className="mb-1 ml-3 border-l border-line pl-2">
+                            {row.list.map((x) => (
+                              <li key={x.r.oid}>
+                                <button
+                                  type="button"
+                                  onClick={() => setPicked(sel === x.r.oid ? null : x.r.oid)}
+                                  className={cn(
+                                    "flex w-full items-baseline gap-2 rounded-xs px-1 py-0.5 text-left text-[11px] hover:bg-paper-hi",
+                                    sel === x.r.oid && "bg-paper-hi",
+                                  )}
+                                >
+                                  <span className="min-w-0 flex-1 truncate text-ink-2">
+                                    {[x.r.name, x.r.district].filter(Boolean).join(" · ")}
+                                  </span>
+                                  <span className="num shrink-0 font-medium text-ink">{x.value}</span>
+                                </button>
+                              </li>
+                            ))}
+                          </ul>
+                        ) : null}
+                      </li>
+                    );
+                  })}
+                </ul>
+              </SheetSection>
+            ) : null}
             {gallery.length ? (
               <SheetSection title="Зураг" meta={`${num(gallery.length)} зураг`}>
-                <div className="grid grid-cols-3 gap-1.5">
-                  {gallery.map(({ r, a }) => (
-                    <div key={`${r.oid}/${a.id}`} className="min-w-0">
+                <div className="grid grid-cols-4 gap-1.5">
+                  {(allPhotos ? gallery : gallery.slice(0, GALLERY_ROWS)).map(({ r, a }) => (
+                    <div key={`${r.oid}/${a.id}`} className="min-w-0" title={r.name}>
                       <Thumb oid={r.oid} a={a} onView={setViewing} />
-                      <p className="mt-0.5 truncate text-[10px] text-ink-3" title={r.name}>
-                        {r.name}
-                      </p>
                     </div>
                   ))}
                 </div>
+                {gallery.length > GALLERY_ROWS ? (
+                  <button
+                    type="button"
+                    onClick={() => setAllPhotos((v) => !v)}
+                    className="mt-1 px-1.5 text-[11px] text-ink-3 hover:text-ink"
+                  >
+                    {allPhotos ? "Хураах" : `Бүгдийг харах · ${num(gallery.length)}`}
+                  </button>
+                ) : null}
               </SheetSection>
             ) : null}
             <SheetSection title={t.list} meta={`${num(listed.length)} ${t.unit}`}>
@@ -742,6 +824,74 @@ function Viewer({ url, name, onClose }: { url: string; name: string; onClose: ()
       </button>
     </div>,
     document.body,
+  );
+}
+
+/** Тийм / үгүй асуултууд — мөр бүр хуваагдсан зурвас; хэсэг дээр дарахад шүүнэ */
+const YES_NO = [
+  { key: "Тийм", color: "var(--data)" },
+  { key: "Үгүй", color: "var(--ochre)" },
+  { key: "Бүртгэгдээгүй", color: "var(--ink-3)" },
+] as const;
+
+function YesNo({
+  rows,
+  picked,
+  onPick,
+}: {
+  rows: { key: string; label: string; counts: Record<string, number> }[];
+  picked: Record<string, string>;
+  onPick: (key: string, value: string | null) => void;
+}) {
+  return (
+    <>
+      <div className="mb-1.5 flex gap-3 px-1.5 text-[10.5px] text-ink-3">
+        {YES_NO.map((y) => (
+          <span key={y.key} className="flex items-center gap-1">
+            <span aria-hidden className="h-2 w-2 rounded-[1px]" style={{ background: sheetFade(y.color) }} />
+            {y.key}
+          </span>
+        ))}
+      </div>
+      <div className="flex flex-col gap-1.5">
+        {rows.map((row) => {
+          const total = YES_NO.reduce((s, y) => s + (row.counts[y.key] ?? 0), 0);
+          const sel = picked[row.key] ?? null;
+          return (
+            <div key={row.key} className="px-1.5">
+              <div className="flex items-baseline justify-between gap-2">
+                <span className="min-w-0 truncate text-[12px] text-ink" title={row.label}>
+                  {row.label}
+                </span>
+                <span className="num shrink-0 text-[11px] text-ink-3">
+                  {YES_NO.filter((y) => row.counts[y.key])
+                    .map((y) => num(row.counts[y.key]))
+                    .join(" · ")}
+                </span>
+              </div>
+              <div className="mt-0.5 flex h-2 overflow-hidden rounded-[1px] bg-line">
+                {YES_NO.map((y) => {
+                  const n = row.counts[y.key] ?? 0;
+                  if (!n || !total) return null;
+                  const on = sel === y.key;
+                  return (
+                    <button
+                      key={y.key}
+                      type="button"
+                      title={`${y.key} · ${num(n)}`}
+                      aria-pressed={on}
+                      onClick={() => onPick(row.key, on ? null : y.key)}
+                      className={cn("h-full", sel != null && !on && "opacity-35")}
+                      style={{ width: `${(n / total) * 100}%`, background: sheetFade(y.color) }}
+                    />
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </>
   );
 }
 
