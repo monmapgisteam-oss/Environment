@@ -12,7 +12,7 @@ import { Columns } from "@/components/ui/resizable-columns";
 import { MapLegend } from "@/components/wildlife/map-legend";
 import { SheetBars, SheetSection, SheetStats, catMeta } from "@/components/wildlife/sheet";
 import { Bounds } from "@/lib/extent";
-import { fetchNogoonSurvey, type SurveyRecord } from "@/lib/nogoon-survey";
+import { fetchRangerRecords, type RangerKind, type RangerRecord } from "@/lib/nogoon-survey";
 import { cn, num } from "@/lib/utils";
 
 const PointMap = dynamic(
@@ -28,18 +28,64 @@ const PointMap = dynamic(
 );
 
 /*
-  "Судалгаа" цэс — Байгаль хамгаалагчийн аппликейшнаар (Survey123) ногоон бүсийн
-  хэлтэс бөглөсөн "Судалгаа" ангиллын бүртгэл ({@link src/lib/nogoon-survey.ts}).
+  Байгаль хамгаалагчийн аппликейшны (Survey123) бүртгэл — ногоон бүсийн гурван
+  цэс: "Судалгаа", "Модны тооллого", "Хог" ({@link src/lib/nogoon-survey.ts}).
 
   Бүтэц нь ногоон бүсийн бусад цэсний хуудастай нэг хэв: зүүнд зураг (цэг нь
-  судалгааны төрлөөр өнгөтэй), баруунд Тойм → төрлөөр → дүүргээр → үзүүлэлтээр →
-  судалгааны жагсаалт. Мөр, цэг дарахад шүүнэ; сонгосон судалгааны цонхонд
-  ҮЗҮҮЛЭЛТ (нэр · утга · нэгж) бүтнээрээ.
+  төрлөөр өнгөтэй), баруунд Тойм → төрлөөр → дүүргээр → үзүүлэлтээр →
+  жагсаалт. Мөр, цэг дарахад шүүнэ; сонгосон бүртгэлийн цонхонд маягтын
+  тухайн хэсгийн бүх талбар (хоосон нь "—") ба ҮЗҮҮЛЭЛТ (нэр · утга · нэгж).
+  ⚠ Ганц төрөлтэй цэсэд (Модны тооллого) төрлийн хэсэг, өнгөний тайлбар гарахгүй.
 */
+
+const TEXT: Record<
+  RangerKind,
+  {
+    title: string;
+    noun: string;
+    type: string;
+    byType: string;
+    measure: string;
+    measured: string;
+    list: string;
+    unit: string;
+  }
+> = {
+  sudalgaa: {
+    title: "Судалгаа",
+    noun: "Судалгаа",
+    type: "Судалгааны төрөл",
+    byType: "Судалгааны төрлөөр",
+    measure: "Судалгааны тоо",
+    measured: "Хэмжсэн судалгааны тоо",
+    list: "Судалгааны жагсаалт",
+    unit: "судалгаа",
+  },
+  mod: {
+    title: "Модны тооллого",
+    noun: "Тооллого",
+    type: "Төрөл",
+    byType: "Төрлөөр",
+    measure: "Тооллогын тоо",
+    measured: "Хэмжсэн тооллогын тоо",
+    list: "Тооллогын жагсаалт",
+    unit: "тооллого",
+  },
+  hog: {
+    title: "Хог",
+    noun: "Бүртгэл",
+    type: "Хогны төрөл",
+    byType: "Хогны төрлөөр",
+    measure: "Бүртгэлийн тоо",
+    measured: "Хэмжсэн бүртгэлийн тоо",
+    list: "Бүртгэлийн жагсаалт",
+    unit: "бүртгэл",
+  },
+};
 
 type Axis = "type" | "district";
 
-function keyOf(r: SurveyRecord, axis: Axis): string {
+function keyOf(r: RangerRecord, axis: Axis): string {
   return axis === "type" ? r.type : r.district || "Бүртгэгдээгүй";
 }
 
@@ -50,8 +96,9 @@ function dateText(ms: number | null): string {
   return `${d.getUTCFullYear()}.${p(d.getUTCMonth() + 1)}.${p(d.getUTCDate())}`;
 }
 
-export function NogoonSurveyDashboard() {
-  const [rows, setRows] = React.useState<SurveyRecord[] | null>(null);
+export function RangerDashboard({ kind }: { kind: RangerKind }) {
+  const t = TEXT[kind];
+  const [rows, setRows] = React.useState<RangerRecord[] | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [type, setType] = React.useState<string | null>(null);
   const [district, setDistrict] = React.useState<string | null>(null);
@@ -60,17 +107,17 @@ export function NogoonSurveyDashboard() {
 
   React.useEffect(() => {
     const ac = new AbortController();
-    fetchNogoonSurvey(ac.signal)
+    fetchRangerRecords(kind, ac.signal)
       .then(setRows)
       .catch((e: Error) => {
         if (e.name !== "AbortError") setError(e.message);
       });
     return () => ac.abort();
-  }, []);
+  }, [kind]);
 
   /* Шүүлт — тэнхлэг бүр өөрийгөө алгасна (өөр утга руу шилжих зам) */
   const passes = React.useCallback(
-    (r: SurveyRecord, skip?: Axis) =>
+    (r: RangerRecord, skip?: Axis) =>
       (skip === "type" || !type || r.type === type) &&
       (skip === "district" || !district || keyOf(r, "district") === district),
     [type, district],
@@ -197,6 +244,9 @@ export function NogoonSurveyDashboard() {
     );
   }
 
+  /* Ганц төрөлтэй цэс — төрлийн хэсэг, тайлбар, шүүлт утгагүй */
+  const typed = typeColor.size > 1;
+  const indicatorTotal = scope.reduce((s, r) => s + r.indicators.length, 0);
   const activeCount = (type ? 1 : 0) + (district ? 1 : 0) + (sel != null ? 1 : 0);
   const listed = shown
     .slice()
@@ -205,7 +255,7 @@ export function NogoonSurveyDashboard() {
   return (
     <div className="flex h-full min-h-0 flex-col gap-2.5">
       <FilterBar
-        title="Судалгаа"
+        title={t.title}
         activeCount={activeCount}
         onReset={() => {
           setType(null);
@@ -213,16 +263,18 @@ export function NogoonSurveyDashboard() {
           setPicked(null);
         }}
       >
-        <FilterMenu
-          label="Судалгааны төрөл"
-          icon={Microscope}
-          value={type}
-          active={Boolean(type)}
-          onClear={() => setType(null)}
-          width={250}
-        >
-          <PickList items={menuType} selected={type} onPick={setType} />
-        </FilterMenu>
+        {typed ? (
+          <FilterMenu
+            label={t.type}
+            icon={Microscope}
+            value={type}
+            active={Boolean(type)}
+            onClear={() => setType(null)}
+            width={250}
+          >
+            <PickList items={menuType} selected={type} onPick={setType} />
+          </FilterMenu>
+        ) : null}
         <FilterMenu
           label="Дүүрэг"
           icon={MapPin}
@@ -240,7 +292,7 @@ export function NogoonSurveyDashboard() {
           <p className="text-[12.5px] text-ink-3">Мэдээлэл хүлээгдэж байна</p>
         </div>
       ) : (
-        <Columns layout="flex" id="nogoon-survey" right={360} className="min-h-0 flex-1">
+        <Columns layout="flex" id={`nogoon-ranger-${kind}`} right={360} className="min-h-0 flex-1">
           <div className="relative min-h-[300px] flex-1 overflow-hidden rounded-xs border border-line bg-paper-2">
             <div className="relative h-full w-full">
               <PointMap
@@ -264,49 +316,56 @@ export function NogoonSurveyDashboard() {
                 groups={[
                   {
                     key: "type",
-                    title: "Судалгаа",
-                    field: "Судалгааны төрөл",
+                    title: t.title,
+                    field: typed ? t.type : undefined,
                     items: [...typeColor].map(([k, c]) => ({ key: k, label: k, color: c })),
                   },
                 ]}
               />
-              {detail ? <Detail record={detail} color={typeColor.get(detail.type)} onClose={() => setPicked(null)} /> : null}
+              {detail ? (
+                <Detail
+                  record={detail}
+                  typeLabel={typed ? t.type : null}
+                  indicators={kind !== "hog"}
+                  color={typeColor.get(detail.type)}
+                  onClose={() => setPicked(null)}
+                />
+              ) : null}
             </div>
           </div>
 
           <div className="flex min-h-0 flex-col gap-2 overflow-y-auto xl:w-(--col-r) xl:shrink-0">
             <SheetStats
               stats={[
-                { label: "Судалгаа", value: scope.length },
-                { label: "Судалгааны төрөл", value: new Set(scope.map((r) => r.type)).size },
-                {
-                  label: "Үзүүлэлт",
-                  value: scope.reduce((s, r) => s + r.indicators.length, 0),
-                },
+                { label: t.noun, value: scope.length },
+                ...(typed ? [{ label: t.type, value: new Set(scope.map((r) => r.type)).size }] : []),
+                ...(indicatorTotal ? [{ label: "Үзүүлэлт", value: indicatorTotal }] : []),
                 {
                   label: "Дүүрэг",
                   value: new Set(scope.map((r) => r.district).filter(Boolean)).size,
                 },
               ]}
             />
-            <SheetSection title="Судалгааны төрлөөр" meta={catMeta(byType.length)}>
-              <SheetBars
-                data={byType}
-                measure="Судалгааны тоо"
-                colorOf={(d) => typeColor.get(d.key)}
-                selected={type}
-                onSelect={setType}
-              />
-            </SheetSection>
+            {typed ? (
+              <SheetSection title={t.byType} meta={catMeta(byType.length)}>
+                <SheetBars
+                  data={byType}
+                  measure={t.measure}
+                  colorOf={(d) => typeColor.get(d.key)}
+                  selected={type}
+                  onSelect={setType}
+                />
+              </SheetSection>
+            ) : null}
             <SheetSection title="Дүүргээр" meta={catMeta(byDistrict.length)}>
-              <SheetBars data={byDistrict} measure="Судалгааны тоо" selected={district} onSelect={setDistrict} />
+              <SheetBars data={byDistrict} measure={t.measure} selected={district} onSelect={setDistrict} />
             </SheetSection>
             {byIndicator.length ? (
               <SheetSection title="Үзүүлэлтээр" meta={catMeta(byIndicator.length)}>
-                <SheetBars data={byIndicator} measure="Хэмжсэн судалгааны тоо" />
+                <SheetBars data={byIndicator} measure={t.measured} />
               </SheetSection>
             ) : null}
-            <SheetSection title="Судалгааны жагсаалт" meta={`${num(listed.length)} судалгаа`}>
+            <SheetSection title={t.list} meta={`${num(listed.length)} ${t.unit}`}>
               <ul className="divide-y divide-line">
                 {listed.map((r) => {
                   const on = sel === r.oid;
@@ -331,7 +390,7 @@ export function NogoonSurveyDashboard() {
                             {r.name || r.type}
                           </span>
                           <span className="block truncate text-[10.5px] text-ink-3">
-                            {[r.type, r.district, dateText(r.date)].filter(Boolean).join(" · ")}
+                            {[typed ? r.type : "", r.district, dateText(r.date)].filter(Boolean).join(" · ")}
                           </span>
                         </span>
                       </button>
@@ -349,19 +408,24 @@ export function NogoonSurveyDashboard() {
 
 function Detail({
   record: r,
+  typeLabel,
+  indicators,
   color,
   onClose,
 }: {
-  record: SurveyRecord;
+  record: RangerRecord;
+  typeLabel: string | null;
+  /** Үзүүлэлтийн хэсэг — Хогны маягтад үзүүлэлт байдаггүй */
+  indicators: boolean;
   color?: string;
   onClose: () => void;
 }) {
   const facts: [string, string][] = [
-    ["Судалгааны төрөл", r.type],
+    ...(typeLabel ? [[typeLabel, r.type] as [string, string]] : []),
     ["Огноо", dateText(r.date)],
     ["Дүүрэг", r.district],
     ["Хороо", r.khoroo],
-    ["Тайлбар", r.note],
+    ...r.facts,
   ];
   return (
     <div className="elevated absolute right-2.5 bottom-8 z-10 flex max-h-[calc(100%-2.5rem)] w-[320px] flex-col rounded-xs border border-line-2 bg-paper/95 backdrop-blur-md">
@@ -388,8 +452,10 @@ function Detail({
             </div>
           ))}
         </dl>
-        <p className="eyebrow mt-3 mb-1">Үзүүлэлт</p>
-        {r.indicators.length ? (
+        {!indicators && !r.indicators.length ? null : (
+          <p className="eyebrow mt-3 mb-1">Үзүүлэлт</p>
+        )}
+        {!indicators && !r.indicators.length ? null : r.indicators.length ? (
           <table className="w-full text-[11.5px]">
             <tbody className="divide-y divide-line">
               {r.indicators.map((i, k) => (

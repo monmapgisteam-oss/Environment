@@ -13,6 +13,8 @@ import {
   Loader2,
   Microscope,
   Mountain,
+  Trash2,
+  TreeDeciduous,
   Recycle,
   Scale,
   ShieldCheck,
@@ -56,12 +58,15 @@ const spinner = () => (
   Бүтцээ эх сурвалжаас өөрөө уншдаг тул энэ арван таван сэдэвт
   зориулж тусдаа код бичих шаардлагагүй: ялгаа нь зөвхөн `LayerSet`-д.
 */
-/* "Судалгаа" — Байгаль хамгаалагчийн аппликейшнаар (Survey123) бөглөсөн
-   ногоон бүсийн хэлтсийн судалгааны бүртгэл (`lib/nogoon-survey.ts`) */
-const SurveyDashboard = dynamic(
-  () => import("./survey-dashboard").then((m) => m.NogoonSurveyDashboard),
+/* "Судалгаа", "Модны тооллого", "Хог" — Байгаль хамгаалагчийн аппликейшнаар
+   (Survey123) БҮХ хэлтсийн бөглөсөн бүртгэл (`lib/nogoon-survey.ts`) */
+const RangerDashboard = dynamic(
+  () => import("./survey-dashboard").then((m) => m.RangerDashboard),
   { ssr: false, loading: spinner },
 );
+
+/** Аппликейшны цэс → бүртгэлийн төрөл */
+const RANGER_TABS = { sudalgaa: "sudalgaa", mod: "mod", hog: "hog" } as const;
 
 const PortalLayers = dynamic(
   () =>
@@ -208,14 +213,29 @@ export const TABS = [
     icon: Building2,
   },
   {
-    /* Байгаль хамгаалагчийн аппликейшны "Судалгаа" ангилал, бөглөгчийн хэлтэс
-       нь ногоон бүс (хэрэглэгч 2026-11-13). Тайлбарт тоо бичихгүй — маягт
-       бөглөгдсөөр байна. */
+    /* Байгаль хамгаалагчийн аппликейшны "Судалгаа" ангилал, БҮХ хэлтэс
+       (хэрэглэгч 2026-11-13). Тайлбарт тоо бичихгүй — маягт бөглөгдсөөр байна. */
     id: "sudalgaa",
     label: "Судалгаа",
     note: "Хөрсний судалгаа · байгаль орчны үнэлгээ",
     full: "Байгаль хамгаалагчийн аппликейшнаар бүртгэсэн судалгаа",
     icon: Microscope,
+  },
+  {
+    /* Аппликейшны "Модны тооллого" (ангилал "Бусад"), бүх хэлтэс */
+    id: "mod",
+    label: "Модны тооллого",
+    note: "Тооллогын үзүүлэлт",
+    full: "Байгаль хамгаалагчийн аппликейшнаар бүртгэсэн модны тооллого",
+    icon: TreeDeciduous,
+  },
+  {
+    /* Аппликейшны "Хог" (ангилал "Бусад"), бүх хэлтэс; `bs_hog_turul` домэйн */
+    id: "hog",
+    label: "Хог",
+    note: "Хог хаягдал · эвдрэл доройтол · бохир",
+    full: "Байгаль хамгаалагчийн аппликейшнаар бүртгэсэн хог",
+    icon: Trash2,
   },
   {
     /* Лавлах баримт бичиг — газрын зураггүй (хэрэглэгч 2026-10-30).
@@ -233,7 +253,7 @@ type TabId = (typeof TABS)[number]["id"];
 const IDS = TABS.map((t) => t.id);
 
 /** Таб → давхаргын бүрдэл. `TABS`-ийн `id` нь `NOGOON_TABS`-ийн түлхүүр */
-const SETS: Record<Exclude<TabId, "huuli" | "sudalgaa">, (typeof NOGOON_TABS)[keyof typeof NOGOON_TABS]> = {
+const SETS: Record<Exclude<TabId, "huuli" | keyof typeof RANGER_TABS>, (typeof NOGOON_TABS)[keyof typeof NOGOON_TABS]> = {
   hamgaalagch: NOGOON_TABS.hamgaalagch,
   bus: NOGOON_TABS.bus,
   bulag: NOGOON_TABS.bulag,
@@ -254,7 +274,8 @@ export function NogoonBusWorkspace() {
      сүүлд харж байсан самбар нээгдэнэ */
   const [tab, pick] = useStoredTab<TabId>("nogoon-bus.tab", IDS, "hamgaalagch", "nogoon-bus");
 
-  const set = tab === "huuli" || tab === "sudalgaa" ? null : SETS[tab];
+  const ranger = tab in RANGER_TABS ? RANGER_TABS[tab as keyof typeof RANGER_TABS] : null;
+  const set = tab === "huuli" || ranger ? null : SETS[tab as keyof typeof SETS];
 
   return (
     <div className="department-workspace">
@@ -269,8 +290,8 @@ export function NogoonBusWorkspace() {
       <div className="department-workspace-content">
         {set ? (
           <PortalLayers key={set.key} set={set} access={{ scope: "nogoon-bus", tab }} />
-        ) : tab === "sudalgaa" ? (
-          <SurveyDashboard />
+        ) : ranger ? (
+          <RangerDashboard key={ranger} kind={ranger} />
         ) : (
           <WaterLaw />
         )}

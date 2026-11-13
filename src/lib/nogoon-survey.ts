@@ -1,12 +1,14 @@
 /**
- * Ногоон бүсийн хэлтэс — "Судалгаа" цэс (хэрэглэгч 2026-11-13: "ene burtgeliin
- * ur dun nbahh deer sudalgaa gj nemegdeed orno").
+ * Ногоон бүсийн хэлтэс — Байгаль хамгаалагчийн аппликейшны бүртгэл гурван цэсэд:
+ * **Судалгаа**, **Модны тооллого**, **Хог** (хэрэглэгч 2026-11-13: "ene burtgeliin
+ * ur dun nbahh deer sudalgaa gj nemegdeed orno" → "ene 2iig bas nbahh deer nemne").
  *
  * Эх сурвалж: **"Байгаль хамгаалагчийн аппликейшн"** Survey123 маягт
  * (`service_d29bedb4ee344a5593146769b0b02f73`, портал). Бүх хэлтэс НЭГ маягтаар
- * бөглөнө: `buglugch_heltes` (бөглөгчийн хэлтэс) × `angilal` (Зөрчил · Амьтан ·
- * Судалгаа · Бусад) × `turul`. Энд ЗӨВХӨН ногоон бүсийн хэлтсийн "Судалгаа"
- * ангиллын бүртгэл.
+ * бөглөнө: `buglugch_heltes` × `angilal` (Зөрчил · Амьтан · Судалгаа · Бусад) ×
+ * `turul`. ⚠⚠ БӨГЛӨГЧИЙН ХЭЛТСЭЭР ШҮҮХГҮЙ: хэрэглэгчийн өгсөн тоо (Хөрсний
+ * судалгаа 2 · БО үнэлгээ 1 · Хог 4 · Модны тооллого 2) нь 2026-11-13 04:12-ын
+ * байдлаар БҮХ хэлтсийнх байв (бүртгэл үүссэн огноогоор тулгасан).
  *
  * ⚠ Давхарга 0 нь цэгэн (`survey`), хүснэгт 1 нь ҮЗҮҮЛЭЛТ (`uzuulelt`, нэг
  * бүртгэлд олон мөр — нэр · утга · нэгж), `parentrowid` → `uniquerowid`.
@@ -14,15 +16,17 @@
  * ⚠⚠ ХУВЬ ХҮНИЙ МЭДЭЭЛЭЛ ТАТАХГҮЙ: маягтад бөглөгчийн нэр, албан тушаал,
  * регистр, утас зэрэг талбар бий — `outFields` нь ЦАГААН ЖАГСААЛТ.
  *
- * ⚠ `turul` талбарт домэйн БАЙХГҮЙ (маягтын `search()` сонголт) — нэр нь
- * маягтын өөрийн сонголтын жагсаалтаас (`media/songolt_ner.csv`, `turul:*`).
- * Дүүрэг, ангилал нь давхаргын домэйноос ажиллах үед уншигдана.
+ * ⚠ Утгууд нь домэйны КОД — давхаргын домэйноор ажиллах үед буулгана. `turul`
+ * домэйнгүй (маягтын `search()` сонголт) — нэр нь маягтын сонголтын
+ * жагсаалтаас (`media/songolt_ner.csv`, `turul:*`). Домэйнгүй сонголтын
+ * талбарын нэрийг маягт `…_ner` хос баганад бичдэг (`bs_hog_ded_turul_ner`).
  */
 
 import { arcgisJson } from "@/lib/arcgis";
 import { HOSTING } from "@/lib/portal";
 import { pointOf } from "@/lib/extent";
 import { inUlaanbaatar } from "@/lib/ub-boundary";
+import { num } from "@/lib/utils";
 
 export const SURVEY_SERVICE = `${HOSTING}/Hosted/service_d29bedb4ee344a5593146769b0b02f73/FeatureServer`;
 
@@ -37,29 +41,45 @@ const TURUL_NAMES: Record<string, string> = {
   hog: "Хог",
 };
 
-export type SurveyIndicator = {
-  name: string;
-  /** Утга нэгжтэйгээ ("3.1 %", "Тийм", "2026-10-20") */
-  value: string;
+export type RangerKind = "sudalgaa" | "mod" | "hog";
+
+type KindSpec = {
+  where: string;
+  /** Тухайн төрлийн маягтын хэсгийн талбарын угтвар */
+  prefix: string;
+  /** Бүртгэлийн "төрөл" — задаргааны тэнхлэг */
+  typeField: string | null;
 };
 
-export type SurveyRecord = {
+const KINDS: Record<RangerKind, KindSpec> = {
+  sudalgaa: { where: "angilal = 'sudalgaa'", prefix: "st_", typeField: null },
+  mod: { where: "turul = 'mod_toollogo'", prefix: "st_", typeField: null },
+  /* Хогны төрөл (Хог хаягдал · Эвдрэл доройтол · Бохир · Бусад) нь тэнхлэг */
+  hog: { where: "turul = 'hog'", prefix: "bs_hog_", typeField: "bs_hog_turul" },
+};
+
+export type RangerIndicator = { name: string; value: string };
+
+export type RangerRecord = {
   oid: number;
   /** Байршилгүй, эсвэл нийслэлээс гадуурх (бичилтийн алдаа) бол `null` */
   lon: number | null;
   lat: number | null;
   type: string;
   name: string;
-  note: string;
   district: string;
   khoroo: string;
   /** UTC огноо, мс — бөглөөгүй бол `null` */
   date: number | null;
-  indicators: SurveyIndicator[];
+  /** Маягтын тухайн хэсгийн талбарууд — шошго · утга (хоосон нь "") */
+  facts: [string, string][];
+  indicators: RangerIndicator[];
 };
 
 type Field = {
   name: string;
+  alias?: string;
+  type: string;
   domain?: { codedValues?: { code: string; name: string }[] } | null;
 };
 type Feature = {
@@ -68,8 +88,7 @@ type Feature = {
 };
 type Query = { features?: Feature[]; exceededTransferLimit?: boolean };
 
-const RECORD_FIELDS =
-  "objectid,uniquerowid,turul,duureg,horoo,ognoo,st_ner,st_tailbar";
+const BASE_FIELDS = ["objectid", "uniquerowid", "turul", "duureg", "horoo", "ognoo"];
 const INDICATOR_FIELDS =
   "objectid,parentrowid,uz_ner,uz_utgiin_turul,uz_too,uz_negj,uz_bichver,uz_ognoo,uz_tiim_ugui,uz_utga";
 
@@ -82,9 +101,21 @@ function guid(v: unknown): string {
   return text(v).replace(/[{}]/g, "").toLowerCase();
 }
 
-function domainOf(fields: Field[], name: string): Map<string, string> {
-  const f = fields.find((x) => x.name === name);
-  return new Map((f?.domain?.codedValues ?? []).map((c) => [c.code, c.name]));
+function dateText(ms: number): string {
+  const d = new Date(ms);
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getUTCFullYear()}.${p(d.getUTCMonth() + 1)}.${p(d.getUTCDate())}`;
+}
+
+/** Огноо нь платформын бусад огноотой нэг хэлбэрээр: 2026.10.20 */
+const dotted = (s: string) => s.replace(/^(\d{4})-(\d{2})-(\d{2})$/, "$1.$2.$3");
+
+function domains(fields: Field[]): Map<string, Map<string, string>> {
+  return new Map(
+    fields
+      .filter((f) => f.domain?.codedValues?.length)
+      .map((f) => [f.name, new Map(f.domain!.codedValues!.map((c) => [c.code, c.name]))]),
+  );
 }
 
 async function queryAll(
@@ -107,7 +138,7 @@ async function queryAll(
     });
     const page = await arcgisJson<Query>(
       `${SURVEY_SERVICE}/${layer}/query?${q}`,
-      "Судалгааны бүртгэл",
+      "Байгаль хамгаалагчийн аппликейшн",
       { signal },
     );
     const feats = page.features ?? [];
@@ -119,39 +150,50 @@ async function queryAll(
 
 /** Үзүүлэлтийн утга — нэгтгэсэн бичвэр байвал түүнийг, үгүй бол төрлөөр нь */
 function indicatorValue(a: Record<string, unknown>, yesNo: Map<string, string>): string {
-  /* Огноо нь платформын бусад огноотой нэг хэлбэрээр: 2026.10.20 */
-  const dotted = (s: string) => s.replace(/^(\d{4})-(\d{2})-(\d{2})$/, "$1.$2.$3");
   const joined = text(a.uz_utga);
   if (joined) return dotted(joined);
   const kind = text(a.uz_utgiin_turul);
   if (kind === "too" && a.uz_too != null)
     return [String(a.uz_too), text(a.uz_negj)].filter(Boolean).join(" ");
-  if (kind === "ognoo" && typeof a.uz_ognoo === "number")
-    return dotted(new Date(a.uz_ognoo).toISOString().slice(0, 10));
+  if (kind === "ognoo" && typeof a.uz_ognoo === "number") return dateText(a.uz_ognoo);
   if (kind === "tiim_ugui") return yesNo.get(text(a.uz_tiim_ugui)) ?? text(a.uz_tiim_ugui);
   return text(a.uz_bichver);
 }
 
-export async function fetchNogoonSurvey(signal: AbortSignal): Promise<SurveyRecord[]> {
+/** Маягтын хэсгийн угтварыг шошгоос хасна ("Хог: Хогны төрөл" → "Хогны төрөл") */
+const label = (f: Field) => (f.alias ?? f.name).replace(/^[^:]+:\s*/, "");
+
+export async function fetchRangerRecords(
+  kind: RangerKind,
+  signal: AbortSignal,
+): Promise<RangerRecord[]> {
+  const spec = KINDS[kind];
   const [meta, table] = await Promise.all([
-    arcgisJson<{ fields?: Field[] }>(`${SURVEY_SERVICE}/0?f=json`, "Судалгааны бүртгэл", { signal }),
-    arcgisJson<{ fields?: Field[] }>(`${SURVEY_SERVICE}/1?f=json`, "Судалгааны үзүүлэлт", { signal }),
+    arcgisJson<{ fields?: Field[] }>(`${SURVEY_SERVICE}/0?f=json`, "Байгаль хамгаалагчийн аппликейшн", { signal }),
+    arcgisJson<{ fields?: Field[] }>(`${SURVEY_SERVICE}/1?f=json`, "Байгаль хамгаалагчийн аппликейшн", { signal }),
   ]);
-  const districts = domainOf(meta.fields ?? [], "duureg");
-  const yesNo = domainOf(table.fields ?? [], "uz_tiim_ugui");
+  const fields = meta.fields ?? [];
+  const codes = domains(fields);
+  const yesNo = domains(table.fields ?? []).get("uz_tiim_ugui") ?? new Map<string, string>();
+
+  /* Хэсгийн талбарууд маягтын дарааллаар. `X_ner` хос нь X-ийн нэр тул тусдаа
+     мөр болохгүй — X-ийн утгыг орлоно */
+  const names = new Set(fields.map((f) => f.name));
+  const section = fields.filter(
+    (f) => f.name.startsWith(spec.prefix) && !(f.name.endsWith("_ner") && names.has(f.name.slice(0, -4))),
+  );
+  const outFields = [
+    ...BASE_FIELDS,
+    ...section.map((f) => f.name),
+    ...section.map((f) => `${f.name}_ner`).filter((n) => names.has(n)),
+  ].join(",");
 
   const [records, indicators] = await Promise.all([
-    queryAll(
-      0,
-      "angilal = 'sudalgaa' AND buglugch_heltes = 'nogoon_bus'",
-      RECORD_FIELDS,
-      true,
-      signal,
-    ),
-    queryAll(1, "uz_angilal = 'sudalgaa'", INDICATOR_FIELDS, false, signal),
+    queryAll(0, spec.where, outFields, true, signal),
+    queryAll(1, "1=1", INDICATOR_FIELDS, false, signal),
   ]);
 
-  const byParent = new Map<string, SurveyIndicator[]>();
+  const byParent = new Map<string, RangerIndicator[]>();
   for (const f of indicators) {
     const a = f.attributes;
     const name = text(a.uz_ner);
@@ -163,24 +205,46 @@ export async function fetchNogoonSurvey(signal: AbortSignal): Promise<SurveyReco
     byParent.set(key, list);
   }
 
-  return records.map((f) => {
-    const a = f.attributes;
-    const at = pointOf(f.geometry);
+  const valueOf = (f: Field, a: Record<string, unknown>): string => {
+    const named = text(a[`${f.name}_ner`]);
+    if (named) return named;
+    const raw = a[f.name];
+    if (raw == null || raw === "") return "";
+    if (f.type === "esriFieldTypeDate" && typeof raw === "number") return dateText(raw);
+    if (typeof raw === "number") return num(raw, Number.isInteger(raw) ? 0 : 2);
+    const t = text(raw);
+    return codes.get(f.name)?.get(t) ?? t;
+  };
+
+  return records.map((r) => {
+    const a = r.attributes;
+    const at = pointOf(r.geometry);
     /* Хамрах хүрээ нь нийслэл — гадуурх цэг нь бичилтийн алдаа */
     const located = at && inUlaanbaatar(at.lon, at.lat) ? at : null;
+    /* Хэмжээ нь нэгжийнхээ хамт нэг мөрөнд ("120 тн") — `…hemjee` + `…negj` */
+    const unitField = fields.find((f) => f.name === `${spec.prefix}negj`);
+    const unit = unitField ? valueOf(unitField, a) : "";
+    /* Нэр ба төрөл нь толгойд — баримтын жагсаалтад давтахгүй */
+    const merged = section
+      .filter((f) => f.name !== "st_ner" && f.name !== spec.typeField && f !== unitField)
+      .map((f): [string, string] => {
+        const v = valueOf(f, a);
+        return [label(f), f.name === `${spec.prefix}hemjee` && v && unit ? `${v} ${unit}` : v];
+      });
     const code = text(a.turul);
-    const district = text(a.duureg);
-    const khoroo = a.horoo == null ? "" : `${a.horoo}-р хороо`;
+    const typeField = spec.typeField ? fields.find((f) => f.name === spec.typeField) : null;
+    const type = typeField ? valueOf(typeField, a) : TURUL_NAMES[code] ?? code;
+    const name = text(a.st_ner) || text(a.bs_hog_ded_turul_ner) || type;
     return {
       oid: Number(a.objectid),
       lon: located?.lon ?? null,
       lat: located?.lat ?? null,
-      type: TURUL_NAMES[code] ?? (code || "Бүртгэгдээгүй"),
-      name: text(a.st_ner),
-      note: text(a.st_tailbar),
-      district: districts.get(district) ?? district,
-      khoroo,
+      type: type || "Бүртгэгдээгүй",
+      name,
+      district: codes.get("duureg")?.get(text(a.duureg)) ?? text(a.duureg),
+      khoroo: a.horoo == null ? "" : `${a.horoo}-р хороо`,
       date: typeof a.ognoo === "number" && a.ognoo > 0 ? a.ognoo : null,
+      facts: merged,
       indicators: byParent.get(guid(a.uniquerowid)) ?? [],
     };
   });
