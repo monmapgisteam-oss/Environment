@@ -60,6 +60,41 @@ const KINDS: Record<RangerKind, KindSpec> = {
 
 export type RangerIndicator = { name: string; value: string };
 
+/**
+ * Хавсралт — маягтын асуултаар (`keywords`): фото зураг, хөрсний шинжилгээний
+ * хариу, файл. Нэр нь маягтын асуултын шошгоноос (`form.xml`).
+ */
+export type RangerAttachment = {
+  id: number;
+  name: string;
+  /** Маягтын асуултын шошго */
+  label: string;
+  image: boolean;
+};
+
+const ATTACH_LABELS: Record<string, string> = {
+  zurag: "Фото зураг",
+  hurs_hariu: "Хөрсний шинжилгээний хариу",
+  file: "Хавсаргасан файл",
+};
+
+function attachLabel(keyword: string): string {
+  const k = Object.keys(ATTACH_LABELS).find((x) => keyword.endsWith(`_${x}`) || keyword === x);
+  return k ? ATTACH_LABELS[k] : "Хавсралт";
+}
+
+/** Хавсралтын биеийг татах хаяг — токенгүй `<img>`-д БҮҮ тавь ({@link arcgisBlobUrl}) */
+export function attachmentUrl(oid: number, id: number): string {
+  return `${SURVEY_SERVICE}/0/${oid}/attachments/${id}`;
+}
+
+type AttachQuery = {
+  attachmentGroups?: {
+    parentObjectId: number;
+    attachmentInfos?: { id: number; name: string; contentType: string; keywords?: string }[];
+  }[];
+};
+
 export type RangerRecord = {
   oid: number;
   /** Байршилгүй, эсвэл нийслэлээс гадуурх (бичилтийн алдаа) бол `null` */
@@ -74,6 +109,7 @@ export type RangerRecord = {
   /** Маягтын тухайн хэсгийн талбарууд — шошго · утга (хоосон нь "") */
   facts: [string, string][];
   indicators: RangerIndicator[];
+  attachments: RangerAttachment[];
 };
 
 type Field = {
@@ -188,10 +224,32 @@ export async function fetchRangerRecords(
     ...section.map((f) => `${f.name}_ner`).filter((n) => names.has(n)),
   ].join(",");
 
-  const [records, indicators] = await Promise.all([
+  const [records, indicators, attach] = await Promise.all([
     queryAll(0, spec.where, outFields, true, signal),
     queryAll(1, "1=1", INDICATOR_FIELDS, false, signal),
+    /* Хавсралт унавал бүртгэл хэвээр — зураггүй гарна */
+    arcgisJson<AttachQuery>(
+      `${SURVEY_SERVICE}/0/queryAttachments?` +
+        new URLSearchParams({ definitionExpression: spec.where, returnUrl: "false", f: "json" }),
+      "Байгаль хамгаалагчийн аппликейшны хавсралт",
+      { signal },
+    ).catch((e: unknown) => {
+      if (e instanceof DOMException && e.name === "AbortError") throw e;
+      return {} as AttachQuery;
+    }),
   ]);
+
+  const files = new Map<number, RangerAttachment[]>();
+  for (const g of attach.attachmentGroups ?? [])
+    files.set(
+      g.parentObjectId,
+      (g.attachmentInfos ?? []).map((a) => ({
+        id: a.id,
+        name: a.name,
+        label: attachLabel(a.keywords ?? ""),
+        image: a.contentType.startsWith("image/"),
+      })),
+    );
 
   const byParent = new Map<string, RangerIndicator[]>();
   for (const f of indicators) {
@@ -234,7 +292,8 @@ export async function fetchRangerRecords(
     const code = text(a.turul);
     const typeField = spec.typeField ? fields.find((f) => f.name === spec.typeField) : null;
     const type = typeField ? valueOf(typeField, a) : TURUL_NAMES[code] ?? code;
-    const name = text(a.st_ner) || text(a.bs_hog_ded_turul_ner) || type;
+    /* Хогийнх нэргүй — төрөл нь шошго, дэд төрөл нь цонхонд */
+    const name = text(a.st_ner) || type;
     return {
       oid: Number(a.objectid),
       lon: located?.lon ?? null,
@@ -246,6 +305,7 @@ export async function fetchRangerRecords(
       date: typeof a.ognoo === "number" && a.ognoo > 0 ? a.ognoo : null,
       facts: merged,
       indicators: byParent.get(guid(a.uniquerowid)) ?? [],
+      attachments: files.get(Number(a.objectid)) ?? [],
     };
   });
 }

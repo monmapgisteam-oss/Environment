@@ -121,6 +121,8 @@ export async function arcgisJson<T>(
 export async function arcgisBlobUrl(
   url: string,
   label: string,
+  /** Зураг биш хавсралт (PDF гэх мэт) — ArcGIS-ийн JSON алдаа л татгалзана */
+  anyType = false,
 ): Promise<string> {
   if (deniedLayer(url)) throw new Error(`${label}: энэ давхаргыг харах эрх байхгүй байна`);
   const ready = await withToken(url);
@@ -137,7 +139,7 @@ export async function arcgisBlobUrl(
   const blob = await res.blob();
   /* ArcGIS алдаагаа HTTP 200 + JSON-оор буцаадаг тул төрлийг шалгана:
      зургийн оронд алдааны бичвэр ирвэл хоосон дөрвөлжин гарах байв */
-  if (!blob.type.startsWith("image/")) {
+  if (anyType ? /json|html/.test(blob.type) : !blob.type.startsWith("image/")) {
     throw new Error(`${label}: зураг ирсэнгүй`);
   }
   return URL.createObjectURL(blob);

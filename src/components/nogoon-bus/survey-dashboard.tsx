@@ -2,7 +2,8 @@
 
 import * as React from "react";
 import dynamic from "next/dynamic";
-import { Loader2, MapPin, Microscope, X } from "lucide-react";
+import { createPortal } from "react-dom";
+import { Camera, FileText, Loader2, MapPin, Microscope, X } from "lucide-react";
 import type { Datum } from "@/components/charts";
 import { BasemapGallery } from "@/components/map/basemap-gallery";
 import { categoryHex } from "@/components/wells/colors";
@@ -12,7 +13,14 @@ import { Columns } from "@/components/ui/resizable-columns";
 import { MapLegend } from "@/components/wildlife/map-legend";
 import { SheetBars, SheetSection, SheetStats, catMeta } from "@/components/wildlife/sheet";
 import { Bounds } from "@/lib/extent";
-import { fetchRangerRecords, type RangerKind, type RangerRecord } from "@/lib/nogoon-survey";
+import { arcgisBlobUrl } from "@/lib/arcgis";
+import {
+  attachmentUrl,
+  fetchRangerRecords,
+  type RangerAttachment,
+  type RangerKind,
+  type RangerRecord,
+} from "@/lib/nogoon-survey";
 import { cn, num } from "@/lib/utils";
 
 const PointMap = dynamic(
@@ -104,6 +112,8 @@ export function RangerDashboard({ kind }: { kind: RangerKind }) {
   const [district, setDistrict] = React.useState<string | null>(null);
   const [picked, setPicked] = React.useState<number | null>(null);
   const [basemap, setBasemap] = React.useState<Basemap>(() => defaultBasemap());
+  /* Томруулж харж буй зураг */
+  const [viewing, setViewing] = React.useState<{ url: string; name: string } | null>(null);
 
   React.useEffect(() => {
     const ac = new AbortController();
@@ -207,8 +217,10 @@ export function RangerDashboard({ kind }: { kind: RangerKind }) {
     () => located.map((r) => typeColor.get(r.type)),
     [located, typeColor],
   );
+  /* Шошго ямар ч масштабад (хэрэглэгч 2026-11-13: "map deer label haragdana") —
+     бүртгэл цөөн тул зургийг бүрхэхгүй */
   const labels = React.useMemo(
-    () => ({ text: located.map((r) => r.name || r.type), minzoom: 13 }),
+    () => ({ text: located.map((r) => r.name || r.type), minzoom: 0 }),
     [located],
   );
 
@@ -329,6 +341,7 @@ export function RangerDashboard({ kind }: { kind: RangerKind }) {
                   indicators={kind !== "hog"}
                   color={typeColor.get(detail.type)}
                   onClose={() => setPicked(null)}
+                  onView={setViewing}
                 />
               ) : null}
             </div>
@@ -393,6 +406,15 @@ export function RangerDashboard({ kind }: { kind: RangerKind }) {
                             {[typed ? r.type : "", r.district, dateText(r.date)].filter(Boolean).join(" · ")}
                           </span>
                         </span>
+                        {r.attachments.length ? (
+                          <span
+                            className="num mt-[2px] flex shrink-0 items-center gap-1 text-[10.5px] text-ink-3"
+                            title={`${r.attachments.length} хавсралт`}
+                          >
+                            <Camera size={12} />
+                            {r.attachments.length}
+                          </span>
+                        ) : null}
                       </button>
                     </li>
                   );
@@ -402,7 +424,159 @@ export function RangerDashboard({ kind }: { kind: RangerKind }) {
           </div>
         </Columns>
       )}
+      {viewing ? <Viewer {...viewing} onClose={() => setViewing(null)} /> : null}
     </div>
+  );
+}
+
+/* ---- Хавсралт (хэрэглэгч 2026-11-13: "saynii nemsen buh burtgeliin zurguud
+   bas haragdah hrgtei") ---- */
+
+/** Татсан хавсралт — нэг удаа, санах ойд */
+const blobs = new Map<string, Promise<string>>();
+
+function blobOf(oid: number, a: RangerAttachment): Promise<string> {
+  const key = `${oid}/${a.id}`;
+  let p = blobs.get(key);
+  if (!p) {
+    p = arcgisBlobUrl(attachmentUrl(oid, a.id), "Хавсралт", !a.image);
+    p.catch(() => blobs.delete(key));
+    blobs.set(key, p);
+  }
+  return p;
+}
+
+function Thumb({
+  oid,
+  a,
+  onView,
+}: {
+  oid: number;
+  a: RangerAttachment;
+  onView: (v: { url: string; name: string }) => void;
+}) {
+  const [url, setUrl] = React.useState<string | null>(null);
+  const [failed, setFailed] = React.useState(false);
+  React.useEffect(() => {
+    let alive = true;
+    blobOf(oid, a).then(
+      (u) => alive && setUrl(u),
+      () => alive && setFailed(true),
+    );
+    return () => {
+      alive = false;
+    };
+  }, [oid, a]);
+  return (
+    <button
+      type="button"
+      disabled={!url}
+      onClick={() => url && onView({ url, name: a.label })}
+      title={a.name}
+      className="flex aspect-[4/3] w-full items-center justify-center overflow-hidden rounded-xs border border-line bg-paper-3 hover:border-line-2"
+    >
+      {url ? (
+        /* eslint-disable-next-line @next/next/no-img-element */
+        <img src={url} alt={a.label} className="block h-full w-full object-cover" />
+      ) : failed ? (
+        <span className="text-[10px] text-ink-3">Татагдсангүй</span>
+      ) : (
+        <Loader2 size={12} className="animate-spin text-ink-3" />
+      )}
+    </button>
+  );
+}
+
+function FileLink({ oid, a }: { oid: number; a: RangerAttachment }) {
+  const [busy, setBusy] = React.useState(false);
+  const [failed, setFailed] = React.useState(false);
+  return (
+    <button
+      type="button"
+      disabled={busy}
+      onClick={() => {
+        setBusy(true);
+        blobOf(oid, a)
+          .then((u) => window.open(u, "_blank", "noopener"))
+          .catch(() => setFailed(true))
+          .finally(() => setBusy(false));
+      }}
+      className="flex w-full items-center gap-1.5 rounded-xs border border-line px-2 py-1 text-left text-[11.5px] text-ink hover:bg-paper-hi"
+    >
+      {busy ? (
+        <Loader2 size={12} className="shrink-0 animate-spin" />
+      ) : (
+        <FileText size={12} className="shrink-0 text-ink-3" />
+      )}
+      <span className="min-w-0 flex-1 truncate">{a.name}</span>
+      {failed ? <span className="shrink-0 text-[10px] text-clay">Татагдсангүй</span> : null}
+    </button>
+  );
+}
+
+/** Маягтын асуултаар бүлэглэнэ: фото зураг · хөрсний шинжилгээний хариу · файл */
+function Attachments({
+  oid,
+  list,
+  onView,
+}: {
+  oid: number;
+  list: RangerAttachment[];
+  onView: (v: { url: string; name: string }) => void;
+}) {
+  const groups = new Map<string, RangerAttachment[]>();
+  for (const a of list) groups.set(a.label, [...(groups.get(a.label) ?? []), a]);
+  return (
+    <>
+      {[...groups].map(([label, items]) => (
+        <div key={label} className="mt-3">
+          <p className="eyebrow mb-1">{label}</p>
+          <div className="grid grid-cols-3 gap-1.5">
+            {items.map((a) =>
+              a.image ? (
+                <Thumb key={a.id} oid={oid} a={a} onView={onView} />
+              ) : (
+                <div key={a.id} className="col-span-3">
+                  <FileLink oid={oid} a={a} />
+                </div>
+              ),
+            )}
+          </div>
+        </div>
+      ))}
+    </>
+  );
+}
+
+/** Зургийг томруулж харах — дарах, Esc хаана */
+function Viewer({ url, name, onClose }: { url: string; name: string; onClose: () => void }) {
+  React.useEffect(() => {
+    const key = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", key);
+    return () => window.removeEventListener("keydown", key);
+  }, [onClose]);
+  /* ⚠ `document.body` руу — ажлын талбарын эх элемент `fixed`-ийг хавчдаг */
+  return createPortal(
+    <div
+      role="dialog"
+      aria-label={name}
+      onClick={onClose}
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 p-6"
+    >
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={url} alt={name} className="max-h-full max-w-full rounded-xs object-contain" />
+      <button
+        type="button"
+        onClick={onClose}
+        aria-label="Хаах"
+        className="absolute top-4 right-4 rounded-xs bg-paper/90 p-1.5 text-ink hover:bg-paper-hi"
+      >
+        <X size={16} />
+      </button>
+    </div>,
+    document.body,
   );
 }
 
@@ -412,6 +586,7 @@ function Detail({
   indicators,
   color,
   onClose,
+  onView,
 }: {
   record: RangerRecord;
   typeLabel: string | null;
@@ -419,6 +594,7 @@ function Detail({
   indicators: boolean;
   color?: string;
   onClose: () => void;
+  onView: (v: { url: string; name: string }) => void;
 }) {
   const facts: [string, string][] = [
     ...(typeLabel ? [[typeLabel, r.type] as [string, string]] : []),
@@ -469,6 +645,9 @@ function Detail({
         ) : (
           <p className="text-[11.5px] text-ink-3">Үзүүлэлт бүртгэгдээгүй байна</p>
         )}
+        {r.attachments.length ? (
+          <Attachments oid={r.oid} list={r.attachments} onView={onView} />
+        ) : null}
       </div>
     </div>
   );
