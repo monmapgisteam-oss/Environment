@@ -178,6 +178,7 @@ export function FilterMenu({
   return (
     <div ref={holder} className="relative">
       <button
+        data-filter-trigger
         onClick={() => setOpen((o) => !o)}
         className={cn(
           "flex min-h-8 items-center gap-2 rounded-lg border px-3 py-1.5 text-[12px] transition-colors",

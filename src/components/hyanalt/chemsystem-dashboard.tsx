@@ -301,7 +301,9 @@ export function ChemSystemDashboard() {
         [0, DATA_COLOR],
         [Math.log10(1200), DATA_COLOR],
       ] as [number, string][],
-      firefly: true,
+      /* ESRI-ИЙН FIREFLY тэмдэг (хэрэглэгч 2026-11-13) — химийн агуулахын
+         самбартай ижил: цагаан цөм + `DATA_COLOR`-оор будсан гэрэл */
+      firefly: "graded" as const,
     }),
     [mapped],
   );

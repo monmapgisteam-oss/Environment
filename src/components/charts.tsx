@@ -1060,9 +1060,18 @@ function donutSlice(c: number, R: number, r: number, a0: number, a1: number) {
 
 export function PieChart({
   data, tone = "var(--data)", colorOf, note, format = num, size = 112, selected, onSelect,
-  legend = "side",
+  legend = "side", outlined = false, shares = true,
 }: {
   data: Datum[]; tone?: string; colorOf?: (d: Datum) => string; note?: (d: Datum) => string;
+  /**
+   * ХҮРЭЭ ӨНГӨӨР, ДҮҮРГЭЛТ ТУНГАЛАГ (хэрэглэгч 2026-11-13, хяналт шалгалтын
+   * самбар): зүсэм бүр өөрийн өнгөөр 0.8px хүрээтэй (1.5 байсныг "urgun bagasga"), дүүргэлт нь тэр өнгөний
+   * 22%. Тайлбарын дөрвөлжин мөн адил. Анхдагч (бүтэн дүүргэлт) хөндөгдөхгүй.
+   */
+  outlined?: boolean;
+  /** Тайлбарын мөрд эзлэх хувь гарах эсэх (анхдагч — тийм). Хяналт шалгалтын
+   *  самбарт (хэрэглэгч 2026-11-16) зөвхөн тоо — картын өндрийг хэмнэнэ */
+  shares?: boolean;
   format?: (v: number) => string; size?: number; selected?: Selection;
   onSelect?: (key: string | null) => void;
   /**
@@ -1079,7 +1088,7 @@ export function PieChart({
   if (!data.length || total <= 0) return <div className="chart-empty">Үзүүлэлт байхгүй</div>;
   const c = size / 2, R = c - 4, r = R * .72;
   const hue = (d: Datum) => colorOf ? colorOf(d) : tone;
-  const opacity = (i: number) => colorOf ? .88 : Math.max(.92 - i * .22, .24);
+  const opacity = (i: number) => outlined ? .22 : colorOf ? .88 : Math.max(.92 - i * .22, .24);
   const slices: { d: Datum; i: number; a0: number; a1: number }[] = [];
   let sum = 0;
   for (let i = 0; i < data.length; i++) {
@@ -1094,16 +1103,22 @@ export function PieChart({
     <div className={cn("donut-chart", legend === "below" && "is-stacked")}>
       <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="donut-chart-ring" role="img" aria-label={`Нийт ${text}`}>
         <circle cx={c} cy={c} r={(R + r) / 2} fill="none" stroke="var(--paper-hi)" strokeWidth={R - r} />
-        {single ? <circle cx={c} cy={c} r={(R + r) / 2} fill="none" stroke={hue(singleDatum)} strokeWidth={R - r} strokeOpacity={nothingPicked(selected) || picked(selected, singleDatum.key) ? .88 : .15} onClick={() => onSelect?.(clickValue(selected, singleDatum.key))} className={onSelect ? "cursor-pointer" : undefined}><title>{`${singleDatum.label} · ${format(singleDatum.value)}`}</title></circle> : slices.filter(({ d }) => d.value > 0).map(({ d, i, a0, a1 }) => <path key={d.key} d={donutSlice(c, R, r, a0, a1)} fill={hue(d)} fillOpacity={nothingPicked(selected) || picked(selected, d.key) ? opacity(i) : .12} stroke="var(--paper-2)" strokeWidth={2} className={onSelect ? "cursor-pointer" : undefined} onClick={() => onSelect?.(clickValue(selected, d.key))}><title>{`${d.label} · ${format(d.value)}`}</title></path>)}
+        {single ? <g onClick={() => onSelect?.(clickValue(selected, singleDatum.key))} className={onSelect ? "cursor-pointer" : undefined} opacity={nothingPicked(selected) || picked(selected, singleDatum.key) ? 1 : outlined ? .3 : 1}>
+          <circle cx={c} cy={c} r={(R + r) / 2} fill="none" stroke={hue(singleDatum)} strokeWidth={R - r} strokeOpacity={outlined ? .22 : nothingPicked(selected) || picked(selected, singleDatum.key) ? .88 : .15}><title>{`${singleDatum.label} · ${format(singleDatum.value)}`}</title></circle>
+          {outlined && <><circle cx={c} cy={c} r={R} fill="none" stroke={hue(singleDatum)} strokeWidth={0.8} /><circle cx={c} cy={c} r={r} fill="none" stroke={hue(singleDatum)} strokeWidth={0.8} /></>}
+        </g> : slices.filter(({ d }) => d.value > 0).map(({ d, i, a0, a1 }) => {
+          const on = nothingPicked(selected) || picked(selected, d.key);
+          return <path key={d.key} d={donutSlice(c, R, r, a0, a1)} fill={hue(d)} fillOpacity={on ? opacity(i) : outlined ? .06 : .12} stroke={outlined ? hue(d) : "var(--paper-2)"} strokeOpacity={outlined && !on ? .3 : 1} strokeWidth={outlined ? 0.8 : 2} strokeLinejoin="round" className={onSelect ? "cursor-pointer" : undefined} onClick={() => onSelect?.(clickValue(selected, d.key))}><title>{`${d.label} · ${format(d.value)}`}</title></path>;
+        })}
         <text x={c} y={c - 6} textAnchor="middle" className="fill-ink-3" fontSize={Math.max(8, size * .08)}>НИЙТ</text>
         <text x={c} y={c + 14} textAnchor="middle" className="num fill-ink font-semibold" fontSize={Math.min(size * .18, (r * 2 - 8) / Math.max(text.length * .64, 1))}>{text}</text>
       </svg>
       <div className="donut-chart-legend">
-        {data.map((d, i) => <button key={d.key} type="button" disabled={!onSelect} aria-pressed={onSelect ? picked(selected, d.key) : undefined} onClick={() => onSelect?.(clickValue(selected, d.key))} title={`${d.label} · ${format(d.value)}`} className={cn("donut-legend-item", picked(selected, d.key) && "is-selected")} style={{ opacity: nothingPicked(selected) || picked(selected, d.key) ? 1 : .35 }}>
-          <span className="donut-legend-swatch" style={{ background: hue(d), opacity: opacity(i) }} />
+        {data.map((d, i) => <button key={d.key} type="button" disabled={!onSelect} aria-pressed={onSelect ? picked(selected, d.key) : undefined} onClick={() => onSelect?.(clickValue(selected, d.key))} title={`${d.label} · ${format(d.value)}`} className={cn("donut-legend-item", picked(selected, d.key) && "is-selected", !note && !shares && "no-share")} style={{ opacity: nothingPicked(selected) || picked(selected, d.key) ? 1 : .35 }}>
+          <span className="donut-legend-swatch" style={outlined ? { background: `color-mix(in srgb, ${hue(d)} 22%, transparent)`, boxShadow: `inset 0 0 0 1px ${hue(d)}` } : { background: hue(d), opacity: opacity(i) }} />
           <span className="donut-legend-label">{d.label}</span>
           <strong>{format(d.value)}</strong>
-          <span className="donut-legend-note">{note ? note(d) : `${(d.value / total * 100).toFixed(1)}%`}</span>
+          {(note || shares) && <span className="donut-legend-note">{note ? note(d) : `${(d.value / total * 100).toFixed(1)}%`}</span>}
         </button>)}
       </div>
     </div>

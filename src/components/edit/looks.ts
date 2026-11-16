@@ -145,7 +145,7 @@ const chemicals: Look = {
     });
     return {
       cluster: false,
-      grades: { values, stops: [[0, DATA_COLOR], [Math.max(hi, 1), DATA_COLOR]], firefly: true },
+      grades: { values, stops: [[0, DATA_COLOR], [Math.max(hi, 1), DATA_COLOR]], firefly: "graded" },
       marks: Object.keys(marks).length ? marks : undefined,
     };
   },
@@ -166,6 +166,7 @@ const repair: Look = {
   points: (d, zoom) => ({
     clusterMaxZoom: Math.round(REPAIR_SWITCH),
     clusterLabel: "badge",
+    esriFirefly: true,
     marks: zoom >= REPAIR_SWITCH ? Object.fromEntries(d.oid.map((o) => [o, REPAIR_PIN])) : undefined,
     labels: { text: d.attrs.map((a) => s(a["компани__иргэний_нэр"]) || "Нэр бүртгэгдээгүй"), minzoom: REPAIR_SWITCH },
   }),

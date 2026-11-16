@@ -619,6 +619,14 @@ export type LayerSet = {
    */
   values?: Record<string, string>;
   /**
+   * ДОМЭЙНЫ КОДЫГ НЭРЭЭР НЬ уншина (татах мөчид, диаграм · шүүлт · бичлэгийн
+   * цонх нэг утга). Survey123 маягт сонголтоо `tiim`, `hyanalt_shalgalt` гэх
+   * мэт кодоор хадгалдаг тул асаана (хяналтын хэлтсийн хяналт шалгалтын
+   * бүртгэл, 2026-11-13). Бусад бүрдэлд унтраалттай — тэдний `values` толь,
+   * нэгтгэлийн дүрэм КОДООР бичигдсэн байж болно.
+   */
+  domains?: boolean;
+  /**
    * ГАЗРЫН ЗУРГИЙН ШОШГОНД ХЭМЖЭЭ БИЧИХ ЭСЭХ (анхдагчаар бичнэ).
    *
    * ⚠ Ногоон бүсийн хэлтэст `false` (хэрэглэгч, 2026-09-30: "mapiin
@@ -1239,6 +1247,11 @@ export type LayerField = {
   alias: string;
   /** `esriFieldType…`-гүй богино төрөл: `String`, `Double`, `Date` … */
   type: string;
+  /**
+   * Домэйны код → нэр ({@link LayerSet.domains} асаалттай үед л). Survey123
+   * маягтын сонголт `tiim`, `shatahuun_stants` гэх мэт КОДООР хадгалагддаг.
+   */
+  codes?: Record<string, string>;
 };
 
 export type LayerInfo = {
@@ -1345,7 +1358,12 @@ type LayerMeta = {
   name: string;
   geometryType?: string;
   objectIdField?: string;
-  fields?: { name: string; alias?: string; type: string }[];
+  fields?: {
+    name: string;
+    alias?: string;
+    type: string;
+    domain?: { type?: string; codedValues?: { name: string; code: string | number }[] } | null;
+  }[];
   /** Сервер нэг хүсэлтэд буцаах дээд бичлэг — хуудасны хэмжээ үүнээс */
   maxRecordCount?: number;
 };
@@ -1428,6 +1446,9 @@ async function loadLayerInfo(
         set.fields?.[(f.alias ?? "").trim()] ??
         officialLabel((f.alias ?? "").trim() || f.name),
       type: f.type.replace("esriFieldType", ""),
+      ...(set.domains && f.domain?.codedValues?.length
+        ? { codes: Object.fromEntries(f.domain.codedValues.map((c) => [String(c.code), c.name.trim()])) }
+        : {}),
     }));
 
   /* Дугаарын талбар — давхарга зарлаагүй бол талбарын жагсаалтаас олно */
@@ -1707,11 +1728,25 @@ async function loadLayerRows(info: LayerInfo): Promise<LayerRows> {
   const rows: Record<number, Record<string, unknown>> = {};
   const area: Record<number, number> = {};
   const remap = info.set.values;
+  /* Домэйны код → нэр ({@link LayerSet.domains}) — олон сонголттой (`select_multiple`)
+     талбарт кодууд таслалаар нийлдэг тул гишүүн бүрийг солино */
+  const coded = info.fields.filter((f) => f.codes);
+  const decode = (p: Record<string, unknown>) => {
+    if (!coded.length) return p;
+    const out = { ...p };
+    for (const f of coded) {
+      const v = out[f.name];
+      if (v == null || v === "") continue;
+      const parts = String(v).split(",").map((x) => x.trim());
+      out[f.name] = parts.map((x) => f.codes![x] ?? x).join(", ");
+    }
+    return out;
+  };
   for (const f of await pagesOf(info, {
     outFields: out.join(","),
     returnGeometry: "false",
   })) {
-    const p = f.properties ?? {};
+    const p = decode(f.properties ?? {});
     const uid = Number(p[oid]);
     if (!Number.isFinite(uid)) continue;
     /* Латинаар буусан домэйны утгыг бүртгэлийн толиор солино */

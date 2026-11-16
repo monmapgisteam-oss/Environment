@@ -7,7 +7,7 @@
 import { DEPARTMENTS } from "@/lib/departments";
 import { ANALYSIS } from "@/lib/access";
 import { VIEWS } from "@/components/analysis/workspace";
-import { TABS as HYANALT } from "@/components/hyanalt/workspace";
+import { GROUPS as HYANALT_GROUPS, TABS as HYANALT } from "@/components/hyanalt/workspace";
 import { TABS as NOGOON } from "@/components/nogoon-bus/workspace";
 import { GROUPS as OI_GROUPS, TABS as OI } from "@/components/oi/workspace";
 import { GROUPS as ORCHIN_GROUPS, TABS as ORCHIN } from "@/components/orchin/workspace";
@@ -37,7 +37,7 @@ const tabsOf = (raw: Raw, groups?: Groups, scope?: string): CatalogTab[] =>
 
 const TAB_LISTS: Record<string, CatalogTab[]> = {
   "sanhuu-monitoring": tabsOf(SANHUU),
-  hyanalt: tabsOf(HYANALT, undefined, "hyanalt"),
+  hyanalt: tabsOf(HYANALT, HYANALT_GROUPS, "hyanalt"),
   "nogoon-bus": tabsOf(NOGOON, undefined, "nogoon-bus"),
   oi: tabsOf(OI, OI_GROUPS, "oi"),
   orchin: tabsOf(ORCHIN, ORCHIN_GROUPS, "orchin"),

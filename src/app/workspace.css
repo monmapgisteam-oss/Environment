@@ -2434,6 +2434,9 @@ html[data-department-preview="true"] .workspace-main { --workspace-gutter: 0px; 
     opacity 150ms,
     background 150ms;
 }
+.donut-legend-item.no-share {
+  grid-template-columns: 7px minmax(0, 1fr) auto;
+}
 .donut-legend-item:last-child {
   border-bottom-color: transparent;
 }

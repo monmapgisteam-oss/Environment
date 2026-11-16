@@ -1,4 +1,8 @@
-.weather-workspace { gap: 12px; }
+/* ⚠ ЦАГ АГААРЫН САМБАРЫН АКЦЕНТ НОГООН (`--moss`), хэлтсийн ягаан
+   (`--d-unelgee`) БИШ — хэрэглэгч 2026-11-13: "ygaan bish nogoon".
+   Харагдацын товч, элементийн сонголт, станцын тэмдэг бүгд `--tone`-оос
+   уншдаг тул энд НЭГ удаа дарна. */
+.weather-workspace { gap: 12px; --tone: var(--moss); }
 .weather-nav { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 3px; border: 1px solid var(--line); border-radius: 10px; background: var(--paper-2); }
 /* ⚠ Өндөр нь багассан (хэрэглэгчийн хүсэлт, 2026-09-21): 11px-ийн
    босоо зай нь зурвасыг 46px болгож, доорх заалтын картуудаас илүү
@@ -74,7 +78,12 @@
    2026-09-21): "Агаарын харьцангуй чийг" нь зургаагийн хамгийн урт
    нэр бөгөөд хоёр дахь мөр нь ("ХАРЬЦАНГУЙ ЧИЙГ") картын ирмэгт
    бараг хүрч байв. Бусад тав нь ТЭНЦҮҮ хэвээр */
-@media (min-width: 1280px) { .observation-grid { grid-template-columns: 1fr 1fr 1.13fr 1fr 1fr 1fr; } }
+@media (min-width: 1280px) {
+  .observation-grid { grid-template-columns: var(--obs-cols, 1fr 1fr 1.13fr 1fr 1fr 1fr); }
+  .observation-grid.is-dense .observation-metric { padding: 6px; }
+  .observation-grid.is-dense .observation-metric > svg:first-child { display: none; }
+  .observation-grid.is-dense .observation-metric > div > div:first-child { font-size: 11px; letter-spacing: 0; overflow-wrap: anywhere; }
+}
 @media (max-width: 639px) {
   .observation-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; padding: 7px; }
   .observation-header { gap: 6px 8px; padding: 8px 10px; }

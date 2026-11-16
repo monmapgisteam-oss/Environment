@@ -301,6 +301,9 @@ export function RepairMap() {
       onZoom={setZoom}
       clusterMaxZoom={CLUSTER_MAX}
       clusterLabel="badge"
+      /* ESRI-ИЙН FIREFLY тэмдэг (хэрэглэгч 2026-11-13) — химийн хоёр
+         самбартай ижил: цагаан цөм + цэнхэр гэрэл */
+      esriFirefly
       />
 
       <BasemapGallery value={basemap} onChange={setManualBasemap} />

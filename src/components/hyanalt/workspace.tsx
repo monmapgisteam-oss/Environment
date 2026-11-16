@@ -2,9 +2,12 @@
 
 import * as React from "react";
 import dynamic from "next/dynamic";
-import { Boxes, FlaskConical, Loader2, Trash2, Workflow, Wrench } from "lucide-react";
-import { SourceTabs, useStoredTab } from "@/components/ui/source-tabs";
+import { Boxes, ClipboardCheck, Factory, FlaskConical, Loader2, ShieldCheck, Trash2, Workflow, Wrench } from "lucide-react";
+import { SourceTabs, TabGroups, useStoredTab } from "@/components/ui/source-tabs";
 import { TabAccess } from "@/components/auth/tab-access";
+import { useAccess } from "@/components/auth/access";
+import { useAuth } from "@/components/auth/provider";
+import { homeScopes } from "@/lib/access";
 
 /*
   Хэлтэс ТАВАН табтай. Зэрэг ачаалахгүй: сонгосон нь л татагдана.
@@ -60,10 +63,33 @@ const ChemSystemDashboard = dynamic(
   Давхаргын бүртгэл (`WASTE`) нь хэвээр: татац, талбарын албан нэр,
   эх сурвалжийн хуудас түүнээс уншина.
 */
+/* Survey123-ийн хоёр төрлийн бүртгэл — бүлэглэсэн дэлгэрэнгүйтэй самбар. */
+const InspectionDashboard = dynamic(
+  () => import("@/components/hyanalt/inspection-dashboard").then((m) => m.InspectionDashboard),
+  { ssr: false, loading: spinner },
+);
+
 const WasteDashboard = dynamic(
   () => import("@/components/hyanalt/waste-dashboard").then((m) => m.WasteDashboard),
   { ssr: false, loading: spinner },
 );
+
+/*
+  Өгөгдлийн багцын БҮЛЭГ — бусад хэлтэстэй нэг загвар (`TabGroups`, хэрэглэгч
+  2026-11-16: "busad heltes shig bulegle"; бүлэглэлт миний сонголт):
+  · ХИМИЙН БОДИС — агуулахын гэрчилгээ ба үндэсний бүртгэл;
+  · ХЯНАЛТ ШАЛГАЛТ — зөрчлийн бүртгэл ба журам (схем);
+  · БОХИРДЛЫН ЭХ ҮҮСВЭР — авто засвар (тос, хаягдал), ландфилл.
+  Гурав дахь нь доороо бүтэн өргөнөөр (`.dataset-groups`). Бүлэг нь сонгосон
+  сэдвээс гарна; товшиход эхний нээлттэй сэдэв нээгдэнэ.
+*/
+export const GROUPS = [
+  { id: "chemical", label: "Химийн бодис", note: "2 сэдэв", icon: FlaskConical },
+  { id: "inspection", label: "Хяналт шалгалт", note: "Хяналт шалгалт, журам", icon: ShieldCheck },
+  { id: "pollution", label: "Бохирдлын эх үүсвэр", note: "Авто засвар · ландфилл", icon: Factory },
+] as const;
+
+type GroupId = (typeof GROUPS)[number]["id"];
 
 export const TABS = [
   {
@@ -74,6 +100,7 @@ export const TABS = [
       сэдэв мэт харагдана.
     */
     id: "chemicals",
+    group: "chemical",
     label: "Химийн бодисын агуулах",
     note: "2023 онд 184 · 2024 онд 20 агуулах",
     icon: FlaskConical,
@@ -86,6 +113,7 @@ export const TABS = [
       товьёогоор, энэ нь агуулах ↔ бодисын хоёр талт сүлжээгээр.
     */
     id: "chemsystem",
+    group: "chemical",
     label: "Химийн бодисын үндэсний бүртгэл",
     note: "520 агуулах · 22,101 бичилт",
     full: "Химийн бодисын үндэсний бүртгэл (HazTrack)",
@@ -93,6 +121,7 @@ export const TABS = [
   },
   {
     id: "repair",
+    group: "pollution",
     label: "Авто засварын үйлчилгээ",
     note: "528 цэг · зөвхөн газрын зураг",
     icon: Wrench,
@@ -114,12 +143,23 @@ export const TABS = [
       2026-09-21-нд хасагдсан. Энэ бол порталын бодит хоёр давхарга.
     */
     id: "landfill",
+    group: "pollution",
     label: "Ландфилл",
     note: "Энгийн · аюултай хог хаягдал",
     icon: Trash2,
   },
   {
+    /* Survey123 маягтын бүртгэл (хэрэглэгч 2026-11-13) — схемийн ӨМНӨ:
+       схем нь журам, энэ нь түүний дагуу хийгдсэн ажлын бүртгэл */
+    id: "inspections",
+    group: "inspection",
+    label: "Хяналт шалгалт", /* хэрэглэгч 2026-11-16 — урьд "Хяналт шалгалт, зөрчлийн бүртгэл" */
+    note: "Хяналт, шалгалт · зөрчил",
+    icon: ClipboardCheck,
+  },
+  {
     id: "scheme",
+    group: "inspection",
     label: "Хяналт шалгалтын схем",
     note: "2026 оны үйл ажиллагааны журам",
     icon: Workflow,
@@ -143,6 +183,9 @@ type TabId = (typeof TABS)[number]["id"];
 
 const IDS = TABS.map((t) => t.id);
 
+/* Түр хугацаанд зөвхөн портал админ ба хяналтын хэлтсийн бүртгэлд харагдах табууд */
+const ADMIN_ONLY: ReadonlySet<TabId> = new Set<TabId>(["inspections"]);
+
 /*
   Тэмдэглэх шаардлагатай табууд.
 
@@ -157,7 +200,41 @@ const CHECKABLE = new Set(
 export function HyanaltWorkspace() {
   /* Сонголт хадгалагдана — хэрэглэгч ажлаа тасалдуулаад буцаж ирэхэд
      хамгийн сүүлд харж байсан самбар нээгдэнэ */
-  const [tab, pick] = useStoredTab<TabId>("hyanalt.tab", IDS, "repair", "hyanalt");
+  const [stored, pick] = useStoredTab<TabId>("hyanalt.tab", IDS, "repair", "hyanalt");
+
+  /*
+    ⚠ ТҮР ХУГАЦААНД "Хяналт шалгалт" ЗӨВХӨН ПОРТАЛЫН АДМИНД
+    (хэрэглэгч 2026-11-13: "tur hugatsaand zuwhun portal admin erhtei hund
+    haragdana"). Бусдад таб жагсаалтад гарахгүй; хадгалсан сонголт нь тэр
+    таб байсан бол анхдагч руу ДАМ буцна. Нээх бол энэ шүүлтийг л авна.
+    ⚠ Хяналтын хэлтсийн ӨӨРИЙН бүртгэл (`ACCOUNTS`-ийн өөрийн хэлтэс нь hyanalt —
+    одоо `nbog_hh`) мөн харна (хэрэглэгч 2026-11-16: "Хяналтын хэлтэс acc hardag
+    bolgo"). Эрхийн хүснэгтээр хяналтын хэлтэс нээгдсэн бусад бүртгэл ХАРАХГҮЙ.
+  */
+  const { admin: portalAdmin, allowsTab } = useAccess();
+  const { session } = useAuth();
+  const admin = portalAdmin || homeScopes(session?.username).includes("hyanalt");
+  const tabs = React.useMemo(
+    () => (admin ? TABS : TABS.filter((t) => !ADMIN_ONLY.has(t.id))),
+    [admin],
+  );
+  const tab: TabId = !admin && ADMIN_ONLY.has(stored) ? "repair" : stored;
+
+  /* Бүлэг нь сонгосон сэдвээс; нээлттэй сэдэвгүй бүлэг ГАРАХГҮЙ */
+  const visible = React.useCallback(
+    (id: TabId) => (admin || !ADMIN_ONLY.has(id)) && allowsTab("hyanalt", id),
+    [admin, allowsTab],
+  );
+  const group: GroupId = TABS.find((t) => t.id === tab)?.group ?? GROUPS[0].id;
+  const shown = React.useMemo(() => tabs.filter((t) => t.group === group), [tabs, group]);
+  const groups = GROUPS.filter((g) => TABS.some((t) => t.group === g.id && visible(t.id)));
+  const pickGroup = React.useCallback(
+    (id: GroupId) => {
+      const first = TABS.find((t) => t.group === id && visible(t.id));
+      if (first) pick(first.id);
+    },
+    [pick, visible],
+  );
 
   /*
     Тэмдэглэгдсэн табууд. ХАДГАЛАХГҮЙ: загвар өгөгдөл нь дараагийн
@@ -189,7 +266,8 @@ export function HyanaltWorkspace() {
     <div className="department-workspace">
       <SourceTabs
         scope="hyanalt"
-        tabs={TABS}
+        groupControl={<TabGroups groups={groups} value={group} onChange={pickGroup} />}
+        tabs={shown}
         value={tab}
         onChange={pick}
         label="Сэдэв"
@@ -205,6 +283,8 @@ export function HyanaltWorkspace() {
             <WasteDashboard />
           ) : open === "repair" ? (
             <RepairMap />
+          ) : open === "inspections" && admin ? (
+            <InspectionDashboard />
           ) : open === "scheme" ? (
             <InspectionScheme />
           ) : open === "chemicals" ? (

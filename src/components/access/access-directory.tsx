@@ -11,6 +11,18 @@ import styles from "./access-directory.module.css";
 
 type Draft = { grant: Grant; removed: boolean };
 
+function toggleDetailValue(grant: Grant, key: string, all: string[], id: string): Grant {
+  const value = grant[key];
+  const list = new Set(Array.isArray(value) ? (key.startsWith("@v:") ? normViews(value) : value) : all);
+  if (list.has(id)) {
+    if (list.size === 1) return grant;
+    list.delete(id);
+  } else list.add(id);
+  if (all.every((item) => list.has(item))) delete grant[key];
+  else grant[key] = all.filter((item) => list.has(item));
+  return grant;
+}
+
 function openCount(grant: Grant, scope: CatalogScope): number {
   const value = grant[scope.scope];
   if (value === "all") return scope.tabs.length;
@@ -37,6 +49,7 @@ export function AccessDirectory() {
   const [drafts, setDrafts] = React.useState<Record<string, Draft>>({});
   const [added, setAdded] = React.useState<string[]>([]);
   const [picked, setPicked] = React.useState(ACCOUNTS[0].username);
+  const [direction, setDirection] = React.useState<"incoming" | "outgoing">("incoming");
   const [scopeId, setScopeId] = React.useState<string | null>(null);
   /** Нарийвчлан тохируулж буй цэс (харагдах хэсэг, давхарга) */
   const [tabId, setTabId] = React.useState<string | null>(null);
@@ -75,16 +88,11 @@ export function AccessDirectory() {
   const locked = busy || loading;
   const disabled = locked || sel.removed;
   const selectedScopes = scopeCount(sel.grant);
-  const allScopes = CATALOG.every((scope) => sel.grant[scope.scope] === "all");
-  const activeScope = CATALOG.find((scope) => scope.scope === scopeId);
   /** Бүртгэлийн өөрийн хэлтэс — үргэлж нээлттэй, чагтгүй */
   const home = homeScopes(picked);
-  const activeHome = !!activeScope && home.includes(activeScope.scope);
-  const activeTab = activeScope?.tabs.find((tab) => tab.id === tabId && tab.layers);
-  const allSelected = activeScope ? sel.grant[activeScope.scope] === "all" : allScopes;
-  const anySelected = activeScope
-    ? sel.grant[activeScope.scope] === "all" || openCount(sel.grant, activeScope) > 0
-    : CATALOG.some((scope) => !homeScopes(picked).includes(scope.scope) && (sel.grant[scope.scope] === "all" || openCount(sel.grant, scope) > 0));
+  const accessScopes = CATALOG.filter((scope) => !home.includes(scope.scope));
+  const allSelected = accessScopes.every((scope) => sel.grant[scope.scope] === "all");
+  const anySelected = accessScopes.some((scope) => sel.grant[scope.scope] === "all" || openCount(sel.grant, scope) > 0);
 
   function selectAccount(username: string) {
     setPicked(username);
@@ -104,30 +112,25 @@ export function AccessDirectory() {
   */
   function toggleDetail(key: string, all: string[], id: string) {
     if (disabled) return;
-    edit((grant) => {
-      const value = grant[key];
-      /* Хуучин хэсгүүд (charts, overview, record) → "db" */
-      const list = new Set(Array.isArray(value) ? (key.startsWith("@v:") ? normViews(value) : value) : all);
-      if (list.has(id)) {
-        if (list.size === 1) return grant;
-        list.delete(id);
-      } else list.add(id);
-      if (all.every((x) => list.has(x))) delete grant[key];
-      else grant[key] = all.filter((x) => list.has(x));
-      return grant;
+    edit((grant) => toggleDetailValue(grant, key, all, id));
+  }
+
+  // Both directions edit the recipient's existing grant, never a second policy.
+  function editAccount(username: string, fn: (grant: Grant) => Grant, removed?: boolean) {
+    if (locked) return;
+    setMsg(null);
+    setDrafts((previous) => {
+      const existing = previous[username] ?? saved(username);
+      const next = { grant: withHome(username, fn({ ...existing.grant })), removed: removed ?? existing.removed };
+      const updated = { ...previous };
+      if (!added.includes(username) && sameDraft(next, saved(username))) delete updated[username];
+      else updated[username] = next;
+      return updated;
     });
   }
 
   function edit(fn: (grant: Grant) => Grant, removed = sel.removed) {
-    if (locked) return;
-    setMsg(null);
-    setDrafts((previous) => {
-      const next = { grant: withHome(picked, fn({ ...(previous[picked] ?? saved(picked)).grant })), removed };
-      const updated = { ...previous };
-      if (!added.includes(picked) && sameDraft(next, saved(picked))) delete updated[picked];
-      else updated[picked] = next;
-      return updated;
-    });
+    editAccount(picked, fn, removed);
   }
 
   function toggleScope(scope: CatalogScope) {
@@ -303,139 +306,239 @@ export function AccessDirectory() {
             </button>
           </div>
 
-          <div className={styles.permissionToolbar}>
-            <h3 className={styles.toolbarLabel}>{activeTab ? "ЦЭСИЙН НАРИЙВЧИЛСАН ЭРХ" : activeScope ? "ЦЭСИЙН ЭРХ" : "ХАНДАХ ЭРХ"}</h3>
-            <div className={styles.toolbarActions}>
-              {activeScope && activeTab ? (
-                <button type="button" className={styles.textButton} disabled={disabled || !tabOpen(activeScope, activeTab.id) || (!sel.grant[viewKey(activeScope.scope, activeTab.id)] && !sel.grant[layerKey(activeScope.scope, activeTab.id)])} onClick={() => edit((grant) => {
-                  clearDetail(grant, activeScope.scope, activeTab.id);
-                  return grant;
-                })}>Бүгдийг сонгох</button>
-              ) : (
-                <>
-                  <button type="button" className={styles.textButton} disabled={disabled || allSelected} onClick={() => edit((grant) => {
-                    (activeScope ? [activeScope] : CATALOG).forEach((scope) => { grant[scope.scope] = "all"; clearDetail(grant, scope.scope); });
-                    return grant;
-                  })}>Бүгдийг сонгох</button>
-                  <button type="button" className={styles.textButton} disabled={disabled || !anySelected || activeHome} onClick={() => edit((grant) => {
-                    (activeScope ? [activeScope] : CATALOG).filter((scope) => !home.includes(scope.scope)).forEach((scope) => { delete grant[scope.scope]; clearDetail(grant, scope.scope); });
-                    return grant;
-                  })}>Сонголт арилгах</button>
-                </>
-              )}
-            </div>
+          <div className={styles.directionTabs} role="group" aria-label="Эрх тохируулах чиглэл">
+            <button type="button" aria-pressed={direction === "incoming"} disabled={busy} onClick={() => setDirection("incoming")}>Хандах эрх</button>
+            <button type="button" aria-pressed={direction === "outgoing"} disabled={busy} onClick={() => setDirection("outgoing")}>Хандалт олгох</button>
           </div>
 
-          {activeScope && activeTab ? (
-            <TabDetail
-              scope={activeScope}
-              tab={activeTab}
-              grant={sel.grant}
-              open={tabOpen(activeScope, activeTab.id)}
-              disabled={disabled}
-              onBack={() => setTabId(null)}
-              onToggle={toggleDetail}
-            />
-          ) : activeScope ? (
-            <>
-              <div className={styles.detailHeading}>
-                <button type="button" className={styles.button} onClick={() => { setScopeId(null); setTabId(null); }}><ArrowLeft size={14} aria-hidden="true" /> Хэлтсүүд</button>
-                <h4 className={styles.detailTitle} title={activeScope.label}>{activeScope.label.toUpperCase()}</h4>
+          {direction === "outgoing" ? (
+            <SharingPermissions key={picked} owner={picked} names={names} nameOf={nameOf} current={current} locked={locked} onEdit={editAccount} />
+          ) : <>
+            <div className={styles.permissionToolbar}>
+              <h3 className={styles.toolbarLabel}>ХАНДАХ ЭРХ</h3>
+              <div className={styles.toolbarActions}>
+                <button type="button" className={styles.textButton} disabled={disabled || allSelected} onClick={() => edit((grant) => {
+                  accessScopes.forEach((scope) => { grant[scope.scope] = "all"; clearDetail(grant, scope.scope); });
+                  return grant;
+                })}>Бүгдийг сонгох</button>
+                <button type="button" className={styles.textButton} disabled={disabled || !anySelected} onClick={() => edit((grant) => {
+                  accessScopes.forEach((scope) => { delete grant[scope.scope]; clearDetail(grant, scope.scope); });
+                  return grant;
+                })}>Сонголт арилгах</button>
               </div>
-              {/*
-                Бүлэгтэй хэлтэст (амьтан · ургамал) карт бүрд бүлгийн нэрийг
-                давтахгүй — бүлгийн гарчгийн доор цэсүүд нь эгнэнэ (хэрэглэгч
-                2026-10-23: "амьтан гэж бичихгүйгээр бүлэглэ").
-              */}
-              {(() => {
-                const renderTab = (tab: CatalogTab) => {
-                  const value = sel.grant[activeScope.scope];
-                  const checked = value === "all" || (Array.isArray(value) && value.includes(tab.id));
-                  return (
-                    <label key={tab.id} className={cn(styles.tabOption, checked && !sel.removed && styles.selectedTab)} title={tab.label}>
-                      <span className={styles.checkboxLabel}><Box state={checked ? "on" : "off"} onChange={() => toggleTab(activeScope, tab.id)} label={tab.label} disabled={disabled} /></span>
-                      <span className={cn(styles.detailTabText, "flex-1")}>
-                        <span>{tab.label}</span>
-                      </span>
-                      {/* Порталын самбартай цэс — харагдах хэсэг, давхаргыг нарийвчилна */}
-                      {tab.layers && (
-                        <button
-                          type="button"
-                          className={styles.ruleButton}
-                          disabled={locked}
-                          title={`${tab.label} — нарийвчлан тохируулах`}
-                          onClick={(event) => {
-                            event.preventDefault();
-                            setTabId(tab.id);
-                          }}
-                        >
-                          <span className={cn(styles.scopeStatus, checked && !sel.removed && styles.enabledStatus)}>{checked && !sel.removed ? ruleText(sel.grant, activeScope.scope, tab) : "Эрхгүй"}</span>
-                          <ChevronRight size={14} className={styles.chevron} aria-hidden="true" />
-                        </button>
-                      )}
-                    </label>
-                  );
-                };
-                const groups = [...new Set(activeScope.tabs.map((tab) => tab.group).filter((g): g is string => !!g))];
-                if (groups.length) {
-                  const order = [...groups, undefined];
-                  return (
-                    <div key={`${picked}:${activeScope.scope}`} className={styles.groupedTabs} role="group" aria-label={`${activeScope.label} — цэсүүд`}>
-                      {order.map((group) => {
-                        const tabs = activeScope.tabs.filter((tab) => tab.group === group);
-                        if (!tabs.length) return null;
-                        return (
-                          <section key={group ?? "other"} className={styles.tabGroup}>
-                            {group && <h5 className={styles.groupHeading}>{group.toUpperCase()}</h5>}
-                            <div className={styles.groupGrid}>{tabs.map(renderTab)}</div>
-                          </section>
-                        );
-                      })}
-                    </div>
-                  );
-                }
-                return (
-                  <PagedList
-                    key={`${picked}:${activeScope.scope}`}
-                    className={styles.tabs}
-                    label={`${activeScope.label} — цэсүүд`}
-                    rowHeight={52}
-                    minColumnWidth={260}
-                    maxColumns={3}
-                    items={activeScope.tabs.map(renderTab)}
-                  />
-                );
-              })()}
-            </>
-          ) : (
-            <PagedList
-              key={`${picked}:scopes`}
-              className={styles.scopeList}
-              label="Хэлтэс, хэсгийн эрх"
-              rowHeight={40}
-              items={CATALOG.filter((scope) => !home.includes(scope.scope)).map((scope) => {
+            </div>
+            <div className={styles.sharingAccordion} role="group" aria-label="Хэлтэс, хэсгийн эрх">
+              {accessScopes.map((scope) => {
                 const count = openCount(sel.grant, scope);
                 const full = sel.grant[scope.scope] === "all";
                 const enabled = full || count > 0;
+                const expanded = scopeId === scope.scope;
+                const activeTab = expanded ? scope.tabs.find((tab) => tab.id === tabId && tab.layers) : undefined;
+                const contentId = `access-details-${scope.scope}`;
+                const restricted = Object.keys(sel.grant).some((key) => key.startsWith(`@v:${scope.scope}/`) || key.startsWith(`@l:${scope.scope}/`));
+                const renderTab = (tab: CatalogTab) => {
+                  const checked = tabOpen(scope, tab.id);
+                  return (
+                    <div key={tab.id} className={cn(styles.tabOption, checked && !sel.removed && styles.selectedTab)}>
+                      <label className={styles.shareTabLabel} title={tab.label}>
+                        <span className={styles.checkboxLabel}><Box state={checked ? "on" : "off"} onChange={() => toggleTab(scope, tab.id)} label={tab.label} disabled={disabled} /></span>
+                        <span className={styles.detailTabText}><span>{tab.label}</span></span>
+                      </label>
+                      {tab.layers && (
+                        <button type="button" className={styles.ruleButton} disabled={locked} title={`${tab.label} — нарийвчлан тохируулах`} onClick={() => setTabId(tab.id)}>
+                          <span className={cn(styles.scopeStatus, checked && !sel.removed && styles.enabledStatus)}>{checked && !sel.removed ? ruleText(sel.grant, scope.scope, tab) : "Эрхгүй"}</span>
+                          <ChevronRight size={14} className={styles.chevron} aria-hidden="true" />
+                        </button>
+                      )}
+                    </div>
+                  );
+                };
+                const groups = [...new Set(scope.tabs.map((tab) => tab.group).filter((group): group is string => !!group))];
                 return (
-                  <div key={scope.scope} className={cn(styles.scopeRow, enabled && !sel.removed && styles.enabledScope)}>
-                    <label className={styles.checkboxLabel}>
-                      <Box state={full ? "on" : enabled ? "part" : "off"} onChange={() => toggleScope(scope)} label={`${scope.label} — бүх эрх`} disabled={disabled} />
-                    </label>
-                    <button type="button" className={styles.scopeToggle} title={scope.label} disabled={locked || (scope.tabs.length === 0 && sel.removed)} onClick={() => scope.tabs.length ? setScopeId(scope.scope) : toggleScope(scope)}>
-                      <span className={styles.scopeName}>{scope.label}</span>
-                      <span className={cn(styles.scopeStatus, enabled && !sel.removed && styles.enabledStatus)}>{sel.removed || !enabled ? "Эрхгүй" : !scope.tabs.length ? "Эрхтэй" : full ? "Бүх цэс" : `${count} / ${scope.tabs.length} цэс`}</span>
-                      {scope.tabs.length > 0 && <ChevronRight size={14} className={styles.chevron} aria-hidden="true" />}
-                    </button>
-                  </div>
+                  <section key={scope.scope} className={cn(styles.sharingItem, expanded && styles.sharingItemOpen)}>
+                    <div className={cn(styles.scopeRow, styles.sharingItemHeader, enabled && !sel.removed && styles.enabledScope)}>
+                      <label className={styles.checkboxLabel}>
+                        <Box state={full ? "on" : enabled ? "part" : "off"} onChange={() => toggleScope(scope)} label={`${scope.label} — бүх эрх`} disabled={disabled} />
+                      </label>
+                      <button type="button" className={styles.scopeToggle} title={scope.label} disabled={locked} aria-expanded={expanded} aria-controls={contentId} onClick={() => { setScopeId(expanded ? null : scope.scope); setTabId(null); }}>
+                        <span className={styles.scopeName}>{scope.label}</span>
+                        <span className={cn(styles.scopeStatus, enabled && !sel.removed && styles.enabledStatus)}>{sel.removed || !enabled ? "Эрхгүй" : !scope.tabs.length ? "Эрхтэй" : full ? "Бүх цэс" : `${count} / ${scope.tabs.length} цэс`}</span>
+                        <ChevronRight size={14} className={cn(styles.chevron, styles.sharingChevron)} aria-hidden="true" />
+                      </button>
+                    </div>
+                    {expanded && (
+                      <div id={contentId} className={styles.sharingItemBody} role="region" aria-label={scope.label}>
+                        <div className={styles.permissionToolbar}>
+                          <h4 className={styles.toolbarLabel}>{activeTab ? "ЦЭСИЙН НАРИЙВЧИЛСАН ЭРХ" : scope.tabs.length ? "ЦЭСИЙН ЭРХ" : "ХАНДАХ ЭРХ"}</h4>
+                          <div className={styles.toolbarActions}>
+                            {activeTab ? (
+                              <button type="button" className={styles.textButton} disabled={disabled || !tabOpen(scope, activeTab.id) || (!sel.grant[viewKey(scope.scope, activeTab.id)] && !sel.grant[layerKey(scope.scope, activeTab.id)])} onClick={() => edit((grant) => {
+                                clearDetail(grant, scope.scope, activeTab.id);
+                                return grant;
+                              })}>Бүгдийг сонгох</button>
+                            ) : <>
+                              <button type="button" className={styles.textButton} disabled={disabled || (full && !restricted)} onClick={() => edit((grant) => {
+                                grant[scope.scope] = "all";
+                                clearDetail(grant, scope.scope);
+                                return grant;
+                              })}>Бүгдийг сонгох</button>
+                              <button type="button" className={styles.textButton} disabled={disabled || !enabled} onClick={() => edit((grant) => {
+                                delete grant[scope.scope];
+                                clearDetail(grant, scope.scope);
+                                return grant;
+                              })}>Сонголт арилгах</button>
+                            </>}
+                          </div>
+                        </div>
+                        {activeTab ? (
+                          <TabDetail scope={scope} tab={activeTab} grant={sel.grant} open={tabOpen(scope, activeTab.id)} disabled={disabled} onBack={() => setTabId(null)} onToggle={toggleDetail} />
+                        ) : groups.length ? (
+                          <div className={styles.accordionGroups} role="group" aria-label={`${scope.label} — цэсүүд`}>
+                            {[...groups, undefined].map((group) => {
+                              const tabs = scope.tabs.filter((tab) => tab.group === group);
+                              if (!tabs.length) return null;
+                              return (
+                                <section key={group ?? "other"} className={styles.tabGroup}>
+                                  {group && <h5 className={styles.groupHeading}>{group.toUpperCase()}</h5>}
+                                  <div className={styles.sharingTabGrid}>{tabs.map(renderTab)}</div>
+                                </section>
+                              );
+                            })}
+                          </div>
+                        ) : scope.tabs.length > 0 && (
+                          <div className={styles.sharingTabGrid} role="group" aria-label={`${scope.label} — цэсүүд`}>{scope.tabs.map(renderTab)}</div>
+                        )}
+                      </div>
+                    )}
+                  </section>
                 );
               })}
-            />
-          )}
+            </div>
+          </>}
         </section>
       </div>
     </div>
   );
+}
+
+/** Reverse view of the same recipient grants. Only the owner's home scopes
+ * can be shared here; other scopes and the recipient's blocked flag survive. */
+function SharingPermissions({ owner, names, nameOf, current, locked, onEdit }: {
+  owner: string;
+  names: string[];
+  nameOf: (username: string) => string;
+  current: (username: string) => Draft;
+  locked: boolean;
+  onEdit: (username: string, fn: (grant: Grant) => Grant) => void;
+}) {
+  const [sourceId, setSourceId] = React.useState("");
+  const [recipient, setRecipient] = React.useState<string | null>(null);
+  const [tabId, setTabId] = React.useState<string | null>(null);
+  const scopes = CATALOG.filter((scope) => homeScopes(owner).includes(scope.scope));
+  const scope = scopes.find((item) => item.scope === sourceId) ?? scopes[0];
+  const recipients = scope ? names.filter((name) => name !== owner && !homeScopes(name).includes(scope.scope)) : [];
+  const selected = recipient && recipients.includes(recipient) ? recipient : null;
+  const draft = selected ? current(selected) : null;
+  const activeTab = scope?.tabs.find((tab) => tab.id === tabId && tab.layers);
+  const disabled = locked || !draft || draft.removed;
+  const tabOpen = (id: string) => !!scope && !!draft && (draft.grant[scope.scope] === "all" || draft.grant[scope.scope]?.includes(id));
+
+  if (!scope) return <p className={styles.sharingNote}>Энэ бүртгэлд харьяалах хэлтэс тохируулаагүй байна.</p>;
+
+  function change(username: string, fn: (grant: Grant) => Grant) {
+    if (locked || !recipients.includes(username) || current(username).removed) return;
+    onEdit(username, fn);
+  }
+
+  function setScope(username: string, enabled: boolean) {
+    change(username, (grant) => {
+      if (enabled) grant[scope.scope] = "all";
+      else delete grant[scope.scope];
+      clearDetail(grant, scope.scope);
+      return grant;
+    });
+  }
+
+  function toggleTab(id: string) {
+    if (!selected) return;
+    change(selected, (grant) => {
+      const value = grant[scope.scope];
+      const tabs = new Set(value === "all" ? scope.tabs.map((tab) => tab.id) : Array.isArray(value) ? value : []);
+      if (tabs.has(id)) {
+        tabs.delete(id);
+        clearDetail(grant, scope.scope, id);
+      } else tabs.add(id);
+      if (!tabs.size) {
+        delete grant[scope.scope];
+        clearDetail(grant, scope.scope);
+      } else grant[scope.scope] = tabs.size === scope.tabs.length ? "all" : [...tabs];
+      return grant;
+    });
+  }
+
+  return <>
+    <div className={styles.sharingContext}>
+      {scopes.length > 1 ? <label className={styles.sharingSource}>
+        <span>Харуулах мэдээлэл</span>
+        <select aria-label="Мэдээлэл харуулах хэлтэс" value={scope.scope} disabled={locked} onChange={(event) => { setSourceId(event.target.value); setRecipient(null); setTabId(null); }}>
+          {scopes.map((item) => <option key={item.scope} value={item.scope}>{item.label}</option>)}
+        </select>
+      </label> : <p>Энэ хэлтсийн мэдээллийг бусад хэлтэст харуулах тохиргоо.</p>}
+    </div>
+    <div className={styles.permissionToolbar}><h3 className={styles.toolbarLabel}>ХҮЛЭЭН АВАХ БҮРТГЭЛҮҮД</h3><span className={styles.scopeStatus}>Цэс бүрээр тохируулахын тулд нэр дээр дарна.</span></div>
+    <div className={styles.sharingAccordion} role="group" aria-label="Мэдээлэл хүлээн авах бүртгэлүүд">
+      {!recipients.length && <p className={styles.sharingNote}>Мэдээлэл хүлээн авах бүртгэл алга.</p>}
+      {recipients.map((username) => {
+        const row = current(username);
+        const full = row.grant[scope.scope] === "all";
+        const count = openCount(row.grant, scope);
+        const enabled = full || count > 0;
+        const restricted = Object.keys(row.grant).some((key) => key.startsWith(`@v:${scope.scope}/`) || key.startsWith(`@l:${scope.scope}/`));
+        const expanded = selected === username;
+        const contentId = `sharing-details-${scope.scope}-${encodeURIComponent(username)}`;
+        return <section key={username} className={cn(styles.sharingItem, expanded && styles.sharingItemOpen)}>
+          <div className={cn(styles.scopeRow, styles.sharingItemHeader, enabled && !row.removed && styles.enabledScope)}>
+            <label className={styles.checkboxLabel}><Box state={full && !restricted ? "on" : enabled ? "part" : "off"} onChange={() => setScope(username, !(full && !restricted))} label={`${nameOf(username)} — бүх мэдээллийг харуулах`} disabled={locked || row.removed} /></label>
+            <button type="button" className={styles.scopeToggle} title={nameOf(username)} disabled={locked} aria-expanded={expanded} aria-controls={contentId} onClick={() => { setRecipient(expanded ? null : username); setTabId(null); }}>
+              <span className={styles.scopeName}>{nameOf(username)}</span>
+              <span className={cn(styles.scopeStatus, row.removed ? styles.blockedStatus : enabled && styles.enabledStatus)}>{row.removed ? "Хандалт хаалттай" : !enabled ? "Харуулахгүй" : !scope.tabs.length ? "Харуулна" : restricted ? "Нарийвчилсан" : full ? "Бүх цэс" : `${count} / ${scope.tabs.length} цэс`}</span>
+              <ChevronRight size={14} className={cn(styles.chevron, styles.sharingChevron)} aria-hidden />
+            </button>
+          </div>
+          {expanded && selected && draft && <div id={contentId} className={styles.sharingItemBody} role="region" aria-label={nameOf(username)}>
+            {draft.removed && <p className={cn(styles.sharingNote, styles.blockedStatus)}>Энэ бүртгэлийн хандалт хаалттай байна.</p>}
+            <div className={styles.permissionToolbar}>
+              <h3 className={styles.toolbarLabel}>{activeTab ? "ЦЭСИЙН НАРИЙВЧИЛСАН ЭРХ" : "ХАРУУЛАХ ЦЭСҮҮД"}</h3>
+              <div className={styles.toolbarActions}>
+                {activeTab ? <button type="button" className={styles.textButton} disabled={disabled || !tabOpen(activeTab.id) || (!draft.grant[viewKey(scope.scope, activeTab.id)] && !draft.grant[layerKey(scope.scope, activeTab.id)])} onClick={() => change(selected, (grant) => { clearDetail(grant, scope.scope, activeTab.id); return grant; })}>Бүгдийг сонгох</button> : <>
+                  <button type="button" className={styles.textButton} disabled={disabled || (draft.grant[scope.scope] === "all" && !Object.keys(draft.grant).some((key) => key.startsWith(`@v:${scope.scope}/`) || key.startsWith(`@l:${scope.scope}/`)))} onClick={() => setScope(selected, true)}>Бүгдийг сонгох</button>
+                  <button type="button" className={styles.textButton} disabled={disabled || (!openCount(draft.grant, scope) && draft.grant[scope.scope] !== "all")} onClick={() => setScope(selected, false)}>Сонголт арилгах</button>
+                </>}
+              </div>
+            </div>
+            {activeTab ? <TabDetail scope={scope} tab={activeTab} grant={draft.grant} open={tabOpen(activeTab.id)} disabled={disabled} onBack={() => setTabId(null)} onToggle={(key, all, id) => {
+              if (!tabOpen(activeTab.id)) return;
+              change(selected, (grant) => toggleDetailValue(grant, key, all, id));
+            }} /> : <div className={styles.sharingTabGrid} role="group" aria-label="Бусад хэлтэст харуулах цэсүүд">
+              {scope.tabs.map((tab) => {
+                const checked = tabOpen(tab.id);
+                return <div key={tab.id} className={cn(styles.tabOption, checked && !draft.removed && styles.selectedTab)}>
+                  <label className={styles.shareTabLabel}>
+                    <span className={styles.checkboxLabel}><Box state={checked ? "on" : "off"} onChange={() => toggleTab(tab.id)} label={tab.label} disabled={disabled} /></span>
+                    <span className={styles.detailTabText}>{tab.group && <small>{tab.group}</small>}<span>{tab.label}</span></span>
+                  </label>
+                  {tab.layers && <button type="button" className={styles.ruleButton} disabled={locked} title={`${tab.label} — нарийвчлан тохируулах`} onClick={() => setTabId(tab.id)}>
+                    <span className={cn(styles.scopeStatus, checked && !draft.removed && styles.enabledStatus)}>{checked && !draft.removed ? ruleText(draft.grant, scope.scope, tab) : "Эрхгүй"}</span>
+                    <ChevronRight size={14} aria-hidden />
+                  </button>}
+                </div>;
+              })}
+            </div>}
+          </div>}
+        </section>;
+      })}
+    </div>
+  </>;
 }
 
 /** Цэсийн нарийвчлалын товч бичвэр — "Бүгд" эсвэл хязгаарласан тоо */
