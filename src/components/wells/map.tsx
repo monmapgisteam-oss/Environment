@@ -837,6 +837,7 @@ export type ModeInput = {
   labels?: { minzoom?: number; offset?: number; size?: number; colors?: Record<string, string>; halo?: number };
   values?: { maxzoom?: number };
   scale?: number;
+  alerts?: { levels: ArrayLike<number | undefined>; colors: string[] };
 };
 export function modeOf({
   cluster = true,
@@ -854,6 +855,7 @@ export function modeOf({
   labels,
   values,
   scale,
+  alerts,
 }: ModeInput): Mode {
   return {
     cluster,
@@ -890,6 +892,7 @@ export function modeOf({
     valued: Boolean(values),
     valueZoom: values?.maxzoom ?? 13,
     scale,
+    alertColors: alerts?.colors ?? [],
   };
 }
 
@@ -967,6 +970,7 @@ export function dataLayers(E: Esri, mode: Mode) {
     { name: "c", type: "string" },
     { name: "t", type: "string" },
     { name: "r", type: "integer" },
+    { name: "a", type: "integer" },
   ];
 
   /*
@@ -1034,12 +1038,41 @@ export function dataLayers(E: Esri, mode: Mode) {
             clusterMaxSize: `${pt(badge ? 28 : 38)}pt`,
             maxScale: scaleAt(mode.clusterMaxZoom),
             /* ⚠ `renderer` БИШ `symbol`: өөрийн рендерер өгвөл НЭГ гишүүнтэй
-               бөөгнөрөл ч цагираг болж зурагддаг байв */
-            symbol: {
-              type: "simple-marker",
-              color: col(mode.fire.glow, badge ? 0.42 : 0.22),
-              outline: { color: col(mode.fire.glow, 0.95), width: (badge ? 1.6 : 1.4) * 0.75 },
-            },
+               бөөгнөрөл ч цагираг болж зурагддаг байв.
+               ХАРДЛАГАТАЙ ЦЭГ (`alerts`, хэрэглэгч 2026-11-16) байвал л рендерер:
+               гишүүдийн `a`-ийн их утгаар (`alert`) — ядаж нэг хардлагатай бол улаан */
+            ...(mode.alertColors.length
+              ? {
+                  fields: [{ name: "alert", onStatisticField: "a", statisticType: "max" }],
+                  /* ⚠ Рендерертэй үед НЭГ гишүүнтэй бөөгнөрөл ч энэ рендерерээр
+                     зурагддаг — тиймээс тэдэнд Firefly цэг ("s0"/"s1"), бусдад дугуй */
+                  renderer: {
+                    type: "unique-value",
+                    /* ⚠ `max` нь бүх гишүүн 0 үед 0 биш 5e-324 буцаадаг (хэмжсэн) — босгоор */
+                    valueExpression: `IIf($feature.cluster_count == 1, "s", "c") + Text(Round(DefaultValue($feature.alert, 0)))`,
+                    defaultSymbol: clusterSymbol(mode.fire.glow, badge),
+                    uniqueValueInfos: [
+                      { value: "c0", symbol: clusterSymbol(mode.fire.glow, badge) },
+                      { value: "s0", symbol: gradedMultiSymbol(mode.graded?.[0][1] ?? mode.fire.glow) },
+                      ...mode.alertColors.flatMap((c, k) => [
+                        { value: `c${k + 1}`, symbol: clusterSymbol(c, badge) },
+                        { value: `s${k + 1}`, symbol: gradedMultiSymbol(c) },
+                      ]),
+                    ],
+                    visualVariables: [
+                      {
+                        type: "size",
+                        field: "cluster_count",
+                        stops: [
+                          { value: 1, size: "10pt" },
+                          { value: 2, size: `${pt(badge ? 12 : 10)}pt` },
+                          { value: 150, size: `${pt(badge ? 28 : 30)}pt` },
+                        ],
+                      },
+                    ],
+                  },
+                }
+              : { symbol: clusterSymbol(mode.fire.glow, badge) }),
             labelingInfo: [
               {
                 deconflictionStrategy: "none",
@@ -1120,9 +1153,10 @@ export function fillPoints(
     values?: { text: string[]; color?: string[] };
     colors?: ArrayLike<string | undefined>;
     dotRank: string;
+    alerts?: ArrayLike<number | undefined>;
   },
 ) {
-  const { points, visible, weights, grades, labels, values, colors, dotRank } = d;
+  const { points, visible, weights, grades, labels, values, colors, dotRank, alerts } = d;
   const { lon, lat, oid } = points;
   const text = labels?.text;
   const rank = dotRank ? (JSON.parse(dotRank) as Record<string, number>) : null;
@@ -1141,6 +1175,7 @@ export function fillPoints(
       /* Хоосон шошгыг ОГТ бичихгүй — `t IS NOT NULL` шүүлт */
       t: text?.[i] || null,
       r: c && rank ? (rank[c] ?? 0) : 0,
+      a: alerts?.[i] ?? 0,
     });
   }
   if (!mode.weighted && !mode.graded) {
@@ -1313,6 +1348,8 @@ export type Mode = {
   graded: [number, string][] | undefined;
   gradedFire: boolean;
   gradedFireColor: boolean;
+  /** Хардлагын түвшний өнгө (`alerts`, түвшин 1…) — цэг ба тэдгээрийг агуулсан бөөгнөрөл */
+  alertColors: string[];
   shaped: boolean;
   shapeGlow: boolean;
   shapeCrisp: boolean;
@@ -1446,7 +1483,27 @@ function pointSymbolFor(m: Mode): (tint: string | null) => any {
   return (t) => fireSymbol(m.fire, t, m.tinted);
 }
 
+/** Бөөгнөрлийн дугуй — тунгалаг дүүргэлт, тод хүрээ */
+function clusterSymbol(color: string, badge: boolean) {
+  return {
+    type: "simple-marker",
+    color: col(color, badge ? 0.42 : 0.22),
+    outline: { color: col(color, 0.95), width: (badge ? 1.6 : 1.4) * 0.75 },
+  };
+}
+
 export function pointRenderer(m: Mode, colors: string[]) {
+  /* Хардлагатай цэг (`a` = түвшин) — зэрэглэлийн Firefly тэмдэг түвшний өнгөөр, хэмжээ ижил */
+  if (m.graded && m.gradedFireColor && m.alertColors.length) {
+    const stops = m.graded;
+    return {
+      type: "unique-value",
+      field: "a",
+      defaultSymbol: gradedMultiSymbol(stops[0][1]),
+      uniqueValueInfos: m.alertColors.map((c, k) => ({ value: k + 1, symbol: gradedMultiSymbol(c) })),
+      visualVariables: [sizeByValue(stops[0][0], stops[stops.length - 1][0], 3.6)],
+    };
+  }
   if (m.graded) {
     const stops = m.graded;
     const lo = stops[0][0];
@@ -1526,6 +1583,7 @@ function WellsMapBody({
   colors,
   dots,
   esriFirefly = false,
+  alerts,
   pointScale,
   highlight = null,
   overlays,
@@ -1623,6 +1681,13 @@ function WellsMapBody({
    * гэрэл — хөрсний мониторингийн `grades.firefly: "graded"`-тэй НЭГ зураг.
    */
   esriFirefly?: boolean;
+  /**
+   * ХАРДЛАГАТАЙ ЦЭГ (хэрэглэгч 2026-11-16, химийн бодисын бүртгэл): `levels[i]` = 0
+   * ердийн, k ≥ 1 бол `colors[k - 1]`-ээр; бөөгнөрөл гишүүдийнхээ ХАМГИЙН ӨНДӨР түвшний
+   * өнгөөр (их түвшин = илүү ноцтой). Өнгө нь ЗӨВХӨН анхны зурагдалтад; түвшин нь
+   * дата шиг шинэчлэгдэнэ. Одоогоор `grades.firefly: "graded"` горимд л.
+   */
+  alerts?: { levels: ArrayLike<number | undefined>; colors: string[] };
   /** Цэгийн хэмжээний үржүүлэгч (зэрэглэлгүй цэгт), анхдагч 1 */
   pointScale?: number;
   /** Тодруулах цэгийн байрлал `[lon, lat]` — гэрэлтэх цагираг */
@@ -1756,7 +1821,7 @@ function WellsMapBody({
   const basemapRef = React.useRef(basemap);
 
   /** Эх сурвалж үүсгэх үед л уншигдах тохиргоо */
-  const modeRef = React.useRef<Mode>(modeOf({ cluster, clusterMaxZoom, clusterRadius, clusterLabel, weights, grades, shapes, firefly, colors, dots, esriFirefly, pointScale, labels, values, scale }));
+  const modeRef = React.useRef<Mode>(modeOf({ cluster, clusterMaxZoom, clusterRadius, clusterLabel, weights, grades, shapes, firefly, colors, dots, esriFirefly, pointScale, labels, values, scale, alerts }));
 
   /* ---------------- Газрын зураг үүсгэх ---------------- */
   React.useEffect(() => {
@@ -2037,10 +2102,11 @@ function WellsMapBody({
     const { E, layers, mode, view } = live;
     /* ИЖИЛ датаг дахин ачаалахгүй — StrictMode болон хамааралгүй
        шинэчлэл 145 мянган цэгийг дахин илгээх байв */
-    const sig = [live, points, visible, weights, grades, labels, values, colors, dotRank];
+    const flags = alerts?.levels;
+    const sig = [live, points, visible, weights, grades, labels, values, colors, dotRank, flags];
     if (applied.current.length === sig.length && sig.every((v, i) => v === applied.current[i])) return;
     applied.current = sig;
-    fillPoints(E, view, layers, mode, { points, visible, weights, grades, labels, values, colors, dotRank });
+    fillPoints(E, view, layers, mode, { points, visible, weights, grades, labels, values, colors, dotRank, alerts: flags });
     const { lon, lat } = points;
     /*
       Эхний удаа өгөгдлийн гол бөөгнөрөл рүү тааруулна — 1–99 хувийн муж:
@@ -2072,7 +2138,7 @@ function WellsMapBody({
         fitTo(view, home.current, 30, 13, 0);
       }
     }
-  }, [ready, points, visible, weights, grades, labels, values, colors, dotRank]);
+  }, [ready, points, visible, weights, grades, labels, values, colors, dotRank, alerts?.levels]);
 
   /* ---------------- Шошгын хязгаар — АМЬД ---------------- */
   const shapeLabelZoom = shapes?.labelZoom;

@@ -36,6 +36,8 @@ import {
   type Index,
   type LocStat,
 } from "@/lib/chemsystem";
+import { pointsOnBuildings, type Building } from "@/lib/buildings";
+import { inUlaanbaatar } from "@/lib/ub-boundary";
 import { cn, num } from "@/lib/utils";
 import type { LucideIcon } from "lucide-react";
 
@@ -64,14 +66,29 @@ const PointMap = dynamic(
    шүүж байна) харагдахаа больдог. Одоо хоёулаа үргэлж дүүрэн бөгөөд
    ИЖИЛ бүтэцтэй (`Panel`) — ижил харагдах нь хамаарлыг өөрөө хэлнэ.
 
-   ⚠ ГАЗРЫН ЗУРАГТ ЗӨВХӨН НИЙСЛЭЛИЙНХ. Орон нутгийн хаягтай 93 агуулахын
-   координат БҮРТГЭГДСЭН ч хаягтайгаа таарахгүй: бүгд Улаанбаатарын
-   төвөөс медиан 2.8 км-ийн дотор багширсан байна. Ховдын хаягтай
-   агуулахын цэг бодит Ховдоос 1,136 км, Говь-Алтайнх 815 км зөрнө.
-   Зурагт буулгавал байхгүй зүйл харуулна тул жагсаалтад л үлдээнэ.
+   ⚠⚠ ОРОН НУТГИЙНХ ч ГАЗРЫН ЗУРАГТ ГАРНА (хэрэглэгч 2026-11-16). Орон нутгийн
+   хаягтай агуулахын координат Улаанбаатарын төвд багширдаг нь АЛДАА БИШ:
+   компанийн агуулах нь хөдөө, координат нь Улаанбаатар дахь ОФФИСЫНХ.
+   Урьд нь "хаягтайгаа таарахгүй" гэж зурагт буулгадаггүй байв — буцаасан.
    -------------------------------------------------------------------------- */
 
 type Scope = "city" | "rural";
+
+/*
+  БАРИЛГЫН ДАВХЦЛААР ТҮВШИН (хэрэглэгч 2026-11-16): барилга дээр буусан цэг ердийн (0 —
+  төрийн байгууллага, сургууль, оффис, үйлдвэр …); "Театр", "Музей", "Цэцэрлэг" ба
+  Засгийн газрын ордон (нэрээр) — ШАР (1); зам, гудамж зэрэг барилгагүй газар — УЛААН (2).
+*/
+const WARN_USE = /театр|музей|цэцэрлэг/i;
+function levelOf(b: Building | null): number {
+  if (!b) return 2;
+  return WARN_USE.test(b.use) || /засгийн газрын ордон/i.test(b.name) ? 1 : 0;
+}
+
+/** Барилгагүй газар буусан цэгийн өнгө — `--clay`-ийн тогтмол hex (газрын зураг горимоос үл хамаарна) */
+const ALERT_COLOR = "#e47b7b";
+/** Театр, музей, цэцэрлэг, Засгийн газрын ордон дээрх цэг — `--ochre`-ийн тогтмол hex */
+const WARN_COLOR = "#e5b75a";
 
 export function ChemSystemDashboard() {
   const [data, setData] = React.useState<ChemSystem | null>(null);
@@ -102,6 +119,41 @@ export function ChemSystemDashboard() {
   }, []);
 
   const ix = React.useMemo<Index | null>(() => (data ? buildIndex(data) : null), [data]);
+
+  /*
+    БАЙРШЛЫН ТҮВШИН (хэрэглэгч 2026-11-16) — бүх агуулахыг `merged_buildings_arkhai`-тай
+    давхцуулна (`levelOf`): 0 ердийн · 1 шар · 2 улаан. Хилийн дотор хоёр хүрээнд ижил
+    дүрэм. Хилээс гадна: орон нутаг 0 (координат хаягтайгаа нийцэх боломжтой),
+    Улаанбаатар 2. Давхарга ирэх хүртэл (эсвэл унавал) орон нутгийн хилийн доторх
+    нь улаан, бусад 0.
+  */
+  const checked = React.useMemo(
+    () => (ix ? ix.stats.filter((s) => Number.isFinite(s.loc.lon) && Number.isFinite(s.loc.lat) && inUlaanbaatar(s.loc.lon, s.loc.lat)) : []),
+    [ix],
+  );
+  const [buildingLevel, setBuildingLevel] = React.useState<Map<number, number> | null>(null);
+  React.useEffect(() => {
+    if (!checked.length) return;
+    const ac = new AbortController();
+    pointsOnBuildings(checked.map((s) => [s.loc.lon, s.loc.lat]), ac.signal)
+      .then((hits) => setBuildingLevel(new Map(checked.map((s, i) => [s.loc.id, levelOf(hits[i])]))))
+      .catch((e: Error) => {
+        if (e.name !== "AbortError") console.warn("Барилгын давхарга уншигдсангүй:", e.message);
+      });
+    return () => ac.abort();
+  }, [checked]);
+  const levels = React.useMemo(() => {
+    const m = new Map<number, number>();
+    if (!ix) return m;
+    for (const s of ix.stats) {
+      if (!Number.isFinite(s.loc.lon) || !Number.isFinite(s.loc.lat)) continue;
+      const rural = s.place.inCity === false;
+      const inside = inUlaanbaatar(s.loc.lon, s.loc.lat);
+      if (!inside) m.set(s.loc.id, rural ? 0 : 2);
+      else m.set(s.loc.id, buildingLevel?.get(s.loc.id) ?? (rural ? 2 : 0));
+    }
+    return m;
+  }, [ix, buildingLevel]);
 
   /** Хамрах хүрээ — ХАЯГААС, координатаас БИШ */
   const inScope = React.useMemo(() => {
@@ -271,10 +323,10 @@ export function ChemSystemDashboard() {
 
   /* ---------------- Газрын зураг ---------------- */
 
-  /* Зурагт ЗӨВХӨН нийслэлийнх — орон нутгийнхны координат нь орлуулга */
+  /* Хоёр хамрах хүрээ хоёулаа зурагт (орон нутгийнхын координат — УБ дахь оффис) */
   const mapped = React.useMemo(
-    () => (scope === "city" ? shownLocs : []),
-    [shownLocs, scope],
+    () => shownLocs.filter((s) => Number.isFinite(s.loc.lon) && Number.isFinite(s.loc.lat)),
+    [shownLocs],
   );
 
   const points = React.useMemo<MapPoints>(
@@ -307,6 +359,18 @@ export function ChemSystemDashboard() {
     }),
     [mapped],
   );
+
+  /*
+    ХАРДЛАГАТАЙ БАЙРШИЛ (хэрэглэгч 2026-11-16): орон нутгийн хаягтай атлаа
+    координат нь Улаанбаатарын хилийн дотор — түвшин нь барилгаас (`levels`, дээрхийг үз).
+    Цэг ба түүнийг агуулсан бөөгнөрөл түвшний өнгөөр.
+  */
+  const alerts = React.useMemo(
+    () => ({ levels: mapped.map((s) => levels.get(s.loc.id) ?? 0), colors: [WARN_COLOR, ALERT_COLOR] }),
+    [mapped, levels],
+  );
+  const warnCount = alerts.levels.filter((l) => l === 1).length;
+  const alertCount = alerts.levels.filter((l) => l === 2).length;
 
   const focus = React.useMemo<Extent | null>(() => {
     const s = selLoc == null ? null : mapped.find((x) => x.loc.id === selLoc);
@@ -598,7 +662,15 @@ export function ChemSystemDashboard() {
                 highlight={spot ? [spot.loc.lon, spot.loc.lat] : null}
                 clusterMaxZoom={13}
                 grades={grades}
+                alerts={alerts}
               />
+              {alertCount + warnCount > 0 && (
+                <div className="absolute bottom-7 left-2 z-[1] flex flex-col gap-1 rounded-xs border border-line bg-paper/90 px-2 py-1.5 text-[10px] text-ink-2 backdrop-blur">
+                  <span className="flex items-center gap-1.5"><i className="size-2 rounded-full" style={{ background: DATA_COLOR }} />Агуулах</span>
+                  <span className="flex items-center gap-1.5"><i className="size-2 rounded-full" style={{ background: ALERT_COLOR }} />Байршил тодруулах шаардлагатай <span className="num text-ink-3">{num(alertCount)}</span></span>
+                  {warnCount > 0 && <span className="flex items-center gap-1.5"><i className="size-2 rounded-full" style={{ background: WARN_COLOR }} />Театр, музей, цэцэрлэг, Засгийн газрын ордон дээр <span className="num text-ink-3">{num(warnCount)}</span></span>}
+                </div>
+              )}
               <BasemapGallery value={basemap} onChange={setBasemap} placement="top-left" />
 
               {hovered ? (
@@ -615,19 +687,9 @@ export function ChemSystemDashboard() {
               ) : null}
             </>
           ) : (
-            /*
-              Координат нь БҮРТГЭГДСЭН ч хаягтайгаа таарахгүй: Ховдын
-              хаягтай агуулахын цэг бодит Ховдоос 1,136 км зөрж, УБ-ын
-              төвд буудаг. 93 бичлэгийн координат бүгд хотын төвөөс
-              медиан 2.8 км-ийн дотор багширсан.
-
-              "Байршил бүртгэгдээгүй" гэж бичих нь ХУДАЛ байв — тэднийг
-              харуулахгүй байгаа шалтгаанаа товч, үнэн зөв хэлнэ.
-            */
             <div className="hatch flex h-full items-center justify-center px-6">
               <p className="max-w-[320px] text-center text-[12px] leading-snug text-ink-3">
-                Бүртгэсэн координат нь хаягтайгаа таарахгүй тул газрын зурагт
-                харуулаагүй
+                Тохирох агуулах байхгүй
               </p>
             </div>
           )}

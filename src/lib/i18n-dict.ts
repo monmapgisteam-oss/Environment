@@ -1357,8 +1357,9 @@ export const DICT: Record<string, string> = {
   "Устгал, дахин боловсруулалт": "Disposal and recycling",
   "Нэр, хаяг, регистр": "Name, address, registration",
   "бодис": "substances",
-  "Бүртгэсэн координат нь хаягтайгаа таарахгүй тул газрын зурагт харуулаагүй":
-    "Not shown on the map because the recorded coordinates do not match the address",
+  "Тохирох агуулах байхгүй": "No matching warehouses",
+  "Байршил тодруулах шаардлагатай": "Location needs verification",
+  "Театр, музей, цэцэрлэг, Засгийн газрын ордон дээр": "On a theatre, museum, kindergarten or the Government Palace",
   "Агуулахад бүртгэгдсэн бодис": "Substances registered at the facility",
   "Бодисын нэр": "Substance name",
   "Товьёог руу буцах": "Back to index",
