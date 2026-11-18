@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Database, Loader2 } from "lucide-react";
+import { Layers, Loader2 } from "lucide-react";
 import type { MapOverlay } from "@/components/wells/map";
 import { oklchHex } from "@/components/wells/colors";
 import { useAccess } from "@/components/auth/access";
@@ -21,7 +21,7 @@ import { cn } from "@/lib/utils";
   хэлтсийн 22 бүртгэлийг (ерөнхий үнэлгээ хоёр он · менежментийн
   төлөвлөгөө · үерийн эрсдэл 7 · ногоон байгууламж 2 · эко-инфраструктур 8 ·
   хог хаягдлын цэг 2 · хийн төхөөрөмж 1) цэсээрээ бүлэглэж асаах, унтраах;
-  одоогийн самбарынх үргэлж асаалттай ("Энэ самбар").
+  одоогийн самбарынх жагсаалтад гарахгүй (зураг дээр аль хэдийн бий).
 
   Хүрээлэн буй орчны хэлтсийн `MineralLayers`-тэй нэг зарчим.
   ⚠ Давхарга нь АСААХ ҮЕДЭЭ л татагдана, амлалтаар кэшлэгдэнэ. Порталын
@@ -175,11 +175,13 @@ export function UnelgeeLayers({
       GROUPS.filter((g) => allowsTab(UNELGEE_SCOPE, g.tab))
         .map((g) => {
           const rule = tabRule(UNELGEE_SCOPE, g.tab);
-          const entries = g.set && rule.layers ? g.entries.filter((e) => rule.layers!.includes(e.id)) : g.entries;
-          return { ...g, entries };
+          const allowed = g.set && rule.layers ? g.entries.filter((e) => rule.layers!.includes(e.id)) : g.entries;
+          /* Энэ самбарын өөрийн давхарга жагсаалтад ГАРАХГҮЙ — зураг дээр аль хэдийн бий
+             (хэрэглэгч 2026-11-18: "ene sambart bga bol haragdah shaardlagagui") */
+          return { ...g, entries: allowed.filter((e) => !current.includes(e.id)) };
         })
         .filter((g) => g.entries.length),
-    [allowsTab, tabRule],
+    [allowsTab, tabRule, current],
   );
 
   const on = new Set(value.map((o) => o.id));
@@ -228,14 +230,11 @@ export function UnelgeeLayers({
         aria-label="Хэлтсийн давхарга"
         aria-expanded={open}
         className={cn(
-          "elevated pointer-events-auto relative flex items-center justify-center rounded-xs border transition-colors",
-          inline ? "size-8 backdrop-blur-md" : "size-7 backdrop-blur",
-          open || extra
-            ? "map-tint border-data/50 text-data"
-            : cn(inline ? "border-line bg-paper/85 text-ink-3" : "border-line-2 bg-paper/90 text-ink-2", "hover:bg-paper-hi hover:text-ink"),
+          "map-tool pointer-events-auto",
+          (open || extra > 0) && "is-on",
         )}
       >
-        <Database size={14} strokeWidth={1.75} />
+        <Layers size={14} strokeWidth={1.75} />
         {extra ? (
           <span className="num absolute -top-1 -right-1 rounded-full bg-data px-1 text-[9px] leading-[1.4] font-medium text-paper">
             {extra}
@@ -246,7 +245,7 @@ export function UnelgeeLayers({
       {open ? (
         <div
           className={cn(
-            "elevated pointer-events-auto absolute z-20 w-[280px] overflow-y-auto rounded-xs border border-line-2 bg-paper-2 p-2",
+            "elevated pointer-events-auto absolute z-30 w-[280px] overflow-y-auto rounded-xs border border-line-2 bg-paper-2 p-2",
             inline ? "top-[calc(100%+5px)] max-h-[min(60vh,520px)]" : "top-[33px] max-h-[calc(100%-33px)]",
             left ? "left-0" : "right-0",
           )}
@@ -260,20 +259,19 @@ export function UnelgeeLayers({
                 </div>
                 <div className="space-y-0.5">
                   {g.entries.map((e) => {
-                    const mine = current.includes(e.id);
-                    const checked = mine || on.has(key(e.id));
+                    const checked = on.has(key(e.id));
                     return (
                       <label
                         key={e.id}
                         className={cn(
                           "flex items-center gap-2 rounded-xs px-1 py-1 transition-colors",
-                          mine ? "cursor-default" : "cursor-pointer hover:bg-paper-hi",
+                          "cursor-pointer hover:bg-paper-hi",
                         )}
                       >
                         <input
                           type="checkbox"
                           checked={checked}
-                          disabled={mine || busy === e.id}
+                          disabled={busy === e.id}
                           onChange={() => toggle(e)}
                           className="size-3 shrink-0 accent-[var(--data)]"
                         />
@@ -283,8 +281,6 @@ export function UnelgeeLayers({
                         </span>
                         {busy === e.id ? (
                           <Loader2 size={10} className="shrink-0 animate-spin text-ink-3" />
-                        ) : mine ? (
-                          <span className="shrink-0 text-[10px] text-ink-3">Энэ самбар</span>
                         ) : failed === e.id ? (
                           <span className="shrink-0 text-[10px] text-clay">Татагдсангүй</span>
                         ) : null}

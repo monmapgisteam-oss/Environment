@@ -1892,7 +1892,7 @@ function WellsMapBody({
           center: [106.9, 47.9],
           zoom: (mode.scale ? zoomForScale(mode.scale) : 9) + 1,
           constraints: { lods, minZoom: 1, maxZoom: MAX_ML + 1, snapToZoom: false, rotationEnabled: false },
-          ui: { components: [] },
+          ui: { components: [], padding: { top: 10, right: 10, bottom: 10, left: 10 } },
           popupEnabled: false,
           /* Хулганы доорх тодруулгыг өөрсдөө зурна — SDK-ийн цэнхэр хүрээ хэрэггүй */
           highlightOptions: { color: [0, 0, 0, 0], haloOpacity: 0, fillOpacity: 0 },
@@ -2455,6 +2455,63 @@ function WellsMapBody({
     return () => hidden.forEach((el) => (el.style.visibility = ""));
   }, [dim]);
 
+  /*
+    ХЭРЭГСЛИЙН НЭГ БАГАНА (хэрэглэгч 2026-11-17: "дээр байгаа basemap, layer гэх
+    мэт toggle доошоо нийлүүл"). Ойртуулах, 2D/3D нь дундад суудаг; баруун дээд
+    булангийн хэрэгслүүдийг (Esri-ийн суурь зураг · 3D-ийн гурван хэрэгсэл,
+    самбарын `.map-tool`, `[data-map-rail]`) тэдний ЯГ ДЭЭР 8px завсартай буулгана.
+    Хэрэгслийн тоо самбар бүрд өөр тул БОДИТ өндрийг хэмжиж, шилжилтийг эх
+    элементийн `--rail-shift` хувьсагчид бичнэ (`workspace.css` `.map-rail-shift`,
+    `.wells-esri .esri-ui-top-right`). Хэрэгсэл нь дундаас өндөр бол шилжихгүй.
+  */
+  React.useEffect(() => {
+    const host = root.current?.parentElement;
+    const own = root.current;
+    if (!host || !own) return;
+    let frame = 0;
+    let shift = 0;
+    const measure = () => {
+      frame = 0;
+      const box = host.getBoundingClientRect();
+      const rail = own.querySelector(".map-rail");
+      if (!box.height || !rail) return;
+      const scope = own.querySelector(".scene-overlay") ?? holder.current;
+      const items = [
+        ...Array.from(scope?.querySelectorAll(".esri-ui-top-right .esri-widget--button") ?? []),
+        ...Array.from(host.querySelectorAll(".map-tool, [data-map-rail]")),
+      ] as HTMLElement[];
+      let top = Infinity;
+      let bottom = -Infinity;
+      for (const el of items) {
+        if (rail.contains(el) || el.closest("[data-map-popover]")) continue;
+        const r = el.getBoundingClientRect();
+        if (!r.height || getComputedStyle(el).visibility === "hidden") continue;
+        if (box.right - r.right > 48) continue;
+        top = Math.min(top, r.top - box.top - shift);
+        bottom = Math.max(bottom, r.bottom - box.top - shift);
+      }
+      const railTop = rail.getBoundingClientRect().top - box.top;
+      const next = Number.isFinite(bottom) ? Math.max(0, Math.round(railTop - 8 - bottom)) : 0;
+      if (next === shift) return;
+      shift = next;
+      host.style.setProperty("--rail-shift", `${next}px`);
+    };
+    const schedule = () => {
+      if (!frame) frame = requestAnimationFrame(measure);
+    };
+    const ro = new ResizeObserver(schedule);
+    ro.observe(host);
+    const mo = new MutationObserver(schedule);
+    mo.observe(host, { childList: true, subtree: true });
+    schedule();
+    return () => {
+      cancelAnimationFrame(frame);
+      ro.disconnect();
+      mo.disconnect();
+      host.style.removeProperty("--rail-shift");
+    };
+  }, [dim]);
+
   return (
     <div ref={root} className="wells-esri relative h-full w-full">
       <div ref={holder} className="h-full w-full" />
@@ -2481,8 +2538,12 @@ function WellsMapBody({
         </div>
       ) : null}
       {dim === "3d" && <SceneOverlay />}
-      {dim === "2d" && <ZoomButtons engine={engine} />}
-      <DimensionToggle value={dim} onChange={setDim} />
+      {/* Ойртуулах, 2D/3D — баруун ирмэгийн дундад; дээрх хэрэгслүүд (суурь
+          зураг, давхарга …) `--rail-shift`-ээр буугдаж түүний ДЭЭР залгана */}
+      <div className="map-rail absolute top-[calc(50%-28px)] right-2.5 z-10 flex flex-col items-end gap-2">
+        {dim === "2d" && <ZoomButtons engine={engine} />}
+        <DimensionToggle value={dim} onChange={setDim} />
+      </div>
     </div>
   );
 }
@@ -2729,7 +2790,7 @@ function DimensionToggle({ value, onChange }: { value: "2d" | "3d"; onChange: (v
     <div
       role="radiogroup"
       aria-label="Харагдацын хэмжээс"
-      className="elevated absolute top-[calc(50%+48px)] right-2.5 z-10 flex flex-col divide-y divide-line overflow-hidden rounded-xs border border-line-2 bg-paper/90 backdrop-blur"
+      className="elevated flex flex-col divide-y divide-line overflow-hidden rounded-xs border border-line-2 bg-paper/90 backdrop-blur"
     >
       {(["2d", "3d"] as const).map((d) => {
         const on = value === d;
@@ -2741,8 +2802,8 @@ function DimensionToggle({ value, onChange }: { value: "2d" | "3d"; onChange: (v
             onClick={() => onChange(d)}
             className={
               on
-                ? "flex size-7 items-center justify-center bg-data/15 text-[11px] font-semibold text-data"
-                : "flex size-7 items-center justify-center text-[11px] font-medium text-ink-2 transition-colors hover:bg-paper-hi hover:text-ink"
+                ? "flex size-[26px] items-center justify-center bg-data/15 text-[11px] font-semibold text-data"
+                : "flex size-[26px] items-center justify-center text-[11px] font-medium text-ink-2 transition-colors hover:bg-paper-hi hover:text-ink"
             }
           >
             {d.toUpperCase()}
@@ -2763,18 +2824,18 @@ function ZoomButtons({ engine }: { engine: React.RefObject<Live | null> }) {
     view?.goTo({ zoom: view.zoom + d }, { duration: 250 }).catch(() => {});
   };
   return (
-    <div className="elevated absolute top-1/2 right-2.5 z-10 flex -translate-y-1/2 flex-col divide-y divide-line overflow-hidden rounded-xs border border-line-2 bg-paper/92 backdrop-blur-md">
+    <div className="elevated flex flex-col divide-y divide-line overflow-hidden rounded-xs border border-line-2 bg-paper/92 backdrop-blur-md">
       <button
         onClick={() => step(1)}
         aria-label="Ойртуулах"
-        className="flex size-7 items-center justify-center text-ink-2 transition-colors hover:bg-paper-hi hover:text-ink"
+        className="flex size-[26px] items-center justify-center text-ink-2 transition-colors hover:bg-paper-hi hover:text-ink"
       >
         <Plus size={13} />
       </button>
       <button
         onClick={() => step(-1)}
         aria-label="Холдуулах"
-        className="flex size-7 items-center justify-center text-ink-2 transition-colors hover:bg-paper-hi hover:text-ink"
+        className="flex size-[26px] items-center justify-center text-ink-2 transition-colors hover:bg-paper-hi hover:text-ink"
       >
         <Minus size={13} />
       </button>

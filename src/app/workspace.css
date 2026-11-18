@@ -1298,6 +1298,45 @@ html[data-department-preview="true"] .workspace-main { --workspace-gutter: 0px; 
 .map-tint {
   background: color-mix(in oklab, var(--data) 15%, var(--paper));
 }
+/*
+  ЗУРАГ ДЭЭРХ ХЭРЭГСЛИЙН ТОВЧ — НЭГ ХЭВ, НЭГ БАГАНА (хэрэглэгч 2026-11-17:
+  "6 хэлтсийн webmap дээрх icon toggle-уудыг нэг эгнээнд, нэг шугамд").
+  Esri-ийн суурь зургийн товч, ойртуулах товч, 2D/3D сэлгэгч бүгд 28px;
+  React-ын товчнууд (шошго, давхарга, нэмэлт давхарга, хэлтсийн давхарга)
+  32px байсан тул баруун ирмэг нь таарч төв нь 2px зөрж, нэмэлт давхаргын
+  товч бүр суурь зургийн ЗҮҮН ТАЛД хэвтээ сууж байв. Одоо бүгд энэ анги,
+  `MapToolStack` (`map/tool-stack.tsx`) баганад — суурь зургийн доор 8px
+  завсартай (`top: 46px` = 10 + 28 + 8).
+*/
+.map-tool {
+  position: relative;
+  display: flex;
+  width: 28px;
+  height: 28px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line-2);
+  border-radius: 2px;
+  background: color-mix(in oklab, var(--paper) 90%, transparent);
+  color: var(--ink-2);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(8px);
+  transition: color 120ms, background-color 120ms;
+}
+.map-tool:hover {
+  background: var(--paper-hi);
+  color: var(--ink);
+}
+/* Баганын дээд хэсэг (суурь зураг, давхарга …) ойртуулах, 2D/3D-ийн ЯГ ДЭЭР
+   залгана — шилжилтийг `WellsMap` хэмжиж эх элементэд бичнэ */
+.map-rail-shift,
+.wells-esri .esri-ui-top-right {
+  transform: translateY(var(--rail-shift, 0px));
+}
+.map-tool.is-on {
+  background: color-mix(in oklab, var(--data) 15%, var(--paper));
+  color: var(--data);
+}
 .pe-loc {
   display: grid;
   gap: 9px;
@@ -3362,6 +3401,10 @@ html[data-department-preview="true"] .workspace-main { --workspace-gutter: 0px; 
 }
 /* Esri-ийн гадна хайрцаг (32px, калцитын саарал дэвсгэр, өөрийн сүүдэр) — тунгалаг, товчныхоо хэмжээтэй */
 .wells-esri .esri-ui .esri-component.esri-expand {
+  /* Esri-ийн `.esri-expand { min-width: 32px }` — 28px товч 32px савны ЗҮҮН талд суугаад
+     бусад товчноос 4px дотогш зөрдөг байв (хэрэглэгч 2026-11-18: "basemap gantsaaraa neg egneend orohgui") */
+  min-width: 28px;
+  min-height: 28px;
   background: transparent;
   box-shadow: none;
 }

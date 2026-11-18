@@ -21,14 +21,12 @@ import {
 } from "@/components/charts";
 import { BasemapGallery } from "@/components/map/basemap-gallery";
 import { MapTip, MapTipRow, useMapTip } from "@/components/map/hover-tip";
-import { OverlayControl } from "@/components/map/overlay-control";
 import { FilterBar, FilterMenu, PickList } from "@/components/wells/filter-bar";
 import { Columns } from "@/components/ui/resizable-columns";
 import {
   defaultBasemap,
   type Basemap,
   type Extent,
-  type MapOverlay,
 } from "@/components/wells/map";
 import {
   fetchToilets,
@@ -114,7 +112,6 @@ export function OrchinDashboard() {
     Нэмэлт давхарга (хил, бүс). Эх сурвалж солиход ч үлдэнэ — хоёр зураг
     ижил газарзүйн лавлагаа хэрэглэнэ.
   */
-  const [overlays, setOverlays] = React.useState<MapOverlay[]>([]);
 
   React.useEffect(() => {
     const ac = new AbortController();
@@ -769,7 +766,6 @@ export function OrchinDashboard() {
                   basemap={basemap}
                   onSelect={() => {}}
                   focus={focus}
-                  overlays={overlays}
                   cluster={false}
                   firefly={PIT_FIRE}
                 />
@@ -783,13 +779,11 @@ export function OrchinDashboard() {
                   onSelect={() => {}}
                   onHover={tip.onHover}
                   focus={focus}
-                  overlays={overlays}
                   cluster={false}
                   pulse
                 />
               )}
               <BasemapGallery value={basemap} onChange={setBasemap} />
-              <OverlayControl value={overlays} onChange={setOverlays} />
 
               {/*
                 ХӨВӨГЧ ТАЙЛБАР. Тэмдэглэгээний хажууд гарна — 17 цэгийн

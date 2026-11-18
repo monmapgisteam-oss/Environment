@@ -18,14 +18,12 @@ import {
 } from "@/components/charts";
 import { BasemapGallery } from "@/components/map/basemap-gallery";
 import { MapTip, MapTipRow, useMapTip } from "@/components/map/hover-tip";
-import { OverlayControl } from "@/components/map/overlay-control";
 import { FilterBar, FilterMenu, PickList } from "@/components/wells/filter-bar";
 import { Columns } from "@/components/ui/resizable-columns";
 import {
   defaultBasemap,
   type Basemap,
   type Extent,
-  type MapOverlay,
   type MapPoints,
   zoomForScale,
 } from "@/components/wells/map";
@@ -110,7 +108,6 @@ export function EcoDashboard() {
   const [showParcels, setShowParcels] = React.useState(true);
 
   const [basemap, setBasemap] = React.useState<Basemap>(defaultBasemap);
-  const [overlays, setOverlays] = React.useState<MapOverlay[]>([]);
 
   React.useEffect(() => {
     let alive = true;
@@ -576,12 +573,10 @@ export function EcoDashboard() {
                 onSelect={(oid) => setPicked(sel === oid ? null : oid)}
                 onHover={tip.onHover}
                 focus={focus}
-                overlays={overlays}
                 cluster={false}
                 onZoom={(z) => setNear(z >= PARCEL_NEAR)}
               />
               <BasemapGallery value={basemap} onChange={setBasemap} />
-              <OverlayControl value={overlays} onChange={setOverlays} />
 
               {/*
                 Давхаргын тайлбар — зурган дээр ямар хоёр зүйл давхарлаж

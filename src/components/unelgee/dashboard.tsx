@@ -18,6 +18,7 @@ import {
 import type { Datum } from "@/components/charts";
 import { BasemapGallery } from "@/components/map/basemap-gallery";
 import { UnelgeeLayers } from "@/components/unelgee/dept-layers";
+import { MapToolStack } from "@/components/map/tool-stack";
 import type { MapOverlay } from "@/components/wells/map";
 import { MapTip, MapTipRow, useMapTip } from "@/components/map/hover-tip";
 import { FilterBar, FilterMenu, PickList } from "@/components/wells/filter-bar";
@@ -584,7 +585,9 @@ export function UnelgeeDashboard() {
               cluster={false}
             />
             <BasemapGallery value={basemap} onChange={setBasemap} />
-            <UnelgeeLayers current={[`assess-${year}`]} value={layers} onChange={setLayers} />
+            <MapToolStack>
+              <UnelgeeLayers inline current={[`assess-${year}`]} value={layers} onChange={setLayers} />
+            </MapToolStack>
 
             <MapLegend
               title="Нэгж талбарын ангилал"

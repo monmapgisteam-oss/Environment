@@ -546,7 +546,7 @@ export function WasteDashboard() {
             </div>
           )}
 
-          <BasemapGallery value={basemap} onChange={setBasemap} placement="top-left" />
+          <BasemapGallery value={basemap} onChange={setBasemap} />
 
           <Legend
             items={[

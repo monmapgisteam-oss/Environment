@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { MapToolStack } from "@/components/map/tool-stack";
 import dynamic from "next/dynamic";
 import {
   Building2,
@@ -447,7 +448,9 @@ export function PetitionsDashboard() {
                   cluster={false}
                 />
                 <BasemapGallery value={basemap} onChange={setBasemap} />
-                <MineralLayers current="petitions" value={layers} onChange={setLayers} />
+                <MapToolStack>
+                  <MineralLayers current="petitions" value={layers} onChange={setLayers} />
+                </MapToolStack>
             
                 {/*
                   ХӨВӨГЧ ТАЙЛБАР. Анхан шатны шүүлт нь энэ самбарын гол

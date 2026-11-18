@@ -671,7 +671,7 @@ export function ChemSystemDashboard() {
                   {warnCount > 0 && <span className="flex items-center gap-1.5"><i className="size-2 rounded-full" style={{ background: WARN_COLOR }} />Театр, музей, цэцэрлэг, Засгийн газрын ордон дээр <span className="num text-ink-3">{num(warnCount)}</span></span>}
                 </div>
               )}
-              <BasemapGallery value={basemap} onChange={setBasemap} placement="top-left" />
+              <BasemapGallery value={basemap} onChange={setBasemap} />
 
               {hovered ? (
                 <MapTip state={tip}>

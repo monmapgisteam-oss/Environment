@@ -73,7 +73,7 @@ export function SceneOverlay() {
                     /* Esri-ийн өөрийн товчнуудыг нуух — платформ өөрийн
                        ойртуулах товчтой; тэдний навигацийг хулгана,
                        хуруугаар хийнэ */
-                    ui: { components: [] },
+                    ui: { components: [], padding: { top: 10, right: 10, bottom: 10, left: 10 } },
                     environment: { atmosphereEnabled: true, lighting: { directShadowsEnabled: false } },
                   });
                   /* Баруун дээд буланд: суурь зураг · давхарга · хэмжилт */
@@ -110,7 +110,7 @@ export function SceneOverlay() {
   }, []);
 
   return (
-    <div className="absolute inset-0 z-[5] bg-paper">
+    <div className="scene-overlay absolute inset-0 z-[5] bg-paper">
       <div ref={holder} className="h-full w-full" />
       {status !== "ready" && (
         <div className="pointer-events-none absolute inset-x-0 bottom-3 flex justify-center">

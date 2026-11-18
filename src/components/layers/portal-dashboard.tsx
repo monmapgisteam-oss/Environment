@@ -43,7 +43,6 @@ import {
   type Datum,
 } from "@/components/charts";
 import { BasemapGallery } from "@/components/map/basemap-gallery";
-import { MapLayerPicker } from "@/components/layers/map-layer-picker";
 import {
   countParcelsIn,
   PARCEL_CUT_LABELS,
@@ -2139,6 +2138,19 @@ function LayersBoard({
     }
     return { at: { oid, lon, lat }, text, colors: tinted ? colors : null };
   }, [views, uidBase, palettes]);
+
+  /*
+    ⚠ ШОШГО БИЧИХ ЗҮЙЛ БАЙХГҮЙ ЗУРАГТ ТОВЧ ГАРАХГҮЙ (хэрэглэгч 2026-11-18: "zarim map deer bga shoshgo
+    asaah gej darhad map deer uurchlult alga" → "zarim polygon line deer shoshgo asaah shaardlagagui
+    uchir iconoos has"). Нэргүй давхарга ({@link LABEL_MAX}, `labelMeasure: false`) шошгогүй тул
+    товч нь юу ч сэлгэдэггүй байв.
+  */
+  const hasLabels = React.useMemo(
+    () =>
+      points.text.some(Boolean) ||
+      shapes.features.some((f) => Boolean((f.properties as { t?: string } | null)?.t)),
+    [points.text, shapes],
+  );
 
   const visible = React.useMemo(
     () => Uint32Array.from(points.at.oid, (_, i) => i),
@@ -6350,48 +6362,39 @@ function LayersBoard({
                 {/* Суурь зургийн тэмдгийн ЯГ ДООР (top-2.5 + 28px + 8px):
                   шошгын унтраалга, түүний доор давхаргын сонголт (хэрэглэгч
                   2026-10-16: "basemap iconii door bairluul") */}
-                <div className="absolute top-[46px] right-2.5 z-[15] flex flex-col items-end gap-1.5">
+                <div className="map-rail-shift absolute top-[46px] right-2.5 z-[15] flex flex-col items-end gap-2">
+                  {hasLabels ? (
                   <button
                     type="button"
                     aria-pressed={showLabels}
-                    onClick={() => setShowLabels((v) => !v)}
+                    onClick={() => {
+                      const next = !showLabels;
+                      setShowLabels(next);
+                      /* Шошго нь хязгаараас ойртсон үед л гарна — хол байхад асаавал юу ч
+                         өөрчлөгдөхгүй мэт харагдах тул төвөө хадгалан хязгаар хүртэл ойртоно
+                         (нэгж талбарын товчтой нэг арга) */
+                      if (!next || !view || view.zoom >= labelZoom) return;
+                      const [w, s2, e, n] = view.box;
+                      const k = 2 ** (view.zoom - labelZoom - 0.3);
+                      const cx = (w + e) / 2;
+                      const cy = (s2 + n) / 2;
+                      const dx = ((e - w) / 2) * k;
+                      const dy = ((n - s2) / 2) * k;
+                      setParcelFocus([cx - dx, cy - dy, cx + dx, cy + dy]);
+                    }}
                     title={
                       showLabels
                         ? "Шошгыг унтраах"
-                        : `Шошгыг асаах (1:${num(LABEL_SCALE)}-аас ойртоход)`
+                        : `Шошгыг асаах (1:${num(set.labelScale ?? LABEL_SCALE)}-аас ойртоход)`
                     }
-                    className={cn(
-                      "elevated flex size-8 items-center justify-center rounded-xs border backdrop-blur-md transition-colors",
-                      showLabels
-                        ? "map-tint border-data/50 text-ink"
-                        : "border-line bg-paper/85 text-ink-3 hover:text-ink",
-                    )}
+                    className={cn("map-tool", showLabels && "is-on")}
                   >
                     <Tag size={14} strokeWidth={1.75} />
                   </button>
-                  {mapTools}
-                  {mapIds.length ? (
-                    <div>
-                      <MapLayerPicker
-                        items={mapIds.map((id) => {
-                          const info = infos[id];
-                          const isOn = on.includes(id);
-                          return {
-                            id,
-                            name: info?.name ?? set.names?.[id] ?? id,
-                            tone: toneOf(id),
-                            on: isOn,
-                            sub: info
-                              ? `${num(info.count)} бүртгэл · ${GEOMETRY_LABEL[info.geometry] ?? info.geometry}`
-                              : "Уншиж байна…",
-                            error: failed[id],
-                            loading: isOn && !loaded[id] && !failed[id],
-                          };
-                        })}
-                        onToggle={(id) => (infos[id] ? toggle(id) : retry(id))}
-                      />
-                    </div>
                   ) : null}
+                  {mapTools}
+                  {/* ⚠ "Давхарга" сонгогч (`MapLayerPicker`) УСТСАН (хэрэглэгч 2026-11-18: "iim dawharguud
+                      bbal del hii") — `mapOnly` давхаргууд "Хэлтсийн давхарга"-д (`mapTools`) */}
                 </div>
                 {/* ⚠ НЭГЖ ТАЛБАРЫН ТОВЧ үнэлгээний хэлтэст ГАРАХГҮЙ (хэрэглэгч,
                   2026-10-06: "тэр нэгж талбарыг del, хэлтсийн бүх
