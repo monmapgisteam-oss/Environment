@@ -8,10 +8,7 @@
    тавьдаг тул дүрэм илүүц байв. Зураг доторх товч (2D/3D, ойртуулах) өөрийн хэмжээгээрээ. */
 .root button { cursor: pointer; }
 .root :global([data-filter-trigger]) { min-height: 27px; gap: 5px; padding: 3px 8px; border-radius: 4px; font-size: 11px; line-height: 18px; }
-.root button:focus-visible, .root select:focus-visible, .root input:focus-visible, .root summary:focus-visible { outline: 2px solid var(--moss); outline-offset: 2px; }
-.yearSwitch, .viewSwitch { display: flex; align-items: center; gap: 4px; }
-.yearSwitch button { padding: 4px 8px; border: 1px solid var(--line); border-radius: 2px; font-size: 11px; color: var(--ink-3); }
-.yearSwitch button[aria-pressed=true] { background: color-mix(in oklab, var(--moss) 10%, var(--paper-2)); border-color: var(--moss); color: var(--ink); }
+.root button:focus-visible, .root select:focus-visible, .root input:focus-visible, .root summary:focus-visible { outline: 2px solid var(--moss); outline-offset: 2px; }.viewSwitch { display: flex; align-items: center; gap: 4px; }
 .search { display: flex; align-items: center; gap: 6px; width: 165px; min-width: 0; padding: 4px 7px; border: 1px solid var(--line); border-radius: 2px; color: var(--ink-3); }
 .search input { width: 100%; min-width: 0; outline: none; background: transparent; font-size: 11px; color: var(--ink); }
 .search button { display: grid; place-items: center; }

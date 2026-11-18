@@ -59,7 +59,7 @@ export async function fetchDutyAnalysis(signal?: AbortSignal): Promise<DutyAnaly
 }
 
 /** Change detection only, not a security hash. Performance changes don't invalidate a duty review. */
-export function dutyFingerprint(task: Task): string {
+function dutyFingerprint(task: Task): string {
   const text = [task.no, task.staff, task.unit, task.text, task.measure, task.target, task.start, task.end]
     .map((v) => v ?? "").join("\x1f");
   let hash = 2166136261;

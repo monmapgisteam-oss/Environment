@@ -15,7 +15,6 @@
   ⚠ Өнгө нь зурагтай ЯГ ИЖИЛ эх сурвалжаас ирэх ёстой.
 */
 
-import * as React from "react";
 import { cn } from "@/lib/utils";
 
 export type LegendItem = {

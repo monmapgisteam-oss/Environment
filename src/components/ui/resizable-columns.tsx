@@ -44,7 +44,7 @@ export type ColumnsApi = ReturnType<typeof useColumns>;
  *   тохируулж болно.
  * @param def Анхны өргөн. Аль талыг өгснөөр тухайн тал чирэгддэг болно.
  */
-export function useColumns(key: string, def: ColumnSizes) {
+function useColumns(key: string, def: ColumnSizes) {
   const el = React.useRef<HTMLDivElement | null>(null);
   const size = React.useRef<ColumnSizes>({ ...def });
   /* Аль талыг сэргээсэн бэ — багана СҮҮЛД нэмэгдэж болно */
@@ -190,7 +190,7 @@ export function useColumns(key: string, def: ColumnSizes) {
  * Tailwind нь ангийн нэрийг эх кодоос ШУУД уншдаг тул эдгээр нь бүтэн
  * мөрөөрөө бичигдсэн байх ёстой — хэсэгчлэн угсарвал үүсэхгүй.
  */
-export function columnsClass(def: ColumnSizes) {
+function columnsClass(def: ColumnSizes) {
   if (def.left == null && def.right == null) return "grid-cols-1";
   if (def.left != null && def.right != null)
     return "xl:grid-cols-[var(--col-l)_1fr_var(--col-r)]";
@@ -208,7 +208,7 @@ export function columnsClass(def: ColumnSizes) {
  * Харагдац нь ердийн үед 1px зураас, хулгана ойртоход л accent болно —
  * самбар дээр байнга харагдах хэрэгсэл болох ёсгүй.
  */
-export function ColumnHandles({ cols }: { cols: ColumnsApi }) {
+function ColumnHandles({ cols }: { cols: ColumnsApi }) {
   return (
     <>
       {cols.sides.left != null ? <Handle cols={cols} side="left" /> : null}

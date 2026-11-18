@@ -133,7 +133,7 @@ export type BearInput = {
 };
 
 /** WGS84 → UTM 48N (EPSG:32648). Тэнхлэг хоорондын алдаа < 1 мм */
-export function toUtm48(lat: number, lon: number) {
+function toUtm48(lat: number, lon: number) {
   const a = 6378137;
   const f = 1 / 298.257223563;
   const k0 = 0.9996;

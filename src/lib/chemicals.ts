@@ -60,7 +60,7 @@ export const RIGHT_LABEL = new Map<string, string>(
   RIGHTS.map((r) => [r.id, r.label] as [string, string]),
 );
 
-export function splitRights(raw: string): string[] {
+function splitRights(raw: string): string[] {
   const x = raw.toLowerCase();
   const out: string[] = [];
   for (const r of RIGHTS) if (r.match.test(x)) out.push(r.id);
@@ -98,7 +98,7 @@ function parseDates(raw: string): { from: string | null; to: string | null } {
 }
 
 /** "2027.12.31" → 20271231 */
-export function dateKey(d: string | null): number | null {
+function dateKey(d: string | null): number | null {
   if (!d) return null;
   const [y, m, day] = d.split(".").map(Number);
   return y * 10000 + m * 100 + day;

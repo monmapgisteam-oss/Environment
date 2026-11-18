@@ -20,7 +20,7 @@
 import { arcgisJson } from "@/lib/arcgis";
 import { HOSTING } from "@/lib/portal";
 
-export const ARCHIVE_SERVICE = `${HOSTING}/Hosted/Tsag_agaar_arhiv/FeatureServer`;
+const ARCHIVE_SERVICE = `${HOSTING}/Hosted/Tsag_agaar_arhiv/FeatureServer`;
 
 /**
  * Татах ЦОНХ, хоногоор.

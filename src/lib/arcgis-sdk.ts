@@ -32,7 +32,7 @@ declare global {
 
 let loading: Promise<EsriRequire> | null = null;
 
-export function loadArcgis(): Promise<EsriRequire> {
+function loadArcgis(): Promise<EsriRequire> {
   if (window.require) return Promise.resolve(window.require);
   loading ??= new Promise<EsriRequire>((resolve, reject) => {
     /* Загварын хуудсыг горимд нь тааруулна — Esri-ийн виджетүүд

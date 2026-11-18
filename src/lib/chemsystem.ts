@@ -133,7 +133,7 @@ export async function fetchChemSystem(signal?: AbortSignal): Promise<ChemSystem>
    -------------------------------------------------------------------------- */
 
 /** Эргэлзээ төрүүлэх дээд хязгаар, тонн. Үүнээс дээш 68 бичлэг байна */
-export const HUGE_TONNES = 10_000;
+const HUGE_TONNES = 10_000;
 
 /**
  * Граммыг уншихад тохиромжтой нэгж рүү буулгана.

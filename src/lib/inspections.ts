@@ -1,7 +1,7 @@
 import type { LayerField, Row } from "@/lib/portal-layers";
 
 export const inspectionText = (value: unknown) => value == null ? "" : String(value).trim();
-export const hasInspectionValue = (value: unknown) => value != null && inspectionText(value) !== "";
+const hasInspectionValue = (value: unknown) => value != null && inspectionText(value) !== "";
 export const inspectionYes = (value: unknown) => ["tiim", "тийм"].includes(inspectionText(value).toLowerCase());
 
 export function inspectionDate(value: unknown): string {

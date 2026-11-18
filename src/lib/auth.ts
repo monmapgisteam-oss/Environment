@@ -289,13 +289,6 @@ export function signOut() {
   writeSession(null);
 }
 
-/** Порталаас БҮРЭН гарах хаяг — хэрэглэгч өөр бүртгэлээр орох үед */
-export function portalSignOutUrl(): string {
-  return (
-    `${SHARING}/oauth2/signout?` +
-    new URLSearchParams({ client_id: APP_ID, redirect_uri: redirectUri() })
-  );
-}
 
 /* --------------------------------------------------------------------------
    ДОТООД ТУСЛАХУУД

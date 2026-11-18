@@ -126,7 +126,7 @@ export function deptSlug(raw: string): string | null {
 /** Газрын удирдлага — хэлтэс биш, бүтцийн ҮНДЭСТ харьяалагдана */
 export const LEAD_DEPT = "Удирдлага";
 
-export const STAFF_STATUS_FIELD = "төлөв";
+const STAFF_STATUS_FIELD = "төлөв";
 export const STAFF_STATUSES = ["Ажиллаж байгаа", "Чөлөөтэй", "Ажлаас гарсан"];
 export const STAFF_WORKING = "Ажиллаж байгаа";
 export const STAFF_LEFT = "Ажлаас гарсан";
@@ -185,7 +185,7 @@ export async function fetchStaff(signal: AbortSignal): Promise<Staff[]> {
 /* --------------------------- Z01 засвар --------------------------- */
 
 /** Засварлах эх — одоогоор унших хаягтай ижил хүснэгт */
-export const STAFF_EDIT_URL = ZAHIRGAA_LAYERS.staff;
+const STAFF_EDIT_URL = ZAHIRGAA_LAYERS.staff;
 
 export type StaffRecord = { id: number; name: string; dept: string; position: string; status: string };
 

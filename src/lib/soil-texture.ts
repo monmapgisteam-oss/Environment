@@ -180,7 +180,7 @@ function gravelPct(s: string): number | null {
  * шинэ бүтэц үүсгэвэл санах ой дүүрнэ; шат солигдох газар нь катенагийн
  * бүс (хөрсний хил) тул тэнд бүтэц солигдох нь үнэн.
  */
-export const GRAVEL_LEVELS = [10, 25, 47];
+const GRAVEL_LEVELS = [10, 25, 47];
 
 export function gravelLevel(pct: number): number {
   return pct < 15 ? 0 : pct < 35 ? 1 : 2;
@@ -915,7 +915,7 @@ function hexRgb(h: string): RGB {
 /* ── Шилжилтийн бүс ─────────────────────────────────────────────── */
 
 /** Шилжилтийн бүсийн бүтцийн өндөр, пиксел */
-export const TRANS_H = 64;
+const TRANS_H = 64;
 
 /**
  * Дээд ба доод давхаргын хоорондох ШИЛЖИЛТИЙН бүтэц — дээрээс доош

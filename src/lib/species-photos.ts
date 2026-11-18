@@ -35,7 +35,7 @@ const NOISE = [
 ];
 
 /** Чөлөөт бичсэн нэрийг толь бичгийн түлхүүр рүү буулгана */
-export function speciesKey(name: string): string {
+function speciesKey(name: string): string {
   let x = name.toLowerCase().replace(/[()]/g, " ").replace(/\s+/g, " ").trim();
   // "2 дэгдээхэй", "3-н ширхэг" зэрэг тоон хэсэг
   x = x.replace(/\d+\s*(ш|ширхэг)?/g, " ");
@@ -51,7 +51,7 @@ export function speciesKey(name: string): string {
 }
 
 /** Латин нэрээс хоёр үгт нэр. Зохиогч, он, хаалтыг хаяна. */
-export function binomial(raw: string): string | null {
+function binomial(raw: string): string | null {
   const fixed = raw
     // Бүртгэл дэх үсгийн алдаа — файл нь зөв нэрээр хадгалагдсан
     .replace(/\bServus\b/gi, "Cervus")

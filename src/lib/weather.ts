@@ -392,31 +392,6 @@ export function dayLabel(date: string): { day: string; weekday: string } {
 }
 
 /* --------------------------------------------------------------------------
-   САЛХИНЫ ЗҮГ
-
-   Эх сайт нь товчлолоор харуулдаг (Ө, БӨ, Б, БХ). Платформ дээр товчлол
-   гаргахгүй дүрэмтэй тул бүтэн нэрээр бичнэ. Найман зүг — 45 градусын
-   муж тус бүрд нэг.
-   -------------------------------------------------------------------------- */
-
-const COMPASS = [
-  "Хойд",
-  "Зүүн хойд",
-  "Зүүн",
-  "Зүүн урд",
-  "Урд",
-  "Баруун урд",
-  "Баруун",
-  "Баруун хойд",
-];
-
-export function windName(deg: number | null): string {
-  if (deg == null) return "Тодорхойгүй";
-  const i = Math.round((((deg % 360) + 360) % 360) / 45) % 8;
-  return COMPASS[i];
-}
-
-/* --------------------------------------------------------------------------
    ХЭМЖИГДЭХҮҮН
 
    Газрын зураг ба жагсаалт НЭГ хэмжигдэхүүнд захирагдана. Тус бүр өөрийн
@@ -491,14 +466,6 @@ export const WIND_BANDS: { from: number; label: string; hex: string }[] = [
   { from: 10, label: "Хүчтэй", hex: FLAME },
   { from: 15, label: "Маш хүчтэй", hex: CLAY },
 ];
-
-/** Утга → ангилал. Хил нь ДООД захаараа хамаарна (2 нь "Зөөлөн") */
-export function windBand(v: number | null) {
-  if (v == null) return null;
-  let hit = WIND_BANDS[0];
-  for (const b of WIND_BANDS) if (v >= b.from) hit = b;
-  return hit;
-}
 
 /**
  * Ангиллуудыг ШАТАН шатлал болгоно: хил бүрийн өмнө өмнөх ангийн өнгө
@@ -606,7 +573,7 @@ export function measureOf(id: MeasureId): Measure {
  * ⚠ Хөтөч `oklch(from …)`-г танихгүй бол мөр хүчингүй болж өнгө
  * УДАМШИНА — дуудагч тал үргэлж `text-ink` суурьтай байх ёстой.
  */
-export function readable(hex: string): string {
+function readable(hex: string): string {
   return `oklch(from ${hex} var(--value-l, 0.6) calc(c * var(--value-c, 1)) h)`;
 }
 

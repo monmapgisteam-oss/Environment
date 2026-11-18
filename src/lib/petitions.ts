@@ -59,7 +59,7 @@ export const SCREENINGS = [
 
 export type ScreeningId = (typeof SCREENINGS)[number]["id"];
 
-export function classifyScreening(raw: string): ScreeningId {
+function classifyScreening(raw: string): ScreeningId {
   const t = raw.trim().toLowerCase();
   if (!t) return "none";
   if (t.startsWith("дараагийн шатны шүүлтэд илгээх")) return "pass";

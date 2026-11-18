@@ -1432,26 +1432,6 @@ export function GroupedRowChart({
    гараар сольж явахгүйн тулд хилийг энд нэг л газар барина.
    -------------------------------------------------------------------------- */
 
-export function CategoryChart({
-  data,
-  selected,
-  onSelect,
-  tone,
-  /** Хэдэн ангилал хүртэл бөгжөөр харуулах вэ */
-  pieMax = 4,
-}: {
-  data: Datum[];
-  selected?: Selection;
-  onSelect?: (key: string | null) => void;
-  tone?: string;
-  pieMax?: number;
-}) {
-  return data.length > 0 && data.length <= pieMax ? (
-    <PieChart data={data} tone={tone} selected={selected} onSelect={onSelect} />
-  ) : (
-    <RowChart data={data} tone={tone} selected={selected} onSelect={onSelect} />
-  );
-}
 
 /* --------------------------------------------------------------------------
    Хоёр үзүүрт муж сонгогч (range slider).

@@ -377,6 +377,8 @@ export function DataBank() {
     const el = holder.current;
     const host = markHost.current;
     if (!el || !host) return;
+    /* Цэвэрлэгээнд ref-ийн ОДООГИЙН утгыг биш, эффект эхлэх үеийнхийг хэрэглэнэ */
+    const groups = mapGroups.current;
     const mapRoot = el.parentElement as (HTMLElement & { __engine?: { E: Esri; view: any; map: any } }) | null;
     const ac = new AbortController();
     let view: any = null;
@@ -526,7 +528,7 @@ export function DataBank() {
       recordRequest.current += 1;
       handles.forEach((h) => h.remove());
       widgets.forEach((w) => w.destroy());
-      mapGroups.current.clear();
+      groups.clear();
       host.replaceChildren();
       if (mapRoot && mapRoot.__engine?.view === view) delete mapRoot.__engine;
       view?.destroy();

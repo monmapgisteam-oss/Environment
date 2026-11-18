@@ -707,22 +707,6 @@ export function parcelCountsIn(
   return p;
 }
 
-/** Хэд хэдэн бүсийн үр дүнг ДУГААРААР нь давхардалгүй нэгтгэнэ */
-export function mergeParcels(tiles: readonly ParcelTile[]): ParcelTile {
-  const seen = new Set<number>();
-  const features: GeoJSON.Feature[] = [];
-  let capped = false;
-  for (const t of tiles) {
-    capped = capped || t.capped;
-    for (const f of t.data.features) {
-      const id = Number(f.id ?? f.properties?.objectid);
-      if (!Number.isFinite(id) || seen.has(id)) continue;
-      seen.add(id);
-      features.push(f);
-    }
-  }
-  return { data: { type: "FeatureCollection", features }, capped };
-}
 
 /**
  * АСУУЛГЫН ГЕОМЕТРИЙГ ХЯЛБАРЧИЛНА (Douglas–Peucker).

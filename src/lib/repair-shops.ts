@@ -35,7 +35,7 @@ export const REPAIR_SERVICE = `${HOSTING}/Hosted/Auto_zaswar/FeatureServer/2`;
   Таних боломжгүй код ирвэл БАЙГААГААР нь үлдэнэ — таамаглан нэрлэвэл
   байхгүй баримт нэмнэ.
 */
-export const DISTRICT_NAMES: Record<string, string> = {
+const DISTRICT_NAMES: Record<string, string> = {
   СХД: "Сонгинохайрхан",
   БЗД: "Баянзүрх",
   БГД: "Баянгол",

@@ -39,7 +39,7 @@ import { cn } from "@/lib/utils";
   товч эрхийн хязгаарыг тойрох зам болохгүй.
 */
 
-export const UNELGEE_SCOPE = "unelgee-uur-amisgal";
+const UNELGEE_SCOPE = "unelgee-uur-amisgal";
 
 type Entry = {
   id: string;
