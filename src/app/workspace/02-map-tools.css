@@ -1,0 +1,728 @@
+/* Зураг дээрх хэрэгслийн товч, багана, засварлагч, өгөгдлийн сан — workspace.css-ийн 1139–1864-р мөр (2026-11-18-нд хуваасан) */
+
+/*
+  ЗУРАГ ДЭЭРХ ХЭРЭГСЛИЙН ТОВЧ — НЭГ ХЭВ, НЭГ БАГАНА (хэрэглэгч 2026-11-17:
+  "6 хэлтсийн webmap дээрх icon toggle-уудыг нэг эгнээнд, нэг шугамд").
+  Esri-ийн суурь зургийн товч, ойртуулах товч, 2D/3D сэлгэгч бүгд 28px;
+  React-ын товчнууд (шошго, давхарга, нэмэлт давхарга, хэлтсийн давхарга)
+  32px байсан тул баруун ирмэг нь таарч төв нь 2px зөрж, нэмэлт давхаргын
+  товч бүр суурь зургийн ЗҮҮН ТАЛД хэвтээ сууж байв. Одоо бүгд энэ анги,
+  `MapToolStack` (`map/tool-stack.tsx`) баганад — суурь зургийн доор 8px
+  завсартай (`top: 46px` = 10 + 28 + 8).
+*/
+.map-tool {
+  position: relative;
+  display: flex;
+  width: 28px;
+  height: 28px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line-2);
+  border-radius: 2px;
+  background: color-mix(in oklab, var(--paper) 90%, transparent);
+  color: var(--ink-2);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(8px);
+  transition: color 120ms, background-color 120ms;
+}
+.map-tool:hover {
+  background: var(--paper-hi);
+  color: var(--ink);
+}
+/* Баганын дээд хэсэг (суурь зураг, давхарга …) ойртуулах, 2D/3D-ийн ЯГ ДЭЭР
+   залгана — шилжилтийг `WellsMap` хэмжиж эх элементэд бичнэ */
+.map-rail-shift,
+.wells-esri .esri-ui-top-right {
+  transform: translateY(var(--rail-shift, 0px));
+}
+.map-tool.is-on {
+  background: color-mix(in oklab, var(--data) 15%, var(--paper));
+  color: var(--data);
+}
+.pe-loc {
+  display: grid;
+  gap: 9px;
+  margin: 0 0 16px;
+  padding: 10px 12px 12px;
+  border: 1px solid color-mix(in oklab, var(--moss) 30%, transparent);
+  border-radius: 10px;
+  background: color-mix(in oklab, var(--moss) 6%, transparent);
+}
+.pe-loc.is-bad {
+  border-color: var(--clay);
+}
+.pe-loc legend {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 5px;
+  color: var(--moss);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.pe-loc-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.pe-loc label,
+.pe-field {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+.pe-loc label > span,
+.pe-field > span {
+  color: var(--ink-3);
+  font-size: 10.5px;
+  font-weight: 500;
+}
+.pe-field > span b {
+  color: var(--clay);
+}
+.pe-loc input,
+.pe-field input,
+.pe-field select {
+  width: 100%;
+  height: 32px;
+  padding: 0 9px;
+  border: 1px solid var(--line-2);
+  border-radius: 7px;
+  background: var(--paper);
+  color: var(--ink);
+  font-size: 12.5px;
+  outline: none;
+}
+.pe-loc input:focus,
+.pe-field input:focus,
+.pe-field select:focus {
+  border-color: var(--moss);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--moss) 18%, transparent);
+}
+.pe-loc input[aria-invalid="true"],
+.pe-field.is-bad input,
+.pe-field.is-bad select {
+  border-color: var(--clay);
+}
+.pe-loc input.num,
+.pe-field input.num {
+  text-align: right;
+}
+.pe-pick {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 30px;
+  border: 1px solid var(--line-2);
+  border-radius: 7px;
+  color: var(--ink-2);
+  font-size: 11.5px;
+}
+.pe-pick:hover {
+  background: var(--paper-3);
+  color: var(--ink);
+}
+.pe-pick.is-on {
+  border-color: var(--moss);
+  background: color-mix(in oklab, var(--moss) 14%, transparent);
+  color: var(--moss);
+}
+/* Дүрсийн булангийн цэг — № · уртраг · өргөрөг · хасах, нэг мөрөнд */
+.pe-verts {
+  display: grid;
+  gap: 5px;
+}
+.pe-vert {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) minmax(0, 1fr) 22px;
+  gap: 6px;
+  align-items: center;
+}
+.pe-vert > span {
+  color: var(--ink-3);
+  font-size: 10.5px;
+  text-align: center;
+}
+.pe-vert.is-head > span {
+  font-weight: 500;
+}
+.pe-vert.is-head > span:nth-child(2),
+.pe-vert.is-head > span:nth-child(3) {
+  text-align: right;
+  padding-right: 9px;
+}
+.pe-loc .pe-vert input {
+  height: 28px;
+  padding: 0 7px;
+  font-size: 12px;
+}
+.pe-vert-del,
+.pe-vert-add {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  border: 1px solid var(--line-2);
+  border-radius: 6px;
+  color: var(--ink-3);
+}
+.pe-vert-del {
+  width: 22px;
+  height: 22px;
+  justify-self: center;
+}
+.pe-vert-del:hover:not(:disabled),
+.pe-vert-add:hover {
+  color: var(--ink);
+  background: var(--paper-3);
+}
+.pe-vert-del:disabled {
+  opacity: 0.35;
+}
+.pe-vert-add {
+  height: 26px;
+  font-size: 11px;
+  justify-self: start;
+  padding: 0 9px;
+}
+.pe-place {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 16px;
+  color: var(--ink-2);
+  font-size: 11.5px;
+}
+.pe-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px 10px;
+}
+.pe-field.is-wide {
+  grid-column: 1 / -1;
+}
+.pe-err {
+  color: var(--clay);
+  font-size: 10.5px;
+  font-style: normal;
+}
+.pe-form-foot {
+  display: grid;
+  gap: 8px;
+  padding: 12px 16px;
+  flex-shrink: 0;
+  border-top: 1px solid var(--line);
+}
+.pe-actions,
+.pe-confirm {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.pe-actions .pe-primary {
+  margin-left: auto;
+}
+.pe-confirm span {
+  margin-right: auto;
+  color: var(--ink);
+  font-size: 12px;
+}
+.pe-primary,
+.pe-ghost,
+.pe-danger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 14px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.pe-primary {
+  background: var(--moss);
+  color: var(--paper);
+}
+.pe-primary:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.pe-ghost {
+  border: 1px solid var(--line-2);
+  color: var(--ink-2);
+  font-weight: 500;
+}
+.pe-ghost:hover {
+  background: var(--paper-3);
+  color: var(--ink);
+}
+.pe-del {
+  width: 32px;
+  padding: 0;
+  color: var(--clay);
+}
+.pe-danger {
+  background: var(--clay);
+  color: #fff;
+}
+.pe-notice {
+  font-size: 11.5px;
+}
+.pe-notice.is-ok {
+  color: var(--moss);
+}
+.pe-notice.is-bad {
+  color: var(--clay);
+}
+.pe-split {
+  position: relative;
+  touch-action: none;
+}
+.pe-split.is-col {
+  cursor: col-resize;
+}
+.pe-split.is-row {
+  cursor: row-resize;
+}
+.pe-split::after {
+  content: "";
+  position: absolute;
+  border-radius: 2px;
+  background: var(--line-2);
+  transition: background 0.15s;
+}
+.pe-split.is-col::after {
+  top: 50%;
+  left: 3px;
+  width: 4px;
+  height: 36px;
+  translate: 0 -50%;
+}
+.pe-split.is-row::after {
+  top: 3px;
+  left: 50%;
+  width: 36px;
+  height: 4px;
+  translate: -50% 0;
+}
+.pe-split:hover::after,
+.pe-split.is-drag::after {
+  background: var(--moss);
+}
+@media (max-width: 960px) {
+  .pe-body {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 10px;
+  }
+  .pe-split.is-col {
+    display: none;
+  }
+}
+.dataset-panel {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 15px;
+  background: var(--paper-2);
+}
+.dataset-panel-heading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  flex-shrink: 0;
+}
+.dataset-panel-symbol {
+  color: var(--moss);
+}
+.dataset-panel-heading h2 {
+  margin-top: 3px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.5;
+  /* ТОМ ҮСГЭЭР (хэрэглэгч 2026-10-16) — бүлгийн нэртэй нэг хэв */
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+.dataset-eyebrow {
+  display: block;
+  color: var(--ink-3);
+  font-size: 8px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  line-height: 1.5;
+}
+.dataset-panel-count {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  margin-left: auto;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  color: var(--ink-3);
+  font-size: 10px;
+}
+.dataset-panel-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 9px;
+  margin: 0 10px 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--ink-3);
+  background: var(--paper);
+  flex-shrink: 0;
+}
+.dataset-panel-search input {
+  width: 100%;
+  min-width: 0;
+  background: transparent;
+  color: var(--ink);
+  outline: none;
+  font-size: 11px;
+}
+.dataset-panel-search svg {
+  flex-shrink: 0;
+}
+.dataset-panel-search:focus-within {
+  border-color: var(--moss);
+}
+.dataset-panel-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 0 6px 8px;
+  min-height: 0;
+  overflow-y: auto;
+  flex: 1;
+}
+.dataset-panel-item {
+  border: 1px solid transparent;
+  border-radius: 10px;
+  transition:
+    background 150ms,
+    border-color 150ms;
+}
+.dataset-panel-item:hover {
+  background: var(--paper-3);
+}
+.dataset-panel-item.is-selected {
+  border-color: color-mix(in oklab, var(--moss) 28%, transparent);
+  background: color-mix(in oklab, var(--moss) 8%, var(--paper-2));
+}
+.dataset-panel-choice {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  width: 100%;
+  padding: 8px;
+  border-radius: inherit;
+  text-align: left;
+}
+.dataset-panel-item-icon {
+  flex-shrink: 0;
+  margin-top: 1px;
+  color: var(--ink-3);
+}
+.dataset-panel-item.is-selected .dataset-panel-item-icon {
+  color: var(--moss);
+}
+.dataset-panel-copy {
+  min-width: 0;
+  flex: 1;
+}
+.dataset-panel-copy strong {
+  display: block;
+  color: var(--ink-2);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+.dataset-panel-item.is-selected strong {
+  color: var(--moss);
+  font-weight: 600;
+}
+.dataset-panel-copy > span {
+  display: block;
+  margin-top: 2px;
+  font-size: 10px;
+  line-height: 1.4;
+  color: var(--ink-3);
+}
+.dataset-panel-copy small {
+  display: inline-block;
+  margin-top: 6px;
+  padding: 2px 5px;
+  border-radius: 4px;
+  background: var(--paper-3);
+  font-size: 9px;
+  color: var(--ink-3);
+}
+/* Жагсаалт доторх задардаг бүлэг (`SourceTabs sections`) — мөр нь
+   сэдвийн мөртэй нэг хэмжээтэй, хүүхдүүд нь доор нь догол мөрөөр. */
+.dataset-panel-group {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  width: 100%;
+  padding: 8px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  text-align: left;
+  transition: background 150ms;
+}
+.dataset-panel-group:hover {
+  background: var(--paper-3);
+}
+/* Бүлгийн нэр ТОМ ҮСГЭЭР (хэрэглэгч 2026-10-16) — сэдвийн мөрөөс ялгарна.
+   Үгийн дундуур таслахгүй (`anywhere` нь урт том үсгийн үгийг хуваана). */
+.dataset-panel-group strong {
+  color: var(--ink);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  overflow-wrap: normal;
+}
+.dataset-panel-group.is-holding .dataset-panel-item-icon,
+.dataset-panel-group.is-holding strong {
+  color: var(--moss);
+}
+.dataset-panel-chevron {
+  flex-shrink: 0;
+  margin-top: 3px;
+  color: var(--ink-3);
+  transition: transform 150ms;
+}
+.dataset-panel-children {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 2px 0 4px 16px;
+  padding-left: 6px;
+  border-left: 1px solid var(--line);
+}
+.dataset-panel-check {
+  flex-shrink: 0;
+  margin-top: 3px;
+  color: var(--moss);
+}
+.dataset-panel-footer {
+  padding: 8px 12px;
+  flex-shrink: 0;
+  border-top: 1px solid var(--line);
+  color: var(--ink-3);
+  font-size: 10px;
+}
+.dataset-demo-toggle {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 8px 8px;
+  font-size: 10px;
+  color: var(--ink-3);
+  cursor: pointer;
+}
+.dataset-demo-toggle input {
+  accent-color: var(--moss);
+}
+.dataset-no-results {
+  padding: 24px 12px;
+  text-align: center;
+  color: var(--ink-3);
+  font-size: 12px;
+  line-height: 1.7;
+}
+.dataset-groups {
+  /* ХОЁР БАГАНАТ ТОР (хэрэглэгч 2026-11-11, ойн гурван товчоор: "1 row биш
+     2 row болго — дээшээ 2, доороо 1"): хоёр бүлэг нэг мөрөнд, гурав дахь нь
+     доороо бүтэн өргөнөөр */
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  flex-shrink: 0;
+  gap: 4px;
+  padding: 0 10px 8px;
+}
+.dataset-groups button:nth-child(3):last-child {
+  grid-column: 1 / -1;
+}
+.dataset-groups button {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 8px 3px;
+  border-radius: 7px;
+  /* ХҮРЭЭТЭЙ, дүүргэлтгүй (хэрэглэгч 2026-11-11: "дээд талын бүлгийн
+     товчийг outline болго") — сонгосон нь accent хүрээ, бусад нь зураас */
+  border: 1px solid var(--line-2);
+  background: transparent;
+  white-space: nowrap;
+  overflow: hidden;
+  font-size: 11px;
+  color: var(--ink-3);
+  transition: border-color 0.15s, color 0.15s;
+}
+.dataset-groups button:hover {
+  color: var(--ink);
+}
+.dataset-groups button[aria-pressed="true"] {
+  border-color: var(--moss);
+  color: var(--moss);
+  font-weight: 600;
+}
+.dataset-groups button > span:first-of-type {
+  /* Урт нэр тэмдгээ тасалж гаргахгүй — нэр нь "…"-ээр, бүтэн нь `title`-д */
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.dataset-group-note {
+  display: none;
+}
+@media (max-width: 1023px) {
+  .department-workspace {
+    grid-template-columns: 1fr;
+    height: auto;
+  }
+  .dataset-column {
+    position: static;
+    height: auto;
+    max-height: none;
+  }
+  .dataset-panel {
+    flex: none;
+    max-height: 320px;
+  }
+  .dataset-panel-heading {
+    padding-block: 12px;
+  }
+  .dataset-panel-list {
+    max-height: 190px;
+  }
+  .dataset-panel-footer {
+    padding-block: 8px;
+  }
+}
+.chart-empty {
+  padding: 24px 12px;
+  border: 1px dashed var(--line);
+  border-radius: 10px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+.chart-unit {
+  margin-bottom: 12px;
+  color: var(--ink-3);
+  font-size: 10px;
+}
+.bar-chart-layout {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: 9px;
+}
+.bar-chart-axis {
+  position: relative;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+  font-size: 9px;
+}
+.bar-chart-axis span {
+  position: absolute;
+  right: 0;
+  max-width: 100%;
+  transform: translateY(50%);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.bar-chart-plot {
+  position: relative;
+}
+.chart-gridline {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 1px;
+  border-top: 1px dashed var(--line);
+  pointer-events: none;
+}
+.chart-gridline:first-child {
+  border-top-style: solid;
+}
+.bar-chart-columns {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  gap: 8px;
+}
+.bar-chart-column {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  align-items: flex-end;
+  height: 100%;
+  flex: 1;
+  min-width: 0;
+  border-radius: 6px;
+}
+.bar-chart-column:not(:disabled):hover {
+  background: color-mix(in oklab, var(--moss) 5%, transparent);
+}
+.bar-chart-fill {
+  width: 80%;
+  max-width: 44px;
+  border-radius: 5px 5px 0 0;
+  transition:
+    height 200ms,
+    opacity 150ms;
+}
+.bar-chart-value {
+  position: absolute;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-size: 10px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink-2);
+}
+.bar-chart-ticks {
+  display: flex;
+  gap: 8px;
+  padding-top: 9px;
+  color: var(--ink-3);
+  font-size: 10px;
+}
+.bar-chart-ticks span {
+  min-width: 0;
+  flex: 1;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.bar-chart-ticks .is-selected {
+  color: var(--moss);
+  font-weight: 600;
+}
+/* Шошго хөрш баганын зай руу хальж болно — тэр хөрш нь хоосон шошготой */
+.bar-chart-open-ticks .bar-chart-ticks span {
+  overflow: visible;
+  text-overflow: clip;
+}

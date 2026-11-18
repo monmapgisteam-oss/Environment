@@ -1,0 +1,951 @@
+/* Диаграм, карт (давхарласан зурвас, босоо багана, мөр, бөгж, картын хэмжээ) — workspace.css-ийн 1865–2813-р мөр (2026-11-18-нд хуваасан) */
+
+/*
+  ОНООР ДАВХАРЛАСАН ЗУРВАС (`StackedBarChart`, ойн төлбөр, 2026-10-06).
+  Нэр · зурвас · нийт НЭГ эгнээнд: нэрийн багана ТОГТМОЛ (зурвасууд нэг
+  цэгээс эхэлж урт нь харьцуулагдана), утгын багана ТОГТМОЛ.
+  Хэсгүүдийн хооронд 1px цоорхой — хөрш онуудын хил тод.
+*/
+.stacked-chart {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.stacked-chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+
+  font-size: 10.5px;
+  color: var(--ink-2);
+}
+.stacked-chart-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.stacked-chart-legend i {
+  width: 8px;
+  height: 8px;
+  border-radius: 1px;
+}
+/* Тайлбар нь оны шүүлт: товч боловч ЧИП биш — хүрээгүй, зөвхөн
+   унтарсан он бүдгэрнэ. Хүрээтэй товч болговол тайлбар биш удирдлагын
+   эгнээ мэт уншигдаж, картын толгойтой өрсөлдөнө. */
+.stacked-chart-key {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 4px;
+  margin: -2px -4px;
+  border-radius: 2px;
+  color: inherit;
+  cursor: pointer;
+}
+.stacked-chart-key:hover { background: var(--paper-hi); }
+.stacked-chart-key:focus-visible { outline: 1px solid var(--line-2); }
+.stacked-chart-key.is-off { opacity: .4; }
+.stacked-chart-key.is-off i { background: transparent !important; box-shadow: inset 0 0 0 1px var(--ink-3); }
+.stacked-chart-row {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr) 64px;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  /* Нягт мөр (хэрэглэгч 2026-10-23, ойн төлбөр: гурван картын 7 дүүрэг
+     гүйлгэхгүйгээр багтах) — 6px байхад карт бүр дотроо гүйдэг байв */
+  padding: 2px 6px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  text-align: left;
+  transition:
+    background 150ms,
+    opacity 150ms;
+}
+.stacked-chart-row:not(:disabled):hover {
+  background: var(--paper-3);
+}
+.stacked-chart-row.is-selected {
+  border-color: color-mix(in oklab, var(--moss) 25%, transparent);
+  background: color-mix(in oklab, var(--moss) 7%, var(--paper-2));
+}
+.stacked-chart-label {
+  overflow: hidden;
+  font-size: 11.5px;
+  color: var(--ink-2);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.stacked-chart-track {
+  display: flex;
+  gap: 1px;
+  height: 10px;
+  overflow: hidden;
+  border-radius: 3px;
+  background: var(--paper-hi);
+}
+.stacked-chart-track span {
+  height: 100%;
+}
+/* Хэсэг дээрх утга (`labels`) — зурвас 16px, тоо дотроо голлоно.
+   ⚠ Өнгө нь БАРААН: хэсгүүд цайвараас дунд ногоон хүртэл тул цагаан
+   тоо эхний (цайвар) хэсэгт уусна. */
+.stacked-chart.is-labeled .stacked-chart-track {
+  height: 16px;
+}
+.stacked-chart.is-labeled .stacked-chart-track span {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  font-size: 10px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  white-space: nowrap;
+  color: #0b1a14;
+}
+.stacked-chart-value {
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+  text-align: right;
+}
+/* Нэрийн доорх нэмэлт утга ("174 га") — `BarChart sub` */
+.bar-chart-ticks em {
+  display: block;
+  margin-top: 2px;
+  font-style: normal;
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/*
+  КАРТАА ДҮҮРГЭСЭН БОСОО БАГАНА (`BarChart fill`, ойн хэлтэс,
+  2026-10-06). Хэвтээ зурвас өндөр картад тарж хоосон зай үлдээж байсан
+  ("арай дэндүү" → "өөрчлөөд үзээдээ"); босоо багана өндрийг шууд
+  ашиглана. Тэнхлэг гарахгүй — утга нь баганын орой дээр.
+*/
+.bar-chart.is-fill {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+}
+.bar-chart.is-fill .bar-chart-layout {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.bar-chart.is-fill .bar-chart-layout > .min-w-0 {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+}
+.bar-chart.is-fill .bar-chart-plot {
+  flex: 1 1 auto;
+  min-height: 160px;
+}
+.bar-chart.is-fill .bar-chart-fill {
+  max-width: 56px;
+}
+.bar-chart.is-fill .bar-chart-value {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.bar-chart.is-fill .bar-chart-ticks {
+  padding-top: 8px;
+  font-size: 11px;
+  color: var(--ink-2);
+}
+.bar-chart.is-fill .bar-chart-ticks em {
+  color: var(--ink-3);
+  font-size: 10.5px;
+}
+/* Зурвасын диаграм НЯГТ (хэрэглэгч 2026-09-17): мөр хоорондын зай, дотоод зай, толгой–зурвасын завсар бүгд хагасаар багассан */
+.row-chart {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.row-chart-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 3px 6px 4px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  transition:
+    background 150ms,
+    opacity 150ms;
+}
+.row-chart-item:not(:disabled):hover {
+  background: var(--paper-3);
+}
+.row-chart-item.is-selected {
+  border-color: color-mix(in oklab, var(--moss) 25%, transparent);
+  background: color-mix(in oklab, var(--moss) 7%, var(--paper-2));
+}
+.row-chart-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 3px;
+}
+.row-chart-label {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  color: var(--ink-2);
+  font-size: 11.5px;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+.row-chart-label i {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+/* Нэмэлт утга — өөр НЭГЖТЭЙ тул зурвасын хуваарьт ОРОХГҮЙ, нэрийн ард бичвэрээр */
+.row-chart-label em {
+  margin-left: 7px;
+  font-style: normal;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-3);
+}
+.row-chart-heading strong {
+  flex-shrink: 0;
+  color: var(--ink);
+  font-size: 11.5px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+/*
+  ЭЗЛЭХ ХУВЬ — тооны ард, БҮДЭГ.
+
+  ⚠ Өргөн нь ТОГТМОЛ (30px, баруун тийш эгнэсэн): эс тэгвээс "7%" ба
+  "33%" хоёр өөр байрлалд сууж, тоонуудын багана мушгирна. Нягт
+  сүлжээнд баганын эгнэлт нь уншигдацын гол хэрэгсэл.
+  ⚠ `--ink-3` нь 10–11px-д ордог тул контраст нь 4.5:1-ээс дээш
+  (харанхуйд 6.0, гэрэлд 6.3) — платформын дүрэм хэвээр.
+*/
+.row-chart-share {
+  flex-shrink: 0;
+  width: 30px;
+  text-align: right;
+  color: var(--ink-3);
+  font-size: 10.5px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+.row-chart-track {
+  display: block;
+  position: relative;
+}
+.row-chart-track-inner {
+  display: flex;
+  height: 5px;
+  overflow: hidden;
+  border-radius: 4px;
+  background: var(--paper-hi);
+}
+.row-chart-track-inner > span {
+  height: 100%;
+  transition: width 200ms;
+}
+.row-chart-guide {
+  position: absolute;
+  top: -4px;
+  bottom: -4px;
+  border-left: 1px dashed var(--ink-2);
+}
+
+/*
+  ШАХСАН МӨР — гүйлгэхгүйгээр багтаах.
+
+  Ердийн мөр ~51px тул есөн ангилал 500px гаруй болж картандаа
+  багтахгүй гүйлгүүр гаргадаг байв. Шахсан хувилбарт мөр ~31px болж,
+  ес нь 295px-д багтана (хэрэглэгчийн хүсэлт, 2026-09-17).
+
+  ⚠ Бичвэр 11.5px хэвээр — платформын 11–13px мужид багтана. Шахалт нь
+  ЗАЙНААС гарна, үсгийн хэмжээнээс биш: 10px болговол `ink-2` дээрх
+  контраст дүрэм зөрчигдөнө.
+*/
+/*
+  ⚠⚠ МӨР ДАХИН ШАХАГДСАН (2026-09-24, хэрэглэгч: "scroll-гүй,
+  мөр хооронд нь шахаад"). 31px → **25px**, өөрөөр хэлбэл
+  ердийн 51px-ээс 51% хэмнэлт — арван ангилал 250px-д багтана.
+
+  Хэмнэлт авсан дөрөв: мөр хоорондоо 2 → 1, доторх зай 3/4 → 2/2,
+  гарчгийн доор 3 → 2, зурвас 4 → 3px.
+
+  ⚠ Шахалт нь ЗАЙНААС ГАРНА, ҮСГИЙН ХЭМЖЭЭНЭЭС БИШ:
+  бичвэр 11.5px хэвээр (платформын 11–13px муж). 10px болговол
+  `ink-2` дээрх контрастын дүрэм зөрчигдөнө.
+  ⚠ ЗУРВАС 3px-ЭЭС НАРИЙСГАХГҮЙ: түүнээс нимгэн бол зурвас
+  биш зураас мэт уншигдаж, уртын харьцаа нүдэнд илэрхий байхаа
+  болно (биотехникийн хэмжигчийн зураас яг ийм шалтгаанаар хасагдсан).
+  ⚠ Товших талбай нь мөр БҮХЭЛДЭЭ хэвээр (өндөр 25px) —
+  хулганаар оноход хүрэлцэнэ.
+*/
+.row-chart.is-dense {
+  gap: 1px;
+}
+.row-chart.is-dense .row-chart-item {
+  padding: 2px 6px;
+  border-radius: 6px;
+}
+.row-chart.is-dense .row-chart-heading {
+  margin-bottom: 2px;
+  gap: 10px;
+}
+.row-chart.is-dense .row-chart-label {
+  font-size: 11.5px;
+  line-height: 1.3;
+}
+.row-chart.is-dense .row-chart-heading strong {
+  font-size: 11.5px;
+}
+.row-chart.is-dense .row-chart-track-inner {
+  height: 3px;
+  border-radius: 2px;
+}
+
+/*
+  НЭГ ЭГНЭЭНД барих. Урт нэр хоёр эгнээ болоход мөр 31px-ээс 46px болж,
+  арван найман зориулалттай карт 763px хүрч гүйлгүүртэй болдог; нэг
+  эгнээнд барихад 654px болно.
+
+  ⚠ `inline-flex` дээр `text-overflow` ажилладаггүй тул тайрах үед
+  `block` болгоно — өнгөт цэг (`i`) агуулсан диаграмд хэрэглэхгүй.
+*/
+.row-chart.is-clamped .row-chart-label {
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/*
+  ⚠⚠ НЭГ ЭГНЭЭНИЙ МӨР (`inline`, 2026-09-29, хэрэглэгч: "энэ чартыг
+  шахаад хязгаарлалтын бүс чартын доор оруулъя"). Нэр нь ДЭЭР,
+  зурвас нь ДООР суудаг ердийн бүтэц мөрийг 28px болгодог; нэр ·
+  зурвас · утга гурвыг НЭГ эгнээнд тавихад **23px** (арван найман
+  мөр 502 → 413px, карт 565 → 476px — хөтчөөр хэмжсэн).
+  ⚠ Хяналтын хэлтсийн дүүргийн мөр (`PlaceCard`) яг энэ хэлбэртэй
+  бөгөөд тэнд `RowChart`-аас САЛЖ дахин бичигдсэн байсан — одоо
+  хуваалцсан бүрэлдэхүүн өөрөө чаддаг боллоо.
+  ⚠⚠ НЭРИЙН БАГАНА ТОГТМОЛ (`--row-name`, 92px): мөр бүр ӨӨРИЙН
+  grid-тэй тул өргөнийг агуулгаар нь тавивал зурвасууд өөр өөр
+  цэгээс эхэлж, урт нь харьцуулагдахаа болино.
+  ⚠ Урт нэр цэгээр тайрагдана; бүтэн нэр нь `title`-д үлдэнэ
+  (`clamp`-тай нэг зарчим) тул `clamp`-ыг давхар өгөх шаардлагагүй.
+  ⚠⚠ УТГЫН БАГАНА ч ТОГТМОЛ (`--row-value`, 56px). Эхэндээ `auto`
+  байсан нь мөр бүрийн grid-ийг утгынх нь ОРОНГООР өөр өргөнтэй
+  болгож, зурвасны төгсгөл зөрж байв: "7" гэсэн мөрийн зурвас 198px,
+  "2,309"-ийнх 176px — ИЖИЛ хувь нь ӨӨР урттай зурагдана
+  (хөтчөөр хэмжсэн, зөрүү 22px). Диаграмын гол амлалт нь уртын
+  харьцуулалт тул энэ нь чимэглэлийн биш ҮНЭН ЗӨВИЙН асуудал.
+  ⚠ Утга нь 56px-ээс урт бол (сая гаруй тоо) дуудагч тал
+  `--row-value`-г өргөсгөнө — тоог ТАСЛАХГҮЙ.
+  ⚠ `share`-тэй ХАМТ бүү хэрэглэ: хувь нь дөрөв дэх баганад унана.
+  ⚠ Мөрийн өндөр 22px — хулганаар оноход хүрэлцэнэ. Бичвэр 11.5px
+  ХЭВЭЭР: шахалт нь ЗАЙНААС гарна, үсгийн хэмжээнээс биш.
+*/
+.row-chart.is-inline {
+  gap: 1px;
+}
+.row-chart.is-inline .row-chart-item {
+  display: grid;
+  grid-template-columns: var(--row-name, 92px) 1fr var(--row-value, 56px);
+  align-items: center;
+  column-gap: 8px;
+  padding: 1px 6px;
+  border-radius: 6px;
+}
+.row-chart.is-inline .row-chart-heading {
+  display: contents;
+}
+.row-chart.is-inline .row-chart-label {
+  grid-column: 1;
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.row-chart.is-inline .row-chart-heading strong {
+  grid-column: 3;
+  font-size: 11.5px;
+  text-align: right;
+}
+.row-chart.is-inline .row-chart-track {
+  grid-column: 2;
+  /* Утга (3-р багана) зурвасаас ӨМНӨ DOM-д байдаг тул автомат байрлал
+     зурвасыг ДАРААГИЙН мөр рүү түлхэж байв — мөрийг тогтооно */
+  grid-row: 1;
+}
+.row-chart.is-inline .row-chart-label i {
+  margin-right: 6px;
+  vertical-align: 1px;
+}
+.row-chart.is-inline .row-chart-track-inner {
+  height: 3px;
+  border-radius: 2px;
+}
+/* Тайлбар НЯГТ (хэрэглэгч 2026-09-17: "хэт их зай эзлээд байна"): мөр бүр нэг шугам — тэмдэглэл (дундаж) тусдаа мөр биш, дөрөв дэх баганад */
+.donut-chart {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 2px 0;
+}
+.donut-chart-ring {
+  flex-shrink: 0;
+  max-width: 100%;
+  height: auto;
+  overflow: visible;
+}
+.donut-chart-legend {
+  flex: 1 1 145px;
+  min-width: 0;
+}
+.donut-legend-item {
+  display: grid;
+  width: 100%;
+  grid-template-columns: 7px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 0 6px;
+  padding: 3px 4px;
+  border-bottom: 1px solid var(--line);
+  border-radius: 5px;
+  text-align: left;
+  transition:
+    opacity 150ms,
+    background 150ms;
+}
+.donut-legend-item.no-share {
+  grid-template-columns: 7px minmax(0, 1fr) auto;
+}
+.donut-legend-item:last-child {
+  border-bottom-color: transparent;
+}
+.donut-legend-item:not(:disabled):hover,
+.donut-legend-item.is-selected {
+  background: var(--paper-3);
+}
+.donut-legend-swatch {
+  width: 7px;
+  height: 7px;
+  border-radius: 2px;
+}
+.donut-legend-label {
+  font-size: 11.5px;
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink-2);
+}
+.donut-legend-item strong {
+  font-size: 11.5px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.donut-legend-note {
+  min-width: 2.6em;
+  text-align: right;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-3);
+}
+
+/*
+  ТАЙЛБАР БӨГЖНИЙ ДООР, ХОЁР БАГАНААР.
+
+  Ангилал олон (найм) үед хажуугийн нэг багана нь нарийхан болж нэр нь
+  мөрөндөө буудаг, карт нь наймхан мөрийн өндөрт сунадаг байв.
+
+  ⚠ Баганын ЁРООЛЫН зураасыг цэвэрлэнэ: хоёр баганат тор дээр сүүлийн
+  ХОЁР нүд нь тус тусын баганын ёроол болно — `nth-last-child(-n + 2)`.
+*/
+.donut-chart.is-stacked {
+  flex-direction: column;
+  gap: 12px;
+}
+.donut-chart.is-stacked .donut-chart-legend {
+  flex: none;
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: 14px;
+}
+.donut-chart.is-stacked .donut-legend-item {
+  border-bottom-color: var(--line);
+}
+.donut-chart.is-stacked .donut-legend-item:nth-last-child(-n + 2) {
+  border-bottom-color: transparent;
+}
+/* Нарийн картад хоёр багана багтахгүй — нэг багана болж буцна */
+@media (max-width: 380px) {
+  .donut-chart.is-stacked .donut-chart-legend {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+/* Үзүүлэлтийн тоо давхаргаасаа хамаарах тул багана нь АВТОМАТ */
+.analytics-overview {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  gap: 12px;
+  flex-shrink: 0;
+}
+.analytics-stat {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+  padding: 14px 18px;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: var(--paper-2);
+}
+.analytics-stat-icon {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  flex-shrink: 0;
+  border-radius: 10px;
+  background: var(--paper-3);
+  color: var(--moss);
+}
+.analytics-stat-label {
+  display: block;
+  margin-bottom: 5px;
+  font-size: 10px;
+  line-height: 1.4;
+  color: var(--ink-3);
+}
+.analytics-stat-value {
+  font-size: 23px;
+  line-height: 1.2;
+  font-weight: 600;
+  letter-spacing: -0.04em;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+/* Тооны ард бүдэг нэмэлт утга — ТХГН-ийн бүлгийн талбай */
+.analytics-stat-sub {
+  margin-left: 8px;
+  font-size: 11.5px;
+  font-weight: 400;
+  letter-spacing: 0;
+  color: var(--ink-3);
+}
+/*
+  ⚠ ЖИЖИГ ЗУРВАС (`LayerSet.overviewSplit`, ойн хэлтэс, 2026-10-06:
+  "индикатор жижигрүүл"). Ердийн нүд ~68px өндөртэй; энд ~46px —
+  зураг, диаграмд ~22px буцаана. Бичвэр 10px-ээс доош БУУХГҮЙ
+  (`ink-3`-ийн контрастын дүрэм).
+*/
+.analytics-overview.is-compact {
+  gap: 8px;
+}
+.analytics-overview.is-compact .analytics-stat {
+  gap: 10px;
+  padding: 6px 12px;
+}
+.analytics-overview.is-compact .analytics-stat-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+}
+.analytics-overview.is-compact .analytics-stat-icon svg {
+  width: 16px;
+  height: 16px;
+}
+.analytics-overview.is-compact .analytics-stat-label {
+  margin-bottom: 1px;
+}
+.analytics-overview.is-compact .analytics-stat-value {
+  font-size: 17px;
+}
+/*
+  ⚠⚠ КАРТЫН ЧИМЭГ ШАХАГДСАН (2026-09-28/29, хэрэглэгч: "ийм title
+  картын өндрийг багасга" → "чартуудыг scroll-дох шаардлагагүй шууд
+  хардаг болгоё"). Толгойн зай 14/16 → 9/12. Толгой **47 → 38px**;
+  дөрвөн карттай цэсэд ~64px хэмнэнэ. Нэг баганад гурав, дөрвөн карт
+  цувардаг тул тэр нь диаграмуудаас зуу гаруй пикселийг авч байсан.
+  ⚠ Шахалт нь ЗАЙНААС гарна, ҮСГИЙН ХЭМЖЭЭНЭЭС биш: гарчиг 12px,
+  мөрийн бичвэр 11.5px ХЭВЭЭР (платформын 11–13px муж, `RowChart
+  dense`-тэй нэг зарчим).
+  ⚠ Палитрын товч (19px) нь одоо толгойн өндрийг тогтоодог тул доторх
+  зайг 9px-ээс доош буулгах нь юу ч өгөхгүй.
+  ⚠ Хэвтээ зай 12px-ээс доош БУУРАХГҮЙ: бичвэр картын ирмэгт наалдах
+  ёсгүй.
+*/
+/*
+  ⚠⚠ БАГАНА НАРИЙСАХАД БИЧВЭР ДАВХЦАХГҮЙ (хэрэглэгч, 2026-10-06:
+  "resize хийхэд текст нь давхцахгүй шүү"). Гарчиг `min-width: 0`
+  байсан тул хамгийн урт ҮГЭЭСЭЭ ч нарийсч, "ТҮВШИН" нь хажуугийн
+  "42 бүртгэл · 3 ангилал" дээгүүр хальж байв. Одоо гарчиг хамгийн
+  урт үгээсээ нарийсахгүй (`min-content`), багтахгүй үед толгойн
+  хэсгүүд ДАРААГИЙН МӨР рүү шилжинэ (`flex-wrap`). Өргөн үед
+  харагдац өөрчлөгдөхгүй — шилжилт зөвхөн дутуу зайд үүснэ.
+*/
+.analytics-chart-head {
+  display: flex;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 10px;
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--line);
+}
+/*
+  ДИАГРАМЫН ГАРЧИГ ТОМ ҮСГЭЭР (хэрэглэгчийн хүсэлт, 2026-09-29:
+  "чартын title uppercase шүү"). Үнэлгээний хэлтэст аль хэдийн
+  мөрддөг албан нэршлийн дүрэм — одоо порталын хуваалцсан самбар
+  бүрд (ой, амьтан, ногоон бүс, хяналт, үнэлгээ) нэг мөр болов.
+
+  ⚠ ТОМ ҮСЭГ нь КИРИЛЛ дээр нягт харагддаг тул 0.02em зай нэмэв —
+  `.eyebrow`-ийн өргөн зайг ХУУЛААГҮЙ: тэр нь 10px тэмдэглэгээ, энэ
+  нь 12px гарчиг бөгөөд хоёр нь эрэмбээрээ ялгарах ёстой.
+  ⚠ Үсгийн хэмжээ, жин ХЭВЭЭР (12px / 600).
+*/
+.analytics-chart-head h2 {
+  min-width: min-content;
+  flex: 1;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.4;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+/*
+  КАРТУУД БАГАНАДАА БАГТАНА (хэрэглэгч, 2026-09-21: "багтаа").
+
+  Урьд нь карт бүр өндрөө агуулгаараа авч (`flex-shrink: 0`,
+  бие нь `max-height: 360px`) гурав карт нийлээд баганаасаа халж
+  БАГАНА ӨӨРӨӨ гүйдэг байв.
+
+  Одоо картууд үлдсэн өндрийг ХУВААЛЦАНА: зайтай үед
+  сунаж доод талыг дүүргэнэ, зай дутвал агшиж агуулгаа
+  КАРТ ДОТОРОО гүйлгэнэ — багана өөрөө хөдлөхгүй.
+  ⚠ 168px гэсэн ДООД ХЯЗГААР ЗААВАЛ: ойн хэлтэс дээр нэг
+  баганад араваад карт цувардаг тул хязгааргүй бол
+  карт бүр таних аргагүй болтлоо шахагдана; тэр үед
+  багана өөрөө гүйнэ.
+  ⚠ `xl`-ээс доош багана нэг мөр болж өндөр нь АГУУЛГААРАА
+  хэмжигдэх тул 360px-ийн хязгаар тэнд ХЭВЭЭР — эс тэгвээс
+  хорин мөртэй диаграм хуудсыг утасны дэлгэцээр сунгана.
+*/
+/*
+  ⚠⚠ ДОТОРХ ЗАЙ 14px-ээс 10px (хэрэглэгчийн хүсэлт, 2026-09-29:
+  "доторх зайг нь янзлаад scroll-гүй болго").
+
+  Тоо нь САНАМСАРГҮЙ БИШ — талбайн диаграмын картыг ЯГ багтаана:
+  толгой 36 + доторх зай 10 × 2 + диаграм 108 = **164px**. Урьд нь
+  14px зайтай байсан тул тэр карт 172px шаардаж, доод хязгаар дээр
+  ҮРГЭЛЖ дөрвөн пикселээр гүйдэг байв — хөтчөөр хэмжихэд гурван карт
+  бүгд `scrollHeight > clientHeight`.
+
+  ⚠ Хэвтээ 12px ХЭВЭЭР — мөрийн бичвэр картын ирмэгт наалдах ёсгүй.
+  ⚠ ҮСГИЙН ХЭМЖЭЭ, МӨРИЙН ӨНДӨР ХӨНДӨГДӨӨГҮЙ: хэмнэлт нь ЗӨВХӨН
+  зайнаас гарна (`RowChart dense`, толгойн өндөртэй нэг зарчим).
+*/
+.analytics-chart-body {
+  padding: 10px 12px;
+  min-height: 0;
+  overflow-y: auto;
+}
+@media (max-width: 1279px) {
+  .analytics-chart-body {
+    max-height: 360px;
+  }
+}
+/*
+  ⚠⚠ КАРТУУД БАГАНЫН ЁРООЛЫГ ДҮҮРГЭНЭ (2026-10-02, хэрэглэгч
+  зургаар: "хоосон зайг дүүргээрэй" — татамын цэсэд хоёр богино
+  картын доор ~650px хоосон үлдэж байв).
+
+  ⚠⚠ **2026-09-29-НЫ `max-height: max-content` ТАГЛААГ ОРЛОВ.** Тэр
+  үед үлдсэн зайг баганын ЁРООЛД хуримтлуулж, "жагсаалт дуусав" гэж
+  уншигдана гэж бичсэн — хэрэглэгч гурван хувилбараас **"карт сунана,
+  мөр хэвээр"**-ийг сонгосон тул одоо үлдсэн зай картуудад жингээрээ
+  хуваарилагдана.
+  ⚠ Хуучин гомдол (богино карт дэмий зай авч, урт нь гүйх) ЭРГЭЖ
+  ИРЭХГҮЙ: flexbox-д ҮЛДСЭН ЗАЙ ба ХАЛИЛТ хоёр хэзээ ч зэрэг
+  тохиолдохгүй — зай байвал нэг ч карт агуулгаасаа нам болохгүй.
+  Бодит CSS-ээр хэмжсэн (1400px цонх):
+  · 2 богино карт, 1000px багана → 426 / 566px, ёроолын зай 0, гүйлтгүй;
+  · 3 холимог карт, 894px → 267 / 105 / 506px, нэг ч карт ГҮЙХГҮЙ;
+  · 10 карт, 900px → `--card-min` (150–170px) дээр тулж БАГАНА гүйнэ
+    (өмнөхтэйгээ ижил).
+  ⚠ `--card-min` нь ХЭВЭЭР: халих үед карт бүр таних аргагүй болтлоо
+  шахагдахаас хамгаална.
+  ⚠ Хүснэгтийн нийт дүн картынхаа ёроолд суухын тулд {@link AxisCard}
+  нь дүүргэгч мөртэй — `sticky bottom` дангаараа хангахгүй (наалдац
+  зөвхөн агуулга халих үед ажилладаг).
+*/
+@media (min-width: 1280px) {
+  .analytics-chart-card {
+    flex: 1 1 auto;
+    min-height: var(--card-min, 160px);
+  }
+  .analytics-chart-body {
+    flex: 1 1 auto;
+  }
+  /*
+    ⚠⚠ ДАН КАРТ БАГАНАА ДҮҮРГЭНЭ (`LayerSet.fillSolo`, ойн хэлтэс,
+    2026-10-06: "энэ зайнд таарсан байдлаар хийгээрэй"). Дээрх
+    `max-content` таглаа нь олон картыг ХУВААЛЦАХ үед хоосон зай
+    үүсгэхгүйн тулд; ганц карт байхад тэр нь баганын доод талыг бүхэлд
+    нь хоосон үлдээж байв.
+  */
+  .analytics-chart-card.is-fill {
+    max-height: none;
+  }
+  .analytics-chart-card.is-fill .analytics-chart-body {
+    display: flex;
+    flex-direction: column;
+  }
+}
+/* Мөрүүд үлдсэн өндрийг хуваалцана, 120px-ээс өндөрсөхгүй; бичвэр,
+   зурвас томорно ({@link RowChart} `fill`) */
+.row-chart.is-fill {
+  flex: 1 1 auto;
+  gap: 4px;
+}
+.row-chart.is-fill .row-chart-item {
+  display: flex;
+  /* ⚠ Агшихгүй (`flex-shrink: 0`): мөр олон бол (ногоон бүсийн 24
+     хэсэг) `flex: 1 1 0; min-height: 0` нь мөрийг агуулгаасаа нам
+     болгож бичвэр нь хөрш зурвасан дээгүүр давхцдаг байв (2026-10-23).
+     Одоо илүү зайг тэнцүү хуваана, дутвал карт дотроо гүйнэ. */
+  flex: 1 0 auto;
+  flex-direction: column;
+  justify-content: center;
+  /* ⚠ 120px нь "арай дэндүү" байв (хэрэглэгч, 2026-10-06): таван мөр
+     баганын өндрөөр тарж, мөр хооронд 80px хоосон зай үүсэж байлаа.
+     64px-ээр туршихад нөгөө туйл руу — картын доод хагас хоосон
+     үлдэв. 88px нь дунд нь. */
+  max-height: 88px;
+  padding: 5px 10px;
+}
+.row-chart.is-fill .row-chart-heading {
+
+}
+.row-chart.is-fill .row-chart-label {
+  font-size: 12.5px;
+}
+.row-chart.is-fill .row-chart-label em {
+  font-size: 11.5px;
+}
+.row-chart.is-fill .row-chart-heading strong {
+  font-size: 15px;
+}
+.row-chart.is-fill .row-chart-track-inner {
+  height: 9px;
+  border-radius: 4px;
+}
+/*
+  БҮТЭН ХАРАГДАХ КАРТ (`CutCard full`) — агшихгүй, дотроо гүйхгүй.
+
+  ⚠⚠ Хамгаалалтын бүсийн карт (хэрэглэгч, 2026-10-06, зургаар: "энэ
+  чарт бүтэн харагддаг болго"). Доор нь нэгж талбарын карт нэмэгдсэний
+  дараа хоёр карт баганын өндрийг жингээрээ хуваалцаж, бүсийн карт
+  хоёр дахь мөрөн дээрээ тасарч дотроо гүйлгүүртэй болж байв. Тэр нь
+  цэсийн ТОЙМ — бүхэлдээ харагдах ёстой; үлдсэн зайг доорх карт
+  эзэлж, шаардлагатай бол ӨӨРӨӨ гүйнэ.
+  ⚠ Агуулга нь баганаас өндөр болбол БАГАНА гүйнэ (хөрсний хажуугийн
+  баганатай нэг зарчим) — карт дотроо тасрахгүй.
+*/
+.analytics-chart-card.is-full {
+  flex: 0 0 auto;
+  min-height: 0;
+  max-height: none;
+}
+.analytics-chart-card.is-full .analytics-chart-body {
+  overflow: visible;
+  max-height: none;
+}
+
+/*
+  ҮЛДСЭН ӨНДРИЙГ ЭЗЛЭХ КАРТ (`CutCard fill`) — нэгж талбарын задаргаа
+  (хэрэглэгч, 2026-10-06: "2 чартаа чи өөрөө мэдээд тааруул").
+
+  ⚠ `max-content` таглааг ТАЙЛНА: ердийн карт агуулгаасаа цааш
+  сунахгүй, харин энэ карт багтах мөрийн тоогоо ӨӨРИЙН өндрөөс
+  тооцдог тул өндөр нь агуулгаас ҮЛ ХАМААРАХ ёстой — эс тэгвээс хэмжилт
+  ба өндөр бие биенээсээ хамаарч эргэлдэнэ.
+  ⚠ Бие нь гүйхгүй (`overflow: hidden`): жагсаалт өөрөө багтах тоогоо
+  сонгоно, дэлгэсэн үед л жагсаалт дотроо гүйнэ.
+  ⚠ Доод хязгаар 220px — бүсүүдийг бүгдийг задлахад ч гурван мөр,
+  сонгогчид харагдана; түүнээс доош бол БАГАНА гүйнэ.
+*/
+@media (min-width: 1280px) {
+  /* ⚠ Зөвхөн өргөн дэлгэцэд — нарийн дэлгэцэд багана нэг мөр болж
+     өндөр нь агуулгаараа хэмжигддэг тул "үлдсэн өндөр" гэж байхгүй;
+     тэнд карт ердийнхөөрөө (бие нь 360px хүртэл, дотроо гүйнэ) */
+  .analytics-chart-card.is-fill {
+    flex: 1 1 0;
+    max-height: none;
+    min-height: 220px;
+  }
+  .analytics-chart-card.is-fill .analytics-chart-body {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  /*
+    ⚠⚠ БҮХ МӨР БАГТСАН ҮЕД АГУУЛГЫН ӨНДӨРТ БУЦНА (хэрэглэгч,
+    2026-10-06: "хоосон зай гаргахгүй"). `flex: 1 1 0` нь эрхийн
+    хэлбэр зэрэг цөөн мөртэй тэнхлэг дээр картыг баганын ёроол хүртэл
+    сунгаж, доор нь хоосон зай үлдээдэг байв.
+    `0 1 auto` — суурь нь агуулгын өндөр, ӨСӨХГҮЙ, харин багана
+    намхан бол АГШИНА: тэр үед жагсаалтын талбай хумигдаж хэмжилт нь
+    хураалт руу шилжинэ (`is-fit` унтарч дахин дүүргэнэ).
+    ⚠ Эргэлдэхгүй: хоёр горимд "бүгд багтах уу" гэсэн дүгнэлт ижил
+    гардаг — багтвал агуулгын өндөр нь үлдсэн зайнаас бага, багтахгүй
+    бол дүүргэсэн ч багтахгүй.
+    ⚠ Доод хязгаарыг ТАЙЛНА: гурван мөртэй жагсаалт 220px-д сунаж
+    мөн л хоосон зай үүсгэнэ.
+  */
+  .analytics-chart-card.is-fill.is-fit {
+    flex: 0 1 auto;
+    min-height: 0;
+  }
+  /* Задарсан тэнхлэгийн урт жагсаалт — 150px хүртэл агшиж дотроо гүйнэ
+     (`CutCard low`, ойн ТХГН 2026-10-23: "ih scrolltoi") */
+  .analytics-chart-card.is-fill.is-low {
+    min-height: 150px;
+  }
+}
+
+/* ХӨРСНИЙ ЗҮСЭЛТИЙН ХАЖУУГИЙН БАГАНА.
+
+   ⚠ Картууд баганынхаа өндрийг ХУВААЛЦАХГҮЙ, агуулгаараа авна:
+   монолитын зураг 400px өндөртэй тул хуваасан өндөрт багтахгүй,
+   картынхаа дотор чимээгүй тасарч байв. Гүйлт нь БАГАНАД — гурван
+   картад тус тусад нь биш. */
+.soil-side .analytics-chart-card {
+  flex: 0 0 auto;
+  min-height: 0;
+}
+.soil-side .analytics-chart-body {
+  overflow: visible;
+  max-height: none;
+}
+/* ⚠ Нэвчилтийн симуляцийн баруун багана ГҮЙЛГҮҮРГҮЙ (хэрэглэгч 2026-10-12:
+   "баруун панелийн scroll-ийг del"). Картууд нягт тул ихэнх дэлгэцэд багтана;
+   нам дэлгэц дээр хулганы дугуйгаар гүйсээр — зөвхөн зураас нь харагдахгүй. */
+.soil-side.is-sim {
+  scrollbar-width: none;
+}
+.soil-side.is-sim::-webkit-scrollbar {
+  display: none;
+}
+
+/* ⚠ Нэвчилтийн симуляцийн ГУЛСУУР — хэмжих хэрэгслийн хэлбэр (хэрэглэгч
+   2026-10-12: "гүйлгэж байгаа зүйлийн дизайн өөрчил"). Хөтчийн анхдагч зузаан
+   зам, том дугуй бариулын оронд: 3px нимгэн зам (утга хүртэл `--tone`, цааш нь
+   `--line-2`), доор нь 10%-ийн хуваарийн зураас, бариул нь 4 × 14px босоо ЗҮҮ
+   (дэвсгэрийн өнгөт хүрээтэй — замыг таслаж сууна). Дүүргэлтийн хувь `--pct`
+   нь inline-аар ирнэ. Булан хурц (`rounded-xs`), сүүдэргүй. */
+.sim-range {
+  --pct: 0%;
+  appearance: none;
+  -webkit-appearance: none;
+  display: block;
+  width: 100%;
+  height: 18px;
+  margin: 0;
+  cursor: pointer;
+  background:
+    linear-gradient(to right, var(--line-2) 1px, transparent 1px) left bottom / 10% 4px repeat-x,
+    linear-gradient(to left, var(--line-2) 1px, transparent 1px) right bottom / 10% 4px no-repeat;
+}
+.sim-range:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+.sim-range:focus {
+  outline: none;
+}
+.sim-range::-webkit-slider-runnable-track {
+  height: 3px;
+  border-radius: 1px;
+  background: linear-gradient(to right, var(--tone) var(--pct), var(--line-2) var(--pct));
+}
+.sim-range::-moz-range-track {
+  height: 3px;
+  border-radius: 1px;
+  background: var(--line-2);
+}
+.sim-range::-moz-range-progress {
+  height: 3px;
+  border-radius: 1px;
+  background: var(--tone);
+}
+.sim-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 5px;
+  height: 14px;
+  margin-top: -5.5px;
+  border: 0;
+  border-radius: 1px;
+  background: var(--tone);
+  box-shadow: 0 0 0 2px var(--paper-2);
+  transition: transform 0.12s;
+}
+.sim-range::-moz-range-thumb {
+  width: 5px;
+  height: 14px;
+  border: 0;
+  border-radius: 1px;
+  background: var(--tone);
+  box-shadow: 0 0 0 2px var(--paper-2);
+}
+.sim-range:hover::-webkit-slider-thumb,
+.sim-range:active::-webkit-slider-thumb {
+  transform: scaleY(1.2);
+}
+.sim-range:focus-visible::-webkit-slider-thumb {
+  box-shadow: 0 0 0 2px var(--paper-2), 0 0 0 3px var(--tone);
+}
+.sim-range:focus-visible::-moz-range-thumb {
+  box-shadow: 0 0 0 2px var(--paper-2), 0 0 0 3px var(--tone);
+}
+
+@media (max-width: 640px) {
+  .analytics-overview {
+    gap: 6px;
+  }
+  .analytics-stat {
+    padding: 10px;
+    gap: 0;
+  }
+  .analytics-stat-icon {
+    display: none;
+  }
+  .analytics-stat-value {
+    font-size: 19px;
+  }
+  .analytics-stat-label {
+    font-size: 9px;
+  }
+}
+

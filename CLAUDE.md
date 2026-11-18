@@ -17,12 +17,12 @@ src/
     layout.tsx              Shell: Header (бүтэн өргөн) + Sidebar + MobileNav
     page.tsx                Ерөнхий самбар
     departments/[slug]/     Хэлтэс тус бүрийн ажлын талбар
-    map|reports|alerts|sources|settings/
+    analysis|sources|access|log/   (хоосон `/map`, `/reports`, `/alerts`, `/settings` 2026-11-18-нд устсан)
   components/
-    shell/                  header, sidebar, mobile-nav (client)
+    shell/                  header, sidebar (client; утасны цэс нь sidebar-ын CSS `dock` хэлбэр — тусдаа файл БАЙХГҮЙ)
     wells/                  худгийн самбар: dashboard, map, colors
     charts.tsx              BarChart, RowChart, YearRange (SVG/CSS, сангүй)
-    ui/                     panel, data (Stat/Badge/Meter/Sparkbars/Sparkline/KeyValue)
+    ui/                     panel, data (Stat/Badge/Meter)
   lib/
     departments.ts          7 хэлтсийн бүртгэл — SLUG, өнгө, модуль, төлөв
     utils.ts                cn(), num(), pct(), огнооны формат
@@ -139,9 +139,11 @@ src/
   БУРУУ байрлал байсан — буцаагдсан. Энэ нь хэлтсийн сэдэв БИШ:
   хэлтсүүдийн ДАРААХ зураасны доор, "Эх сурвалж"-тай нэг бүлэгт
   сууна — тэр хоёр нь хэлтсээс ҮЛ ХАМААРАХ, бүх системийн хуудсууд.
-  ⚠ Хажуугийн зурвас ба УТАСНЫ цэс ХОЁУЛАА нэмэгдсэн
-  ({@link src/components/shell/mobile-nav.tsx}) — нэгд нь мартвал
-  ямар хуудас байгаа нь төхөөрөмжөөс хамаарна.
+  ⚠⚠ **УТАСНЫ ЦЭС ГЭЖ ТУСДАА ФАЙЛ БАЙХГҮЙ** (2026-11-18-нд тогтоов): `mobile-nav.tsx`, `rail.tsx`
+  нь `e58a6e8` ("dock") засвараас хойш хаана ч импортлогдоогүй ҮХСЭН файл байсан — устгасан.
+  Жижиг дэлгэцэд `sidebar.tsx`-ийн `.workspace-dock` өөрөө CSS-ээр доод мөр болдог
+  (`workspace.css` `@media`). Энэ баримтын бусад "утасны цэст ч нэм" гэсэн хуучин
+  заавар ХҮЧИНГҮЙ — зөвхөн `sidebar.tsx`, `PAGE_NAMES`.
   ⚠ `ComingSoon`-ийн `items` нь СОНГОЛТТОЙ болсон (энэ хуудас хоосон
   байх үед жагсаалтгүй гарч байсан) — `/reports`, `/alerts` хоёрт
   хэвээр.
@@ -542,6 +544,14 @@ src/
   порталын самбарт өөрийн багана). Урьд нь 28/32px холилдож төв нь 2px зөрж, нэмэлт давхаргын
   товч суурь зургийн ЗҮҮН ТАЛД хэвтээ сууж, хоёулаа байх самбарт `top-[46px]` дээр давхцаж байв.
   Шинэ товч нэмэхдээ `.map-tool`, `.is-on` ба `MapToolStack` хэрэглэ.
+- ⚠ **КОДЫН ЦЭВЭРЛЭГЭЭ 2026-11-18** (хэрэглэгч: "codeg ehnees ni duustal shalga … hereggui code"):
+  үхсэн 4 хоосон хуудас (`/map`, `/reports`, `/alerts`, `/settings` + `ComingSoon`), үхсэн 2 shell
+  файл, хаанаас ч дуудагдаагүй 21 функц/тогтмол (`CategoryChart`, `Sparkline`, `totalHa`,
+  `fetchPitPointsIn` …), ~30 үхсэн CSS анги, зөвхөн дотроо хэрэглэгддэг ~55 экспортын `export` үг
+  хасагдсан. Шалгах скрипт: ашиглагдаагүй файл/экспорт — `tsc --noUnusedLocals` + өөрийн regex
+  скан (knip татах эрх байгаагүй). ⚠ Хойшлуулсан: `i18n-dict.ts`-ийн ~160 сэжигтэй мөр
+  (загвартай тул худал эерэг олон), том файл хуваах, `Card`/`Stat` давхардал, `public/logo.svg`
+  708KB оновчлол, CLAUDE.md архивлах.
   ⚠⚠ **БАГАНА БҮХЭЛДЭЭ ДУНДАД НИЙЛНЭ** (мөн өдөр: "дээр байгаа basemap, layer гэх мэт toggle
   доошоо нийлүүл"): ойртуулах + 2D/3D нь `.map-rail` (баруун ирмэгийн дунд, `top: 50% − 28px`);
   дээд хэсэг (Esri `.esri-ui-top-right`, `.map-tool`, `[data-map-rail]`) нь `WellsMap`-ийн
@@ -3420,6 +3430,19 @@ linkuud ugnu"). Ногоон бүсийн СҮҮЛИЙН цэс, газрын з
   татдаг байсан тул хөтчөөс шууд татах болгож өөрчлөх хэрэгтэй.
   ⚠ `components/wells/` хавтас ХЭВЭЭР: `map.tsx` (бүх самбарын
   хуваалцсан зураг), `colors.ts`, `filter-bar.tsx` амьд.
+- ⚠⚠ **ХУВААЛЦСАН САМБАР 2026-11-18-НД ЕСӨН ФАЙЛД ХУВААГДСАН** (хэрэглэгч: "том файл хуваах ene ajliig
+  hii"; 11,264 мөр → 6,000 орчим). Код ӨӨРЧЛӨГДӨӨГҮЙ, зөвхөн байрлал — [layers/](src/components/layers/):
+  `portal-dashboard.tsx` (`PortalLayersDashboard`, `LayersBoard` — төлөв, угсралт) ·
+  `board-shared.tsx` (тогтмол, `Loaded` төрөл, `toneOfHue`, `categoryRamp`, `labelFor`, `restrict`,
+  `ADMIN_WORDS` …) · `chart-helpers.tsx` (`chartTitle`, `filterKey`, `isTime`, `headMeta`, `tickOf` …) ·
+  `share-charts.tsx` (`ShareGroups`, `DistrictBars`) · `sheet.tsx` (`SheetPanel`, `SheetSection`,
+  `SheetAdmin`, `SheetAxis`, `SheetTimes` …) · `axis-card.tsx` (`AxisCard`, `AxisBars`, `RecordListCard`) ·
+  `zones.tsx` (`ZoneSheet`, `ZoneShapes`, `ParcelCard`) · `cards.tsx` (`CutCard`, `StackPager`, `Card`,
+  `Head`, `Stat`) · `record-panel.tsx` (`RecordPanel`, `RecordBars`, `fieldText`). Импортын чиглэл:
+  бусад → `board-shared`/`chart-helpers`; үндсэн файл бүгдийг импортлоно; `board-shared` нь
+  `portal-dashboard`-аас ЮУ Ч импортлохгүй (давталт үүсгэхгүй). Энэ баримтын "portal-dashboard.tsx"
+  гэсэн хуучин заалтууд тэр функцийг агуулсан файлаар уншигдана. `LayersBoard` (~6,000 мөр) нь
+  closure-ууд тул механикаар хуваагдаагүй — дараагийн алхам.
 - **Найман цэс бүгд ХУВААЛЦСАН самбараар** зурагдана
   ([layers/portal-dashboard.tsx](src/components/layers/portal-dashboard.tsx)) —
   бүтцээ эх сурвалжаас өөрөө уншдаг тул тусдаа код бичээгүй. Ялгаа нь
@@ -6905,6 +6928,15 @@ map"). Урьд нь "архивынх нь газрын зураггүй" гэ�
 `protected-areas.ts` ба самбарууд нь 2026-09-16-нд кодоос
 УСТГАГДСАН (git түүхэнд бий).
 
+- ⚠⚠ **`lib/portal-layers.ts` 2026-11-18-НД ТАВАН ФАЙЛД ХУВААГДСАН** (4,791 мөр → ~940; код
+  өөрчлөгдөөгүй): `layer-types.ts` (`LayerSet` болон бүх экспортолсон төрөл — `LayerInfo`,
+  `LayerFeatures`, `Breakdown`, `Row`, `DateAxis`, `LayerLabels` …) · `layer-fields.ts`
+  (`isSystemField`, `SKIP_FIELDS`, `EDITOR_FIELDS`, `KML_NOISE`) · `breakdowns.ts` (задаргааны
+  хөдөлгүүр: `breakdowns`, `categoryKey`, `unitOf`, `officialLabel`, `dateAxes`, бүх тогтмол ба
+  дүрэм) · `layer-labels.ts` (`labelParts`, `LABEL_MAX`) · `portal-layers.ts` (татац, кэш,
+  `fetchLayerInfo`, `fetchLayerFeatures`, `splitsZones`, нэр, үйлчилгээний хаяг) бөгөөд сүүлийнх нь
+  `export *`-оор дөрвийг дахин экспортолдог тул ГАДНЫ импортын зам `@/lib/portal-layers` ХЭВЭЭР.
+  Энэ баримтын "`portal-layers.ts`-ийн `breakdowns`" гэх мэт заалтууд одоо `breakdowns.ts`-д.
 - Дата нь **`environment.ub.gov.mn` порталын хостлогдсон давхаргууд**
   руу шилжсэн ([lib/forest-layers.ts](src/lib/forest-layers.ts) — бүртгэл,
   [lib/portal-layers.ts](src/lib/portal-layers.ts) — хуваалцсан хөдөлгүүр):
@@ -11110,6 +11142,22 @@ Esri-ийн `SceneView` давхарга
   хэрэгсэл) хоёуланд. `DimensionToggle`, `ZoomButtons` ХӨНДӨГДӨӨГҮЙ.
 
 ### 2D газрын зураг — Esri `MapView` (2026-10-12-ноос, MapLibre УСТСАН)
+
+⚠⚠ **`wells/map.tsx` 2026-11-18-НД ЗУРГААН ФАЙЛД ХУВААГДСАН** (2,844 → ~1,330 мөр; код
+өөрчлөгдөөгүй): `map-scale.ts` (`zoomForScale`, `scaleAt`, `mlOf`, `MapPoints`, `Extent`,
+`MapOverlay` төрөл) · `map-basemaps.ts` (`BASEMAPS`, `defaultBasemap`, `tileLayer`, `esriBasemaps`) ·
+`map-geometry.ts` (өнгө, Mercator, `cleanGeom`, `esriGeom`, `familyOf`) · `map-symbols.ts` (CIM тэмдэг,
+`gradeRenderer`, `polySymbol`, `pointRenderer`, `highlightSymbol`) · `map-layers.ts` (`loadEsri`,
+`geoLayer`, `refill`, `modeOf`, `dataLayers`, `fillPoints`, `fillShapes`, `overlayParts`, `Mode`/`Live`
+төрөл, `lineMidpoints`) · `map.tsx` (`WellsMap` бүрэлдэхүүн, DOM тэмдэглэгээ, ойртуулах, 2D/3D).
+`map.tsx` нь `export *`-оор тавыг дахин экспортолдог тул ГАДНЫ импортын зам `@/components/wells/map`
+ХЭВЭЭР (`edit/looks.ts` ч). Доорх тэмдэглэлийн "энэ файлд" гэсэн заалтууд тэр функцийг агуулсан
+файлаар уншигдана.
+
+⚠⚠ **`app/workspace.css` 2026-11-18-НД ЗУРГААН ФАЙЛД ХУВААГДСАН** — `src/app/workspace/01-base.css`
+… `06-misc.css` (мөрийн дарааллаар, нэг ч мөр өөрчлөгдөөгүй); `workspace.css` нь зөвхөн `@import`-ын
+дараалал. Каскад дарааллаас хамаардаг тул `@import`-ын дарааллыг БҮҮ соль; шинэ дүрэм сэдэвт нь тохирох
+файлд. Энэ баримтын "`workspace.css`-д" гэсэн заалтууд тэр хавтсыг хэлнэ.
 
 Хэрэглэгч: "maplibre esri 2d sdk солиод ашиглана шүү". Хуваалцсан
 `WellsMap` ({@link src/components/wells/map.tsx}) нь ArcGIS Maps SDK 4.33
