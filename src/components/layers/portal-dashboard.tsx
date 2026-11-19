@@ -28,6 +28,7 @@ import {
   ShieldCheck,
   Sigma,
   Tag,
+  MapPinOff,
 } from "lucide-react";
 import {
   AreaChart,
@@ -94,6 +95,8 @@ import {
   type LayerInfo,
 } from "@/lib/portal-layers";
 import { cn, num } from "@/lib/utils";
+import { isDistrictField, offDistricts, offText, type DistrictItem } from "@/lib/district-check";
+import { mismatchPin, useUbDistricts } from "@/components/map/off-district";
 import { NoAccess, useAccess } from "@/components/auth/access";
 
 import {
@@ -1857,6 +1860,45 @@ function LayersBoard({
       return row ? { id, hit, info: hit.info, row } : null;
     },
     [loaded, set.layers],
+  );
+
+  /*
+    БҮРТГЭСЭН ДҮҮРГЭЭС ӨӨР ДҮҮРЭГТ БУУСАН ЦЭГ (хэрэглэгч 2026-11-19: "Химийн бодисын агуулах
+    hiisen shig pointiig tusagi temdegt bolgo"). ЦЭГЭН давхарга бүрд самбарын ДҮҮРГИЙН
+    задаргааны талбараар (шүүлт яг тэр талбараар явдаг) — хилээр тогтоосон талбар
+    (`… хилийн давхаргаар`, `_geo`) `isDistrictField`-д орохгүй тул зөрүүгүй. Аудитаар:
+    гүний худгийн паспорт 1,675, нийслэлийн худаг 480, УСУГ 209, тоолуур 24, булаг 17,
+    гэрээ 11, үерийн эрсдэлтэй цэг 13 … Шүүлтээс ҮЛ ХАМААРАН ачаалсан дата дээр нэг удаа;
+    `WellsMap` тэмдгийг зөвхөн харагдаж буй цэгт тавина.
+  */
+  const ubBounds = useUbDistricts();
+  const offDistrict = React.useMemo(() => {
+    const items: DistrictItem[] = [];
+    for (const id of set.layers) {
+      const hit = loaded[id];
+      if (!hit || hit.info.geometry !== "Point") continue;
+      const chart = hit.charts.find(
+        (c) => c.kind === "count" && isDistrictField(c.field, hit.info.fields.find((f) => f.name === c.field)?.alias),
+      );
+      if (!chart) continue;
+      const base = uidBase(id);
+      for (const f of hit.data.shapes.features) {
+        if (f.geometry?.type !== "Point") continue;
+        const n = Number(f.id);
+        const [x, y] = f.geometry.coordinates as [number, number];
+        items.push({ oid: base + n, lon: x, lat: y, district: hit.data.rows[n]?.[chart.field] });
+      }
+    }
+    return offDistricts(ubBounds, items);
+  }, [loaded, ubBounds, set.layers, uidBase]);
+  const offMarks = React.useMemo(() => {
+    const m: Record<number, string> = {};
+    for (const o of offDistrict.keys()) m[o] = mismatchPin();
+    return Object.keys(m).length ? m : undefined;
+  }, [offDistrict]);
+  const offShown = React.useMemo(
+    () => points.at.oid.some((o) => offDistrict.has(o)),
+    [points, offDistrict],
   );
 
   const hovered = React.useMemo(() => lookup(tip.oid), [lookup, tip.oid]);
@@ -5891,6 +5933,7 @@ function LayersBoard({
                     minzoom: showLabels ? labelZoom : OFF_ZOOM,
                   }}
                   basemap={basemap}
+                  marks={offMarks}
                   onSelect={(uid) => {
                     setPicked(picked === uid ? null : uid);
                     /* Зураг дээрх дүрс аль хэдийн харагдаж байгаа тул
@@ -6119,7 +6162,26 @@ function LayersBoard({
                               },
                             ],
                       };
-                    })}
+                    }).concat(
+                      offShown
+                        ? [
+                            {
+                              id: "__off-district",
+                              name: "Байршил нь бүртгэсэн дүүргээс өөр дүүрэгт байгаа",
+                              geometry: "Point",
+                              field: undefined,
+                              solo: true,
+                              items: [
+                                {
+                                  key: "__off-district",
+                                  label: "Байршил нь бүртгэсэн дүүргээс өөр дүүрэгт байгаа",
+                                  color: "var(--water)",
+                                },
+                              ],
+                            },
+                          ]
+                        : [],
+                    )}
                   />
                 ) : null}
 
@@ -6152,6 +6214,9 @@ function LayersBoard({
                             text={r.text}
                           />
                         ))}
+                        {tip.oid != null && offDistrict.has(tip.oid) ? (
+                          <MapTipRow icon={MapPinOff} text={offText(offDistrict.get(tip.oid) ?? "")} />
+                        ) : null}
                       </div>
                     </>
                   ) : null}
@@ -6170,6 +6235,7 @@ function LayersBoard({
                     hit={active.hit}
                     row={active.row}
                     oid={(picked ?? 0) - uidBase(active.id)}
+                    off={picked != null && offDistrict.has(picked) ? offText(offDistrict.get(picked) ?? "") : undefined}
                     place={places[active.id]?.get(
                       (picked ?? 0) - uidBase(active.id),
                     )}

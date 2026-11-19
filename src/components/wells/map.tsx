@@ -94,6 +94,7 @@ function WellsMapBody({
   highlight = null,
   overlays,
   adminLines = true,
+  credit,
   shapes,
   grades,
   weights,
@@ -206,6 +207,12 @@ function WellsMapBody({
    * хил давхцаж зураг замбараагүй болно.
    */
   adminLines?: boolean;
+  /**
+   * ЭХ СУРВАЛЖИЙН МӨР ("Суурь зураг: Esri · Дата: …") — масштабын ДООР, зүүн доод буланд
+   * (хэрэглэгч 2026-11-19: "bairiig soli"). Өгвөл масштаб нэг мөр дээшилнэ; өгөөгүй бол
+   * масштаб байрандаа. Самбар энэ мөрийг зураг дээр ТУСАД НЬ тавихгүй — давхцана.
+   */
+  credit?: string;
   /**
    * ДАТА олон өнцөгт — харилцдаг: `properties.oid`-оор товшилт, hover,
    * `properties.c`-д өнгө, `properties.t`-д шошго.
@@ -1027,9 +1034,17 @@ function WellsMapBody({
           хиймэл дагуул дээр улам бараан болгож байв (хэрэглэгч 2026-11-09) */}
       <div
         ref={ratio}
-        className="num pointer-events-none absolute bottom-2.5 left-2.5 z-[2] text-[10px] leading-none text-ink"
+        className={`num pointer-events-none absolute left-2.5 z-[2] text-[10px] leading-none text-ink ${credit ? "bottom-[20px]" : "bottom-2.5"}`}
         style={{ filter: "drop-shadow(0 0 1.5px var(--paper)) drop-shadow(0 0 1.5px var(--paper))" }}
       />
+      {credit ? (
+        <p
+          className="pointer-events-none absolute bottom-1.5 left-2.5 z-[2] text-[10px] leading-none text-ink-3"
+          style={{ filter: "drop-shadow(0 0 1.5px var(--paper)) drop-shadow(0 0 1.5px var(--paper))" }}
+        >
+          {credit}
+        </p>
+      ) : null}
       {/*
         ТАСАЛДЛЫГ ИЛ ХЭЛНЭ — туван цагаан болоход хэрэглэгч зураг эвдэрсэн
         гэж үзнэ. ⚠ `--ochre`: дүрслэл сэргэх боломжтой.

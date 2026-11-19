@@ -15,6 +15,7 @@ import { NOGOON } from "@/lib/nogoon-layers";
 import { WILDLIFE } from "@/lib/wildlife-layers";
 import { UNELGEE_ALL } from "@/lib/unelgee-layers";
 import { chemicalService } from "@/lib/chemicals";
+import { PLANNED_SERVICE } from "@/lib/planned-inspections";
 import { INSPECTIONS as HYANALT_INSPECTIONS, WASTE as HYANALT_WASTE } from "@/lib/hyanalt-layers";
 import { REPAIR_SERVICE } from "@/lib/repair-shops";
 import { LICENSES_SERVICE } from "@/lib/licenses";
@@ -169,6 +170,12 @@ export const SOURCES: Source[] = [
     name: "Химийн хорт, аюултай бодисын агуулах 2024",
     kind: "ArcGIS Enterprise FeatureServer",
     url: chemicalService(2024),
+  },
+  {
+    slug: "hyanalt",
+    name: "Хяналт шалгалтын төлөвлөгөөт мэдээлэл",
+    kind: "ArcGIS Enterprise FeatureServer",
+    url: PLANNED_SERVICE,
   },
   ...portalSources("hyanalt", HYANALT_WASTE),
   ...portalSources("hyanalt", HYANALT_INSPECTIONS),

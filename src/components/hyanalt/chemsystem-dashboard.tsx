@@ -10,6 +10,7 @@ import {
   FlaskConical,
   Loader2,
   MapPin,
+  MapPinOff,
   Recycle,
   Search,
   Table2,
@@ -39,6 +40,9 @@ import {
 import { pointsOnBuildings, type Building } from "@/lib/buildings";
 import { inUlaanbaatar } from "@/lib/ub-boundary";
 import { cn, num } from "@/lib/utils";
+import { PlaceCard } from "@/components/hyanalt/catalog-rows";
+import { offDistricts, offText } from "@/lib/district-check";
+import { OffDistrictLegend, mismatchPin, useUbDistricts } from "@/components/map/off-district";
 import type { LucideIcon } from "lucide-react";
 
 const PointMap = dynamic(
@@ -339,6 +343,28 @@ export function ChemSystemDashboard() {
   );
 
   const visible = React.useMemo(() => Uint32Array.from(mapped.map((_, i) => i)), [mapped]);
+
+  /*
+    ХАЯГИЙН ДҮҮРГЭЭС ӨӨР ДҮҮРЭГТ БУУСАН агуулах (2026-11-19; аудитаар нийслэлийн хаягтай 423-аас
+    142). Шүүлт хаягийн дүүргээр хэвээр, цэг дээр тусгай тэмдэг. Орон нутгийн хаягтай нь
+    харьцуулахгүй — тэдний координат УБ дахь оффисынх (дээрх `alerts`-ийн тайлбарыг үз).
+  */
+  const ubBounds = useUbDistricts();
+  const offDistrict = React.useMemo(
+    () =>
+      offDistricts(
+        ubBounds,
+        mapped
+          .filter((s) => s.place.inCity !== false && s.place.district)
+          .map((s) => ({ oid: s.loc.id, lon: s.loc.lon, lat: s.loc.lat, district: s.place.district })),
+      ),
+    [ubBounds, mapped],
+  );
+  const offMarks = React.useMemo(() => {
+    const m: Record<number, string> = {};
+    for (const o of offDistrict.keys()) m[o] = mismatchPin();
+    return Object.keys(m).length ? m : undefined;
+  }, [offDistrict]);
 
   /*
     Цэгийн ХЭМЖЭЭ = бүртгэгдсэн бодисын нэрийн тоо, ЛОГАРИФМ хуваарьтай
@@ -663,14 +689,16 @@ export function ChemSystemDashboard() {
                 clusterMaxZoom={13}
                 grades={grades}
                 alerts={alerts}
+                marks={offMarks}
               />
-              {alertCount + warnCount > 0 && (
+              {alertCount + warnCount > 0 || offDistrict.size > 0 ? (
                 <div className="absolute bottom-7 left-2 z-[1] flex flex-col gap-1 rounded-xs border border-line bg-paper/90 px-2 py-1.5 text-[10px] text-ink-2 backdrop-blur">
                   <span className="flex items-center gap-1.5"><i className="size-2 rounded-full" style={{ background: DATA_COLOR }} />Агуулах</span>
                   <span className="flex items-center gap-1.5"><i className="size-2 rounded-full" style={{ background: ALERT_COLOR }} />Байршил тодруулах шаардлагатай <span className="num text-ink-3">{num(alertCount)}</span></span>
                   {warnCount > 0 && <span className="flex items-center gap-1.5"><i className="size-2 rounded-full" style={{ background: WARN_COLOR }} />Театр, музей, цэцэрлэг, Засгийн газрын ордон дээр <span className="num text-ink-3">{num(warnCount)}</span></span>}
+                  {offDistrict.size > 0 && <OffDistrictLegend className="flex items-center gap-1.5" />}
                 </div>
-              )}
+              ) : null}
               <BasemapGallery value={basemap} onChange={setBasemap} />
 
               {hovered ? (
@@ -682,6 +710,9 @@ export function ChemSystemDashboard() {
                       text={`${num(hovered.chemicals)} нэр төрлийн бодис`}
                       num
                     />
+                    {offDistrict.has(hovered.loc.id) ? (
+                      <MapTipRow icon={MapPinOff} text={offText(offDistrict.get(hovered.loc.id) ?? "")} />
+                    ) : null}
                   </div>
                 </MapTip>
               ) : null}
@@ -712,6 +743,11 @@ export function ChemSystemDashboard() {
                 <div className="mt-1 text-[10.5px] leading-snug text-ink-3">
                   {picked.loc.address}
                 </div>
+                {offDistrict.has(picked.loc.id) ? (
+                  <div className="mt-1 text-[10.5px] leading-snug text-water">
+                    {offText(offDistrict.get(picked.loc.id) ?? "")}
+                  </div>
+                ) : null}
                 <div className="mt-1.5 flex flex-wrap items-baseline gap-x-3 text-[10px]">
                   {picked.org?.reg ? (
                     <span className="num text-ink-3">Регистр {picked.org.reg}</span>
@@ -773,105 +809,6 @@ export function ChemSystemDashboard() {
       <p className="shrink-0 px-0.5 text-[10.5px] leading-none text-ink-3">
         Эх сурвалж: {data.source.system} · Суурь зураг: Esri
       </p>
-    </div>
-  );
-}
-
-/**
- * Байршлын диаграм — агуулахын жагсаалтын ДЭЭР.
- *
- * ⚠⚠ ТОВЧНЫ ОРОНД ДИАГРАМ (хэрэглэгчийн хүсэлт, 2026-09-23:
- * "Дүүргээр serial chart харуулъя"). Товчнууд нэр, тоо хоёрыг л
- * хэлдэг байсан бол зурвас нь ХАРЬЦААГ нэмж хэлнэ.
- *
- * ⚠⚠ МӨР НЬ НЭГ ЭГНЭЭ (хэрэглэгчийн хүсэлт, 2026-09-23: "Дүүргээр
- * картын өндрийг багасгах боломж бий юу"). `RowChart dense` нь нэрийг
- * дээр нь, зурвасыг доор нь тавьдаг тул мөр ~31px болж, найман дүүрэг
- * 280px эзэлдэг байв. Нэр, зурвас, тоо гурвыг ЗЭРЭГЦҮҮЛЭХЭД мөр
- * ~21px — карт **190px** болж багасна.
- *
- * ⚠ Ингэснээр `RowChart`-аас САЛСАН: тэр бүрэлдэхүүн нэрээ мөрийн
- * дээр тавьдаг бөгөөд тэр байрлалыг проп-оор өөрчлөх боломжгүй.
- * Зурвасны утга, сонголтын зан төлөв нь адилхан хэвээр.
- *
- * ⚠ Нэрийн багана ТОГТМОЛ өргөнтэй (92px): зурваснууд НЭГ эгнээнээс
- * эхлэхгүй бол урт нь харьцуулагдахаа болино.
- *
- * ⚠ ӨНГӨ нь ГАНЦ (`--tone`): дүүрэг бол нэрлэсэн ангилал, эрэмбэтэй
- * хэмжүүр БИШ тул мөр бүрийг өөр өнгөөр ялгавал утгагүй солонго
- * болно. Ялгаа нь уртаараа гарна.
- */
-function PlaceCard({
-  title,
-  rows,
-  show,
-  picked,
-  onPick,
-}: {
-  title: string;
-  rows: [string, number][];
-  /** Карт харагдах эсэх — хайлт, сонголтоос ҮЛ ХАМААРНА (карт үсрэхгүй) */
-  show: boolean;
-  picked: string | null;
-  onPick: (key: string) => void;
-}) {
-  const max = Math.max(...rows.map(([, n]) => n), 1);
-  if (!show) return null;
-  return (
-    <div className="shrink-0 overflow-hidden rounded-xs border border-line bg-paper-2">
-      <div className="flex items-baseline gap-2 border-b border-line px-2.5 py-1.5">
-        <span className="eyebrow min-w-0 flex-1 truncate">{title}</span>
-        {picked ? (
-          <button
-            onClick={() => onPick(picked)}
-            className="shrink-0 text-[10px] text-(--tone) transition-colors hover:text-ink"
-          >
-            Цэвэрлэх
-          </button>
-        ) : (
-          <span className="num shrink-0 text-[10px] text-ink-3">
-            {num(rows.length)}
-          </span>
-        )}
-      </div>
-      {/* Агуулга нь картаасаа урт бол картынхаа ДОТОР гүйнэ (22 аймаг)
-          — багана өөрөө хөдлөхгүй */}
-      <div className="max-h-[186px] overflow-y-auto py-1">
-        {rows.map(([key, n]) => {
-          const on = picked === key;
-          return (
-            <button
-              key={key}
-              onClick={() => onPick(key)}
-              aria-pressed={on}
-              title={`${key} · ${num(n)}`}
-              className={cn(
-                "flex w-full items-center gap-2 px-2.5 py-[3px] text-left transition-colors",
-                on ? "bg-(--tone)/10" : "hover:bg-paper-hi",
-                picked && !on && "opacity-55",
-              )}
-            >
-              <span
-                className={cn(
-                  "w-[92px] shrink-0 truncate text-[11px]",
-                  on ? "font-medium text-ink" : "text-ink-2",
-                )}
-              >
-                {key}
-              </span>
-              <span className="h-[5px] min-w-0 flex-1 overflow-hidden rounded-full bg-paper-hi">
-                <span
-                  className="block h-full rounded-full bg-(--tone)"
-                  style={{ width: `${Math.max((n / max) * 100, 2)}%` }}
-                />
-              </span>
-              <span className="num w-[30px] shrink-0 text-right text-[11px] text-ink-2">
-                {num(n)}
-              </span>
-            </button>
-          );
-        })}
-      </div>
     </div>
   );
 }

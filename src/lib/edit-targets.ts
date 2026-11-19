@@ -25,6 +25,7 @@ import { DAMAGED_SERVICE } from "@/lib/damaged";
 import { ECO_SERVICE } from "@/lib/eco-corridors";
 import { FLORA } from "@/lib/flora";
 import { FOREST_TABS } from "@/lib/forest-layers";
+import { PLANNED_SERVICE } from "@/lib/planned-inspections";
 import { WASTE as LANDFILL } from "@/lib/hyanalt-layers";
 import { LICENSES_SERVICE } from "@/lib/licenses";
 import { LICHENS_SERVICE } from "@/lib/lichens";
@@ -104,7 +105,9 @@ const TARGETS: Record<string, (tab: string) => EditTarget[]> = {
               { title: "Химийн бодисын агуулах, 2023", url: chemicalService(2023) },
               { title: "Химийн бодисын агуулах, 2024", url: chemicalService(2024) },
             ]
-          : [],
+          : tab === "planned"
+            ? one("Төлөвлөгөөт мэдээлэл", PLANNED_SERVICE)
+            : [],
 
   orchin: (tab) =>
     tab === "sanitation"

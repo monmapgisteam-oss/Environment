@@ -469,6 +469,38 @@ body {
 }
 
 /*
+  БАЙРШИЛ НЬ БҮРТГЭСЭН ДҮҮРГЭЭС ӨӨР (химийн агуулах, хэрэглэгч 2026-11-19: "Бүртгэсэн
+  дүүргээр, зөрснийг тэмдэглэх"). Шүүлт нь бүртгэлийн дүүргээр явдаг тул Сүхбаатараар
+  шүүхэд координат нь Хан-Уул, Налайхад буусан цэг ч гарна — тэр нь алдаа биш, датаны
+  зөрүү гэдгийг энэ тэмдэг хэлнэ. Өнгө `--water` (мэдээлэл) — хугацаа дууссан
+  (`--ochre`, анхааруулга)-аас ялгарна; хоёулаа бол хүрээ нь `--ochre` (`data-also`).
+*/
+.species-pin:has(svg[data-pin="mismatch"]) {
+  width: 22px;
+  height: 22px;
+  border-color: var(--water);
+  background: color-mix(in oklab, #111a22 88%, transparent);
+  color: var(--water);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.4),
+    0 0 10px -2px color-mix(in oklab, var(--water) 85%, transparent);
+}
+.species-pin:has(svg[data-pin="mismatch"][data-also="expired"]) {
+  border-color: var(--ochre);
+}
+.species-pin:has(svg[data-pin="mismatch"]) svg {
+  width: 12px;
+  height: 12px;
+}
+.species-pin:has(svg[data-pin="mismatch"]):hover {
+  width: 26px;
+  height: 26px;
+}
+:root:not([data-theme="dark"]) .species-pin:has(svg[data-pin="mismatch"]) {
+  background: color-mix(in oklab, var(--paper-2) 88%, transparent);
+}
+
+/*
   ХОГ ХАЯГДЛЫН ХОЁР ТЭМДЭГ (хяналтын ландфилл).
 
   Хоёр давхарга нэг зураг дээр зэрэг суудаг тул ӨНГӨ, ХЭЛБЭР, ИКОН

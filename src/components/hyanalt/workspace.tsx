@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import dynamic from "next/dynamic";
-import { Boxes, ClipboardCheck, Factory, FlaskConical, Loader2, ShieldCheck, Trash2, Workflow, Wrench } from "lucide-react";
+import { Boxes, CalendarCheck, ClipboardCheck, Factory, FlaskConical, Loader2, ShieldCheck, Trash2, Workflow, Wrench } from "lucide-react";
 import { SourceTabs, TabGroups, useStoredTab } from "@/components/ui/source-tabs";
 import { TabAccess } from "@/components/auth/tab-access";
 import { useAccess } from "@/components/auth/access";
@@ -36,6 +36,12 @@ const RepairMap = dynamic(
 const ChemicalsDashboard = dynamic(
   () =>
     import("@/components/hyanalt/chemicals-dashboard").then((m) => m.ChemicalsDashboard),
+  { ssr: false, loading: spinner },
+);
+
+/* Хяналт шалгалтын төлөвлөгөөт мэдээлэл — агуулахын самбартай нэг бүтэц (2026-11-19) */
+const PlannedDashboard = dynamic(
+  () => import("@/components/hyanalt/planned-dashboard").then((m) => m.PlannedDashboard),
   { ssr: false, loading: spinner },
 );
 
@@ -84,7 +90,7 @@ const WasteDashboard = dynamic(
   сэдвээс гарна; товшиход эхний нээлттэй сэдэв нээгдэнэ.
 */
 export const GROUPS = [
-  { id: "chemical", label: "Химийн бодис", note: "2 сэдэв", icon: FlaskConical },
+  { id: "chemical", label: "Химийн бодис", note: "3 сэдэв", icon: FlaskConical },
   { id: "inspection", label: "Хяналт шалгалт", note: "Хяналт шалгалт, журам", icon: ShieldCheck },
   { id: "pollution", label: "Бохирдлын эх үүсвэр", note: "Авто засвар · ландфилл", icon: Factory },
 ] as const;
@@ -104,6 +110,20 @@ export const TABS = [
     label: "Химийн бодисын агуулах",
     note: "2023 онд 184 · 2024 онд 20 агуулах",
     icon: FlaskConical,
+  },
+  {
+    /*
+      ХЯНАЛТ ШАЛГАЛТЫН ТӨЛӨВЛӨГӨӨТ МЭДЭЭЛЭЛ (хэрэглэгч 2026-11-19: "himiin bodisiin
+      aguulah button deer shineer tuluwluguut medeelel gj shineer uusgeed") —
+      `Hosted/Төлөвлөгөөт_мэдээлэл` (`Tuluvlugut_XX_parcel`), нэгж талбараар.
+      Самбар нь агуулахынхтай нэг бүтэцтэй (`planned-dashboard.tsx`).
+      Тайлбарт ТОО БИЧЭЭГҮЙ — бүртгэл нэмэгдсээр байна.
+    */
+    id: "planned",
+    group: "chemical",
+    label: "Төлөвлөгөөт мэдээлэл",
+    note: "Хяналт шалгалт хийх объект · эрсдэл",
+    icon: CalendarCheck,
   },
   {
     /*
@@ -288,6 +308,8 @@ export function HyanaltWorkspace() {
             <InspectionScheme />
           ) : open === "chemicals" ? (
             <ChemicalsDashboard />
+          ) : open === "planned" ? (
+            <PlannedDashboard />
           ) : (
             /*
               Тэмдэглэгдээгүй таб. ХООСОН ТӨЛӨВ нь дизайны нэг хэсэг:

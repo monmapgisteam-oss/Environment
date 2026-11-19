@@ -6,9 +6,9 @@ import {
   Building2,
   CalendarClock,
   CalendarRange,
-  ChevronRight,
   FlaskConical,
   Loader2,
+  MapPinOff,
   MousePointerClick,
   Package,
   ScrollText,
@@ -47,6 +47,9 @@ import {
   type Warehouse,
 } from "@/lib/chemicals";
 import { districtName } from "@/lib/repair-shops";
+import { GroupRow, NameRow } from "@/components/hyanalt/catalog-rows";
+import { offDistricts, offText } from "@/lib/district-check";
+import { OffDistrictLegend, mismatchPin, useUbDistricts } from "@/components/map/off-district";
 import { Bounds } from "@/lib/extent";
 import { cn, num } from "@/lib/utils";
 
@@ -144,6 +147,9 @@ export function ChemicalsDashboard() {
 
   const data = cache[year];
 
+  /* Дүүргийн хил — цэг аль дүүрэгт буусныг тогтооход ({@link ../../lib/district-check}) */
+  const bounds = useUbDistricts();
+
   React.useEffect(() => {
     if (cache[year]) return;
     const ac = new AbortController();
@@ -154,6 +160,13 @@ export function ChemicalsDashboard() {
   }, [year, cache]);
 
   const rows = data?.rows;
+
+  /*
+    Цэгийн ДҮҮРЭГ бүртгэлийнхээс зөрсөн агуулах → координатын дүүрэг (хотоос гадна бол
+    `""`). Бүртгэлийн дүүрэг нь нийслэлийн танигдах товчлол биш бол ("Төв аймаг")
+    харьцуулахгүй.
+  */
+  const offDistrict = React.useMemo(() => offDistricts(bounds, rows ?? []), [bounds, rows]);
 
   /** Бүртгэлд байгаа дуусах оны бүтэн муж */
   const span = React.useMemo<[number, number] | null>(() => {
@@ -478,10 +491,15 @@ export function ChemicalsDashboard() {
     if (!rows) return undefined;
     const m: Record<number, string> = {};
     for (const w of rows) {
-      if (expiryState(w, todayKey) === "expired") m[w.oid] = EXPIRED_PIN;
+      const expired = expiryState(w, todayKey) === "expired";
+      if (offDistrict.has(w.oid)) m[w.oid] = mismatchPin(expired);
+      else if (expired) m[w.oid] = EXPIRED_PIN;
     }
     return Object.keys(m).length ? m : undefined;
-  }, [rows, todayKey]);
+  }, [rows, todayKey, offDistrict]);
+
+  /* Одоогийн харагдацад зөрсөн цэг байгаа эсэх — тайлбарын мөр түүгээр */
+  const offShown = React.useMemo(() => shown.filter((w) => offDistrict.has(w.oid)).length, [shown, offDistrict]);
 
   const focus = React.useMemo<Extent | null>(() => {
     if (!filterCount || !shown.length) return null;
@@ -697,6 +715,7 @@ export function ChemicalsDashboard() {
           <div className="relative min-h-[280px] flex-1 overflow-hidden rounded-xs border border-line">
             {data ? (
               <PointMap
+                credit="Суурь зураг: Esri · Дата: ArcGIS FeatureServer"
                 key={year}
                 points={points}
                 visible={visible}
@@ -721,9 +740,9 @@ export function ChemicalsDashboard() {
             <BasemapGallery value={basemap} onChange={setBasemap} />
 
             {/*
-              Тэмдэглэгээний тайлбар — зургийн зүүн ДООД буланд, эх
-              сурвалжийн бичгийн яг дээр. Дээд булан нь суурь зургийн
-              товчинд үлдэнэ.
+              Тэмдэглэгээний тайлбар — зургийн БАРУУН ДООД буланд (хэрэглэгч
+              2026-11-19: зүүн доод буланд масштабыг дардаг байв). Зүүн доод
+              булан нь масштаб ба эх сурвалжийн мөрөнд үлдэнэ.
             */}
             <div
               /*
@@ -734,7 +753,7 @@ export function ChemicalsDashboard() {
                 дагуулын цас, элс) дээр ч тэмдэглэгээг тодруулна —
                 зургийн доод ирмэгийн эх сурвалжийн бичигтэй ижил арга.
               */
-              className="pointer-events-none absolute bottom-6 left-2.5 z-10 rounded-xs border border-line bg-paper/10 px-2 py-1.5 backdrop-blur-md"
+              className="pointer-events-none absolute right-2.5 bottom-2.5 z-10 rounded-xs border border-line bg-paper/10 px-2 py-1.5 backdrop-blur-md"
               style={{ filter: "drop-shadow(0 0 1.5px var(--paper)) drop-shadow(0 0 1.5px var(--paper))" }}
             >
               <div className="flex items-center gap-1.5">
@@ -753,6 +772,7 @@ export function ChemicalsDashboard() {
                   Гэрчилгээний хугацаа дууссан аж ахуйн нэгжийн байршил
                 </span>
               </div>
+              {offShown ? <OffDistrictLegend /> : null}
             </div>
 
             {/* ХӨВӨГЧ ТАЙЛБАР — хулганы хажууд */}
@@ -779,6 +799,9 @@ export function ChemicalsDashboard() {
                   {hovered.district ? (
                     <MapTipRow icon={Building2} text={districtName(hovered.district)} />
                   ) : null}
+                  {offDistrict.has(hovered.oid) ? (
+                    <MapTipRow icon={MapPinOff} text={offText(offDistrict.get(hovered.oid) ?? "")} />
+                  ) : null}
                   <MapTipRow
                     icon={CalendarClock}
                     text={
@@ -800,17 +823,12 @@ export function ChemicalsDashboard() {
               <RecordCard
                 w={selected}
                 state={expiryState(selected, todayKey)}
+                off={offDistrict.get(selected.oid) ?? null}
                 onClose={() => setPicked(null)}
                 onSubstance={setSubstance}
               />
             ) : null}
 
-            <p
-              className="pointer-events-none absolute bottom-1 left-2.5 z-10 text-[10px] leading-none text-ink-3"
-              style={{ filter: "drop-shadow(0 0 1.5px var(--paper)) drop-shadow(0 0 1.5px var(--paper))" }}
-            >
-              Суурь зураг: Esri · Дата: ArcGIS FeatureServer
-            </p>
           </div>
         </div>
 
@@ -986,99 +1004,6 @@ function SubstanceIndex({
   );
 }
 
-/**
- * Товьёогийн бүлгийн мөр.
- *
- * `share` нь 0–1 хооронд — мөрийн доод ирмэгийн хэмжигчийн зураасны урт.
- */
-function GroupRow({
-  label,
-  n,
-  share,
-  open,
-  onClick,
-}: {
-  label: string;
-  n: number;
-  share: number;
-  open: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={cn(
-        "relative flex w-full items-center gap-1.5 py-[6px] pr-1.5 pl-2.5 text-left transition-colors",
-        open ? "bg-paper-hi text-ink" : "text-ink-2 hover:bg-paper-hi hover:text-ink",
-      )}
-    >
-      {/* Сонголтыг дүүргэлтээр биш ИРМЭГИЙН ЗУРААСААР тэмдэглэнэ */}
-      {open ? (
-        <span aria-hidden className="absolute inset-y-0 left-0 w-[2px] bg-data" />
-      ) : null}
-
-      <ChevronRight
-        size={11}
-        className={cn(
-          "shrink-0 text-ink-3 transition-transform",
-          open && "rotate-90 text-data",
-        )}
-      />
-      <span className={cn("min-w-0 flex-1 truncate text-[11.5px]", open && "font-medium")}>
-        {label}
-      </span>
-      <span className={cn("num shrink-0 text-[10.5px]", open ? "text-ink-2" : "text-ink-3")}>
-        {n}
-      </span>
-
-      <span
-        aria-hidden
-        className="absolute bottom-0 left-0 h-[2px]"
-        style={{
-          width: `${Math.max(share * 100, 1.5)}%`,
-          background: open
-            ? "var(--data)"
-            : "color-mix(in oklab, var(--data) 45%, transparent)",
-        }}
-      />
-    </button>
-  );
-}
-
-function NameRow({
-  name,
-  n,
-  note,
-  on,
-  onPick,
-}: {
-  name: string;
-  n: number;
-  /** Хайлтын үр дүнд бүлгийн нэрийг хажууд нь бичнэ */
-  note?: string;
-  on: boolean;
-  onPick: () => void;
-}) {
-  return (
-    <button
-      onClick={onPick}
-      title={name}
-      className={cn(
-        "flex w-full items-baseline justify-between gap-2 rounded-xs px-1.5 py-[3px] text-left transition-colors",
-        on
-          ? "bg-data/14 font-medium text-ink"
-          : "text-ink-2 hover:bg-paper-hi hover:text-ink",
-      )}
-    >
-      <span className="min-w-0 flex-1 truncate text-[11px] leading-snug">
-        {name}
-        {note ? <span className="ml-1 text-[9.5px] text-ink-3">· {note}</span> : null}
-      </span>
-      <span className="num shrink-0 text-[10.5px] text-ink-3">{n}</span>
-    </button>
-  );
-}
-
 /* -------------------------------------------------------------------------- */
 
 function Cell({
@@ -1165,11 +1090,14 @@ function StatusChip({ state }: { state: ExpiryState }) {
 function RecordCard({
   w,
   state,
+  off,
   onClose,
   onSubstance,
 }: {
   w: Warehouse;
   state: ExpiryState;
+  /** Цэгийн дүүрэг бүртгэлийнхээс зөрсөн бол координатын дүүрэг (`""` — хотоос гадна) */
+  off: string | null;
   onClose: () => void;
   onSubstance: (name: string) => void;
 }) {
@@ -1193,6 +1121,9 @@ function RecordCard({
         <dl className="mt-2.5 space-y-1.5">
           <Field k="Байршил" v={w.place || "—"} />
           <Field k="Дүүрэг" v={districtName(w.district)} />
+          {off != null ? (
+            <Field k="Цэгийн байршил" v={<span className="text-water">{offText(off)}</span>} />
+          ) : null}
           <Field k="Зөвшөөрлийн эрх" v={w.rightsRaw || "—"} />
           <Field k="Хадгалах зориулалт" v={w.storage} />
           <Field

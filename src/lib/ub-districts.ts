@@ -87,3 +87,33 @@ export function fetchUbKhoroos(): Promise<GeoJSON.FeatureCollection> {
   }
   return khorooCache;
 }
+
+/*
+  ЦЭГ АЛЬ ДҮҮРЭГТ БАЙНА ВЭ — `fetchUbDistricts`-ийн хилээр (цацраг татах арга).
+  Хотын хилээс гадна бол `null`. Хил нь ~20 м ерөнхийлсөн тул яг хил дээрх цэг
+  хөрш дүүрэгт унаж болно (хяналтын химийн агуулахын бүртгэлийн дүүрэгтэй тулгахад
+  хэрэглэнэ, 2026-11-19).
+*/
+type Ring = number[][];
+
+function inRing(x: number, y: number, r: Ring): boolean {
+  let c = false;
+  for (let i = 0, j = r.length - 1; i < r.length; j = i++) {
+    const [xi, yi] = r[i];
+    const [xj, yj] = r[j];
+    if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) c = !c;
+  }
+  return c;
+}
+
+export function districtAt(fc: GeoJSON.FeatureCollection, lon: number, lat: number): string | null {
+  for (const f of fc.features) {
+    const g = f.geometry;
+    const polys = g?.type === "Polygon" ? [g.coordinates] : g?.type === "MultiPolygon" ? g.coordinates : [];
+    if (polys.some((p) => inRing(lon, lat, p[0]) && !p.slice(1).some((h) => inRing(lon, lat, h)))) {
+      const n = f.properties?.soum_name;
+      return typeof n === "string" ? n : null;
+    }
+  }
+  return null;
+}

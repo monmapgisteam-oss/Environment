@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { MapPin, ChevronDown, Loader2 } from "lucide-react";
+import { MapPin, MapPinOff, ChevronDown, Loader2 } from "lucide-react";
 
 import { countParcelsIn, ringsOf } from "@/lib/parcels";
 import { MapPanel, useMapPanel } from "@/components/map/panel";
@@ -35,6 +35,7 @@ export function RecordPanel({
   row,
   oid,
   place,
+  off,
   tone,
   onClose,
 }: {
@@ -44,6 +45,8 @@ export function RecordPanel({
   oid: number;
   /** Тооцоолсон байршлын нэр ({@link LayerSet.placeNames}) — ангилалгүй үед */
   place?: string;
+  /** Бүртгэсэн дүүргээс зөрсөн цэгийн байршлын бичвэр ({@link ../../lib/district-check}) */
+  off?: string;
   tone: string;
   onClose: () => void;
 }) {
@@ -306,6 +309,12 @@ export function RecordPanel({
                 <span className="min-w-0">
                   {where.map((w) => w.text).join(" · ")}
                 </span>
+              </p>
+            ) : null}
+            {off ? (
+              <p className="mt-1 flex items-start gap-1 text-[11.5px] leading-snug text-water">
+                <MapPinOff size={11} aria-hidden className="mt-[2px] shrink-0" />
+                <span className="min-w-0">{off}</span>
               </p>
             ) : null}
           </div>

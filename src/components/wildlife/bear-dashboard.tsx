@@ -56,6 +56,8 @@ import {
   type BearInput,
 } from "@/lib/bears";
 import { cn, num } from "@/lib/utils";
+import { offDistricts, offText } from "@/lib/district-check";
+import { OffDistrictLegend, mismatchPin } from "@/components/map/off-district";
 
 /*
   ОЙН ТӨРӨЛ — ойн самбарын "Ойн ялгарал"-ын бүлэг, өнгөтэй ЯГ ИЖИЛ
@@ -799,6 +801,21 @@ export function BearDashboard() {
     `statusHex`. ⚠ Урьдын (2026-10-14) "нэг хороонд 2+ тохиолдол шаргал"
     өнгө ОРЛОГДСОН — давталт нь хорооны диаграмд уншигдана.
   */
+  /*
+    БҮРТГЭСЭН ДҮҮРГЭЭС ӨӨР ДҮҮРЭГТ БУУСАН тохиолдол (2026-11-19, аудитаар 56-аас 4) —
+    шүүлт бүртгэлээр хэвээр, цэг дээр тусгай тэмдэг ({@link ../../lib/district-check}).
+  */
+  const offDistrict = React.useMemo(
+    () => offDistricts(districtBnd, rows.filter(located)),
+    [districtBnd, rows],
+  );
+  const offMarks = React.useMemo(() => {
+    const m: Record<number, string> = {};
+    for (const o of offDistrict.keys()) m[o] = mismatchPin();
+    return Object.keys(m).length ? m : undefined;
+  }, [offDistrict]);
+  const offShown = shown.some((r) => offDistrict.has(r.oid));
+
   const colors = React.useMemo(
     () => placed.map((r) => statusHex(mapStatus(r))),
     [placed],
@@ -1185,6 +1202,7 @@ export function BearDashboard() {
                     : undefined
                 }
                 colors={colors}
+                marks={offMarks}
                 labels={labels}
                 overlays={overlays}
                 onView={onView}
@@ -1281,6 +1299,7 @@ export function BearDashboard() {
                     ))}
                   </div>
                 ) : null}
+                {offShown ? <OffDistrictLegend className="flex items-center gap-1.5 border-t border-line pt-1" /> : null}
                 </div>
               </div>
               <BasemapGallery value={basemap} onChange={setBasemap} />
@@ -1342,6 +1361,7 @@ export function BearDashboard() {
                   </div>
                   <CaseCard
                     r={chosen}
+                    off={offDistrict.get(chosen.oid) ?? null}
                     onEdit={() => openForm(chosen.oid)}
                     onDelete={async () => {
                       await deleteBear(chosen.oid);
@@ -1450,10 +1470,13 @@ const val = (v: unknown) => {
  */
 function CaseCard({
   r,
+  off,
   onEdit,
   onDelete,
 }: {
   r: BearCase;
+  /** Цэгийн дүүрэг бүртгэлийнхээс зөрсөн бол координатын дүүрэг (`""` — хотоос гадна) */
+  off: string | null;
   onEdit: () => void;
   onDelete: () => Promise<void>;
 }) {
@@ -1473,6 +1496,7 @@ function CaseCard({
   const rows: [string, string][] = [
     ...(fake ? ([["Юу байсан", note]] as [string, string][]) : []),
     ["Байршил", [r.district, khoroo].filter(Boolean).join(" · ")],
+    ...(off != null ? ([["Цэгийн байршил", offText(off)]] as [string, string][]) : []),
     ["Газрын нэр", val(a["газрын_нэр"])],
     ["Нас / төлөв", val(a["нас___төлөв"])],
     ["Эх бичилт", val(a["зүйлийн_эх_бичилт"])],
