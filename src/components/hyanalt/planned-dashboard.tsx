@@ -7,6 +7,8 @@ import {
   Building2,
   BriefcaseBusiness,
   Check,
+  ChevronLeft,
+  ChevronRight,
   ClipboardCheck,
   Copy,
   FlaskConical,
@@ -16,9 +18,17 @@ import {
   MousePointerClick,
   TriangleAlert,
   MapPinOff,
+  type LucideIcon,
 } from "lucide-react";
-import { AreaChart, RowChart, type Datum } from "@/components/charts";
-import { GroupRow, NameRow, PlaceCard } from "@/components/hyanalt/catalog-rows";
+import { AreaChart, PieChart, RowChart, type Datum } from "@/components/charts";
+import {
+  CatalogGroup,
+  CatalogName,
+  CatalogRow,
+  CatalogSearch,
+  PlaceCard,
+  PlaceRows,
+} from "@/components/hyanalt/catalog-rows";
 import { BasemapGallery } from "@/components/map/basemap-gallery";
 import { MapTip, MapTipRow, useMapTip } from "@/components/map/hover-tip";
 import { MapPanel, useMapPanel } from "@/components/map/panel";
@@ -400,39 +410,56 @@ export function PlannedDashboard() {
             show={byDistrict.length > 0}
             picked={district}
             onPick={(k) => setDistrict((d) => (d === k ? null : k))}
+            bar={4}
+            color="var(--data)"
           />
-          <div className="flex min-h-0 flex-1 flex-col rounded-xs border border-line bg-paper-2">
-            <div className="flex shrink-0 items-center justify-between gap-2 border-b border-line px-3 py-2">
-              <h2 className="display text-[13.5px] leading-none tracking-[0.06em] uppercase">
-                Объектын жагсаалт
-              </h2>
-              <span className="num text-[10.5px] text-ink-3">{num(shown.length)}</span>
-            </div>
-            <div className="min-h-0 flex-1 overflow-hidden">
-              <ObjectList
-                items={shown}
-                selected={sel}
-                onPick={(oid) => setPicked((p) => (p === oid ? null : oid))}
-              />
-            </div>
-          </div>
-
-          <Block title="Химийн бодис ашиглагдаг эсэх" note="объектын тоо">
-            <RowChart data={byChemical} selected={chemical} onSelect={setChemical} format={num} />
-          </Block>
+          {/* ОБЪЕКТЫН ЖАГСААЛТ · ҮЙЛ АЖИЛЛАГААНЫ ЧИГЛЭЛ — ДАВХАРЛАСАН (хэрэглэгч 2026-11-19: "Объектын
+              жагсаалт deer Үйл ажиллагааны чиглэлээр dawharlah"); баруун баганаас хасагдсан. */}
+          <SwitchCard
+            fill
+            views={[
+              {
+                title: "Объектын жагсаалт",
+                meta: <span className="num">{num(shown.length)}</span>,
+                flush: true,
+                body: (
+                  <ObjectList
+                    items={shown}
+                    selected={sel}
+                    onPick={(oid) => setPicked((p) => (p === oid ? null : oid))}
+                  />
+                ),
+              },
+              {
+                title: "Үйл ажиллагааны чиглэлээр",
+                flush: true,
+                body: (
+                  <ActivityIndex
+                    groups={actGroups}
+                    items={actItems}
+                    group={agroup}
+                    selected={activity}
+                    onGroup={pickAgroup}
+                    onPick={setActivity}
+                  />
+                ),
+              },
+            ]}
+          />
         </div>
 
         {/* ---- ТӨВ: үзүүлэлт + газрын зураг ---- */}
         <div className="flex min-h-0 min-w-0 flex-col gap-2.5">
-          <div className="grid shrink-0 grid-cols-2 divide-x divide-line rounded-xs border border-line bg-paper-2 sm:grid-cols-4">
-            <Cell label="Объект" value={num(picks.length)} />
-            <Cell label="Химийн бодис ашигладаг" value={num(totals.chem)} />
+          <div className="grid shrink-0 grid-cols-2 gap-2 sm:grid-cols-4">
+            <Cell icon={Building2} label="Объект" value={num(picks.length)} />
+            <Cell icon={FlaskConical} label="Химийн бодис ашигладаг" value={num(totals.chem)} />
             <Cell
+              icon={ClipboardCheck}
               label="Хууль сахин мөрдөлт"
               value={totals.law == null ? "—" : num(totals.law, 1)}
               unit={totals.law == null ? undefined : "% дундаж"}
             />
-            <Cell label="Эрсдэл их" value={num(totals.high)} alert={totals.high > 0} />
+            <Cell icon={TriangleAlert} label="Эрсдэл их" value={num(totals.high)} alert={totals.high > 0} />
           </div>
 
           <div className="relative min-h-[280px] flex-1 overflow-hidden rounded-xs border border-line">
@@ -520,44 +547,100 @@ export function PlannedDashboard() {
 
         {/* ---- БАРУУН: задаргаа ---- */}
         <div className="flex min-h-0 min-w-0 flex-col gap-2.5 overflow-y-auto">
-          <Block title="Эрсдэлийн зэргээр" note="объектын тоо">
-            <RowChart
-              data={byRisk}
-              selected={risk}
-              onSelect={setRisk}
-              /* Бүртгэгдээгүйн цагаан нь цагаан карт дээр уусна — диаграмд саарал */
-              colorOf={(d) => (d.key ? riskOf(d.key).hex : "var(--ink-3)")}
-              format={num}
-            />
-          </Block>
-          <Block title="Оноор" note="объектын тоо">
-            <AreaChart
-              data={byYear}
-              height={96}
-              unit="объект"
-              selected={year == null ? null : String(year)}
-              /* Бүртгэлгүй (тэг) он дээр дарвал шүүлт цуцлагдана — хоосон дэлгэц үлдээхгүй */
-              onSelect={(k) => {
-                const hit = byYear.find((d) => d.key === k);
-                setYear(k != null && hit && hit.value > 0 && Number(k) !== year ? Number(k) : null);
-              }}
-            />
-          </Block>
-          <Block title="Усны эх үүсвэрээр" note="объектын тоо">
-            <RowChart data={byWater} selected={water} onSelect={setWater} format={num} dense />
-          </Block>
+          {/* ЭРСДЭЛ · ХИМИЙН БОДИС — ДАВХАРЛАСАН ХОЁР БӨГЖ (хэрэглэгч 2026-11-19: хяналт шалгалтын
+              "Бүртгэлийн төрлөөр" шиг ‹ 1 / 2 ›). Нуугдсан диаграмын шүүлт хадгалагдана. */}
+          <SwitchCard
+            views={[
+              {
+                title: "Эрсдэлийн зэргээр",
+                body: (
+                  <PieChart
+                    data={byRisk}
+                    size={100}
+                    selected={risk}
+                    onSelect={setRisk}
+                    colorOf={(d) => riskOf(d.key).tone}
+                    outlined
+                    shares={false}
+                  />
+                ),
+              },
+              {
+                title: "Химийн бодис ашиглагдаг эсэх",
+                body: (
+                  <PieChart
+                    data={byChemical}
+                    size={100}
+                    selected={chemical}
+                    onSelect={setChemical}
+                    colorOf={yesNoColor}
+                    outlined
+                    shares={false}
+                  />
+                ),
+              },
+            ]}
+          />
+          {/* ОНООР · УСНЫ ЭХ ҮҮСВЭР — ДАВХАРЛАСАН (хэрэглэгч 2026-11-19: "Оноор door Усны эх үүсвэрээр
+              dawharla") */}
+          <SwitchCard
+            sameHeight
+            views={[
+              {
+                title: "Оноор",
+                body: (
+                  <AreaChart
+                    data={byYear}
+                    height={96}
+                    unit="объект"
+                    selected={year == null ? null : String(year)}
+                    /* Бүртгэлгүй (тэг) он дээр дарвал шүүлт цуцлагдана — хоосон дэлгэц үлдээхгүй */
+                    onSelect={(k) => {
+                      const hit = byYear.find((d) => d.key === k);
+                      setYear(k != null && hit && hit.value > 0 && Number(k) !== year ? Number(k) : null);
+                    }}
+                  />
+                ),
+              },
+              {
+                /* Дүүргийн карттай нэг хэв — нэр · зурвас · тоо нэг эгнээнд (хэрэглэгч 2026-11-19) */
+                title: "Усны эх үүсвэрээр",
+                flush: true,
+                meta: water ? (
+                  <button
+                    onClick={() => setWater(null)}
+                    className="text-[10px] text-(--tone) transition-colors hover:text-ink"
+                  >
+                    Цэвэрлэх
+                  </button>
+                ) : null,
+                body: (
+                  <PlaceRows
+                    rows={byWater.map((d) => [d.key, d.value, d.label] as [string, number, string])}
+                    picked={water}
+                    onPick={(k) => setWater((w) => (w === k ? null : k))}
+                    bar={4}
+                    color="var(--data)"
+                  />
+                ),
+              },
+            ]}
+          />
+          {/* Хэлбэр, өндөр нь хэвээр (`RowChart dense clamp`); ЗУРВАСЫН ӨНГӨ, ЗУЗААН нь "Усны эх
+              үүсвэрээр"-тэй ижил — "Оноор"-ын `--data`, 4px, бөөрөнхий (хэрэглэгч 2026-11-19: "line ungu urgung
+              ijilhen bolgo") */}
           <Block title="Газрын зориулалтаар" note="объектын тоо">
-            <RowChart data={byLand} selected={land} onSelect={setLand} format={num} dense clamp />
-          </Block>
-          <Block title="Үйл ажиллагааны чиглэлээр" note="объектын тоо">
-            <ActivityIndex
-              groups={actGroups}
-              items={actItems}
-              group={agroup}
-              selected={activity}
-              onGroup={pickAgroup}
-              onPick={setActivity}
-            />
+            <div className="[&_.row-chart-track-inner]:h-[4px]! [&_.row-chart-track-inner]:rounded-full!">
+              <RowChart
+                data={byLand}
+                selected={land}
+                onSelect={setLand}
+                format={num}
+                tone="var(--data)"
+                dense
+                clamp
+              />
+            </div>
           </Block>
         </div>
       </Columns>
@@ -625,65 +708,60 @@ function ActivityIndex({
   const [q, setQ] = React.useState("");
   const query = q.trim().toLowerCase();
   const found = query ? items.filter((i) => i.name.toLowerCase().includes(query)) : [];
-  const max = Math.max(...groups.map((g) => g.n), 1);
-  const label = (name: string) => name || "Бүртгэгдээгүй";
+  const names = new Map<string, number>();
+  for (const i of items) names.set(i.group, (names.get(i.group) ?? 0) + 1);
 
+  /* "Хамрах хүрээ"-ний "Бодисын товьёог"-той яг нэг хэв (хэрэглэгч 2026-11-19) */
   return (
-    <div className="-m-3 flex flex-col">
-      <div className="px-2 pt-2 pb-1.5">
-        <input
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="Чиглэлээр хайх"
-          className="h-7 w-full rounded-xs border border-line bg-paper px-2 text-[12px] text-ink outline-none placeholder:text-ink-3 focus:border-line-2"
-        />
-      </div>
+    <div className="flex h-full min-h-0 flex-col">
+      <CatalogSearch value={q} onChange={setQ} placeholder="Чиглэлийн нэр" />
       {query ? (
         found.length === 0 ? (
-          <p className="py-4 text-center text-[11.5px] text-ink-3">Илэрц олдсонгүй</p>
+          <div className="hatch m-3 rounded-xs border border-dashed border-line-2 px-3 py-6 text-center text-[11.5px] text-ink-3">
+            Тохирох бүртгэл олдсонгүй
+          </div>
         ) : (
-          <div className="px-1.5 pb-2">
+          <ul className="min-h-0 flex-1 divide-y divide-line overflow-y-auto">
             {found.map((i) => (
-              <NameRow
+              <CatalogRow
                 key={i.name}
-                name={label(i.name)}
-                n={i.n}
-                note={ACTIVITY_GROUP_LABEL.get(i.group)}
                 on={selected === i.name}
-                onPick={() => onPick(selected === i.name ? null : i.name)}
+                onClick={() => onPick(selected === i.name ? null : i.name)}
+                title={i.name}
+                note={ACTIVITY_GROUP_LABEL.get(i.group)}
+                value={num(i.n)}
+                unit="объект"
               />
             ))}
-          </div>
+          </ul>
         )
       ) : (
-        <div className="divide-y divide-line border-t border-line">
+        <ul className="min-h-0 flex-1 overflow-y-auto py-0.5">
           {groups.map((g) => (
-            <div key={g.id}>
-              <GroupRow
-                label={g.label}
-                n={g.n}
-                share={g.n / max}
-                open={group === g.id}
-                onClick={() => onGroup(g.id)}
-              />
-              {group === g.id ? (
-                <div className="mb-1 ml-4 border-l border-line pr-1.5 pl-1.5">
-                  {items
-                    .filter((i) => i.group === g.id)
-                    .map((i) => (
-                      <NameRow
-                        key={i.name}
-                        name={label(i.name)}
-                        n={i.n}
-                        on={selected === i.name}
-                        onPick={() => onPick(selected === i.name ? null : i.name)}
-                      />
-                    ))}
-                </div>
-              ) : null}
-            </div>
+            <CatalogGroup
+              key={g.id}
+              label={g.label}
+              note={`${num(names.get(g.id) ?? 0)} чиглэл`}
+              value={num(g.n)}
+              unit="объект"
+              open={group === g.id}
+              onClick={() => onGroup(g.id)}
+            >
+              {items
+                .filter((i) => i.group === g.id)
+                .map((i) => (
+                  <CatalogName
+                    key={i.name}
+                    on={selected === i.name}
+                    onClick={() => onPick(selected === i.name ? null : i.name)}
+                    name={i.name}
+                    value={num(i.n)}
+                    unit="объект"
+                  />
+                ))}
+            </CatalogGroup>
           ))}
-        </div>
+        </ul>
       )}
     </div>
   );
@@ -769,15 +847,113 @@ function ObjectList({
   );
 }
 
-function Cell({ label, value, unit, alert }: { label: string; value: string; unit?: string; alert?: boolean }) {
+function Cell({ icon: Icon, label, value, unit, alert }: { icon: LucideIcon; label: string; value: string; unit?: string; alert?: boolean }) {
   return (
-    <div className="px-3 py-2">
-      <div className="eyebrow truncate">{label}</div>
-      <div className="mt-1.5 flex items-baseline gap-1">
-        <span className={cn("num text-[19px] leading-none font-medium", alert ? "text-clay" : "text-ink")}>
+    <div className="flex min-w-0 flex-col items-center justify-center rounded-xs border border-line bg-paper-2 px-2 py-1.5">
+      <div className="eyebrow text-center">{label}</div>
+      <div className="mt-1 flex items-center gap-2">
+        <Icon size={22} strokeWidth={1.4} className={cn("shrink-0", alert ? "text-clay" : "text-(--tone)")} aria-hidden />
+        <span className={cn("num text-[18px] leading-none font-semibold", alert ? "text-clay" : "text-ink")}>
           {value}
         </span>
         {unit ? <span className="text-[10.5px] text-ink-3">{unit}</span> : null}
+      </div>
+    </div>
+  );
+}
+
+/** Тийм / үгүй утгын өнгө — бөгжний зүсэм ижил өнгөтэй бол ялгагдахгүй (хяналт шалгалттай нэг) */
+const yesNoColor = (d: Datum) =>
+  /^тийм/i.test(d.key) ? "var(--moss)" : /^үгүй/i.test(d.key) ? "var(--ochre)" : "var(--ink-3)";
+
+/**
+ * Давхарласан картууд — толгойд ‹ 1 / 2 › сэлгэгч (хяналт шалгалтын `SwitchCard`-ийн хэв).
+ * `fill` — баганын үлдсэн өндрийг авна; `flush` харагдацын бие зайгүй, өөрөө гүйнэ (жагсаалт).
+ */
+function SwitchCard({
+  views,
+  fill = false,
+  sameHeight = false,
+}: {
+  views: { title: string; meta?: React.ReactNode; flush?: boolean; body: React.ReactNode }[];
+  fill?: boolean;
+  /**
+   * Бүх харагдац ЭХНИЙХийнхээ өндөртэй (хэрэглэгч 2026-11-19: "2 cardiin undur ijil … Оноор bolj") —
+   * сэлгэхэд карт үсрэхгүй. Эхний харагдацын биеийг хэмжиж, бусдад тэр өндрийг тавина; урт бол дотроо гүйнэ.
+   */
+  sameHeight?: boolean;
+}) {
+  const [at, setAt] = React.useState(0);
+  const view = views[at] ?? views[0];
+  const n = views.length;
+  const go = (step: number) => setAt((at + step + n) % n);
+  const body = React.useRef<HTMLDivElement>(null);
+  const [lock, setLock] = React.useState<number | null>(null);
+  React.useEffect(() => {
+    const el = body.current;
+    if (!sameHeight || at !== 0 || !el) return;
+    const ro = new ResizeObserver(() => setLock(el.offsetHeight));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [sameHeight, at]);
+  const locked = sameHeight && at !== 0 && lock != null;
+  return (
+    <div
+      className={cn(
+        "rounded-xs border border-line bg-paper-2",
+        fill ? "flex min-h-0 flex-1 flex-col" : "shrink-0",
+      )}
+    >
+      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-line px-3 py-2">
+        <h2 className="display min-w-0 text-[12.5px] leading-tight tracking-[0.06em] uppercase">
+          {view.title}
+        </h2>
+        <span className="flex shrink-0 items-center gap-2 text-[10.5px] text-ink-3">
+          {view.meta}
+        {n > 1 ? (
+          <span
+            className="inline-flex shrink-0 items-center rounded-xs border border-line bg-paper p-px text-[10px] text-ink-3"
+            role="group"
+            aria-label="Диаграм сэлгэх"
+          >
+            <button
+              type="button"
+              aria-label="Өмнөх диаграм"
+              title={views[(at - 1 + n) % n].title}
+              onClick={() => go(-1)}
+              className="grid size-[22px] place-items-center rounded-xs hover:bg-paper-hi hover:text-(--tone)"
+            >
+              <ChevronLeft size={12} aria-hidden />
+            </button>
+            <span className="num inline-flex min-w-[34px] justify-center gap-1 px-0.5 leading-none" aria-live="polite">
+              <strong className="font-semibold text-ink">{at + 1}</strong>
+              <span aria-hidden>/</span>
+              <span>{n}</span>
+            </span>
+            <button
+              type="button"
+              aria-label="Дараагийн диаграм"
+              title={views[(at + 1) % n].title}
+              onClick={() => go(1)}
+              className="grid size-[22px] place-items-center rounded-xs hover:bg-paper-hi hover:text-(--tone)"
+            >
+              <ChevronRight size={12} aria-hidden />
+            </button>
+          </span>
+        ) : null}
+        </span>
+      </div>
+      <div
+        ref={body}
+        className={cn(
+          view.flush ? "min-h-0 overflow-hidden" : "p-3",
+          fill && "min-h-0 flex-1",
+          fill && !view.flush && "overflow-y-auto",
+          locked && "overflow-y-auto [&>*]:max-h-none",
+        )}
+        style={locked ? { height: lock } : undefined}
+      >
+        {view.body}
       </div>
     </div>
   );

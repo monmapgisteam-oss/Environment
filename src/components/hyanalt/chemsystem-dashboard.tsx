@@ -5,7 +5,6 @@ import dynamic from "next/dynamic";
 import {
   Boxes,
   Building2,
-  ChevronDown,
   ClipboardList,
   FlaskConical,
   Loader2,
@@ -40,7 +39,12 @@ import {
 import { pointsOnBuildings, type Building } from "@/lib/buildings";
 import { inUlaanbaatar } from "@/lib/ub-boundary";
 import { cn, num } from "@/lib/utils";
-import { PlaceCard } from "@/components/hyanalt/catalog-rows";
+import {
+  CatalogGroup as GroupBlock,
+  CatalogName as NameRow,
+  CatalogRow as Row,
+  PlaceCard,
+} from "@/components/hyanalt/catalog-rows";
 import { offDistricts, offText } from "@/lib/district-check";
 import { OffDistrictLegend, mismatchPin, useUbDistricts } from "@/components/map/off-district";
 import type { LucideIcon } from "lucide-react";
@@ -545,7 +549,12 @@ export function ChemSystemDashboard() {
     <div className="flex h-full min-h-0 flex-col gap-2">
       {/* ---------------- Хамрах хүрээ ---------------- */}
       <div className="flex shrink-0 flex-wrap items-center gap-x-2 gap-y-1.5 rounded-xs border border-line bg-paper-2 px-2.5 py-1.5">
-        <span className="eyebrow shrink-0">Хамрах хүрээ</span>
+        {/* Самбарын НЭР — бусад самбарын толгойтой ижил хэв (хэрэглэгч 2026-11-19: "Хамрах хүрээ ner ni bish …
+            himiin bodisiin undesni burtgel bolgo") */}
+        <span className="shrink-0 text-[12px] font-semibold tracking-[0.02em] text-ink uppercase">
+          Химийн бодисын үндэсний бүртгэл
+        </span>
+        <span className="mx-0.5 h-4 w-px shrink-0 bg-line" aria-hidden />
 
         {/*
           ⚠⚠ ХУУЧИН ТОВЧНУУД ХЭВЭЭР (хэрэглэгчийн шийдвэр, 2026-09-23:
@@ -1142,80 +1151,6 @@ function Panel({
   );
 }
 
-/**
- * Жагсаалтын нэг мөр.
- *
- * Нэр нь ХОЁР МӨРӨНД буудаг: аж ахуйн нэгжийн нэр урт бөгөөд нэг
- * мөрөнд таславал "Дундговь аймгийн мэргэжлийн хян…" гэж бүгд ижил
- * эхэлсэн, ялгагдахгүй мөрүүд болно.
- *
- * Хэмжигчийн зураас БАЙХГҮЙ: тоо нь баруун талдаа аль хэдийн
- * бичигдсэн байхад зураас нэмэлт мэдээлэл өгөхгүй, зөвхөн чимэг болно.
- */
-function Row({
-  on,
-  onClick,
-  onEnter,
-  onLeave,
-  title,
-  note,
-  value,
-  unit,
-}: {
-  on: boolean;
-  onClick: () => void;
-  onEnter?: () => void;
-  onLeave?: () => void;
-  title: string;
-  note?: string;
-  value: string;
-  unit?: string;
-}) {
-  return (
-    <li>
-      <button
-        onClick={onClick}
-        onMouseEnter={onEnter}
-        onMouseLeave={onLeave}
-        className={cn(
-          "relative block w-full px-2.5 py-2 text-left transition-colors",
-          on ? "bg-(--tone)/10" : "hover:bg-paper-hi",
-        )}
-      >
-        {on ? (
-          <span aria-hidden className="absolute inset-y-0 left-0 w-[2px] bg-(--tone)" />
-        ) : null}
-
-        <div className="flex items-start gap-2">
-          <span
-            className={cn(
-              "line-clamp-2 min-w-0 flex-1 text-[11.5px] leading-snug text-ink",
-              on && "font-medium",
-            )}
-            title={title}
-          >
-            {title}
-          </span>
-          <span className="num shrink-0 pt-[1px] text-[11px] leading-snug text-ink-2">
-            {value}
-          </span>
-        </div>
-
-        {note || unit ? (
-          <div className="mt-0.5 flex items-baseline gap-2">
-            <span className="min-w-0 flex-1 truncate text-[10px] leading-snug text-ink-3">
-              {note}
-            </span>
-            {unit ? (
-              <span className="shrink-0 text-[9.5px] leading-snug text-ink-3">{unit}</span>
-            ) : null}
-          </div>
-        ) : null}
-      </button>
-    </li>
-  );
-}
-
 function Pill({
   on,
   onClick,
@@ -1290,116 +1225,3 @@ function groupOf(name: string): string {
   return g;
 }
 
-/**
- * Товьёогийн бүлгийн мөр ба задарсан нэрс.
- *
- * ⚠⚠ ХЭМЖИГЧИЙН ЗУРААС ХАСАГДСАН (хэрэглэгчийн шийдвэр, 2026-09-23:
- * "Бодисын товьёог энд баганан чарт хэрэггүй юм байна"). Товьёог нь
- * ЖАГСААЛТ — хайж олох, задлах зам бөгөөд бүлгүүдийн харьцааг
- * зурагладаг диаграм БИШ. Тоонууд нь өөрсдөө эрэмбэлэгдсэн тул
- * зураас нэмэлт мэдээлэл өгөхгүй, зөвхөн мөрийг өндөрсгөж байв.
- * Дахин бүү нэм.
- */
-function GroupBlock({
-  label,
-  note,
-  value,
-  unit,
-  open,
-  onClick,
-  children,
-}: {
-  label: string;
-  /** Нэрийн тоо — "· 1,321 нэр" */
-  note?: string;
-  value: string;
-  unit: string;
-  open: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <li className="px-1.5 py-1">
-      <div
-        className={cn(
-          "rounded-md border px-1.5 py-1.5 transition-colors",
-          open ? "border-(--tone)/45 bg-paper-3" : "border-line bg-paper-2 hover:border-line-2",
-        )}
-      >
-        <button onClick={onClick} aria-expanded={open} className="block w-full text-left">
-          <div className="flex items-baseline gap-1.5">
-            <ChevronDown
-              size={12}
-              strokeWidth={2}
-              aria-hidden
-              className={cn(
-                "shrink-0 translate-y-[2px] transition-transform",
-                open ? "text-(--tone)" : "-rotate-90 text-ink-3",
-              )}
-            />
-            <span className="min-w-0 flex-1 text-[12px] leading-snug font-medium text-ink">
-              {label}
-              {note ? (
-                <span className="ml-1.5 text-[10px] font-normal whitespace-nowrap text-ink-3">
-                  · {note}
-                </span>
-              ) : null}
-            </span>
-            <span className="num shrink-0 text-[11.5px] text-ink-2">{value}</span>
-            <span className="shrink-0 text-[10px] text-ink-3">{unit}</span>
-          </div>
-        </button>
-
-        {open ? (
-          <div className="mt-1.5 ml-[18px] divide-y divide-line border-l border-line-2">
-            {children}
-          </div>
-        ) : null}
-      </div>
-    </li>
-  );
-}
-
-/** Задарсан бүлэг доторх бодисын мөр */
-function NameRow({
-  on,
-  onClick,
-  name,
-  value,
-  unit,
-}: {
-  on: boolean;
-  onClick: () => void;
-  name: string;
-  value: string;
-  unit?: string;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={cn(
-        "relative block w-full px-2.5 py-1.5 text-left transition-colors",
-        on ? "bg-(--tone)/10" : "hover:bg-paper-hi",
-      )}
-    >
-      {on ? (
-        <span aria-hidden className="absolute inset-y-0 left-0 w-[2px] bg-(--tone)" />
-      ) : null}
-      <div className="flex items-start gap-2">
-        <span
-          className={cn(
-            "line-clamp-2 min-w-0 flex-1 text-[11px] leading-snug text-ink-2",
-            on && "font-medium text-ink",
-          )}
-          title={name}
-        >
-          {name}
-        </span>
-        <span className="num shrink-0 pt-[1px] text-[10.5px] leading-snug text-ink-2">
-          {value}
-          {unit ? <span className="ml-1 text-ink-3">{unit}</span> : null}
-        </span>
-      </div>
-    </button>
-  );
-}
