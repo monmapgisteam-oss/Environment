@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import dynamic from "next/dynamic";
-import { Boxes, CalendarCheck, ClipboardCheck, Factory, FlaskConical, Loader2, ShieldCheck, Trash2, Workflow, Wrench } from "lucide-react";
+import { Boxes, CalendarCheck, ClipboardCheck, ClipboardList, Factory, FlaskConical, Loader2, ShieldCheck, Trash2, Workflow, Wrench } from "lucide-react";
 import { SourceTabs, TabGroups, useStoredTab } from "@/components/ui/source-tabs";
 import { TabAccess } from "@/components/auth/tab-access";
 import { useAccess } from "@/components/auth/access";
@@ -178,6 +178,15 @@ export const TABS = [
     icon: ClipboardCheck,
   },
   {
+    /* Хэрэглэгч 2026-11-19: "Хяналт шалгалт door hynal shalgalt asuultuud, unelgee geed shine button nee".
+       Эх сурвалж ИРЭЭГҮЙ — `.hatch` "Мэдээлэл хүлээгдэж байна"; асуулт, үнэлгээг ТААМАГЛАЖ бичихгүй. */
+    id: "questions",
+    group: "inspection",
+    label: "Хяналтын хуудас", /* хэрэглэгч 2026-11-19 — урьд "Хяналт шалгалтын асуулт, үнэлгээ" */
+    note: "Асуулт · үнэлгээ",
+    icon: ClipboardList,
+  },
+  {
     id: "scheme",
     group: "inspection",
     label: "Хяналт шалгалтын схем",
@@ -203,7 +212,8 @@ type TabId = (typeof TABS)[number]["id"];
 const IDS = TABS.map((t) => t.id);
 
 /* Түр хугацаанд зөвхөн портал админ ба хяналтын хэлтсийн бүртгэлд харагдах табууд */
-const ADMIN_ONLY: ReadonlySet<TabId> = new Set<TabId>(["inspections"]);
+/* "Хяналт шалгалтын асуулт, үнэлгээ" мөн — "Хяналт шалгалт"-тай ижил хүрээнд (2026-11-19) */
+const ADMIN_ONLY: ReadonlySet<TabId> = new Set<TabId>(["inspections", "questions"]);
 
 /*
   Тэмдэглэх шаардлагатай табууд.
@@ -304,6 +314,10 @@ export function HyanaltWorkspace() {
             <RepairMap />
           ) : open === "inspections" && admin ? (
             <InspectionDashboard />
+          ) : open === "questions" && admin ? (
+            <div className="hatch flex h-full items-center justify-center rounded-xs border border-dashed border-line-2">
+              <p className="px-6 text-center text-[12.5px] leading-snug text-ink-3">Мэдээлэл хүлээгдэж байна</p>
+            </div>
           ) : open === "scheme" ? (
             <InspectionScheme />
           ) : open === "chemicals" ? (

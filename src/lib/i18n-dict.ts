@@ -1364,6 +1364,8 @@ export const DICT: Record<string, string> = {
   "Хадгалах, бүртгэл": "Filing and records",
   "Гарц": "Output",
   "Хяналт шалгалтын схем": "Inspection scheme",
+  "Хяналтын хуудас": "Inspection checklist",
+  "Асуулт · үнэлгээ": "Questions · assessment",
   "Хяналт шалгалт": "Inspection",
   "{0} оны үйл ажиллагааны журам": "{0} operating procedure",
   "Дуусах огноо тодорхойгүй": "Expiry date unknown",
