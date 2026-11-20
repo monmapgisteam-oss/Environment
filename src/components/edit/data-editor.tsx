@@ -11,6 +11,7 @@ import {
   Loader2,
   Lock,
   MapPin,
+  MapPinOff,
   MapPinPlus,
   MousePointer2,
   PencilLine,
@@ -32,6 +33,9 @@ import { isSystemField, officialLabel } from "@/lib/portal-layers";
 import { cn, num } from "@/lib/utils";
 import { BASEMAPS, WellsMap, defaultBasemap, type Basemap, type Extent, type MapOverlay } from "@/components/wells/map";
 import { BasemapGallery } from "@/components/map/basemap-gallery";
+import { OffDistrictLegend, mismatchPin, useUbDistricts } from "@/components/map/off-district";
+import { UB_DISTRICTS, canonDistricts, offText } from "@/lib/district-check";
+import { districtAt } from "@/lib/ub-districts";
 import { DISTRICT_CODE, installToken, layerUrl, loadMapData, placeAt, reason, type MapData, type Place } from "./esri-edit";
 import { EditorHead, type EditSource } from "./editor-head";
 import { AddField } from "./add-field";
@@ -114,6 +118,14 @@ type Draft = {
   place: Place | null | "loading" | undefined;
   /** Хуучин бүртгэл анх ТҮГЖЭЭТЭЙ — сануулгыг баталгаажуулсны дараа л засагдана */
   locked: boolean;
+  /**
+   * БҮРТГЭСЭН ДҮҮРЭГ (цэгэн давхарга) — жагсаалтаас сонгоно, гараас бичихгүй (хэрэглэгч
+   * 2026-11-20: "duuregiin neriig solih … domain shig … ner bichigui songono"). Утга нь
+   * {@link UB_DISTRICTS}-ийн нэр; хоосон — бүртгэгдээгүй эсвэл танигдаагүй бичиглэл (`distRaw`).
+   */
+  dist: string;
+  distOrig: string;
+  distRaw: string;
 };
 
 const TABLE_LIMIT = 500;
@@ -253,20 +265,23 @@ const coord = (s: string, lo: number, hi: number) => {
 const LON = [87, 120] as const;
 const LAT = [41, 52.5] as const;
 
+const sampleOf = (rows: Row[], name: string) =>
+  rows.map((r) => r.a[name]).find((v) => typeof v === "string" && v.trim()) as string | undefined;
+
+/** Дүүргийн нэр → давхаргын ОДОО БАЙГАА бичиглэл ("СХД" / "Сонгинохайрхан" / "Сонгинохайрхан дүүрэг") */
+function districtValue(name: string, field: string, rows: Row[]): string {
+  const s = sampleOf(rows, field)?.trim();
+  return s && /^[А-ЯӨҮЁ]{2,3}$/.test(s) ? (DISTRICT_CODE[name] ?? name) : s && !/дүүрэг$/i.test(s) ? name : `${name} дүүрэг`;
+}
+
+/** Байршлын дүүрэг (`placeAt`) → {@link UB_DISTRICTS}-ийн нэр */
+const canonName = (v: string) => canonDistricts(v)?.[0] ?? v;
+
 /** Хадгалах утга — тухайн давхаргын ОДОО БАЙГАА бичиглэлийг дагана */
 function placeAttrs(p: Place | null, spec: PlaceSpec, rows: Row[]): Record<string, unknown> {
-  const sample = (name: string) => rows.map((r) => r.a[name]).find((v) => typeof v === "string" && v.trim()) as string | undefined;
+  const sample = (name: string) => sampleOf(rows, name);
   const out: Record<string, unknown> = {};
-  if (spec.district) {
-    const s = sample(spec.district)?.trim();
-    out[spec.district] = !p
-      ? null
-      : s && /^[А-ЯӨҮЁ]{2,3}$/.test(s)
-        ? (DISTRICT_CODE[p.district] ?? p.district)
-        : s && !/дүүрэг$/i.test(s)
-          ? p.district
-          : `${p.district} дүүрэг`;
-  }
+  if (spec.district) out[spec.district] = p ? districtValue(p.district, spec.district, rows) : null;
   if (spec.khoroo) {
     const k = p?.khoroo ?? null;
     const s = sample(spec.khoroo)?.trim();
@@ -391,6 +406,8 @@ export function DataEditor({
   const target = targets[active];
   const [meta, setMeta] = React.useState<Meta | null>(null);
   const [mapData, setMapData] = React.useState<MapData | null>(null);
+  /** Зураг дээр сонгосон бүртгэл — хүснэгт түүн рүү гүйнэ */
+  const scrollTo = React.useRef<number | null>(null);
   const [rows, setRows] = React.useState<Row[]>([]);
   const [matched, setMatched] = React.useState(0);
   const [status, setStatus] = React.useState<"loading" | "ready">("loading");
@@ -477,7 +494,8 @@ export function DataEditor({
     const data = await loadMapData(m.url, {
       oid: m.oidField,
       label: m.displayField,
-      fields: lk?.fields,
+      /* Цэгэн давхаргын дүүрэг — бүртгэсэн дүүргээс зөрсөн цэгийн тэмдэгт */
+      fields: [...(lk?.fields ?? []), ...(m.geo === "point" && m.place?.district ? [m.place.district] : [])],
       point: m.geo === "point",
       pageSize: m.pageSize,
       signal,
@@ -625,6 +643,33 @@ export function DataEditor({
     };
   }, [shapeData, look, draft, isNew, isPoint, target, decor]);
   const pulseOn = Boolean(pointProps.pulse);
+
+  /*
+    БҮРТГЭСЭН ДҮҮРГЭЭС ЗӨРСӨН ЦЭГ — самбартай нэг тэмдэг ({@link mismatchPin}). Зурагт бүх цэг
+    (`mapData`), хүснэгтэд харагдаж буй мөрүүд. 30 мянгаас олон цэгт (нүхэн жорлон) тооцохгүй.
+  */
+  const bounds = useUbDistricts();
+  const distField = isPoint ? (meta?.place?.district ?? null) : null;
+  const off = React.useMemo(() => {
+    const m = new Map<number, string>();
+    if (!bounds || !distField) return m;
+    const check = (oid: number, lon: number | null, lat: number | null, v: unknown) => {
+      const reg = canonDistricts(v);
+      if (!reg || lon == null || lat == null || !Number.isFinite(lon) || !Number.isFinite(lat)) return;
+      const at = districtAt(bounds, lon, lat);
+      if (!at || !reg.includes(at)) m.set(oid, at ?? "");
+    };
+    if (mapData && mapData.points.oid.length <= 30_000)
+      mapData.points.oid.forEach((oid, i) => check(oid, mapData.points.lon[i], mapData.points.lat[i], mapData.attrs[i]?.[distField]));
+    for (const r of rows) if (!m.has(r.oid)) check(r.oid, r.lon, r.lat, r.a[distField]);
+    return m;
+  }, [bounds, distField, mapData, rows]);
+  const marks = React.useMemo(() => {
+    if (!off.size) return pointProps.marks;
+    const m: Record<number, string> = { ...(pointProps.marks ?? {}) };
+    for (const oid of off.keys()) m[oid] = mismatchPin();
+    return m;
+  }, [off, pointProps.marks]);
   const effBasemap =
     !basemapUser && look?.basemapAt ? (BASEMAPS.find((b) => b.id === look.basemapAt!(zoom)) ?? basemap) : basemap;
 
@@ -638,6 +683,8 @@ export function DataEditor({
       const district = typeof dv === "string" && dv.trim() ? dv.trim().replace(/\s*дүүрэг$/i, "") : null;
       const abbr = district ? Object.entries(DISTRICT_CODE).find(([, c]) => c === district)?.[0] : null;
       const kn = kv == null ? NaN : parseInt(String(kv), 10);
+      const reg = canonDistricts(dv);
+      const dist = reg?.length === 1 ? reg[0] : "";
       return {
         oid: r.oid,
         values,
@@ -650,6 +697,9 @@ export function DataEditor({
         moved: false,
         place: district ? { district: abbr ?? district, khoroo: Number.isFinite(kn) ? kn : null, code: null } : undefined,
         locked: true,
+        dist,
+        distOrig: dist,
+        distRaw: typeof dv === "string" ? dv.trim() : "",
       };
     },
     [meta],
@@ -743,7 +793,8 @@ export function DataEditor({
       const ac = (placeAc.current = new AbortController());
       setDraft((d) => (d ? { ...d, place: "loading" } : d));
       placeAt(lon, lat, ac.signal)
-        .then((p) => !ac.signal.aborted && setDraft((d) => (d ? { ...d, place: p } : d)))
+        /* Цэг зөөхөд бүртгэсэн дүүрэг шинэ байршлыг дагана — хэрэглэгч дараа нь жагсаалтаас сольж болно */
+        .then((p) => !ac.signal.aborted && setDraft((d) => (d ? { ...d, place: p, dist: p ? canonName(p.district) : "" } : d)))
         .catch(() => !ac.signal.aborted && setDraft((d) => (d ? { ...d, place: undefined } : d)));
     },
     [meta],
@@ -842,7 +893,7 @@ export function DataEditor({
     const values: Record<string, string> = {};
     for (const f of meta?.fields ?? []) values[f.name] = "";
     clearSketch();
-    setDraft({ oid: null, values, orig: { ...values }, lon: "", lat: "", geom: null, verts: emptyVerts(meta?.geo ?? "point"), measure: null, moved: false, place: undefined, locked: false });
+    setDraft({ oid: null, values, orig: { ...values }, lon: "", lat: "", geom: null, verts: emptyVerts(meta?.geo ?? "point"), measure: null, moved: false, place: undefined, locked: false, dist: "", distOrig: "", distRaw: "" });
     setErrors({});
     setConfirmDel(false);
     setNotice(null);
@@ -1012,7 +1063,8 @@ export function DataEditor({
     } catch {}
   };
 
-  const dirty = !!draft && (draft.moved || Object.keys(draft.values).some((k) => draft.values[k] !== draft.orig[k]));
+  const dirty =
+    !!draft && (draft.moved || draft.dist !== draft.distOrig || Object.keys(draft.values).some((k) => draft.values[k] !== draft.orig[k]));
 
   async function save() {
     const e = esri.current;
@@ -1056,6 +1108,11 @@ export function DataEditor({
           known === "loading" || known === undefined ? await placeAt(at[0], at[1]).catch(() => undefined) : known;
         if (found !== undefined) Object.assign(attrs, placeAttrs(found, meta.place, rows));
       }
+      /* Сонгосон дүүрэг давуу — байршлаас ирсэнийг хэрэглэгч сольсон байж болно */
+      const distField = isPoint ? meta.place?.district : undefined;
+      const distChanged = Boolean(distField) && draft.dist !== draft.distOrig;
+      if (distField && (distChanged || ((isNew || draft.moved) && draft.dist)))
+        attrs[distField] = draft.dist ? districtValue(draft.dist, distField, rows) : null;
       const edit = isNew
         ? { addFeatures: [new e.Graphic({ attributes: attrs, geometry })] }
         : {
@@ -1080,12 +1137,13 @@ export function DataEditor({
               .filter(([k, v]) => isNew ? v !== "" : v !== draft.orig[k])
               .map(([k, v]) => [k, isNew ? v : [draft.orig[k], v]]),
           ),
+          ...(distField && distChanged ? { [distField]: isNew ? draft.dist : [draft.distRaw || draft.distOrig, draft.dist] } : {}),
           ...(geometry ? { geometry: isPoint && at ? `${at[0].toFixed(6)}, ${at[1].toFixed(6)}` : draft.measure ?? true } : {}),
         },
       });
       clearSketch();
       const list = await loadRows(query, meta);
-      if (geometry) {
+      if (geometry || distChanged) {
         const ac = new AbortController();
         await loadMap(meta, ac.signal, look).catch(() => undefined);
       }
@@ -1160,8 +1218,28 @@ export function DataEditor({
   /* Засварлаж буй (түгжээ тайлсан, өөрчлөлттэй) бүртгэлээс өөр бүртгэл рүү
      санамсаргүй шилжихгүй — өөрчлөлт алдагдана */
   const busyEditing = !!draft && !draft.locked && !isNew && dirty;
+  /*
+    Зураг дээр сонгоход хүснэгтийн тэр мөр ХАМГИЙН ДЭЭР, шараар (хэрэглэгч 2026-11-20: "map deer feature
+    songowol doorh attributen hamgiin deer shar select"). Хүснэгтэд байхгүй (хуучин) бүртгэлийг `select`
+    асууж эхэнд нь нэмдэг тул мөр ирмэгц гүйлгэнэ. Хүснэгтээс дарахад гүйлгэхгүй — мөр аль хэдийн харагдаж байна.
+  */
+  React.useLayoutEffect(() => {
+    const oid = scrollTo.current;
+    if (oid == null || draft?.oid !== oid) return;
+    const box = tableRef.current?.parentElement;
+    const tr = tableRef.current?.querySelector<HTMLElement>(`tr[data-oid="${oid}"]`);
+    if (!box || !tr) return;
+    const head = tableRef.current?.tHead?.offsetHeight ?? 0;
+    box.scrollTo({ top: Math.max(tr.offsetTop - head, 0) });
+    scrollTo.current = null;
+  }, [draft?.oid, rows]);
+
   const selectedAt: [number, number] | null =
     isPoint && draft && dLon != null && dLat != null ? [dLon, dLat] : null;
+
+  /* Сонгосон цэгийн БАЙРШЛЫН дүүрэг — `null` нийслэлээс гадна, `undefined` тодорхойгүй */
+  const locDist: string | null | undefined =
+    distField && bounds && draft && dLon != null && dLat != null ? districtAt(bounds, dLon, dLat) : undefined;
 
   const tone = getDepartment(source.scope)?.tone;
 
@@ -1221,13 +1299,18 @@ export function DataEditor({
                   key={`${target.url}-${mapKey}`}
                   cluster={false}
                   {...pointProps}
+                  marks={marks}
                   points={points}
                   visible={visible}
                   basemap={effBasemap}
                   shapes={shapes}
                   overlays={overlays}
                   onZoom={look?.zoomAware || look?.basemapAt ? setZoom : undefined}
-                  onSelect={(oid) => (oid < DECOR && mode === "select" && !busyEditing ? select(oid, false) : undefined)}
+                  onSelect={(oid) => {
+                    if (oid >= DECOR || mode !== "select" || busyEditing) return;
+                    scrollTo.current = oid;
+                    select(oid, false);
+                  }}
                   onHover={(oid) => setHover(oid != null && oid >= DECOR ? null : oid)}
                   hotMark={hover}
                   pickedMark={isNew ? null : (draft?.oid ?? null)}
@@ -1240,6 +1323,11 @@ export function DataEditor({
               {!mapData && !error && (
                 <div className="pe-map-wait">
                   <Loader2 size={18} className="animate-spin" />
+                </div>
+              )}
+              {off.size > 0 && (
+                <div className="pointer-events-none absolute bottom-8 left-2.5 rounded-xs border border-line bg-paper/90 px-2 py-1 backdrop-blur">
+                  <OffDistrictLegend className="flex items-center gap-1.5" />
                 </div>
               )}
               <BasemapGallery
@@ -1322,6 +1410,7 @@ export function DataEditor({
                   {rows.map((r) => (
                     <tr
                       key={r.oid}
+                      data-oid={r.oid}
                       className={cn(draft?.oid === r.oid && "is-picked", hover === r.oid && "is-hot")}
                       onMouseEnter={() => setHover(r.oid)}
                       onClick={() => !busyEditing && select(r.oid, true)}
@@ -1331,7 +1420,10 @@ export function DataEditor({
                       {isPoint && <td className="num">{r.lon?.toFixed(6) ?? "—"}</td>}
                       {isPoint && <td className="num">{r.lat?.toFixed(6) ?? "—"}</td>}
                       {placeCols.map((c) => (
-                        <td key={c}>{r.a[c] != null && r.a[c] !== "" ? String(r.a[c]) : "—"}</td>
+                        <td key={c} title={c === distField && off.has(r.oid) ? offText(off.get(r.oid)!) : undefined}>
+                          {c === distField && off.has(r.oid) && <MapPinOff size={11} className="pe-off-icon" aria-hidden="true" />}
+                          {r.a[c] != null && r.a[c] !== "" ? String(r.a[c]) : "—"}
+                        </td>
                       ))}
                       {restCols.map((f) => cell(r, f, false))}
                     </tr>
@@ -1456,6 +1548,32 @@ export function DataEditor({
                       <p className="pe-place">
                         {draft.place === "loading" ? <Loader2 size={12} className="animate-spin" /> : draft.place ? placeText(draft.place) : "Нийслэлийн нутаг дэвсгэрээс гадуур"}
                       </p>
+                    )}
+                    {distField && (
+                      <label className="pe-field">
+                        <span>Бүртгэсэн дүүрэг</span>
+                        <select value={draft.dist} onChange={(e) => setDraft({ ...draft, dist: e.target.value })}>
+                          <option value="">{draft.distRaw && !draft.distOrig ? draft.distRaw : "—"}</option>
+                          {UB_DISTRICTS.map((d) => (
+                            <option key={d} value={d}>
+                              {d}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    )}
+                    {locDist !== undefined && draft.dist && locDist !== draft.dist && (
+                      <div className="pe-off">
+                        <p>
+                          <MapPinOff size={13} aria-hidden="true" />
+                          {offText(locDist ?? "")}
+                        </p>
+                        {locDist && !draft.locked && (
+                          <button type="button" className="pe-pick" onClick={() => setDraft({ ...draft, dist: locDist })}>
+                            Дүүргийг {locDist} болгох
+                          </button>
+                        )}
+                      </div>
                     )}
                     {errors.__coords && <p className="pe-err">{errors.__coords}</p>}
                   </fieldset>

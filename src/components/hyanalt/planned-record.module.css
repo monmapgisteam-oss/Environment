@@ -1,30 +1,30 @@
 .panel { top: 8px; right: 46px; width: 348px; max-width: calc(100% - 16px); max-height: calc(100% - 2.5rem); border-radius: 10px; background: var(--paper-2); box-shadow: 0 4px 18px color-mix(in oklab, var(--ink) 10%, transparent); container-type: inline-size; }
 .panel > div:first-child { padding: 10px 12px; }
-.panel > div:first-child > span { font-size: 13px; font-weight: 600; letter-spacing: 0; text-transform: none; color: var(--ink); }
+.panel > div:first-child > span { font-size: 11px; font-weight: 600; letter-spacing: 0; text-transform: none; color: var(--ink); }
 .content { padding: 16px 14px 2px; color: var(--ink); }
 .identity { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
 .objectIcon { display: grid; place-items: center; width: 46px; height: 46px; flex-shrink: 0; border: 1px solid color-mix(in oklab, var(--moss) 18%, var(--line)); border-radius: 9px; color: var(--moss); background: color-mix(in oklab, var(--moss) 10%, var(--paper-2)); }
 .identity > div { min-width: 0; }
-.identity h3 { margin: 0 0 7px; font-size: 16px; font-weight: 600; line-height: 1.4; overflow-wrap: anywhere; }
+.identity h3 { margin: 0 0 7px; font-size: 12px; font-weight: 600; line-height: 1.4; overflow-wrap: anywhere; }
 .identity > div > span { border-radius: 6px; padding: 4px 7px; font-size: 11px; }
 .identity > div > span::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; margin-right: 3px; }
 .highlights { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; margin: 0; }
 .highlights > div { padding: 3px 8px; border: 1px solid var(--line); border-radius: 5px; background: var(--paper-3); }
 .highlights dt { color: var(--ink-3); font-size: 10px; line-height: 1.2; }
-.highlights dd { margin: 1px 0 0; font-size: 16px; font-weight: 600; line-height: 1.2; }
+.highlights dd { margin: 1px 0 0; font-size: 13px; font-weight: 600; line-height: 1.2; }
 .content small { margin-left: 4px; color: var(--ink-3); font-size: 11px; font-weight: 400; }
 .section { margin-top: 18px; }
-.section h4 { display: flex; align-items: center; gap: 8px; margin: 0; padding-bottom: 9px; border-bottom: 1px solid var(--line); color: var(--ink); font-size: 12px; font-weight: 600; letter-spacing: .025em; text-transform: uppercase; }
+.section h4 { display: flex; align-items: center; gap: 8px; margin: 0; padding-bottom: 9px; border-bottom: 1px solid var(--line); color: var(--ink); font-size: 10px; font-weight: 600; letter-spacing: .025em; text-transform: uppercase; }
 .section h4 svg { color: var(--moss); flex-shrink: 0; }
 .fields { margin: 0; }
 .fields > div { display: grid; grid-template-columns: minmax(0, .85fr) minmax(0, 1.25fr); gap: 12px; padding: 10px 0; }
 .fields > div + div { border-top: 1px solid color-mix(in oklab, var(--line) 55%, transparent); }
 .fields dt { font-size: 11px; line-height: 1.5; color: var(--ink-3); overflow-wrap: anywhere; }
-.fields dd { min-width: 0; margin: 0; font-size: 12px; line-height: 1.5; color: var(--ink); overflow-wrap: anywhere; }
+.fields dd { min-width: 0; margin: 0; font-size: 11px; line-height: 1.5; color: var(--ink); overflow-wrap: anywhere; }
 .activity { margin: 0; padding: 10px 0; border-bottom: 1px solid color-mix(in oklab, var(--line) 55%, transparent); }
 .activity > div { display: grid; grid-template-columns: minmax(0, .85fr) minmax(0, 1.25fr); align-items: baseline; gap: 12px; }
 .activity dt { margin: 0; font-size: 11px; line-height: 1.5; color: var(--ink-3); }
-.activity dd { min-width: 0; margin: 0; font-size: 12px; line-height: 1.5; color: var(--ink); overflow-wrap: anywhere; }
+.activity dd { min-width: 0; margin: 0; font-size: 11px; line-height: 1.5; color: var(--ink); overflow-wrap: anywhere; }
 .answer { display: inline-block; padding: 2px 9px; border-radius: 5px; background: var(--paper-3); }
 .parcel { display: flex; align-items: center; flex-wrap: wrap; gap: 5px; }
 .parcel > span:first-child { min-width: 0; overflow-wrap: anywhere; }
@@ -37,7 +37,7 @@
 @container (max-width: 270px) {
   .content { padding-inline: 10px; }
   .fields > div { grid-template-columns: minmax(0, 1fr); gap: 3px; }
-  .identity h3 { font-size: 13px; }
+  .identity h3 { font-size: 12px; }
 }
 .listFirefly { position: relative; display: inline-block; width: 8px; height: 8px; margin-top: 5px; flex-shrink: 0; pointer-events: none; }
 .fireflyGlow { position: absolute; inset: -4px; background: currentColor; mask-size: 100% 100%; mask-repeat: no-repeat; }

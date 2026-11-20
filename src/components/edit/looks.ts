@@ -41,6 +41,7 @@ import { num } from "@/lib/utils";
 import { fetchReclamation, RECLAMATION_SERVICES } from "@/lib/reclamation";
 import { REPAIR_SERVICE } from "@/lib/repair-shops";
 import { NEUTRALIZATION_SERVICE } from "@/lib/neutralization";
+import { PLANNED_SERVICE, riskOf } from "@/lib/planned-inspections";
 import { mnPointCode, PLI_RAMP, SOIL_SERVICES } from "@/lib/soil";
 import { CITY_SERVICE, PIT_SERVICE } from "@/lib/toilets";
 import { rampColor, spreadRamp } from "@/lib/tone-ramp";
@@ -622,8 +623,16 @@ const LOOKS: Record<string, Look> = {
     points: (d) => ({
       cluster: false,
       pulse: true,
+      /* Самбартай нэг тогтмол өнгө (2026-11-13) — анхдагч `--data` гэрэл горимд бараан ногоон болж уусдаг */
+      pulseColor: () => "#94d7b9",
       labels: { text: d.attrs.map((a) => s(a.kh_mon) || mnPointCode(s(a["цэгийн_дугаар"]))), minzoom: 0 },
     }),
+  },
+  /* Төлөвлөгөөт мэдээлэл (hyanalt/planned-dashboard.tsx, 2026-11-19): нэгж талбар эрсдэлийн зэргийн өнгөөр, нимгэн хүрээ */
+  [PLANNED_SERVICE]: {
+    fields: ["risk_lvl"],
+    shapeOpts: { edge: "thin", labelZoom: 13 },
+    shape: () => (a) => ({ c: riskOf(s(a.risk_lvl).replace(/\s+/g, " ").trim()).hex }),
   },
   [SOIL_SERVICES[0]]: soil("dugaar"),
   [SOIL_SERVICES[1]]: soil("tseg_num"),

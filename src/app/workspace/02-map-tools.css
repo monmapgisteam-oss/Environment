@@ -188,6 +188,32 @@
   justify-self: start;
   padding: 0 9px;
 }
+/* Бүртгэсэн дүүрэг зөрсөн үед сануулга (`--water`, самбарын тэмдэгтэй нэг өнгө) */
+.pe-off {
+  display: grid;
+  gap: 6px;
+  padding: 7px 9px;
+  border: 1px solid color-mix(in oklab, var(--water) 40%, transparent);
+  border-radius: 7px;
+  background: color-mix(in oklab, var(--water) 8%, transparent);
+}
+.pe-off p {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ink);
+  font-size: 11.5px;
+}
+.pe-off p svg {
+  flex-shrink: 0;
+  color: var(--water);
+}
+.pe-off-icon {
+  display: inline-block;
+  margin-right: 4px;
+  vertical-align: -1px;
+  color: var(--water);
+}
 .pe-place {
   display: flex;
   align-items: center;
