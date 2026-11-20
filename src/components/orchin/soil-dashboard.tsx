@@ -16,14 +16,12 @@ import {
 import { GroupedRowChart, PieChart, RowChart, type Datum, type DatumGroup } from "@/components/charts";
 import { BasemapGallery } from "@/components/map/basemap-gallery";
 import { MapTip, MapTipRow, useMapTip } from "@/components/map/hover-tip";
-import { OverlayControl } from "@/components/map/overlay-control";
 import { FilterBar, FilterMenu, PickList } from "@/components/wells/filter-bar";
 import { Columns } from "@/components/ui/resizable-columns";
 import {
   defaultBasemap,
   type Basemap,
   type Extent,
-  type MapOverlay,
   type MapPoints,
 } from "@/components/wells/map";
 import {
@@ -108,7 +106,6 @@ export function SoilDashboard() {
   const tip = useMapTip();
 
   const [basemap, setBasemap] = React.useState<Basemap>(defaultBasemap);
-  const [overlays, setOverlays] = React.useState<MapOverlay[]>([]);
 
   React.useEffect(() => {
     let alive = true;
@@ -726,12 +723,9 @@ export function SoilDashboard() {
                   onHover={tip.onHover}
                   highlight={highlight}
                   focus={focus}
-                  overlays={overlays}
                   cluster={false}
                 />
                 <BasemapGallery value={basemap} onChange={setBasemap} />
-                <OverlayControl value={overlays} onChange={setOverlays} />
-            
                 {/*
                   ХӨВӨГЧ ТАЙЛБАР — хулганы хажууд. Цэг дээр очиход хамгийн
                   чухал гурван зүйл шууд гарна: аль цэг, ямар түвшин, хаана.

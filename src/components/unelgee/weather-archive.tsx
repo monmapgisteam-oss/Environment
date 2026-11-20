@@ -360,6 +360,8 @@ function Line({
   const box = React.useRef<HTMLDivElement>(null);
   const [w, setW] = React.useState(0);
   const [h, setH] = React.useState(0);
+  /* Хулганы доорх заалт (индекс) — шугам дээр утга ба цагийг харуулна */
+  const [hov, setHov] = React.useState<number | null>(null);
   React.useLayoutEffect(() => {
     const el = box.current;
     if (!el) return;
@@ -416,8 +418,29 @@ function Line({
     )
     .join(" ");
 
+  /*
+    ХУЛГАНЫН ДООРХ УТГА (хэрэглэгч 2026-11-13: "smooth line deer cursor
+    ochihod utga ni haragdmaar bn"). Цэг бүрийн `<title>` нь 1.5px цэгийг
+    яг онох шаардлагатай байсан тул бараг ажилладаггүй байв. Одоо бүх
+    талбай мэдрэгчтэй: хамгийн ойрын заалт (цаг нь өсөх дарааллаар тул
+    хоёртын хайлт) босоо зураас, тодорсон цэг, жижиг хайрцгаар гарна.
+  */
+  const nearest = (x: number) => {
+    let a = 0;
+    let b = points.length - 1;
+    while (b - a > 1) {
+      const m = (a + b) >> 1;
+      if (X(points[m].t) < x) a = m;
+      else b = m;
+    }
+    return Math.abs(X(points[a].t) - x) <= Math.abs(X(points[b].t) - x) ? a : b;
+  };
+  const cur = hov != null && hov < points.length ? points[hov] : null;
+  const cx = cur ? X(cur.t) : 0;
+  const cy = cur ? Y(cur.v) : 0;
+
   return (
-    <div ref={box} className="h-full min-h-[96px] w-full">
+    <div ref={box} className="relative h-full min-h-[96px] w-full">
       {w > 0 ? (
         <svg
           width={w}
@@ -469,12 +492,41 @@ function Line({
               cy={Y(p.v)}
               r={points.length > 120 ? 1.5 : 2.5}
               fill="var(--data)"
-            >
-              <title>
-                {timeText(p.t)} · {num(p.v, measure.digits)} {measure.unit}
-              </title>
-            </circle>
+            />
           ))}
+          {cur ? (
+            <g pointerEvents="none">
+              <line
+                x1={cx}
+                x2={cx}
+                y1={T}
+                y2={H - B}
+                stroke="var(--ink-3)"
+                strokeWidth={1}
+                strokeDasharray="3 3"
+              />
+              <circle
+                cx={cx}
+                cy={cy}
+                r={4}
+                fill="var(--data)"
+                stroke="var(--paper-2)"
+                strokeWidth={2}
+              />
+            </g>
+          ) : null}
+          <rect
+            x={L}
+            y={0}
+            width={Math.max(w - L - R, 1)}
+            height={H}
+            fill="transparent"
+            onPointerMove={(e) => {
+              const r = e.currentTarget.ownerSVGElement?.getBoundingClientRect();
+              if (r) setHov(nearest(e.clientX - r.left));
+            }}
+            onPointerLeave={() => setHov(null)}
+          />
           <text x={L} y={H - 3} fontSize={9.5} fill="var(--ink-3)">
             {timeText(t0)}
           </text>
@@ -488,6 +540,22 @@ function Line({
             {timeText(t1)}
           </text>
         </svg>
+      ) : null}
+      {cur ? (
+        <div
+          className="elevated pointer-events-none absolute z-10 rounded-xs border border-line-2 bg-paper px-2 py-1 whitespace-nowrap"
+          style={{
+            left: Math.min(Math.max(cx, 60), w - 60),
+            top: Math.max(cy - 8, 0),
+            transform: "translate(-50%, -100%)",
+          }}
+        >
+          <div className="num text-[12.5px] font-semibold text-ink">
+            {num(cur.v, measure.digits)}
+            <span className="ml-0.5 text-[10px] font-normal text-ink-3">{measure.unit}</span>
+          </div>
+          <div className="num text-[10px] text-ink-3">{timeText(cur.t)}</div>
+        </div>
       ) : null}
     </div>
   );

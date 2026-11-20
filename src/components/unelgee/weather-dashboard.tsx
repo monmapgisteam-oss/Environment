@@ -502,7 +502,15 @@ function LiveWeather({
           хэвээр хуваагдана.
         */}
           {current ? (
-            <div className="observation-grid">
+            /* ⚠⚠ НЭМЭЛТ НҮД (хур тунадас, хамгийн бага/их температур) ирвэл
+              НЭГ МӨРӨНД нэмэгдэнэ (хэрэглэгч 2026-11-16: "ene asuudal
+              shiidegdeegui ymuu") — баганын жагсаалт нүдний тооноос,
+              тогтмол зургаа биш. Урьд нь долоо дахь нүд хоёр дахь мөрөнд
+              ганцаараа бууж эгнээг өндөрсгөдөг байв */
+            <div
+              className={cn("observation-grid", obsCols(current.obs).length > 7 && "is-dense")}
+              style={{ "--obs-cols": obsCols(current.obs).join(" ") } as React.CSSProperties}
+            >
               <Gauge
                 label="Агаарын температур"
                 value={current.obs.temp}
@@ -538,14 +546,30 @@ function LiveWeather({
                 icon={GaugeIcon}
                 tone={colorOf(measureOf("pressure"), current.obs.pressure)}
               />
-              <Gauge
-                label="Нийт үүлшил"
-                value={current.obs.cloud}
-                unit="балл"
-                digits={0}
-                icon={Cloud}
-                tone={colorOf(measureOf("cloud"), current.obs.cloud)}
-              />
+              {/* ⚠⚠ ЦАСНЫ ЗУЗААН ирвэл НИЙТ ҮҮЛШЛИЙН СУУДАЛД (хэрэглэгч
+                2026-11-13): долоо дахь нүд хоёр дахь мөрөнд ганцаараа буудаг
+                тул эгнээ өндөрсөж доорх зураг багасдаг байв. Үүлшил нь
+                зургийн элементийн сонголтоор харагдсаар байна.
+                Цас, тунадас хоёрт шатлал БАЙХГҮЙ тул тэмдэг нь өнгөгүй —
+                таамгаар өнгө өгвөл утга заасан мэт уншигдана */}
+              {current.obs.snowDepth != null ? (
+                <Gauge
+                  label="Цасны зузаан"
+                  value={current.obs.snowDepth}
+                  unit="см"
+                  digits={0}
+                  icon={Snowflake}
+                />
+              ) : (
+                <Gauge
+                  label="Нийт үүлшил"
+                  value={current.obs.cloud}
+                  unit="балл"
+                  digits={0}
+                  icon={Cloud}
+                  tone={colorOf(measureOf("cloud"), current.obs.cloud)}
+                />
+              )}
               {/* ⚠⚠ ЛУУЖИН ХАСАГДСАН (хэрэглэгчийн шийдвэр,
                 2026-09-21). Салхины зүг нь одоо зүүн баганын РАДАРТ,
                 сүлжээний бусад станцтайгаа зэрэг харагдана — нэг
@@ -585,17 +609,6 @@ function LiveWeather({
                   digits={1}
                   icon={Thermometer}
                   tone={colorOf(measureOf("temp"), current.obs.tmax)}
-                />
-              ) : null}
-              {/* Цас, тунадас хоёрт шатлал БАЙХГҮЙ тул тэмдэг нь өнгөгүй —
-                таамгаар өнгө өгвөл утга заасан мэт уншигдана */}
-              {current.obs.snowDepth != null ? (
-                <Gauge
-                  label="Цасны зузаан"
-                  value={current.obs.snowDepth}
-                  unit="см"
-                  digits={0}
-                  icon={Snowflake}
                 />
               ) : null}
               {current.obs.precip != null ? (
@@ -1623,4 +1636,16 @@ function Empty({ text }: { text: string }) {
       </p>
     </div>
   );
+}
+
+/** Заалтын эгнээний баганууд — нэмэлт нүд (хамгийн бага/их температур, хур
+ *  тунадас) ирсэн үед НЭГ мөрөнд нэмэгдэнэ. `minmax(0, …)` — найм, есөн нүд
+ *  ирвэл картууд шахагдаж (`is-dense`: тэмдэггүй, 11px шошго) эгнээнээс хальдаггүй */
+function obsCols(obs: { tmin?: number | null; tmax?: number | null; precip?: number | null }) {
+  return [
+    "1fr", "1fr", "1.13fr", "1fr", "1fr", "1fr",
+    ...(obs.tmin != null ? ["1.2fr"] : []),
+    ...(obs.tmax != null ? ["1.2fr"] : []),
+    ...(obs.precip != null ? ["1fr"] : []),
+  ].map((w) => `minmax(0, ${w})`);
 }

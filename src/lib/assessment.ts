@@ -57,9 +57,6 @@ export const ASSESSMENT_YEARS = ASSESSMENT_SERVICES.map(
   (s) => s.year,
 ) as readonly AssessmentYear[];
 
-/** Эх сурвалжийн бүртгэлд — хамгийн сүүлийн жилийнх */
-export const ASSESSMENT_SERVICE = ASSESSMENT_SERVICES[1].url;
-
 /**
  * Давхарга хоорондын мөргөлдөөнгүй дугаар.
  *

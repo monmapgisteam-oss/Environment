@@ -1,7 +1,7 @@
 .source-catalog { max-width: 1440px; margin-inline: auto; padding-block: 10px 24px; color: var(--ink); }
 .source-catalog-intro { display: flex; align-items: center; justify-content: space-between; gap: 24px; margin-bottom: 14px; }
 /* Хоёр харагдацын товч — хуучин тэмдэглэгээний (eyebrow) хэв: 10px, том үсэг, өргөн зай; сонгосон нь төрлийн товчтой нэг тинт */
-.source-catalog-views { display: flex; flex-wrap: wrap; gap: 6px; }
+.source-catalog-views { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 20px; } /* доороо зай (хэрэглэгч 2026-11-13) */
 .source-catalog-views button { display: flex; align-items: center; gap: 7px; padding: 5px 9px; border: 1px solid var(--line-2); border-radius: 2px; font-size: 10px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); }
 .source-catalog-views button svg { color: var(--ink-3); }
 .source-catalog-views button:hover { background: var(--paper-hi); color: var(--ink); }
@@ -28,7 +28,7 @@
 .source-catalog-reset { display: flex; align-items: center; gap: 4px; margin-left: auto; font-size: 10px; color: var(--ink-2); }
 .source-catalog-results { display: flex; justify-content: space-between; gap: 12px; padding: 14px 2px 10px; font-size: 10.5px; color: var(--ink-3); }
 .source-catalog-results strong { font-weight: 600; color: var(--ink-2); }
-.source-catalog-groups { display: grid; gap: 16px; }
+/* Хэлтсээ дээрээс сонгож, доорх нэг хүснэгтэд эх сурвалжуудыг харна. */
 .source-catalog-group { overflow: hidden; border: 1px solid var(--line-2); border-radius: 10px; background: var(--paper-2); }
 .source-catalog-group-head { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--line-2); background: color-mix(in srgb, var(--moss) 5%, var(--paper-2)); }
 .source-catalog-dept-icon { display: grid; place-items: center; width: 32px; height: 32px; flex-shrink: 0; border: 1px solid var(--line-2); border-radius: 8px; background: var(--paper); color: var(--moss); }
@@ -81,6 +81,108 @@
   .source-catalog-group-head h2 { flex-basis: 100%; }
   .source-catalog-entry { flex-direction: column; gap: 10px; padding: 13px 12px; }
   .source-catalog-reset { padding: 5px; }
+}
+
+/* The source register fills one workspace screen; its table owns vertical scrolling. */
+.workspace-main:has(.source-catalog[data-view="sources"]) {
+  height: calc(100dvh - var(--head-h));
+  min-height: 0;
+  overflow: hidden;
+  padding-block: 12px;
+}
+.source-catalog[data-view="sources"] {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  height: 100%;
+  min-height: 0;
+  padding-block: 0;
+}
+.source-catalog[data-view="sources"] > :not(.source-catalog-detail):not(.source-catalog-empty) { flex-shrink: 0; }
+.source-catalog[data-view="sources"] .source-catalog-intro { margin-bottom: 0; }
+.source-catalog[data-view="sources"] .source-catalog-search-row { padding: 10px 12px; gap: 10px; }
+.source-catalog[data-view="sources"] .source-catalog-filter-row { padding: 7px 12px; }
+.source-catalog[data-view="sources"] .source-catalog-results { padding: 0 2px; }
+.source-catalog-departments { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.source-catalog-departments:empty { display: none; }
+.source-catalog-department { display: flex; align-items: center; gap: 10px; width: 100%; min-width: 0; min-height: 48px; padding: 8px 12px; border: 1px solid var(--line-2); border-radius: 8px; background: var(--paper-2); color: var(--ink-2); text-align: left; font-size: 11px; line-height: 1.4; }
+.source-catalog-department:hover { background: var(--paper-hi); }
+.source-catalog-department[aria-pressed="true"] { border-color: var(--moss); background: color-mix(in srgb, var(--moss) 9%, var(--paper-2)); color: var(--ink); box-shadow: inset 3px 0 var(--moss); }
+.source-catalog-department > svg { flex-shrink: 0; color: var(--ink-3); }
+.source-catalog-department .source-catalog-dept-name { font-weight: 500; }
+.source-catalog-department .source-catalog-dept-icon { width: 28px; height: 28px; border: 0; background: color-mix(in srgb, var(--moss) 7%, var(--paper-2)); }
+.source-catalog-department .source-catalog-count { flex-shrink: 0; margin: 0; min-width: 25px; text-align: center; }
+/* Fit the source count and expanded details, capped by the remaining screen space. */
+.source-catalog-detail { display: flex; flex: 0 1 auto; flex-direction: column; min-height: 0; overflow: hidden; border: 1px solid var(--line-2); border-radius: 10px; background: var(--paper-2); }
+.source-catalog-detail-head { display: flex; flex-shrink: 0; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+.source-catalog-detail-head > div { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.source-catalog-detail-head svg { flex-shrink: 0; color: var(--moss); }
+.source-catalog-detail-head h2 { margin: 0; font-size: 12px; font-weight: 600; line-height: 1.5; }
+.source-catalog-detail-head > span { flex-shrink: 0; padding: 2px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--paper-3); font-size: 10px; color: var(--ink-3); }
+.source-catalog-detail-head strong { color: var(--ink); font-weight: 600; }
+.source-catalog-table-scroll { flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; scrollbar-width: thin; }
+.source-catalog-table-scroll:focus-visible { outline: 2px solid var(--moss); outline-offset: -2px; }
+.source-catalog-columns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: 14px; padding: 12px; }
+.source-catalog-column { display: grid; gap: 6px; min-width: 0; margin: 0; padding: 0; list-style: none; }
+.source-catalog-column:only-child { grid-column: 1 / -1; }
+.source-catalog-item { min-width: 0; }
+.source-catalog-item-details { overflow: hidden; border: 1px solid var(--line); border-radius: 8px; background: var(--paper-2); }
+.source-catalog-item-details:hover { border-color: color-mix(in srgb, var(--moss) 35%, var(--line)); background: color-mix(in srgb, var(--moss) 3%, var(--paper-2)); }
+.source-catalog-item-details[open] { border-color: color-mix(in srgb, var(--moss) 48%, var(--line)); background: color-mix(in srgb, var(--moss) 4%, var(--paper-2)); }
+.source-catalog-item-details > summary { display: flex; align-items: center; gap: 11px; min-height: 43px; padding: 7px 11px; cursor: pointer; list-style: none; }
+.source-catalog-item-details > summary::-webkit-details-marker { display: none; }
+.source-catalog-item-details > summary:focus-visible { outline-offset: -3px; }
+.source-catalog-number { display: grid; place-items: center; flex-shrink: 0; width: 27px; height: 27px; border-radius: 7px; background: var(--paper-3); color: var(--ink-3); font-size: 10px; font-weight: 500; font-variant-numeric: tabular-nums; }
+.source-catalog-item-details[open] .source-catalog-number { background: color-mix(in srgb, var(--moss) 12%, var(--paper-2)); color: var(--moss); }
+.source-catalog-item-name { flex: 1; min-width: 0; font-size: 12px; line-height: 1.5; color: var(--ink); overflow-wrap: anywhere; }
+.source-catalog-item-arrow { flex-shrink: 0; color: var(--ink-3); }
+.source-catalog-item-details[open] .source-catalog-item-arrow { transform: rotate(90deg); color: var(--moss); }
+.source-catalog-item-body { margin: 0 12px 12px 49px; padding-top: 10px; border-top: 1px solid var(--line); }
+.source-catalog-item-body dl { display: grid; gap: 9px; }
+.source-catalog-item-body dt { margin-bottom: 3px; font-size: 10px; color: var(--ink-3); }
+.source-catalog-item-body dd { margin: 0; font-size: 11px; line-height: 1.6; color: var(--ink-2); overflow-wrap: anywhere; }
+.source-catalog[data-view="sources"] .source-catalog-empty { flex: 1; min-height: 0; overflow-y: auto; justify-content: center; padding: 20px 16px; }
+@media (max-width: 900px) {
+  .workspace-main:has(.source-catalog[data-view="sources"]) { padding-bottom: calc(88px + env(safe-area-inset-bottom, 0px)); }
+  .source-catalog-department { font-size: 10px; }
+}
+@media (max-width: 760px) {
+  .source-catalog-columns { grid-template-columns: minmax(0, 1fr); gap: 6px; padding: 8px; }
+  .source-catalog[data-view="sources"] { gap: 8px; }
+  .source-catalog[data-view="sources"] .source-catalog-intro > div { min-width: 0; max-width: 100%; }
+  .source-catalog[data-view="sources"] .source-catalog-views { margin-bottom: 8px; }
+  .source-catalog[data-view="sources"] .source-catalog-search-row { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .source-catalog[data-view="sources"] .source-catalog-types { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: thin; }
+  .source-catalog-types button { flex-shrink: 0; }
+  .source-catalog-departments { grid-auto-flow: column; grid-template-columns: none; grid-auto-columns: minmax(210px, 68%); overflow-x: auto; scrollbar-width: thin; padding-bottom: 4px; }
+  .source-catalog-department .source-catalog-dept-name { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .source-catalog-detail-head { padding: 10px 12px; }
+  .source-catalog-detail-head h2 { font-size: 11px; }
+  .source-catalog-detail-head > span { max-width: 65px; text-align: right; }
+}
+@media (max-width: 520px) {
+  .source-catalog[data-view="sources"] .source-catalog-search-row { gap: 6px; padding: 8px; }
+  .source-catalog[data-view="sources"] .source-catalog-search { padding: 6px; min-height: 40px; }
+  .source-catalog[data-view="sources"] .source-catalog-search input { font-size: 11px; }
+  .source-catalog-table td, .source-catalog-table th { padding-inline: 8px; }
+  .source-catalog-detail-head > div > svg { display: none; }
+}
+@media (max-height: 650px) and (min-width: 761px) {
+  .source-catalog[data-view="sources"] .source-catalog-views { margin-bottom: 6px; }
+  .source-catalog-department { min-height: 40px; padding-block: 5px; }
+  .source-catalog-departments { gap: 5px; }
+}
+@media (max-height: 650px) and (max-width: 760px) {
+  .source-catalog[data-view="sources"] { gap: 5px; }
+  .source-catalog[data-view="sources"] .source-catalog-views { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; margin-bottom: 2px; padding-bottom: 3px; }
+  .source-catalog[data-view="sources"] .source-catalog-results { display: none; }
+  .source-catalog-views button { flex-shrink: 0; }
+  .source-catalog-departments { scrollbar-width: none; }
+  .source-catalog[data-view="sources"] .source-catalog-search-row { padding-block: 5px; }
+  .source-catalog[data-view="sources"] .source-catalog-filter-row { padding-block: 3px; }
+  .source-catalog-department { min-height: 42px; padding-block: 5px; }
+  .source-catalog-detail-head { padding-block: 7px; }
+  .source-catalog-detail-head h2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 }
 
 /* ── Мэдээллийн сан — зүүн талд өгөгдлийн багц, зураг дээр баруун дээд хэрэгслүүд ── */

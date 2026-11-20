@@ -46,6 +46,9 @@ import {
   type LichenDetail,
 } from "@/lib/lichens";
 import { cn, num } from "@/lib/utils";
+import { MapPinOff } from "lucide-react";
+import { offDistricts, offText } from "@/lib/district-check";
+import { mismatchPin, useUbDistricts } from "@/components/map/off-district";
 
 const PointMap = dynamic(
   () => import("@/components/wells/map").then((m) => m.WellsMap),
@@ -193,7 +196,7 @@ export function LichensDashboard() {
         data.rows.filter((r) => r.siteCode === site).map((r) => r.sci),
       ),
     ].sort((a, b) => a.localeCompare(b));
-    return { site: s, names };
+    return { site: s, names, oid: data.sites.indexOf(s) + 1 };
   }, [data, site]);
 
   /* Сонгосон зүйлийн зураг. Зураггүй зүйл дээр юу ч татахгүй */
@@ -564,6 +567,25 @@ export function LichensDashboard() {
     return data.sites.filter((s) => codes.has(s.code));
   }, [data, rows, keep, species]);
 
+  /*
+    БҮРТГЭСЭН ДҮҮРГЭЭС ӨӨР ДҮҮРЭГТ БУУСАН судалгааны цэг (2026-11-19; аудитаар бичлэгийн 24%
+    — бүгд цөөн цэгт давхарлана). Цэгийн дугаар нь `data.points`-ийнх (индекс + 1).
+  */
+  const bounds = useUbDistricts();
+  const offDistrict = React.useMemo(
+    () => offDistricts(bounds, (data?.sites ?? []).map((s, i) => ({ oid: i + 1, lon: s.lon, lat: s.lat, district: s.district }))),
+    [bounds, data],
+  );
+  const offMarks = React.useMemo(() => {
+    const m: Record<number, string> = {};
+    for (const o of offDistrict.keys()) m[o] = mismatchPin();
+    return Object.keys(m).length ? m : undefined;
+  }, [offDistrict]);
+  const offShown = React.useMemo(
+    () => Array.from(visible).some((i) => offDistrict.has(i + 1)),
+    [visible, offDistrict],
+  );
+
   const activeSite = React.useMemo(() => {
     if (hover == null || !data) return null;
     const s = data.sites[hover - 1];
@@ -796,6 +818,7 @@ export function LichensDashboard() {
                 visible={visible}
                 labels={labels}
                 grades={grades}
+                marks={offMarks}
                 /* ⚠ Цохилтын тэмдэглэгээ (`pulse`) ХАСАГДСАН (2026-10-23) —
                    амьтны зургуудтай ижил firefly цэг; хэмжээ нь зүйлийн тоо */
                 basemap={basemap}
@@ -815,7 +838,19 @@ export function LichensDashboard() {
                 groups={[
                   {
                     key: "site",
-                    items: [{ key: "site", label: "Судалгааны цэг", color: DATA_COLOR }],
+                    items: [
+                      { key: "site", label: "Судалгааны цэг", color: DATA_COLOR },
+                      ...(offShown
+                        ? [
+                            {
+                              key: "off",
+                              label: "Байршил нь бүртгэсэн дүүргээс өөр дүүрэгт байгаа",
+                              color: "var(--water)",
+                              icon: <MapPinOff size={10} />,
+                            },
+                          ]
+                        : []),
+                    ],
                   },
                 ]}
               />
@@ -835,6 +870,11 @@ export function LichensDashboard() {
                       ? ` · д.т.д. ${num(activeSite.s.elev)} м`
                       : ""}
                   </div>
+                  {hover != null && offDistrict.has(hover) ? (
+                    <div className="mt-1 text-[10.5px] leading-snug text-water">
+                      {offText(offDistrict.get(hover) ?? "")}
+                    </div>
+                  ) : null}
                 </div>
               ) : null}
 
@@ -863,6 +903,12 @@ export function LichensDashboard() {
                     <dl className="mt-2 space-y-1.5 border-t border-line pt-2">
                       <Field k="Код" v={siteCard.site.code} />
                       <Field k="Дүүрэг" v={siteCard.site.district} />
+                      {offDistrict.has(siteCard.oid) ? (
+                        <Field
+                          k="Цэгийн байршил"
+                          v={offText(offDistrict.get(siteCard.oid) ?? "")}
+                        />
+                      ) : null}
                       {siteCard.site.elev != null ? (
                         <Field
                           k="Өндөршил"

@@ -36,7 +36,7 @@ import { ADMIN_USERNAME, isAdminName, normName } from "@/lib/access";
 import { readSession } from "@/lib/auth";
 import { SHARING } from "@/lib/portal";
 
-export const LOG_TITLE = "Environment_Log";
+const LOG_TITLE = "Environment_Log";
 
 export type AuditKind = "login" | "logout" | "view" | "tab" | "edit" | "schema" | "access";
 
@@ -144,7 +144,7 @@ async function createTable(): Promise<string> {
 }
 
 /** Хүснэгтийн хаяг — байхгүй бол админ үүсгэнэ, бусдад `null` */
-export function logTable(): Promise<string | null> {
+function logTable(): Promise<string | null> {
   if (tableUrl) return Promise.resolve(tableUrl);
   if (tableP) return tableP;
   if (missingAt && Date.now() - missingAt < RETRY_MS) return Promise.resolve(null);

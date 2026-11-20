@@ -45,22 +45,13 @@ const PAGE = 2000;
 const CONCURRENCY = 8;
 
 /** Газрын зургийн нүдний хэмжээ (градус) — ~220 метр */
-export const CELL = 0.002;
+const CELL = 0.002;
 /** Бүсийн ангилал: 1–4. Эх сурвалжид -9999 нь "утга алга" */
 export const ZONES = [1, 2, 3, 4];
 /** PLI-г 0.1-ийн алхамтай 1.0–4.0 хооронд савлана */
 export const PLI_MIN = 1;
 export const PLI_STEP = 0.1;
 
-/**
- * Ойртсон харагдацад татах ДЭЛГЭРЭНГҮЙ цэгийн дээд хязгаар.
- *
- * Үйлчилгээ нэг хүсэлтэд 2000-аас олон буцаадаггүй (`maxRecordCount`)
- * тул хуудаслана. 1:20 000 масштабын харагдацад нягт хороололд ~5 мянган
- * цэг тохиолдож байсан; дөрвөн хуудас (8000) нь түүнийг давна. Үүнээс
- * олон бол таслах бөгөөд ЧИМЭЭГҮЙ өнгөрөхгүй — консолд бичнэ.
- */
-const DETAIL_PAGES = 4;
 export const PLI_BUCKETS = 31;
 
 export type ToiletsPayload = {
@@ -111,61 +102,6 @@ function page(offset: number) {
     resultRecordCount: String(PAGE),
     orderByFields: "objectid ASC",
   })}`;
-}
-
-/**
- * Харагдацын хүрээн доторх БОДИТ жорлонгууд.
- *
- * ХӨТӨЧӨӨС ШУУД дуудагдана — `api/` зам биш. Хүрээ нь хэрэглэгчийн
- * гүйлгэлтээс хамаардаг тул статикаар экспортлогдсон API зам үүнийг
- * үйлчилж чадахгүй.
- *
- * Атрибут ТАТАХГҮЙ (`objectid` л): энэ давхарга нь "энд яг хаана байна"
- * гэдгийг л хэлнэ, бусад тоог нэгтгэсэн самбар аль хэдийн хэлж байгаа.
- * `geometryPrecision=5` (~1 метр) нь бичлэг тутмын хэмжээг гуравны нэгээр
- * багасгана — нэг хуудас 273KB-аас ~180KB болно.
- */
-export async function fetchPitPointsIn(
-  bounds: [number, number, number, number],
-  where: string,
-  signal: AbortSignal,
-): Promise<GeoJSON.FeatureCollection> {
-  const features: GeoJSON.Feature[] = [];
-
-  for (let p = 0; p < DETAIL_PAGES; p++) {
-    const url = `${PIT_SERVICE}/query?${new URLSearchParams({
-      f: "geojson",
-      where,
-      geometry: bounds.join(","),
-      geometryType: "esriGeometryEnvelope",
-      inSR: "4326",
-      outSR: "4326",
-      spatialRel: "esriSpatialRelIntersects",
-      outFields: "objectid",
-      returnGeometry: "true",
-      geometryPrecision: "5",
-      resultOffset: String(p * PAGE),
-      resultRecordCount: String(PAGE),
-      orderByFields: "objectid ASC",
-    })}`;
-
-    /* ⚠ `arcgisJson` ЗААВАЛ — энгийн `fetch` токен хавсаргадаггүй тул
-       ойртоход цэгүүд ЧИМЭЭГҮЙ алга болж байв (2026-09-17) */
-    const json = await arcgisJson<{ features?: GeoJSON.Feature[] }>(
-      url,
-      "Жорлонгийн цэг",
-      { signal },
-    );
-    const got = json.features ?? [];
-    features.push(...got);
-    /* Дүүрээгүй хуудас = сүүлчийнх */
-    if (got.length < PAGE) return { type: "FeatureCollection", features };
-  }
-
-  console.warn(
-    `[toilets] Харагдацад ${DETAIL_PAGES * PAGE}-аас олон жорлон байна — үлдсэнийг татсангүй`,
-  );
-  return { type: "FeatureCollection", features };
 }
 
 /** Толь бичиг — нэрийг индекс болгоно */

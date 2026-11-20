@@ -90,7 +90,7 @@ export type Rescue = {
    болохоос дата дарж бичихгүй.
    -------------------------------------------------------------------------- */
 
-export const OUTCOMES = {
+const OUTCOMES = {
   released: "Байгальд тавьсан",
   died: "Хорогдсон",
   culled: "Устгасан",
@@ -121,7 +121,7 @@ const RULES: [string, RegExp][] = [
   [OUTCOMES.moved, /үргээ|гаргасан|гаргуулсан/],
 ];
 
-export function classifyOutcome(raw: string): string {
+function classifyOutcome(raw: string): string {
   const s = raw.trim().toLocaleLowerCase("mn-MN");
   if (!s) return OUTCOMES.unknown;
   // Зөвхөн цифр (утасны дугаар) — шийдвэрлэлт тэмдэглэгдээгүй гэсэн үг

@@ -1,5 +1,7 @@
 "use client";
 
+import * as React from "react";
+
 /*
   ГАЗРЫН ЗУРГИЙН ТАНИХ ТЭМДЭГ — амьтан, ургамлын хэлтсийн бүх зурагт НЭГ хэлбэр.
 
@@ -15,7 +17,6 @@
   ⚠ Өнгө нь зурагтай ЯГ ИЖИЛ эх сурвалжаас ирэх ёстой.
 */
 
-import * as React from "react";
 import { cn } from "@/lib/utils";
 
 export type LegendItem = {
@@ -27,6 +28,8 @@ export type LegendItem = {
   /** Унтраалттай мөр — `false` бол зураас дайрсан, бүдэг */
   on?: boolean;
   onToggle?: () => void;
+  /** Өнгөт дүрсийн ОРОНД тэмдэг (жишээ нь зөрсөн байршлын `MapPinOff`) */
+  icon?: React.ReactNode;
 };
 
 export type LegendGroup = {
@@ -50,7 +53,11 @@ export function MapLegend({ groups }: { groups: LegendGroup[] }) {
             {g.title ? <h3>{g.title}</h3> : null}
             {g.title && g.field ? <p>Өнгөөр ялгасан үзүүлэлт: {g.field}</p> : null}
             {g.items.map((it) => {
-              const sym = (
+              const sym = it.icon ? (
+                <span aria-hidden="true" className="inline-flex w-[11px] shrink-0 items-center justify-center" style={{ color: it.color }}>
+                  {it.icon}
+                </span>
+              ) : (
                 <span
                   aria-hidden="true"
                   className={cn(

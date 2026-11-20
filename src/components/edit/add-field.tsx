@@ -33,7 +33,7 @@ const LATIN: Record<string, string> = {
 };
 
 /** Нэрээс талбарын нэр — латин, жижиг үсэг, `_`, 30 тэмдэгт, давхардалгүй */
-export function fieldNameOf(alias: string, taken: Set<string>): string {
+function fieldNameOf(alias: string, taken: Set<string>): string {
   const base =
     [...alias.trim().toLowerCase()]
       .map((ch) => LATIN[ch] ?? ch)

@@ -48,7 +48,7 @@ export const CATEGORY_HEX = [
   "#f06fb4",
   "#d8e85a",
 ] as const;
-export const CATEGORY_REST = "#8d99a6";
+const CATEGORY_REST = "#8d99a6";
 
 /** Тоогоор буурах дараалал дахь `i` дэх ангиллын өнгө */
 export function categoryHex(key: string, i: number): string {
@@ -71,11 +71,6 @@ export function categoryHex(key: string, i: number): string {
  */
 export const FOREST = "#63e4a6";
 
-export const FOREST_FIREFLY = {
-  glow: "#00c47f",
-  mid: "#68efaf",
-  core: "#d0ffe4",
-};
 
 /**
  * OKLCH → hex.

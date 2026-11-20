@@ -32,7 +32,7 @@ import { num } from "@/lib/utils";
   нийлбэр, олон утгат задаргаа, хураасан жагсаалт дээр хувь нийлээд
   100 болохгүй тул бөгж өөрөө худал хэлнэ — тэдгээр нь зурвас хэвээр.
 */
-export const DONUT_BELOW = 3;
+const DONUT_BELOW = 3;
 
 export function SimpleChart({
   data,

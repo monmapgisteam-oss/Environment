@@ -1,0 +1,201 @@
+:global(.workspace-main):has(.root) { height: calc(100dvh - var(--head-h)); min-height: 0; overflow: hidden; }
+:global(.workspace-main):has(.root) > div, :global(.department-workspace):has(.root) { height: 100%; min-height: 0; }
+:global(.department-workspace-content):has(.root) { overflow: hidden; }
+.root { position: relative; display: flex; flex-direction: column; gap: 10px; height: 100%; min-height: 0; min-width: 0; overflow: hidden; color: var(--ink); }
+/* ⚠⚠ ТОВЧНЫ `font: inherit` ДҮРЭМ ХАСАГДСАН (хэрэглэгч 2026-11-16: "Цэвэрлэх" товч бусдаасаа том).
+   CSS модуль давхаргагүй тул ямар ч жинтэй байсан Tailwind-ийн `@layer utilities` (`text-[11.5px]`)-ийг
+   ДАРДАГ — `:where` ч тус болохгүй. Tailwind-ийн preflight товч, оролтод `font: inherit`-ийг аль хэдийн
+   тавьдаг тул дүрэм илүүц байв. Зураг доторх товч (2D/3D, ойртуулах) өөрийн хэмжээгээрээ. */
+.root button { cursor: pointer; }
+.root :global([data-filter-trigger]) { min-height: 27px; gap: 5px; padding: 3px 8px; border-radius: 4px; font-size: 11px; line-height: 18px; }
+.root button:focus-visible, .root select:focus-visible, .root input:focus-visible, .root summary:focus-visible { outline: 2px solid var(--moss); outline-offset: 2px; }.viewSwitch { display: flex; align-items: center; gap: 4px; }
+.search { display: flex; align-items: center; gap: 6px; width: 165px; min-width: 0; padding: 4px 7px; border: 1px solid var(--line); border-radius: 2px; color: var(--ink-3); }
+.search input { width: 100%; min-width: 0; outline: none; background: transparent; font-size: 11px; color: var(--ink); }
+.search button { display: grid; place-items: center; }
+.columns { flex: 1; min-height: 0; min-width: 0; }
+.leftColumn, .rightColumn, .centerColumn { display: flex; flex-direction: column; gap: 10px; min-height: 0; min-width: 0; }
+.leftColumn { width: var(--col-l); flex-shrink: 0; }
+.rightColumn { width: var(--col-r); flex-shrink: 0; }
+.centerColumn { flex: 1; }
+.chartCard { display: flex; flex-direction: column; min-height: 0; min-width: 0; border: 1px solid var(--line); border-radius: 2px; background: var(--paper-2); overflow: hidden; }
+.fillCard { flex: 1; }
+.rightColumn .chartContent { --row-name: 112px; --row-value: 32px; } /* "Дүүргээр" нэг эгнээний мөр — "Сонгинохайрхан" бүтнээрээ багтана */
+.pager { display: inline-flex; align-items: center; gap: 7px; flex-shrink: 0; color: var(--ink-3); font-size: 10px; }
+.pagerControls { display: inline-flex; align-items: center; padding: 1px; border: 1px solid var(--line); border-radius: 5px; background: var(--paper-2); }
+.pagerControls button { display: grid; place-items: center; width: 22px; height: 22px; padding: 0; border: 0; border-radius: 3px; color: var(--ink-3); background: transparent; }
+.pagerControls button:hover { background: var(--paper-hi); color: var(--moss); }
+.pagerControls button:active { background: var(--paper-3); }
+.pagerPosition { display: inline-flex; align-items: center; justify-content: center; gap: 4px; min-width: 34px; padding: 0 3px; line-height: 1; }
+.pagerPosition strong { color: var(--ink); font-weight: 600; }
+.chartContent { padding: 12px; min-height: 0; overflow-y: auto; scrollbar-width: thin; }
+.fillCard .chartContent { flex: 1; }
+.leftColumn .fillCard .chartContent > :global(.row-chart) { height: 100%; justify-content: space-around; }
+/* Бөгж дээр, тайлбар доор нь НЭГ баганаар — хажуудаа бол нэр тасардаг (зүүн самбар 300px) */
+/* Тайлбар бөгжний БАРУУН талд (хэрэглэгч 2026-11-16: "cardiin undriig bagasgaj zaig hemne") — урьд нь доор нь байв */
+.chartContent :global(.donut-chart) { flex-wrap: nowrap; justify-content: flex-start; gap: 12px; }
+.chartContent :global(.donut-chart-legend) { flex: 1 1 0; min-width: 0; } /* нийтийн `flex: 1 1 145px` баганад 145px ӨНДӨР болж доор хоосон зай үлдээдэг байв */
+/* НЭГ МӨР, ДӨРВӨН БАГАНА (хэрэглэгч 2026-11-13) — 600px-ээс нарийнд 2 × 2 */
+.stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); flex-shrink: 0; border: 1px solid var(--line); border-radius: 2px; background: var(--paper-2); }
+.stat { display: flex; align-items: center; justify-content: center; gap: 7px; min-width: 0; padding: 8px 6px; border-right: 1px solid var(--line); text-align: left; }
+.stat:last-child { border-right: 0; }
+.stat > svg { flex-shrink: 0; color: var(--moss); }
+.stat > span { font-size: 10px; color: var(--ink-3); line-height: 1.3; }
+.stat strong { display: block; color: var(--ink); font-size: 20px; font-weight: 500; }
+.stat[aria-pressed=true] { background: color-mix(in oklab, var(--moss) 7%, var(--paper-2)); }
+.stat:hover { background: var(--paper-hi); }
+.viewSwitch { flex-shrink: 0; padding: 4px; border: 1px solid var(--line); border-radius: 2px; background: var(--paper-2); }
+.viewSwitch button { display: flex; align-items: center; justify-content: center; flex: 1; gap: 5px; padding: 5px 7px; color: var(--ink-3); font-size: 11px; }
+.viewSwitch button[aria-pressed=true] { background: var(--paper-3); color: var(--ink); }
+.map { position: relative; flex: 1; min-height: 200px; overflow: hidden; border: 1px solid var(--line); border-radius: 2px; background: var(--paper-3); }
+.mapNote { position: absolute; top: 10px; left: 10px; right: 10px; width: fit-content; padding: 6px 8px; background: var(--paper-2); border: 1px solid var(--line); border-radius: 2px; font-size: 10px; }
+.legend { position: absolute; left: 8px; bottom: 28px; /* зүүн доод — баруун ирмэгийн 2D/3D-тэй давхцаж байв */ display: flex; flex-direction: column; gap: 6px; padding: 8px; border: 0; background: transparent; font-size: 10px; text-shadow: 0 0 2px var(--paper-2), 0 0 4px var(--paper-2); pointer-events: none; }
+.legend span { display: flex; align-items: center; gap: 5px; }
+.legend i { width: 7px; height: 7px; border-radius: 50%; background: #67d7e4; }
+.legend span:last-child i { background: #e47b7b; }
+.mapTooltip { display: flex; flex-direction: column; gap: 7px; padding: 10px; font-size: 11px; }
+.mapTooltip > span { color: var(--ink-3); }
+.sourceNote { flex-shrink: 0; font-size: 10px; color: var(--ink-3); padding: 0 2px; }
+.listPanel, .detailPanel { display: flex; flex-direction: column; min-height: 0; min-width: 0; overflow: hidden; border: 1px solid var(--line); border-radius: 2px; background: var(--paper-2); }
+.panelHeading { display: flex; align-items: center; gap: 8px; justify-content: space-between; min-height: 38px; padding: 8px 13px; flex-shrink: 0; border-bottom: 1px solid var(--line); }
+.panelHeading h3 { font-size: 11px; font-weight: 600; }
+.panelHeading > span { color: var(--ink-3); font-size: 10px; }
+.list, .detailScroll { flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: thin; overscroll-behavior: contain; }
+.list { padding: 5px; }
+.officerGroup + .officerGroup { margin-top: 8px; }
+.officerGroup > summary { display: flex; align-items: center; gap: 6px; padding: 9px 8px; border: 1px solid var(--line); border-radius: 3px; background: var(--paper-3); cursor: pointer; list-style: none; }
+.officerGroup > summary::-webkit-details-marker { display: none; }
+.officerGroup > summary > strong { flex: 1; min-width: 0; overflow-wrap: anywhere; font-size: 12px; font-weight: 600; }
+.officerGroup > summary > span { flex-shrink: 0; font-size: 10px; color: var(--ink-3); }
+.officerGroup > summary > svg { flex-shrink: 0; color: var(--moss); }
+.officerGroup:not([open]) > summary > svg:last-child { transform: rotate(-90deg); }
+.activity { font-size: 11px; color: var(--ink-2); line-height: 1.5; overflow-wrap: anywhere; }
+.recordOutcome { padding-left: 7px; border-left: 2px solid var(--moss); font-size: 10px; color: var(--ink-2); line-height: 1.5; overflow-wrap: anywhere; }
+.record { display: flex; flex-direction: column; gap: 8px; width: 100%; padding: 12px 10px; border: 1px solid transparent; border-bottom-color: var(--line); text-align: left; border-radius: 5px; }
+.record[aria-pressed=true] { border-color: color-mix(in oklab, var(--moss) 55%, var(--line)); background: color-mix(in oklab, var(--moss) 7%, var(--paper-2)); }
+.record + .record { margin-top: 3px; }
+.recordTop, .recordBottom, .introTop { display: flex; align-items: center; gap: 8px; justify-content: space-between; }
+.recordTop time { font-size: 10px; color: var(--ink-3); flex-shrink: 0; }
+.badge { width: fit-content; padding: 3px 6px; border-radius: 4px; background: color-mix(in oklab, var(--moss) 10%, var(--paper-2)); color: var(--moss); font-size: 10px; font-weight: 550; }
+.violation { color: var(--clay); background: color-mix(in oklab, var(--clay) 10%, var(--paper-2)); }
+.record > strong { font-size: 12px; font-weight: 600; line-height: 1.5; overflow-wrap: anywhere; }
+.subject { font-size: 11px; color: var(--ink-2); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; line-height: 1.5; }
+.recordBottom { color: var(--ink-3); font-size: 10px; }
+.recordBottom > span { display: flex; align-items: center; gap: 4px; }
+.recordBottom svg { flex-shrink: 0; }
+.detailIntro { padding: 18px; border-bottom: 1px solid var(--line); }
+.introTop { flex-wrap: wrap; }
+.resolved { display: flex; gap: 4px; align-items: center; color: var(--moss); font-size: 10px; }
+.violationFlag { display: flex; gap: 4px; align-items: center; color: var(--clay); font-size: 10px; }
+.detailIntro h3 { font-size: 19px; font-weight: 600; line-height: 1.45; margin: 12px 0 6px; overflow-wrap: anywhere; }
+.detailIntro p { color: var(--ink-2); font-size: 12px; line-height: 1.7; }
+.facts { display: grid; grid-template-columns: .8fr 1fr 1.1fr; gap: 12px; margin-top: 17px; }
+.facts > div { display: flex; align-items: flex-start; gap: 7px; color: var(--ink-3); font-size: 10px; line-height: 1.6; }
+.facts svg { flex-shrink: 0; margin-top: 2px; color: var(--moss); }
+.facts strong { display: block; font-weight: 500; font-size: 11px; color: var(--ink); overflow-wrap: anywhere; }
+.fieldToolbar { display: flex; flex-direction: column; gap: 8px; margin: 10px 8px; padding: 9px 10px; border: 1px solid var(--line); border-radius: 5px; background: var(--paper); font-size: 11px; color: var(--ink-2); }
+.fieldSummary { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.fieldSummary > span { display: inline-flex; align-items: center; gap: 6px; }
+.fieldSummary svg { color: var(--ink-3); }
+.fieldSummary b { min-width: 25px; padding: 2px 5px; border-radius: 3px; background: var(--paper-3); color: var(--ink); font-size: 11px; font-weight: 600; text-align: center; }
+.expandActions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); border: 1px solid var(--line); border-radius: 4px; background: var(--paper-2); }
+.expandActions button { display: flex; align-items: center; justify-content: center; gap: 4px; min-height: 28px; padding: 4px; color: var(--ink-2); font-size: 10px; line-height: 1.4; }
+.expandActions button + button { border-left: 1px solid var(--line); }
+.expandActions button:first-child { border-radius: 3px 0 0 3px; }
+.expandActions button:last-child { border-radius: 0 3px 3px 0; }
+.expandActions button:hover { background: var(--paper-hi); color: var(--moss); }
+.expandActions svg { flex-shrink: 0; color: var(--moss); }
+.emptyFieldsToggle { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 22px; cursor: pointer; font-size: 10px; color: var(--ink-3); }
+.emptyFieldsToggle input { appearance: none; position: relative; flex-shrink: 0; width: 28px; height: 16px; margin: 0; border: 1px solid var(--line-2); border-radius: 10px; background: var(--paper-3); cursor: pointer; }
+.emptyFieldsToggle input::before { content: ""; position: absolute; top: 2px; left: 2px; width: 10px; height: 10px; border-radius: 50%; background: var(--ink-3); }
+.emptyFieldsToggle input:checked { border-color: var(--moss); background: var(--moss); }
+.emptyFieldsToggle input:checked::before { transform: translateX(12px); background: var(--paper-2); }
+.groups { display: flex; flex-direction: column; gap: 8px; padding: 0 12px 14px; }
+.group { border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.group summary { display: flex; align-items: center; gap: 8px; padding: 11px 12px; background: var(--paper-3); cursor: pointer; list-style: none; font-size: 11px; font-weight: 600; }
+.group summary::-webkit-details-marker { display: none; }
+.group summary > span { flex: 1; }
+.group summary small { color: var(--ink-3); font-size: 10px; font-weight: 400; }
+.group:not([open]) summary > svg:last-child { transform: rotate(-90deg); }
+.group dl > div { display: grid; grid-template-columns: minmax(100px, .85fr) minmax(0, 1.25fr); gap: 15px; padding: 10px 12px; border-top: 1px solid var(--line); line-height: 1.65; }
+.group dt { font-size: 11px; color: var(--ink-3); overflow-wrap: anywhere; }
+.group dd { font-size: 12px; color: var(--ink); white-space: pre-wrap; overflow-wrap: anywhere; }
+.attachments { display: flex; flex-wrap: wrap; gap: 10px; padding: 12px; color: var(--ink-3); font-size: 11px; }
+.attachment { width: min(100%, 240px); border: 1px solid var(--line); border-radius: 5px; overflow: hidden; }
+.attachment img { display: block; height: 130px; width: 100%; object-fit: contain; background: var(--paper); }
+.attachment > span { min-height: 75px; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 5px; }
+.attachment figcaption { padding: 8px; overflow-wrap: anywhere; }
+.attachment small { display: block; margin-top: 3px; }
+.state { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 30px; color: var(--ink-3); font-size: 12px; text-align: center; }
+.state button, .attachments button { color: var(--moss); text-decoration: underline; }
+.error { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; padding: 10px 12px; border: 1px solid var(--clay); border-radius: 5px; color: var(--clay); font-size: 12px; }
+.error button { display: flex; gap: 6px; align-items: center; }
+.mobileBack { display: flex; align-items: center; gap: 4px; color: var(--moss); font-size: 11px !important; }
+
+.listPanel, .detailPanel { flex: 1; }
+.panelHeading h3 { font-size: 12px; letter-spacing: .04em; text-transform: uppercase; }
+.detailIntro { padding: 12px; }
+.detailIntro h3 { font-size: 16px; }
+.facts { grid-template-columns: 1fr; gap: 8px; }
+.group dl > div { grid-template-columns: minmax(0, 1fr); gap: 3px; }
+.groups { padding-inline: 8px; }
+@media (max-width: 1279px) {
+  .columns { overflow-y: auto; scrollbar-width: thin; }
+  .leftColumn, .rightColumn, .centerColumn { width: 100%; flex: none; }
+  .centerColumn { order: -1; }
+  .map { min-height: 360px; flex: none; height: 45dvh; }
+  .leftColumn { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .leftColumn > :last-child { grid-column: 1 / -1; }
+  .chartContent { max-height: 350px; }
+  .stats { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .stat { border-bottom: 0; border-right: 1px solid var(--line); }
+  .stat:last-child { border-right: 0; }
+  .rightColumn[data-detail=true] { position: absolute; inset: 0; z-index: 30; background: var(--paper); width: 100%; }
+  .rightColumn[data-detail=true] .detailPanel { height: 100%; }
+  .listPanel { max-height: 400px; }
+}
+@media (max-width: 1023px) {
+  :global(.department-workspace):has(.root) { grid-template-rows: auto minmax(0, 1fr); }
+  :global(.department-workspace):has(.root) > :global(.dataset-column) { max-height: 24dvh; overflow-y: auto; }
+}
+@media (max-width: 600px) {
+  .leftColumn { display: flex; }
+  .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .stat { border-bottom: 1px solid var(--line); }
+  .stat:nth-child(even) { border-right: 0; }
+  .search { width: 130px; }
+}
+
+/* Төв баганын доод мөр — огноо, зургийн цомог (хэрэглэгч 2026-11-13) */
+.bottomRow { position: relative; display: grid; grid-template-columns: minmax(0, var(--insp-left, 40%)) minmax(0, 1fr); gap: 10px; flex-shrink: 0; height: var(--insp-bottom-h, 208px); }
+/* Чирэх бариул — карт хоорондын 10px завсарт яг сууна (агуулга дарахгүй) */
+.rowGrip, .colGrip { position: absolute; z-index: 2; touch-action: none; }
+.rowGrip { left: 0; right: 0; top: -10px; height: 10px; cursor: row-resize; }
+.colGrip { top: 0; bottom: 0; left: var(--insp-left, 40%); width: 10px; cursor: col-resize; }
+.rowGrip::after, .colGrip::after { content: ""; position: absolute; border-radius: 2px; background: var(--line-2); opacity: 0; transition: opacity .15s; }
+.rowGrip::after { left: 50%; top: 3px; width: 36px; height: 4px; margin-left: -18px; }
+.colGrip::after { top: 50%; left: 3px; width: 4px; height: 36px; margin-top: -18px; }
+.rowGrip:hover::after, .colGrip:hover::after, .bottomRow:hover > .rowGrip::after, .bottomRow:hover > .colGrip::after { opacity: 1; }
+.rowGrip:hover::after, .colGrip:hover::after { background: var(--data); }
+.bottomRow .chartCard { height: 100%; }
+/* Зургийн цомог — хагийн "Зүйлийн зураг"-тай нэг хэв (хэрэглэгч 2026-11-16: "zurag ni iimerhu"):
+   хоёр ба түүнээс олон баганат тор, зураг 4:3, доор нь нэр; карт дотроо босоо гүйнэ */
+.gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(124px, 1fr)); gap: 6px; }
+.thumb { display: block; min-width: 0; overflow: hidden; border: 1px solid var(--line); border-radius: 2px; background: none; text-align: left; transition: border-color .15s; }
+.thumb:hover { border-color: var(--line-2); }
+.thumb[aria-pressed=true] { border-color: color-mix(in oklab, var(--data) 60%, transparent); }
+.thumbImage { display: block; aspect-ratio: 4 / 3; width: 100%; background: var(--paper-3); }
+.thumbImage img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.thumbCaption { display: flex; align-items: center; gap: 5px; min-width: 0; padding: 4px 6px; font-size: 10px; line-height: 1.2; color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.thumb:hover .thumbCaption { color: var(--ink-2); }
+.thumb[aria-pressed=true] .thumbCaption { color: var(--data); }
+.thumbCaption i { flex: none; width: 6px; height: 6px; border-radius: 50%; background: #67d7e4; }
+.thumbCaption i.violation { background: #e47b7b; }
+.thumbWait { display: grid; place-items: center; width: 100%; height: 100%; color: var(--ink-3); }
+.galleryNote { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--ink-3); }
+@media (max-width: 1279px) { .bottomRow { grid-template-columns: minmax(0, 1fr); height: auto; } .rowGrip, .colGrip { display: none; } }
+/* Диаграм нэмэгдсэн тул картууд шахагдаж алга болохгүй — БАГАНА өөрөө гүйнэ */
+@media (min-width: 1280px) {
+  .leftColumn, .rightColumn { overflow-y: auto; scrollbar-width: thin; }
+  .leftColumn > .chartCard, .rightColumn > .chartCard { flex-shrink: 0; }
+  .leftColumn > .fillCard, .rightColumn > .fillCard { flex: 1 0 auto; min-height: 190px; }
+}

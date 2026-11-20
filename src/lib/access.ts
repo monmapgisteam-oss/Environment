@@ -163,7 +163,7 @@ export const FULL_RULE: TabRule = { views: null, layers: null };
 
 export const viewKey = (scope: string, tab: string) => `@v:${scope}/${tab}`;
 export const layerKey = (scope: string, tab: string) => `@l:${scope}/${tab}`;
-export const isDetailKey = (key: string) => key.startsWith("@");
+const isDetailKey = (key: string) => key.startsWith("@");
 
 export function tabRule(g: Grant, scope: string, tab: string): TabRule {
   const v = g[viewKey(scope, tab)];

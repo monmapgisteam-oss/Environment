@@ -27,6 +27,16 @@ import {
 import { readableText } from "@/lib/soil";
 import { cn, num } from "@/lib/utils";
 
+/*
+  ТЭМДЭГЛЭГЭЭНИЙ ӨНГӨ ТОГТМОЛ — харанхуй горимын `--data` (#94d7b9). Анхдагчаар
+  `.pulse-pin` нь `--data` хувьсагчаас өнгөө авдаг тул гэрэл горимд бараан
+  ногоон (#466b32) болж хиймэл дагуулын зураг дээр уусдаг байв (хэрэглэгч
+  2026-11-13: "light deer bas darktai adilhan"). Газрын зургийн агуулга
+  горимоос үл хамаарна.
+*/
+const PIN_HEX = "#94d7b9";
+const pinColor = () => PIN_HEX;
+
 const PointMap = dynamic(
   () => import("@/components/wells/map").then((m) => m.WellsMap),
   {
@@ -295,6 +305,7 @@ export function NeutralizationDashboard() {
                 highlight={highlight}
                 cluster={false}
                 pulse
+                pulseColor={pinColor}
                 pickedMark={picked}
               />
               <BasemapGallery value={basemap} onChange={setBasemap} />

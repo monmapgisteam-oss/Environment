@@ -527,6 +527,7 @@ export function WasteDashboard() {
         <div className="relative min-h-0 min-w-0 overflow-hidden rounded-xl border border-line max-xl:min-h-[420px]">
           {ready ? (
             <PointMap
+                credit="Суурь зураг: Esri"
               points={map.points}
               visible={visible}
               marks={map.marks}
@@ -546,7 +547,7 @@ export function WasteDashboard() {
             </div>
           )}
 
-          <BasemapGallery value={basemap} onChange={setBasemap} placement="top-left" />
+          <BasemapGallery value={basemap} onChange={setBasemap} />
 
           <Legend
             items={[
@@ -586,12 +587,6 @@ export function WasteDashboard() {
             </MapTip>
           ) : null}
 
-          <p
-            className="pointer-events-none absolute bottom-1 left-2.5 z-10 text-[10px] leading-none text-ink-3"
-            style={{ filter: "drop-shadow(0 0 1.5px var(--paper)) drop-shadow(0 0 1.5px var(--paper))" }}
-          >
-            Суурь зураг: Esri
-          </p>
         </div>
 
         {/* ---- БАРУУН: динамик самбар ---- */}

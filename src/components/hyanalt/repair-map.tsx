@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import dynamic from "next/dynamic";
-import { Building2, Loader2, MapPin, MousePointerClick, Search, X } from "lucide-react";
+import { Building2, Loader2, MapPin, MapPinOff, MousePointerClick, Search, X } from "lucide-react";
 import { BasemapGallery } from "@/components/map/basemap-gallery";
 import { MapTip, MapTipRow, useMapTip } from "@/components/map/hover-tip";
 import { type Datum } from "@/components/charts";
@@ -17,6 +17,8 @@ import {
 import { Bounds } from "@/lib/extent";
 import { districtName, fetchRepairShops, type RepairData } from "@/lib/repair-shops";
 import { num } from "@/lib/utils";
+import { offDistricts, offText } from "@/lib/district-check";
+import { OffDistrictLegend, mismatchPin, useUbDistricts } from "@/components/map/off-district";
 
 /*
   ҮЙЛЧИЛГЭЭНИЙ ЦЭГИЙН тэмдэглэгээ — бүх цэгт нэг ижил.
@@ -236,12 +238,23 @@ export function RepairMap() {
     Тэмдэглэгээ — бүх цэгт нэг ижил икон, ЗӨВХӨН ойртсон үед.
     Холоос өгвөл бөөгнөрлийн бөмбөлөгтэй давхарлаж, зураг бөглөрнө.
   */
+  /*
+    БҮРТГЭСЭН ДҮҮРГЭЭС ӨӨР ДҮҮРЭГТ БУУСАН цэг (2026-11-19, аудитаар 453-аас 47, 19 нь хотоос
+    гадна) — тэмдэг нь ЯМАР Ч ойртолтод (бөөгнөрсөн цэгийг `WellsMap` өөрөө алгасна);
+    ойртсон үед бусад нь ердийн тэмдгээ авна.
+  */
+  const bounds = useUbDistricts();
+  const offDistrict = React.useMemo(() => offDistricts(bounds, data?.shops ?? []), [bounds, data]);
+  const offShown = React.useMemo(() => shown.some((sh) => offDistrict.has(sh.oid)), [shown, offDistrict]);
+
   const marks = React.useMemo<Record<number, string> | undefined>(() => {
-    if (!close) return undefined;
     const m: Record<number, string> = {};
-    for (const sh of data?.shops ?? []) m[sh.oid] = PIN;
-    return m;
-  }, [data, close]);
+    for (const sh of data?.shops ?? []) {
+      if (offDistrict.has(sh.oid)) m[sh.oid] = mismatchPin();
+      else if (close) m[sh.oid] = PIN;
+    }
+    return Object.keys(m).length ? m : undefined;
+  }, [data, close, offDistrict]);
 
   /*
     Цэгийн шошго — үйлчилгээний нэр. Хамгийн ойрын түвшинд (z15) л
@@ -289,6 +302,7 @@ export function RepairMap() {
     */
     <div className="relative h-full min-h-[320px] overflow-hidden rounded-xs border border-line">
       <PointMap
+                credit="Суурь зураг: Esri · Дата: ArcGIS FeatureServer"
       points={points}
       visible={visible}
       basemap={basemap}
@@ -301,6 +315,9 @@ export function RepairMap() {
       onZoom={setZoom}
       clusterMaxZoom={CLUSTER_MAX}
       clusterLabel="badge"
+      /* ESRI-ИЙН FIREFLY тэмдэг (хэрэглэгч 2026-11-13) — химийн хоёр
+         самбартай ижил: цагаан цөм + цэнхэр гэрэл */
+      esriFirefly
       />
 
       <BasemapGallery value={basemap} onChange={setManualBasemap} />
@@ -391,6 +408,16 @@ export function RepairMap() {
       </div>
 
       {/* ХӨВӨГЧ ТАЙЛБАР — хулганы хажууд */}
+      {/* Зөрсөн цэгийн тайлбар — зүүн доод буланд, масштаб ба эх сурвалжийн мөрийн ДЭЭР */}
+      {offShown ? (
+        <div
+          className="pointer-events-none absolute bottom-11 left-2.5 z-10 rounded-xs border border-line bg-paper/10 px-2 py-1.5 backdrop-blur-md"
+          style={{ filter: "drop-shadow(0 0 1.5px var(--paper)) drop-shadow(0 0 1.5px var(--paper))" }}
+        >
+          <OffDistrictLegend className="flex items-center gap-1.5" />
+        </div>
+      ) : null}
+
       {hovered ? (
       <MapTip state={tip} width={244}>
         <div className="px-2.5 pt-2 pb-2 text-[12.5px] leading-snug font-medium text-ink">
@@ -400,6 +427,9 @@ export function RepairMap() {
           {hovered.place ? <MapTipRow icon={MapPin} text={hovered.place} /> : null}
           {hovered.district ? (
             <MapTipRow icon={Building2} text={districtName(hovered.district)} />
+          ) : null}
+          {offDistrict.has(hovered.oid) ? (
+            <MapTipRow icon={MapPinOff} text={offText(offDistrict.get(hovered.oid) ?? "")} />
           ) : null}
         </div>
         <div className="flex items-center justify-between gap-2 border-t border-line px-2.5 py-1.5">
@@ -431,6 +461,9 @@ export function RepairMap() {
             <Field k="Чиглэл" v="Авто засварын үйлчилгээ" />
             <Field k="Байршил" v={selected.place || "—"} />
             <Field k="Дүүрэг" v={districtName(selected.district)} />
+            {offDistrict.has(selected.oid) ? (
+              <Field k="Цэгийн байршил" v={<span className="text-water">{offText(offDistrict.get(selected.oid) ?? "")}</span>} />
+            ) : null}
             <Field
               k="Координат"
               v={
@@ -444,17 +477,6 @@ export function RepairMap() {
       </MapPanel>
       ) : null}
 
-      {/*
-      Эх сурвалжийн бичиг — зургийн доод ирмэгт, дэвсгэргүй. Суурь
-      зургийн товчтой ижил сүүдэр: хиймэл дагуулын цайвар талбай дээр
-      `text-ink-3` дангаараа алга болно.
-      */}
-      <p
-      className="pointer-events-none absolute bottom-1 left-2.5 z-10 text-[10px] leading-none text-ink-3"
-      style={{ filter: "drop-shadow(0 0 1.5px var(--paper)) drop-shadow(0 0 1.5px var(--paper))" }}
-      >
-      Суурь зураг: Esri · Дата: ArcGIS FeatureServer
-      </p>
       </div>
   );
 }

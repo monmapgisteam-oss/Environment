@@ -143,7 +143,7 @@ export function MineralLayers({
   const extra = LAYERS.filter((d) => d.id !== current && on.has(key(d.id))).length;
 
   return (
-    <div ref={holder} className="absolute top-[46px] right-2.5 z-20">
+    <div ref={holder} className="relative">
       {/* Суурь зургийн товчтой (28px, `rounded-xs`, `elevated`) нэг загвар — яг доор нь */}
       <button
         type="button"
@@ -152,8 +152,8 @@ export function MineralLayers({
         aria-label="Давхарга"
         aria-expanded={open}
         className={cn(
-          "elevated relative flex size-7 items-center justify-center rounded-xs border border-line-2 backdrop-blur transition-colors",
-          open || extra ? "map-tint text-data" : "bg-paper/90 text-ink-2 hover:bg-paper-hi hover:text-ink",
+          "map-tool",
+          (open || extra > 0) && "is-on",
         )}
       >
         <Layers size={14} strokeWidth={1.75} />
@@ -165,24 +165,25 @@ export function MineralLayers({
       </button>
 
       {open ? (
-        <div className="elevated absolute top-[calc(100%+5px)] right-0 w-[236px] rounded-xs border border-line-2 bg-paper-2 p-2">
+        <div className="elevated absolute top-[calc(100%+5px)] right-0 z-30 w-[236px] rounded-xs border border-line-2 bg-paper-2 p-2">
           <div className="eyebrow mb-2">Давхарга</div>
           <div className="space-y-0.5">
-            {LAYERS.map((d) => {
-              const mine = d.id === current;
-              const checked = mine || on.has(key(d.id));
+            {/* Энэ самбарын өөрийн бүртгэл жагсаалтад ГАРАХГҮЙ — зураг дээр аль хэдийн бий
+                (хэрэглэгч 2026-11-18: "ene sambart bga bol haragdah shaardlagagui") */}
+            {LAYERS.filter((d) => d.id !== current).map((d) => {
+              const checked = on.has(key(d.id));
               return (
                 <label
                   key={d.id}
                   className={cn(
                     "flex items-center gap-2 rounded-xs px-1 py-1 transition-colors",
-                    mine ? "cursor-default" : "cursor-pointer hover:bg-paper-hi",
+                    "cursor-pointer hover:bg-paper-hi",
                   )}
                 >
                   <input
                     type="checkbox"
                     checked={checked}
-                    disabled={mine || busy === d.id}
+                    disabled={busy === d.id}
                     onChange={() => toggle(d)}
                     className="size-3 shrink-0 accent-[var(--data)]"
                   />
@@ -196,8 +197,6 @@ export function MineralLayers({
                   </span>
                   {busy === d.id ? (
                     <Loader2 size={10} className="shrink-0 animate-spin text-ink-3" />
-                  ) : mine ? (
-                    <span className="shrink-0 text-[10px] text-ink-3">Энэ самбар</span>
                   ) : failed === d.id ? (
                     <span className="shrink-0 text-[10px] text-clay">Татагдсангүй</span>
                   ) : null}

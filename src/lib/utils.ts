@@ -34,12 +34,6 @@ export function monthLabel(index: number) {
   return MONTHS[index % 12];
 }
 
-export function dateLabel(iso: string) {
-  const d = new Date(iso);
-  return `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, "0")}.${String(
-    d.getDate(),
-  ).padStart(2, "0")}`;
-}
 
 /**
  * Одоогийн зам заасан хаягтай тохирч байна уу.

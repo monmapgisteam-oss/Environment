@@ -469,6 +469,38 @@ body {
 }
 
 /*
+  БАЙРШИЛ НЬ БҮРТГЭСЭН ДҮҮРГЭЭС ӨӨР (химийн агуулах, хэрэглэгч 2026-11-19: "Бүртгэсэн
+  дүүргээр, зөрснийг тэмдэглэх"). Шүүлт нь бүртгэлийн дүүргээр явдаг тул Сүхбаатараар
+  шүүхэд координат нь Хан-Уул, Налайхад буусан цэг ч гарна — тэр нь алдаа биш, датаны
+  зөрүү гэдгийг энэ тэмдэг хэлнэ. Өнгө `--water` (мэдээлэл) — хугацаа дууссан
+  (`--ochre`, анхааруулга)-аас ялгарна; хоёулаа бол хүрээ нь `--ochre` (`data-also`).
+*/
+.species-pin:has(svg[data-pin="mismatch"]) {
+  width: 22px;
+  height: 22px;
+  border-color: var(--water);
+  background: color-mix(in oklab, #111a22 88%, transparent);
+  color: var(--water);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.4),
+    0 0 10px -2px color-mix(in oklab, var(--water) 85%, transparent);
+}
+.species-pin:has(svg[data-pin="mismatch"][data-also="expired"]) {
+  border-color: var(--ochre);
+}
+.species-pin:has(svg[data-pin="mismatch"]) svg {
+  width: 12px;
+  height: 12px;
+}
+.species-pin:has(svg[data-pin="mismatch"]):hover {
+  width: 26px;
+  height: 26px;
+}
+:root:not([data-theme="dark"]) .species-pin:has(svg[data-pin="mismatch"]) {
+  background: color-mix(in oklab, var(--paper-2) 88%, transparent);
+}
+
+/*
   ХОГ ХАЯГДЛЫН ХОЁР ТЭМДЭГ (хяналтын ландфилл).
 
   Хоёр давхарга нэг зураг дээр зэрэг суудаг тул ӨНГӨ, ХЭЛБЭР, ИКОН
@@ -701,27 +733,6 @@ body {
   box-shadow:
     0 0 0 2px rgb(8 14 20 / 0.7),
     0 0 16px 5px rgb(255 230 0 / 0.75);
-}
-
-/*
-  ДОХИОЛЛЫН өнгөт тэмдэглэгээ.
-
-  Дата дүрслэлийн өнгө ганц (`--data`) гэсэн дүрмээс гарсан ЦОРЫН ГАНЦ
-  тохиолдол: тэмдэглэгдэж буй зүйл нь хэмжигдэхүүн биш ЭРСДЭЛ илэрхийлэх
-  үед. Жишээ нь шувуу мөргөхөөс сэргийлж стикер наасан шилэн барилга —
-  тэдгээр нь "хэр их" гэсэн асуултын хариу биш "энд асуудал байсан"
-  гэсэн тэмдэг юм.
-
-  Цөм нь улбар шар (`--ochre` — анхааруулга), тэлэх цагираг нь улаан
-  (`--clay` — ноцтой эрсдэл). Хоёулаа дохионы гэр бүлээс тул шинэ өнгө
-  нэмээгүй; гэрэл, харанхуй хоёуланд нь өөрөө тохирно.
-*/
-.warn-pins .pulse-pin {
-  background: var(--ochre);
-  box-shadow: 0 0 10px 1px color-mix(in oklab, var(--ochre) 90%, transparent);
-}
-.warn-pins .pulse-pin .ring {
-  border-color: var(--clay);
 }
 
 @keyframes pulse-ring {

@@ -50,33 +50,8 @@ export function PanelHead({
   );
 }
 
-export function PanelBody({
-  className,
-  ...props
-}: React.HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn("p-4", className)} {...props} />;
-}
 
 /* --------------------------------------------------------------------------
    SectionHeader — хуудсан доторх бүлгийн тэмдэглэгээ
    -------------------------------------------------------------------------- */
-
-export function SectionHeader({
-  index,
-  title,
-  note,
-}: {
-  index: string;
-  title: string;
-  note?: string;
-}) {
-  return (
-    <div className="mb-3.5 flex items-baseline gap-3 border-b border-line pb-2.5">
-      <span className="num text-[11.5px] text-ink-3">{index}</span>
-      <h2 className="display text-[18px] leading-none">{title}</h2>
-      {note ? (
-        <span className="ml-auto text-[12px] text-ink-3">{note}</span>
-      ) : null}
-    </div>
-  );
-}
+

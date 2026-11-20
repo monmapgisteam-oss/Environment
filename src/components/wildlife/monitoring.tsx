@@ -1,7 +1,6 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import * as React from "react";
 import { Loader2, Mountain, PhoneCall, Waves } from "lucide-react";
 import { TabGroups, useStoredTab } from "@/components/ui/source-tabs";
 

@@ -40,7 +40,7 @@ export type LicenseData = {
  * эрэмбэлж нэгтгэнэ. "???" гэх мэт бөглөгдөөгүй утгыг тодорхойгүй гэж
  * үзнэ; ТААМАГЛАЖ нөхөхгүй.
  */
-export function normalMineral(raw: string | null | undefined): string {
+function normalMineral(raw: string | null | undefined): string {
   const t = (raw ?? "").replace(/\s+/g, " ").trim();
   if (!t || t === "???" || t === "-") return "Тодорхойгүй";
   const parts = t

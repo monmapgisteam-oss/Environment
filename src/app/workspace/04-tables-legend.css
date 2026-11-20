@@ -1,0 +1,365 @@
+/* Биотехникийн хүснэгт, газрын зургийн таних тэмдэг — workspace.css-ийн 2814–3176-р мөр (2026-11-18-нд хуваасан) */
+
+/* --------------------------------------------------------------------------
+   БИОТЕХНИКИЙН ХҮСНЭГТ — дүүргийн ЯЛГАА МӨРИЙН ИРМЭГТ
+
+   Мөр бүр `--tint`-ээ инлайнаар үүрнэ (дүүргийн өнгөний дугаараас).
+
+   ⚠⚠ БҮТЭН МӨРИЙН ДҮҮРГЭЛТ БУЦААГДСАН (хэрэглэгч, 2026-09-21:
+   "арай өөрөөр нь засаад үзээд"). 9%-ийн дүүргэлт дөрвөн өнгөөр
+   тарсны дараа хүснэгт өөрөө өнгөний блок болж, тооноосоо илүү
+   жин авч байв — платформын "өнгө нь зураас/цэг/икон дээр л
+   гарна" дүрэм (дизайны 7) яг энэ тухай.
+   Одоо өнгө нь мөрийн ЗҮҮН ИРМЭГТ 3px зураас — дүүрэг бүр өөрийн
+   тод өнгөтэй бөгөөд зэрэгцээ мөрүүд НЭГ ТАСРАЛГҮЙ ЗУРААС
+   болж бүлэглэлтийг өөрөө хэлнэ. Дэвсгэр цэвэр тул тооны
+   контраст хөндөгдөхгүй, hover ба сонголт ч бүрэн харагдана.
+   ⚠ Зураас нь 3px бөгөөд БҮДЭГ БИШ: нимгэн зураас дээр бүдэг
+   өнгө танигдахгүй — бүдэг байх шаардлага нь ДҮҮРГЭЛТЭЭС
+   гарсан бөгөөд дүүргэлт алга болсон тул хүчингүй.
+
+   ⚠ Tailwind-ийн `hover:bg-*`, `bg-data/10` ХЭРЭГЛЭЭГҮЙ: inline `style`
+   нь класс бүрийг дардаг тул hover, сонголт хоёр ажиллахгүй болно.
+   Гурван төлөв бүгд ЭНД, нэг газар тодорхойлогдоно.
+   -------------------------------------------------------------------------- */
+.district-row {
+  cursor: pointer;
+  transition: background-color 120ms ease;
+}
+.district-row > td:first-child {
+  box-shadow: inset 3px 0 0 var(--tint);
+}
+.district-row:hover {
+  background: var(--paper-hi);
+}
+.district-row.is-picked {
+  background: color-mix(in oklab, var(--data) 14%, transparent);
+}
+
+/* --------------------------------------------------------------------------
+   ГАЗРЫН ЗУРГИЙН ТАНИХ ТЭМДЭГ (legend)
+
+   ⚠⚠ НИЙТИЙН ХУУДСАНД СУУНА (2026-09-29, хэрэглэгч: "map дээр legend
+   оруулаарай"). Урьд нь `unelgee/workspace.css`-д байсан бөгөөд тэр
+   файлыг ЗӨВХӨН үнэлгээний ажлын талбар импортолдог — тайлбарыг өөр
+   хэлтэст гаргамагц хэлбэргүй `<details>` болж унана.
+
+   Байршил нь зүүн ДООД буланд, масштабын заалтын ДЭЭР (`bottom: 32px`)
+   — зургийн дөрвөн булан аль хэдийн эзэлгдсэн: зүүн дээд талд суурь
+   зургийн сонголт ба нэгж талбарын товч, баруун ирмэгийн дунд
+   ойртуулах товч, баруун дээд буланд бичлэгийн цонх.
+   -------------------------------------------------------------------------- */
+.ue-map-legend {
+  position: absolute;
+  z-index: 10;
+  bottom: 30px;
+  left: 10px;
+  width: min(208px, calc(100% - 64px));
+  overflow: hidden;
+  /* Хөвөгч гадаргуугийн платформын хэв маяг — ойртуулах товч, суурь
+     зургийн сонголт, бичлэгийн цонхтой ЯГ ИЖИЛ: 2px булан, `line`
+     хүрээ, 95% `paper`, бүдгэрүүлэлт. Урьд нь 10px булан, өөрийн
+     сүүдэртэй байсан нь `unelgee`-гийн хэв байв. */
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  background: color-mix(in oklab, var(--paper) 95%, transparent);
+  backdrop-filter: blur(12px);
+  box-shadow: var(--shadow);
+}
+/* Хэсгийн тэмдэглэгээ — платформын `.eyebrow`-тэй ижил утга */
+.ue-map-legend summary {
+  cursor: pointer;
+  padding: 6px 8px;
+  font-size: 11px;
+  line-height: 1.3;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  font-weight: 600;
+  color: var(--ink-3);
+}
+.ue-map-legend summary:hover {
+  color: var(--ink);
+}
+/* Нууж, гаргадаг толгой (`LegendShell`) — `summary`-тай ижил төрх */
+.ue-map-legend-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 6px 8px;
+  font-size: 11px;
+  line-height: 1.3;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  font-weight: 600;
+  color: var(--ink-3);
+  text-align: left;
+}
+.ue-map-legend-toggle:hover {
+  color: var(--ink);
+}
+/* Нуугдсан үед зөвхөн товч — хайрцаг агуулгаараа нарийсна */
+.ue-map-legend.is-hidden {
+  width: auto;
+}
+/* Нуугдсан товч НАМ (хэрэглэгч, 2026-10-06: "өндрийг багасга") —
+   ~26px-ээс ~19px: зай 6/8 → 3/6, бичвэр 11 → 10px */
+.ue-map-legend.is-hidden .ue-map-legend-toggle {
+  padding: 3px 6px;
+  font-size: 10px;
+  line-height: 1.2;
+  letter-spacing: 0.1em;
+  gap: 5px;
+}
+.ue-map-legend-body {
+  max-height: 164px;
+  overflow-y: auto;
+  border-top: 1px solid var(--line);
+  padding: 4px 8px 7px;
+}
+.ue-map-legend section + section {
+  border-top: 1px solid var(--line);
+  margin-top: 5px;
+  padding-top: 5px;
+}
+/* Задаргаагүй давхаргууд НЭГ МӨР тул хооронд нь зураас татвал
+   гурван мөрийн жагсаалт гурван блок болж өндөрсөнө. Гарчигтай
+   хэсэгтэй хиллэхэд зураас нь ҮЛДЭНЭ — тэнд үнэхээр хоёр өөр бүтэц */
+.ue-map-legend section.is-solo + section.is-solo {
+  border-top: 0;
+  margin-top: 0;
+  padding-top: 0;
+}
+.ue-map-legend h3 {
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--ink);
+  margin-top: 3px;
+}
+.ue-map-legend p {
+  font-size: 10px;
+  color: var(--ink-3);
+  line-height: 1.4;
+  margin-top: 2px;
+}
+.ue-legend-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-top: 4px;
+  font-size: 11px;
+  color: var(--ink-2);
+}
+/* Урт нэр НЭГ эгнээнд — хоёр мөр болбол тайлбар хэдэн ч давхарга дээр
+   хурдан өндөрсөнө (`RowChart clamp`-тай нэг зарчим) */
+.ue-legend-row > span:nth-child(2) {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ue-map-symbol {
+  width: 11px;
+  height: 9px;
+  flex-shrink: 0;
+  border: 1.5px solid currentColor;
+  background: color-mix(in srgb, currentColor 30%, transparent);
+  border-radius: 1px;
+}
+.ue-map-symbol.is-point {
+  width: 9px;
+  height: 9px;
+  margin-inline: 1px;
+  border: 0;
+  border-radius: 50%;
+  background: currentColor;
+}
+.ue-map-symbol.is-line {
+  height: 0;
+  background: none;
+  border-width: 1.5px 0 0;
+}
+/* ⚠ Зургийн икон, түүний цонх нь ХАЖУУГИЙН КАРТТАЙ НЭГ ДЭВСГЭРТЭЙ
+   (хэрэглэгч 2026-10-07: "map deer bga icon bolon hajuu cardiin background
+   ungu uur bn"). Esri-ийн calcite загвар өөрийн саарал (#242424 / #2b2b2b)
+   өгдөг байсан тул платформын токеноор ДАРНА. Хувьсагч нь shadow DOM руу
+   удамшдаг тул `calcite-action`-ийн дотоод товч ч дагана.
+   ⚠ SDK `.esri-ui` дээр `calcite-mode-dark|light` анги тавьж хувьсагчаа
+   ТЭНД дахин тодорхойлдог — тиймээс тэр элементэд ч заавал (0,2,0). */
+/* ⚠ `.wells-esri` (2D зураг, 3D давхарга) ч мөн: хэмжилтийн цонхны нэгжийн
+   унждаг цэс calcite-ийн #2b2b2b саарлаар гарч байв (хэрэглэгч 2026-11-02:
+   "ene saaral hesgiig zas") — хөтчийн цэсний дэвсгэр `select`-ийн өнгөнөөс
+   гардаг тул энэ хувьсагч л түүнд хүрнэ. */
+.soil-scene-view,
+.soil-scene-view .esri-ui,
+.soil-scene-view [class*="calcite-mode-"],
+.wells-esri .esri-ui,
+.wells-esri [class*="calcite-mode-"],
+.data-bank-panel {
+  --calcite-color-foreground-1: var(--paper-2);
+  --calcite-color-foreground-2: var(--paper-hi);
+  --calcite-color-foreground-3: var(--paper-hi);
+  --calcite-color-border-1: var(--line-2);
+  --calcite-color-border-2: var(--line);
+  --calcite-color-border-3: var(--line);
+  --calcite-color-text-1: var(--ink);
+  --calcite-color-text-2: var(--ink-2);
+  --calcite-color-text-3: var(--ink-3);
+}
+.soil-scene-view .esri-widget,
+.wells-esri .esri-ui .esri-widget {
+  background-color: var(--paper-2);
+  color: var(--ink);
+}
+/* Давхаргын иконы цонх — порталын давхаргуудыг 3D-д асаана. Орчны
+   цонхтой нэг загвар (`.soil-env`); мөр бүр өнгөт цэгтэй — тэр нь
+   зураг дээрх тэмдгийн өнгө тул цонх нь тайлбарын үүрэг давхар гүйцэтгэнэ. */
+.soil-scene-view .soil-layers {
+  width: 220px;
+}
+.soil-scene-view .soil-layer-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+/* Ангилалтай давхаргын хуулга — товчны доор, товшигдохгүй */
+.soil-scene-view .soil-layer-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 2px 8px 6px 26px;
+}
+.soil-scene-view .soil-layer-legend-head {
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.soil-scene-view .soil-layer-legend-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--ink-2);
+}
+.soil-scene-view .soil-layer-dot {
+  width: 9px;
+  height: 9px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px var(--line-2);
+}
+.soil-scene-view .soil-layer-opt .soil-env-note {
+  padding-left: 17px;
+}
+/* Жорлонгийн хуулга — 3D-ийн тэмдэгтэй ижил бүхээг: өнгөт их бие, бараан дээвэр */
+.soil-scene-view .soil-layer-box {
+  width: 9px;
+  height: 11px;
+  border-radius: 1px;
+  border-top: 3px solid #3e2e22;
+}
+
+/* Орчны сонголт — зүсэлтийн иконы дээрх цонх. Радио мөр: нэг удаад
+   нэг орчин, идэвхтэй нь зүүн ирмэгийн 2px зураасаар (дүүргэлтгүй). */
+/* ⚠ Esri-ийн цонх `box-sizing`-ийг content-box болгодог тул ЗААВАЛ
+   border-box: эс тэгвээс `width: 100%` товч дээр дотоод зай, хүрээ
+   нэмэгдэж цонхны баруун ирмэгээс ~18px хальж байв (хэрэглэгч 2026-10-01). */
+.soil-scene-view .soil-env,
+.soil-scene-view .soil-env * {
+  box-sizing: border-box;
+}
+.soil-scene-view .soil-env {
+  width: 232px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  --calcite-color-brand: var(--tone);
+}
+.soil-scene-view .soil-env-head {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  padding: 0 2px 2px;
+}
+.soil-scene-view .soil-env-opt {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  width: 100%;
+  min-width: 0;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  box-shadow: inset 2px 0 0 transparent;
+}
+.soil-scene-view .soil-env-opt:hover {
+  background: var(--paper-hi);
+}
+.soil-scene-view .soil-env-opt.is-on {
+  border-color: var(--line-2);
+  box-shadow: inset 2px 0 0 var(--tone);
+}
+.soil-scene-view .soil-env-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.soil-scene-view .soil-env-note {
+  font-size: 11px;
+  color: var(--ink-3);
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+/* ӨӨРИЙН ЗҮСЭЛТИЙН ХЭРЭГСЭЛ — орчны цонхтой нэг загвар (`.soil-env`).
+   Esri-ийн `Slice` виджет хасагдсан тул түүний CSS засварууд (хассан
+   давхаргын жагсаалт нуух, 300px-ийг дарах, хоосон цонх нуух) бүгд
+   хамт устсан. */
+/* ⚠ Өргөн нь `.soil-env`-ийнх (232px) — 220px-д "Зурах"-ын тайлбар хоёр мөр болдог */
+.soil-scene-view .soil-cut-actions {
+  display: flex;
+  gap: 4px;
+}
+.soil-scene-view .soil-cut-btn {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 5px 6px;
+  border: 1px solid var(--line-2);
+  border-radius: 2px;
+  background: transparent;
+  font-size: 11.5px;
+  color: var(--ink);
+  cursor: pointer;
+}
+.soil-scene-view .soil-cut-btn:hover:not(:disabled) {
+  background: var(--paper-hi);
+}
+.soil-scene-view .soil-cut-btn:disabled {
+  color: var(--ink-3);
+  opacity: 0.55;
+  cursor: default;
+}
+/* Бариул дээр заагч үйлдлээ хэлнэ: гол нь зөөх, үзүүр нь өргөн */
+.soil-scene-view .is-grab .esri-view-surface,
+.soil-scene-view .is-grab canvas {
+  cursor: move;
+}
+.soil-scene-view .is-size .esri-view-surface,
+.soil-scene-view .is-size canvas {
+  cursor: ew-resize;
+}
+/* Шугам зурах үед зураг дээрх заагч загалмай болно */
+.soil-scene-view .is-drawing .esri-view-surface,
+.soil-scene-view .is-drawing canvas {
+  cursor: crosshair;
+}
+

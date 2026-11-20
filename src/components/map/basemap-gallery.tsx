@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { ScanSearch } from "lucide-react";
 import { BASEMAPS, esriBasemaps, type Basemap } from "@/components/wells/map";
 import { esriModules } from "@/lib/arcgis-sdk";
 import { cn } from "@/lib/utils";
@@ -151,21 +152,27 @@ export function BasemapGallery({
         Esri-ийн галерейн ДООР тусдаа товч.
       */}
       {onExtentChange ? (
-        <label
+        /* Тэмдэгтэй товч — бусад зургийн хэрэгсэлтэй нэг `.map-tool` хэв (хэрэглэгч 2026-11-18:
+           "харагдацаар шүүх хэсгийг icon болгоод оруул"); нэр нь `title`-д */
+        <div
           className={cn(
-            "elevated absolute top-[52px] z-20 flex cursor-pointer items-center gap-2 rounded-xs border border-line-2 bg-paper/92 px-2 py-1.5 backdrop-blur-md",
-            placement === "top-left" ? "left-2.5" : "right-2.5",
+            "absolute top-[46px] z-20",
+            placement === "top-left" ? "left-2.5" : "map-rail-shift right-2.5",
           )}
-          title={unit ? `Зургийн хүрээнд багтсан ${unit}-аар бусад самбар шинэчлэгдэнэ` : undefined}
         >
-          <input
-            type="checkbox"
-            checked={extent}
-            onChange={(e) => onExtentChange(e.target.checked)}
-            className="size-3 shrink-0 accent-[var(--data)]"
-          />
-          <span className="text-[11px] leading-none font-medium text-ink">Харагдацаар шүүх</span>
-        </label>
+          <button
+            type="button"
+            data-map-rail
+            role="switch"
+            aria-checked={extent}
+            aria-label="Харагдацаар шүүх"
+            title={unit ? `Харагдацаар шүүх — зургийн хүрээнд багтсан ${unit}-аар бусад самбар шинэчлэгдэнэ` : "Харагдацаар шүүх"}
+            onClick={() => onExtentChange(!extent)}
+            className={cn("map-tool", extent && "is-on")}
+          >
+            <ScanSearch size={14} strokeWidth={1.75} />
+          </button>
+        </div>
       ) : null}
     </>
   );

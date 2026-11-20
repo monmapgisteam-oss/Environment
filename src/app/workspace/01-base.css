@@ -1,0 +1,1140 @@
+/* Ажлын талбарын өнгө, бүрхүүл (толгой, зурвас, dock), хуудасны ерөнхий элементүүд — workspace.css-ийн 1–1138-р мөр (2026-11-18-нд хуваасан) */
+
+/* Workspace: editorial overview, compact navigation, map-first data surfaces. */
+/*
+  ⚠ АЖЛЫН ТАЛБАРЫН ӨНГӨ ХОЁР ГОРИМД (2026-09-17, хэрэглэгч: "харанхуйд
+  бүгд гоё, гэрэлд UI сонин харагдаад байна"). Урьд нь dock, accent,
+  зураасууд ХАРАНХУЙД зориулж хатуу бичигдсэн (#203b32, #d7ed99,
+  #ffffff12) бөгөөд гэрэл горимд ч тэр чигээрээ гарч байв: цайвар
+  хуудсан дээр бараан ногоон хавтан, шар-ногоон товч. Харанхуйн утга
+  ЯГ ХЭВЭЭР; гэрлийнх `globals.css`-ийн ногоон палитраас гарна.
+  Шинэ өнгө нэмвэл хоёр блокт зэрэг нэм — `globals.css`-тэй нэг дүрэм.
+*/
+:root,
+:root[data-theme="light"] {
+  --workspace-accent: var(--moss);
+  --workspace-accent-ink: #ffffff;
+  --workspace-accent-hover: var(--moss-deep);
+  --dock-bg: var(--paper-3);
+  --dock-ink: var(--ink);
+  --dock-ink-2: var(--ink-2);
+  --dock-ink-3: var(--ink-3);
+  --dock-line: var(--line);
+  --dock-line-2: var(--line-2);
+  --dock-hover: var(--paper-hi);
+  --dock-active-bg: var(--moss);
+  --dock-active-ink: #ffffff;
+}
+:root[data-theme="dark"] {
+  --workspace-accent: #d7ed99;
+  --workspace-accent-ink: #243820;
+  --workspace-accent-hover: #c7e47a;
+  --dock-bg: #203b32;
+  --dock-ink: #dde6d6;
+  --dock-ink-2: #c0d0c3;
+  --dock-ink-3: #a4b7a6;
+  --dock-line: #ffffff12;
+  --dock-line-2: #ffffff16;
+  --dock-hover: #ffffff0c;
+  --dock-active-bg: #d7ed99;
+  --dock-active-ink: #203b32;
+}
+.workspace-frame {
+  margin-left: 104px;
+}
+.workspace-main {
+  padding-left: clamp(20px, 2.4vw, 48px);
+  padding-right: clamp(20px, 2.4vw, 48px);
+}
+.workspace-dock {
+  position: fixed;
+  inset: 0 auto 0 0;
+  z-index: 60;
+  width: 104px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: var(--dock-bg);
+  color: var(--dock-ink);
+  border-right: 1px solid var(--dock-line);
+}
+.dock-brand {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  min-height: 48px;
+  margin: 20px 0 17px;
+  border-radius: 50%;
+  background: var(--dock-active-bg);
+  color: var(--dock-active-ink);
+}
+/*
+  Хажуугийн зурвасын доторх зай 12px-ээс 10px (2026-09-29): "Дүн
+  шинжилгээ" мөрийн хоёр дахь эгнээ ("шинжилгээ") 10px үсгээр ЯГ 79px
+  буюу товчны бүтэн өргөнийг эзэлж, хоёр ирмэгт наалдаж байв — халиагүй
+  ч шахагдсан харагдана. 10px зай нь мөр бүрийг 83px болгож, тэр үгэнд
+  хоёр талдаа 2px амьсгал өгнө.
+  ⚠ ҮСГИЙН ХЭМЖЭЭГ БУУЛГААГҮЙ: платформын нягт сүлжээний доод хязгаар
+  нь 10px бөгөөд энэ бол хамгийн жижиг бичвэр.
+*/
+.dock-nav {
+  width: 100%;
+  padding: 0 10px;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+.dock-link {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-height: 57px;
+  margin: 3px 0;
+  border-radius: 13px;
+  color: var(--dock-ink-2);
+  font-size: 10px;
+  font-weight: 500;
+  transition:
+    color 160ms,
+    background 160ms;
+}
+.dock-link:hover {
+  color: var(--dock-ink);
+  background: var(--dock-hover);
+}
+.dock-link.active {
+  background: var(--dock-active-bg);
+  color: var(--dock-active-ink);
+}
+.dock-divider {
+  height: 1px;
+  background: var(--dock-line-2);
+  margin: 12px 16px;
+}
+.dock-end {
+  margin: auto 0 0;
+  padding: 16px;
+  color: var(--dock-ink-3);
+}
+.workspace-header {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  display: flex;
+  gap: 20px;
+  align-items: center;
+  height: var(--head-h);
+  padding: 0 clamp(20px, 2.4vw, 48px);
+  border-bottom: 1px solid var(--line);
+  background: color-mix(in oklab, var(--paper) 94%, transparent);
+  backdrop-filter: blur(16px);
+}
+.workspace-wordmark {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-family: var(--font-manrope), sans-serif;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+.workspace-identity {
+  position: relative;
+  padding-left: 72px;
+}
+.workspace-wordmark > img {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 60px;
+  height: 60px;
+  object-fit: contain;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.workspace-wordmark > span {
+  color: var(--ink);
+}
+.workspace-breadcrumb {
+  padding-left: 0;
+}
+.workspace-icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  color: var(--ink-2);
+  transition: background 160ms;
+}
+.workspace-icon-button:hover {
+  background: var(--paper-hi);
+}
+/* Хэлний товч — дүрсний оронд хоёр үсэг (EN / МН) */
+.workspace-lang-button {
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+.workspace-search-dialog {
+  position: fixed;
+  inset: 0;
+  margin: 12vh auto auto;
+  width: min(640px, calc(100% - 32px));
+  max-height: 80dvh;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  background: var(--paper-2);
+  color: var(--ink);
+  box-shadow: 0 24px 100px #0005;
+}
+.workspace-search-dialog::backdrop {
+  background: #0c211b88;
+  backdrop-filter: blur(5px);
+}
+.search-result {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 12px;
+  border-radius: 10px;
+  font-size: 13px;
+  line-height: 1.6;
+}
+.search-result:hover {
+  background: var(--paper-hi);
+}
+/* Нүүр бүхэлдээ нэг дэлгэцэнд: зөвхөн нарийн дэлгэцийн жагсаалт дотроо гүйнэ. */
+.workspace-main:has(> .home-one) { height: calc(100dvh - var(--head-h)); min-height: 0; padding-block: 20px; }
+.home-one { display: flex; min-height: 0; height: 100%; max-width: 1600px; flex-direction: column; margin: 0 auto; }
+.home-overview { display: grid; min-height: 0; height: clamp(200px, 23dvh, 220px); flex-shrink: 0; grid-template-columns: minmax(0, 1fr) clamp(340px, 36vw, 500px); gap: 20px; margin-bottom: 20px; }
+.home-summary { display: grid; min-width: 0; min-height: 0; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); grid-template-rows: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.home-summary > div { display: flex; min-width: 0; min-height: 0; align-items: center; justify-content: space-between; gap: 8px; padding: 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--paper-2); }
+.home-summary dt { display: flex; min-width: 0; align-items: center; gap: 8px; color: var(--ink-3); font-size: 11px; }
+.home-summary dd { flex-shrink: 0; color: var(--ink); font-size: 25px; font-weight: 500; line-height: 1.2; }
+.summary-label { overflow-wrap: anywhere; text-decoration: none; }
+.home-summary dd > span { color: var(--ink-3); font-size: 14px; font-weight: 400; }
+.summary-icon { display: grid; width: 30px; height: 30px; flex-shrink: 0; place-items: center; border-radius: 8px; background: var(--paper-3); color: var(--moss); }
+.home-layout { display: grid; min-height: 0; flex: 1; grid-template-columns: minmax(0, 1fr); }
+.home-departments { display: flex; min-width: 0; min-height: 0; flex-direction: column; }
+.home-departments > h2 { flex-shrink: 0; margin-bottom: 12px; color: var(--ink-2); font-size: 13px; font-weight: 500; line-height: 20px; text-transform: uppercase; }
+.home-depts { display: grid; min-width: 0; min-height: 0; flex: 1; grid-template-columns: repeat(4, minmax(0, 1fr)); grid-auto-rows: minmax(min-content, 1fr); gap: 12px; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
+.home-depts:has(> :only-child) { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-rows: minmax(min-content, 50%); }
+.department-entry { display: flex; min-width: 0; min-height: 0; flex-direction: column; padding: 18px; border: 1px solid var(--line); border-radius: 10px; background: var(--paper-2); transition: background-color 160ms, border-color 160ms; }
+.department-entry:hover { border-color: color-mix(in oklab, var(--moss) 45%, var(--line)); background: var(--paper-hi); }
+.entry-top { display: flex; min-width: 0; min-height: 34px; flex-shrink: 0; align-items: center; gap: 9px; }
+.entry-icon { display: grid; width: 32px; height: 32px; flex-shrink: 0; place-items: center; border: 1px solid var(--line); border-radius: 7px; background: var(--paper-3); color: var(--moss); transition: background-color 160ms, color 160ms; }
+.entry-arrow { display: grid; width: 24px; height: 24px; place-items: center; color: var(--ink-3); transition: color 160ms; }
+.entry-copy { display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; margin-top: 10px; }
+.entry-name { min-width: 0; flex: 1; color: var(--ink); font-size: 11px; font-weight: 500; line-height: 1.45; text-wrap: pretty; text-transform: uppercase; }
+.entry-photo { position: relative; display: block; width: 100%; min-height: 0; flex: 1; overflow: hidden; border-radius: 6px; background: var(--paper-3); }
+.entry-photo img { object-fit: cover; }
+.entry-dashboard-preview { contain: strict; pointer-events: none; }
+.entry-dashboard-preview iframe { position: absolute; inset: 0 auto auto 0; width: 1280px; height: var(--preview-height, 720px); max-width: none; border: 0; transform: scale(var(--preview-scale, 0.2)); transform-origin: top left; pointer-events: none; }
+.department-entry:hover .entry-icon { background: var(--moss); color: var(--paper-2); }
+.department-entry:hover .entry-arrow { color: var(--moss); }
+@media (max-width: 1180px) {
+  .home-overview { height: 264px; gap: 16px; }
+  .home-summary { grid-auto-flow: row; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: repeat(4, minmax(0, 1fr)); gap: 8px; }
+  .home-summary > div { min-height: 0; padding: 8px 10px; }
+  .home-summary .summary-icon { display: none; }
+  .home-depts { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+  .department-entry { flex-direction: column; gap: 0; padding: 12px; }
+  .entry-top { display: flex; }
+  .entry-top .entry-arrow { display: none; }
+  .entry-icon { width: 32px; height: 32px; }
+  .entry-copy { height: 100%; margin-top: 8px; }
+  .entry-name { font-size: 10px; line-height: 1.4; }
+}
+@media (max-height: 760px) {
+  .home-overview { margin-bottom: 16px; }
+  .home-summary > div { min-height: 0; padding: 8px 10px; }
+  .home-summary dd { font-size: 25px; }
+  .home-departments > h2 { margin-bottom: 8px; }
+  .department-entry { padding: 12px; }
+  .entry-icon { width: 32px; height: 32px; }
+  .entry-copy { margin-top: 8px; }
+  .entry-name { font-size: 10px; line-height: 1.4; }
+}
+@media (max-width: 900px) {
+  .workspace-main:has(> .home-one) { padding-bottom: calc(92px + env(safe-area-inset-bottom, 0px)); }
+  .home-summary > div { min-height: 0; padding: 8px; }
+  .home-summary .summary-icon { display: none; }
+  .home-summary dd { font-size: 24px; }
+  .department-entry { gap: 8px; padding: 10px; }
+  .entry-top { display: flex; }
+  .entry-copy { margin-top: 8px; }
+  .home-overview { grid-template-columns: minmax(0, 1fr) 320px; }
+}
+@media (max-height: 660px) and (min-width: 1181px) {
+  .home-overview { height: 200px; margin-bottom: 12px; }
+  .home-summary > div { min-height: 0; padding-block: 8px; }
+}
+@media (max-width: 640px) {
+  .workspace-main:has(> .home-one) { padding-top: 12px; padding-bottom: calc(88px + env(safe-area-inset-bottom, 0px)); }
+  .home-overview { height: 248px; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: 8px; margin-bottom: 12px; }
+  .home-summary { gap: 5px; }
+  .home-summary > div { min-height: 0; flex-direction: column; align-items: flex-start; justify-content: center; gap: 3px; padding: 5px; border-radius: 7px; }
+  .home-summary dt { font-size: 9px; line-height: 1.3; }
+  .home-summary dd { font-size: 18px; }
+  .home-summary dd > span { font-size: 12px; }
+  .home-layout { grid-template-columns: minmax(0, 1fr); }
+  .home-departments > h2 { margin-bottom: 6px; font-size: 12px; }
+  .home-depts { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
+  .department-entry { min-height: 164px; padding: 10px; }
+  .entry-copy { height: 100%; }
+  .entry-icon { width: 24px; height: 24px; }
+  .entry-icon svg { width: 17px; height: 17px; }
+  .entry-name { font-size: 10px; line-height: 1.4; }
+}
+:where(a, button, input, select):focus-visible {
+  outline: 2px solid var(--moss);
+  outline-offset: 4px;
+}
+.workspace-dock a:focus-visible {
+  outline-color: var(--workspace-accent);
+}
+@media (max-width: 900px) {
+  .workspace-frame {
+    margin-left: 0;
+  }
+  .workspace-main {
+    padding-bottom: 100px;
+  }
+  .workspace-dock {
+    inset: auto 0 0;
+    width: 100%;
+    height: 76px;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    border-top: 1px solid var(--dock-line-2);
+  }
+  .dock-brand,
+  .dock-divider,
+  .dock-end {
+    display: none;
+  }
+  .dock-nav {
+    display: flex;
+    gap: 5px;
+    padding: 5px 10px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    height: 100%;
+  }
+  .dock-link {
+    flex-shrink: 0;
+    width: 70px;
+    margin: 0;
+    min-height: 58px;
+  }
+}
+@media (max-width: 640px) {
+  .workspace-header {
+    padding-inline: 18px;
+    gap: 10px;
+  }
+  .workspace-wordmark {
+    gap: 8px;
+    font-size: 12px;
+  }
+  .workspace-identity {
+    padding-left: 52px;
+  }
+  .workspace-wordmark > img {
+    width: 44px;
+    height: 44px;
+  }
+  .workspace-breadcrumb {
+    display: none;
+  }
+  .workspace-main {
+    padding-inline: 18px;
+  }
+
+}
+@media (prefers-reduced-motion: reduce) {
+  .department-entry, .entry-icon, .entry-arrow {
+    transition: none;
+  }
+}
+.map-view-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 32px;
+  padding: 6px 11px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  font-size: 11px;
+  color: var(--ink-3);
+}
+.map-view-toggle.selected {
+  background: var(--workspace-accent);
+  border-color: transparent;
+  color: var(--workspace-accent-ink);
+}
+.data-surface {
+  box-shadow: 0 3px 15px #172c2005;
+}
+.source-intro {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 25px;
+  padding: 25px 0 36px;
+}
+.source-intro h1 {
+  font-family: var(--font-manrope), sans-serif;
+  font-size: clamp(28px, 3vw, 44px);
+  font-weight: 600;
+  letter-spacing: -0.045em;
+  line-height: 1.3;
+  margin-top: 12px;
+}
+.source-intro h1 > span {
+  color: var(--moss);
+}
+.source-intro h1 + p {
+  color: var(--ink-3);
+  font-size: 13px;
+  line-height: 1.8;
+  margin-top: 12px;
+}
+.source-kind {
+  font-size: 11px;
+  color: var(--ink-3);
+}
+@media (max-width: 1000px) {  .source-kind {
+    display: none;
+  }
+}
+@media (max-width: 640px) {
+}
+
+/* Dataset navigation and analytical surfaces. */
+.workspace-main:has(.department-workspace) {
+  --workspace-gutter: 24px;
+  padding: 12px;
+}
+@media (max-width: 900px) {
+  .workspace-main:has(.department-workspace) {
+    padding-bottom: 100px;
+  }
+}
+.department-workspace {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  gap: 10px;
+  height: 100%;
+  min-height: 0;
+}
+.department-workspace-content {
+  min-width: 0;
+  min-height: 0;
+}
+/* Same-origin card previews keep the real page and its permission checks. */
+html[data-department-preview="true"] { --head-h: 0px; --rail-w: 0px; }
+html[data-department-preview="true"] body { overflow: hidden; }
+html[data-department-preview="true"] .workspace-dock,
+html[data-department-preview="true"] .workspace-header,
+html[data-department-preview="true"] .skip-link,
+html[data-department-preview="true"] nextjs-portal { display: none; }
+html[data-department-preview="true"] .workspace-frame { margin-left: 0; }
+html[data-department-preview="true"] .workspace-main { --workspace-gutter: 0px; height: 100dvh; min-height: 0; overflow: hidden; padding: 0; }
+/* Зүүн багана: "Өгөгдөл засах" карт + өгөгдлийн багц (хэрэглэгч 2026-10-20).
+   Наалдалт, өндрийн хязгаар нь БАГАНАД — багцын жагсаалт үлдсэн өндрийг авна. */
+.dataset-column {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-self: start;
+  position: sticky;
+  top: calc(var(--head-h) + 12px);
+  height: 100%;
+  max-height: calc(100dvh - var(--head-h) - var(--workspace-gutter, 3rem));
+  min-height: 0;
+}
+.dataset-edit {
+  flex-shrink: 0;
+  border: 1px solid var(--line);
+  border-radius: 15px;
+  background: var(--paper-2);
+  padding-bottom: 10px;
+}
+.dataset-edit-button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: calc(100% - 20px);
+  margin: 0 10px;
+  padding: 8px 10px;
+  border: 1px solid color-mix(in oklab, var(--moss) 28%, transparent);
+  border-radius: 8px;
+  background: color-mix(in oklab, var(--moss) 8%, var(--paper-2));
+  color: var(--moss);
+  font-size: 11.5px;
+  font-weight: 600;
+  text-align: left;
+  transition: background 150ms;
+}
+.dataset-edit-button.is-add {
+  border-color: var(--moss);
+  background: color-mix(in oklab, var(--moss) 18%, var(--paper-2));
+}
+.dataset-edit-button.is-add:hover:not(:disabled) {
+  background: color-mix(in oklab, var(--moss) 26%, var(--paper-2));
+}
+.dataset-edit-button:hover:not(:disabled) {
+  background: color-mix(in oklab, var(--moss) 16%, var(--paper-2));
+}
+.dataset-edit-button:disabled {
+  border-color: var(--line);
+  background: transparent;
+  color: var(--ink-3);
+  font-weight: 500;
+  cursor: default;
+}
+/* Засварын цонх — бүтэн дэлгэц, толгой + зураг */
+.feature-editor {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  background: var(--paper);
+}
+.feature-editor-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 58px;
+  padding: 0 14px;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--line);
+  background: var(--paper-2);
+}
+.feature-editor-head h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  margin-top: 2px;
+  font-size: 14px;
+  font-weight: 600;
+}
+/* Өгөгдлийн багцын нэр — том үсгээр, хашилтад (хэрэглэгч 2026-10-21) */
+.feature-editor-title {
+  font-size: 12px;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+.feature-editor-title::before {
+  content: "\201C";
+}
+.feature-editor-title::after {
+  content: "\201D";
+}
+.feature-editor-symbol {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  border: 1px solid color-mix(in oklab, var(--tone, var(--moss)) 35%, transparent);
+  border-radius: 9px;
+  background: color-mix(in oklab, var(--tone, var(--moss)) 12%, transparent);
+  color: var(--tone, var(--moss));
+}
+.feature-editor-dept {
+  display: block;
+  color: var(--ink-3);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.feature-editor-error {
+  overflow: hidden;
+  max-width: 50%;
+  color: var(--clay);
+  font-size: 11.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* "Өгөгдөл засах" тэмдэг ба "Гарах" товч НЭГ хэлбэртэй (хэрэглэгч 2026-10-21:
+   "ui adilhan bolgo") — өндөр, булан, зай, үсэг ижил; өнгө нь л ялгаатай */
+.feature-editor-tag,
+.feature-editor-close {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid var(--line-2);
+  border-radius: 7px;
+  font-size: 11.5px;
+  font-weight: 500;
+  line-height: 1;
+}
+.feature-editor-tag {
+  margin-left: auto;
+  border-color: color-mix(in oklab, var(--tone, var(--moss)) 35%, transparent);
+  background: color-mix(in oklab, var(--tone, var(--moss)) 12%, transparent);
+  color: var(--tone, var(--moss));
+}
+.feature-editor-close {
+  color: var(--ink-2);
+}
+.feature-editor-close:hover {
+  background: var(--paper-3);
+  color: var(--ink);
+}
+
+/* ӨГӨГДӨЛ ЗАСАХ ЦОНХ (src/components/edit/data-editor.tsx):
+   зүүн — зураг дээр, хүснэгт доор; баруун — 400px маягт */
+/* Олон давхаргатай багцын давхарга сонгох мөр */
+.pe-layers {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+  overflow-x: auto;
+  padding: 10px 10px 0;
+  background: var(--paper);
+  scrollbar-width: thin;
+}
+.pe-layers button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  flex-shrink: 0;
+  height: 30px;
+  padding: 0 12px;
+  border: 1px solid var(--line-2);
+  border-radius: 8px;
+  color: var(--ink-2);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.pe-layers button:hover:not(:disabled) {
+  background: var(--paper-3);
+  color: var(--ink);
+}
+.pe-layers button[aria-selected="true"] {
+  border-color: color-mix(in oklab, var(--moss) 45%, transparent);
+  background: color-mix(in oklab, var(--moss) 12%, transparent);
+  color: var(--moss);
+  font-weight: 600;
+}
+.pe-layers button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.pe-layers i {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+}
+/* ГУРВАН ХЭСЭГ ТУС ТУСДАА КАРТ (хэрэглэгч 2026-10-21: "zaag uusge, shuud
+   tsugtaa ym shig haragdaad bn") — canvas дэвсгэр дээр 10px завсартай,
+   хүрээтэй; харанхуйд зураг, хүснэгт, маягт нийлж харагдаж байв */
+.pe-body {
+  display: grid;
+  /* Дунд нь 10px чирэх бариул (`.pe-split`) — завсар нь өөрөө */
+  grid-template-columns: minmax(0, 1fr) 10px var(--pe-form-w, 400px);
+  flex: 1;
+  min-height: 0;
+  padding: 10px;
+  background: var(--paper);
+}
+.pe-main {
+  display: grid;
+  /* Хүснэгт өргөн тул баганыг ЗААВАЛ хязгаарлана — эс тэгвээс зураг
+     хүснэгтийн өргөнөөр сунаж маягтыг дарна */
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) 10px var(--pe-table-h, minmax(170px, 34%));
+  overflow: hidden;
+  min-width: 0;
+  min-height: 0;
+}
+.pe-map {
+  position: relative;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid var(--line-2);
+  border-radius: 12px;
+}
+.pe-map-host {
+  position: absolute;
+  inset: 0;
+}
+.pe-map-host .esri-view-surface--inset-outline:focus::after {
+  outline: none;
+}
+.pe-map-wait {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--ink-3);
+}
+.pe-measure {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  color: var(--ink-3);
+  font-size: 11px;
+}
+.pe-measure strong {
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 600;
+}
+.pe-tools {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: color-mix(in oklab, var(--paper-2) 94%, transparent);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(12px);
+}
+.pe-tools button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 11px;
+  border-radius: 7px;
+  color: var(--ink-2);
+  font-size: 12px;
+  font-weight: 500;
+}
+.pe-tools button:hover:not(:disabled) {
+  background: var(--paper-3);
+  color: var(--ink);
+}
+.pe-tools button[aria-pressed="true"] {
+  background: color-mix(in oklab, var(--moss) 14%, transparent);
+  color: var(--moss);
+}
+.pe-tools button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.pe-table {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid var(--line-2);
+  border-radius: 12px;
+  background: var(--paper-2);
+}
+.pe-table-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 38px;
+  padding: 0 12px;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--line-2);
+  background: var(--paper-3);
+}
+.pe-count {
+  color: var(--ink-3);
+  font-size: 11px;
+}
+.pe-search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 220px;
+  height: 26px;
+  margin-left: auto;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  color: var(--ink-3);
+}
+.pe-search input {
+  flex: 1;
+  min-width: 0;
+  background: none;
+  color: var(--ink);
+  font-size: 11.5px;
+  outline: none;
+}
+/* "Мөр нэмэх" — давхаргад шинэ талбар (add-field.tsx) */
+.pe-addfield {
+  position: relative;
+  margin-left: auto;
+}
+.pe-addfield + .pe-search {
+  margin-left: 0;
+}
+.pe-addfield-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid var(--line-2);
+  border-radius: 7px;
+  color: var(--ink-2);
+  font-size: 11.5px;
+  font-weight: 500;
+}
+.pe-addfield-btn:hover,
+.pe-addfield-btn.is-on {
+  border-color: color-mix(in oklab, var(--moss) 45%, transparent);
+  background: color-mix(in oklab, var(--moss) 12%, transparent);
+  color: var(--moss);
+}
+.pe-addfield-card {
+  position: fixed;
+  z-index: 230;
+  display: grid;
+  gap: 12px;
+  width: 320px;
+  padding: 14px;
+  border: 1px solid var(--line-2);
+  border-radius: 12px;
+  background: var(--paper-2);
+  box-shadow: var(--shadow);
+}
+.pe-addfield-card header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 13px;
+}
+.pe-addfield-card header button {
+  color: var(--ink-3);
+}
+.pe-addfield-card footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.pe-addfield-name {
+  margin-top: -6px;
+  color: var(--ink-3);
+  font-size: 11px;
+}
+.pe-addfield-name code {
+  margin-left: 4px;
+  padding: 1px 6px;
+  border-radius: 5px;
+  background: var(--paper-3);
+  color: var(--ink);
+  font-family: inherit;
+}
+.pe-addfield-kinds {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+.pe-addfield-kinds button {
+  height: 32px;
+  border: 1px solid var(--line-2);
+  border-radius: 7px;
+  color: var(--ink-2);
+  font-size: 12px;
+}
+.pe-addfield-kinds button[aria-checked="true"] {
+  border-color: var(--moss);
+  background: color-mix(in oklab, var(--moss) 14%, transparent);
+  color: var(--moss);
+  font-weight: 600;
+}
+.pe-table-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+.pe-table table {
+  min-width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 11.5px;
+}
+.pe-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--line-2);
+  background: var(--paper-2);
+  color: var(--ink-3);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-align: left;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.pe-table td {
+  overflow: hidden;
+  max-width: 280px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--line);
+  color: var(--ink-2);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pe-table td.num,
+.pe-table th.num {
+  text-align: right;
+}
+/* Тогтоосон багана — зүүн талд наалдана; зүүн зай нь хэмжигдэж DOM-д бичигдэнэ */
+.pe-table th.is-frozen,
+.pe-table td.is-frozen {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: var(--paper-2);
+  box-shadow: inset -1px 0 var(--line-2);
+}
+.pe-table th.is-frozen {
+  z-index: 3;
+}
+.pe-table th.is-frozen svg {
+  display: inline-block; /* Tailwind preflight нь svg-г block болгодог — тэмдэг тусдаа мөр болж байв */
+  vertical-align: -1px;
+  margin-right: 2px;
+  color: var(--moss);
+}
+.pe-table tbody tr.is-hot td.is-frozen,
+.pe-table tbody tr.is-picked td.is-frozen {
+  background: var(--paper-hi);
+}
+.pe-table th {
+  cursor: context-menu;
+}
+.pe-hidden-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 24px;
+  padding: 0 8px;
+  border: 1px dashed var(--line-2);
+  border-radius: 7px;
+  color: var(--ink-3);
+  font-size: 11px;
+}
+.pe-hidden-chip:hover {
+  color: var(--ink);
+  border-color: var(--ink-3);
+}
+/* Баганын баруун товшилтын цэс */
+.pe-colmenu {
+  position: fixed;
+  z-index: 240;
+  min-width: 208px;
+  padding: 4px;
+  border: 1px solid var(--line-2);
+  border-radius: 10px;
+  background: var(--paper-2);
+  box-shadow: var(--shadow);
+}
+.pe-colmenu-title {
+  overflow: hidden;
+  padding: 6px 10px 4px;
+  color: var(--ink-3);
+  font-size: 10.5px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pe-colmenu button {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 8px;
+  height: 30px;
+  padding: 0 10px;
+  border-radius: 7px;
+  color: var(--ink);
+  font-size: 12px;
+  text-align: left;
+}
+.pe-colmenu button:hover {
+  background: var(--paper-hi);
+}
+.pe-colmenu button svg {
+  color: var(--ink-3);
+}
+.pe-colmenu button.is-danger,
+.pe-colmenu button.is-danger svg {
+  color: var(--clay);
+}
+.pe-colmenu hr {
+  margin: 4px 6px;
+  border: 0;
+  border-top: 1px solid var(--line);
+}
+/* Талбар устгах цонх — хөшигтэй, голдоо */
+.pe-dialog-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 235;
+  display: grid;
+  place-items: center;
+  background: rgb(0 0 0 / 0.35);
+}
+.pe-addfield-card.pe-dialog {
+  position: static;
+  width: 360px;
+}
+.pe-addfield-card.pe-dialog.is-danger {
+  border-color: color-mix(in oklab, var(--clay) 55%, transparent);
+}
+.pe-dialog-text {
+  color: var(--ink-2);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.pe-dialog-warn {
+  display: flex;
+  gap: 8px;
+  padding: 9px 11px;
+  border: 1px solid color-mix(in oklab, var(--clay) 55%, transparent);
+  border-radius: 10px;
+  background: color-mix(in oklab, var(--clay) 10%, transparent);
+  color: var(--ink);
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+.pe-dialog-warn svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--clay);
+}
+.pe-table td.is-empty {
+  color: var(--ink-3);
+}
+.pe-table tbody tr {
+  cursor: pointer;
+}
+/* Шар — зураг дээрх тодруулгатай нэг өнгө */
+.pe-table tbody tr.is-hot td {
+  background: rgb(255 230 0 / 0.14);
+  color: var(--ink);
+}
+.pe-table tbody tr.is-picked td {
+  background: color-mix(in oklab, var(--moss) 12%, transparent);
+  color: var(--ink);
+}
+.pe-table tbody tr.is-picked td:first-child {
+  box-shadow: inset 3px 0 0 var(--moss);
+}
+.pe-empty {
+  padding: 18px;
+  color: var(--ink-3);
+  font-size: 12px;
+  text-align: center;
+}
+
+.pe-form {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid var(--line-2);
+  border-radius: 12px;
+  background: var(--paper-2);
+}
+.pe-idle {
+  display: grid;
+  gap: 10px;
+  padding: 16px;
+}
+.pe-idle-box {
+  display: grid;
+  place-items: center;
+  gap: 8px;
+  padding: 34px 12px;
+  border: 1px dashed var(--line-2);
+  border-radius: 10px;
+  color: var(--ink-3);
+  font-size: 12px;
+}
+.pe-idle-box strong {
+  font-weight: 500;
+}
+.pe-form-head {
+  padding: 12px 16px 10px;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--line-2);
+  background: var(--paper-3);
+}
+.pe-form-head h3 {
+  margin-top: 3px;
+  font-size: 14px;
+  font-weight: 600;
+}
+.pe-form-scroll {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  margin: 0;
+  padding: 14px 16px 18px;
+  border: 0;
+}
+/* Хадгалсан бүртгэл ТҮГЖЭЭТЭЙ — зөвхөн харах */
+.pe-form-scroll:disabled input,
+.pe-form-scroll:disabled select {
+  border-color: var(--line);
+  background: transparent;
+  color: var(--ink);
+  cursor: default;
+  opacity: 1;
+}
+.pe-locked {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 12px;
+  color: var(--ink-3);
+  font-size: 11px;
+}
+.pe-warn {
+  display: grid;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in oklab, var(--ochre) 55%, transparent);
+  border-radius: 10px;
+  background: color-mix(in oklab, var(--ochre) 12%, transparent);
+}
+.pe-warn p {
+  display: flex;
+  gap: 8px;
+  color: var(--ink);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.pe-warn p svg {
+  flex-shrink: 0;
+  margin-top: 1px;
+  color: var(--ochre);
+}
+.pe-warn strong {
+  font-weight: 600;
+}

@@ -12,7 +12,7 @@ export const G = 9.81;
 // s = soil water storage, mm (dry soil): once that much has soaked in, the soil is saturated and infiltration
 // drops to a tenth — long rain then runs off the mountains instead of vanishing into them (Horton alone never
 // saturates: 6 mm/h for 12 h on grass, fc 8 mm/h, made no runoff at all).
-export const LANDCOVER = [
+const LANDCOVER = [
   { code: 0, name: 'Тодорхойгүй', n: 0.035, f0: 30, fc: 6, s: 40 },
   { code: 10, name: 'Ой мод', n: 0.10, f0: 60, fc: 15, s: 80 },
   { code: 20, name: 'Бут сөөг', n: 0.07, f0: 50, fc: 12, s: 60 },

@@ -6,17 +6,18 @@ import {
   Building2,
   CalendarClock,
   CalendarRange,
-  ChevronRight,
   FlaskConical,
   Loader2,
+  MapPinOff,
   MousePointerClick,
   Package,
   ScrollText,
   ShieldCheck,
   TriangleAlert,
   Warehouse as WarehouseIcon,
+  type LucideIcon,
 } from "lucide-react";
-import { AreaChart, RowChart, YearRange, type Datum } from "@/components/charts";
+import { AreaChart, PieChart, RowChart, YearRange, type Datum } from "@/components/charts";
 import { BasemapGallery } from "@/components/map/basemap-gallery";
 import { MapTip, MapTipRow, useMapTip } from "@/components/map/hover-tip";
 import { FilterBar, FilterMenu, PickList } from "@/components/wells/filter-bar";
@@ -47,6 +48,14 @@ import {
   type Warehouse,
 } from "@/lib/chemicals";
 import { districtName } from "@/lib/repair-shops";
+import {
+  CatalogGroup,
+  CatalogName,
+  CatalogRow,
+  CatalogSearch,
+} from "@/components/hyanalt/catalog-rows";
+import { offDistricts, offText } from "@/lib/district-check";
+import { OffDistrictLegend, mismatchPin, useUbDistricts } from "@/components/map/off-district";
 import { Bounds } from "@/lib/extent";
 import { cn, num } from "@/lib/utils";
 
@@ -144,6 +153,9 @@ export function ChemicalsDashboard() {
 
   const data = cache[year];
 
+  /* Дүүргийн хил — цэг аль дүүрэгт буусныг тогтооход ({@link ../../lib/district-check}) */
+  const bounds = useUbDistricts();
+
   React.useEffect(() => {
     if (cache[year]) return;
     const ac = new AbortController();
@@ -154,6 +166,13 @@ export function ChemicalsDashboard() {
   }, [year, cache]);
 
   const rows = data?.rows;
+
+  /*
+    Цэгийн ДҮҮРЭГ бүртгэлийнхээс зөрсөн агуулах → координатын дүүрэг (хотоос гадна бол
+    `""`). Бүртгэлийн дүүрэг нь нийслэлийн танигдах товчлол биш бол ("Төв аймаг")
+    харьцуулахгүй.
+  */
+  const offDistrict = React.useMemo(() => offDistricts(bounds, rows ?? []), [bounds, rows]);
 
   /** Бүртгэлд байгаа дуусах оны бүтэн муж */
   const span = React.useMemo<[number, number] | null>(() => {
@@ -341,6 +360,7 @@ export function ChemicalsDashboard() {
 
   /* ---------------- Задаргаа ---------------- */
 
+
   /*
     Диаграм нь зургийн сонголтоор хумигдана, ШҮҮЛТҮҮРИЙН ЦЭС харин үгүй
     (`menu`): цэс өөрийгөө хумивал сонголтоо солих арга үлдэхгүй.
@@ -382,7 +402,9 @@ export function ChemicalsDashboard() {
         label: r.label,
         value: m.get(r.id) ?? 0,
       }));
-    return [out(cut), out(all)] as const;
+    /* Диаграм ИХЭЭС БАГА руу (хэрэглэгч 2026-11-19: "Зөвшөөрлийн эрхээр ihees baga ruu"); цэс эрхийн
+       тогтмол дараалалаар хэвээр */
+    return [out(cut).sort((a, b) => b.value - a.value), out(all)] as const;
   }, [rows, keep, has]);
 
   const [byStorage, storageMenu] = React.useMemo(() => {
@@ -399,6 +421,29 @@ export function ChemicalsDashboard() {
         .sort((a, b) => b.value - a.value);
     return [out(cut), out(all)] as const;
   }, [rows, keep, has]);
+
+  const rightCol = React.useRef<HTMLDivElement>(null);
+  const pieBox = React.useRef<HTMLDivElement>(null);
+  const pieH = React.useRef(0);
+  const [pieRight, setPieRight] = React.useState(false);
+  React.useEffect(() => {
+    const col = rightCol.current;
+    if (!col) return;
+    const GAP = 10;
+    const check = () => {
+      const box = pieBox.current;
+      if (box && box.offsetHeight) pieH.current = box.offsetHeight;
+      if (!pieH.current) return;
+      const rest = [...col.children].filter((c) => !(c as HTMLElement).dataset.pie) as HTMLElement[];
+      const used = rest.reduce((sum, c) => sum + c.offsetHeight, 0) + GAP * Math.max(rest.length - 1, 0);
+      setPieRight(used + GAP + pieH.current <= col.clientHeight);
+    };
+    const ro = new ResizeObserver(check);
+    ro.observe(col);
+    for (const c of col.children) ro.observe(c);
+    if (pieBox.current) ro.observe(pieBox.current);
+    return () => ro.disconnect();
+  }, [byStorage, byDistrict, byRight, pieRight, data]);
 
   /* Гэрчилгээ дуусах он. Задраагүй огноог ТУСДАА мөр болгоно — нуувал
      жагсаалтын нийлбэр нийт тоотой таарахгүй нь тайлбаргүй үлдэнэ */
@@ -464,10 +509,12 @@ export function ChemicalsDashboard() {
         [0, DATA_COLOR],
         [Math.max(hi, 1), DATA_COLOR],
       ] as [number, string][],
-      /* Шатлал нь нэг өнгөт тул платформын бусад зурагтай ижил гурван
-         давхаргын гэрэлтэлтээр зурна — радиус нь хэмжигдэхүүнээ
+      /* ESRI-ИЙН FIREFLY тэмдэг (хэрэглэгч 2026-11-13: "zuw firefly
+         bolgo") — цагаан цөм + `DATA_COLOR`-оор будсан гэрэл, хөрсний
+         мониторинг, гадаргын устай ижил зураг. Урьдын гараар зурсан
+         гурван дискийн гэрэлтэлтийг орлосон; радиус нь хэмжигдэхүүнээ
          үүрсэн хэвээр */
-      firefly: true,
+      firefly: "graded" as const,
     };
   }, [rows]);
 
@@ -476,10 +523,15 @@ export function ChemicalsDashboard() {
     if (!rows) return undefined;
     const m: Record<number, string> = {};
     for (const w of rows) {
-      if (expiryState(w, todayKey) === "expired") m[w.oid] = EXPIRED_PIN;
+      const expired = expiryState(w, todayKey) === "expired";
+      if (offDistrict.has(w.oid)) m[w.oid] = mismatchPin(expired);
+      else if (expired) m[w.oid] = EXPIRED_PIN;
     }
     return Object.keys(m).length ? m : undefined;
-  }, [rows, todayKey]);
+  }, [rows, todayKey, offDistrict]);
+
+  /* Одоогийн харагдацад зөрсөн цэг байгаа эсэх — тайлбарын мөр түүгээр */
+  const offShown = React.useMemo(() => shown.filter((w) => offDistrict.has(w.oid)).length, [shown, offDistrict]);
 
   const focus = React.useMemo<Extent | null>(() => {
     if (!filterCount || !shown.length) return null;
@@ -510,6 +562,27 @@ export function ChemicalsDashboard() {
       </div>
     );
   }
+
+  /*
+    ХАДГАЛАХ ГАЗРЫН ЗОРИУЛАЛТ — БӨГЖ. Байрлал нь ДИНАМИК (хэрэглэгч 2026-11-19: "2024 on deer … baruun paneliin
+    hamgiin deer … baruun paneliin door hooosn zai uldeed bga uchir … dynamic"): баруун баганын диаграмууд
+    (дүүрэг, эрх, хугацаа) нийлээд бөгжийг багтаах зай үлдээвэл бөгж баруун баганын ДЭЭД талд, эс бөгөөс зүүн
+    баганын дээд талд (бодисын товьёогийн дээр). Хэмжилт нь бөгжийг ТООЦОЛГҮЙ баруун баганын агуулгаар тул
+    байрлал солигдоход хэлбэлзэхгүй. 2023 (дүүрэг 7) — зүүн, 2024 (дүүрэг цөөн) — баруун.
+  */
+  const storagePie = (
+    <Block title="Хадгалах газрын зориулалтаар">
+      <PieChart
+        data={byStorage}
+        size={100}
+        selected={storage}
+        onSelect={setStorage}
+        colorOf={(d) => STORAGE_TONES[byStorage.findIndex((x) => x.key === d.key)] ?? "var(--ink-3)"}
+        outlined
+        shares={false}
+      />
+    </Block>
+  );
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-2.5">
@@ -634,17 +707,25 @@ export function ChemicalsDashboard() {
         </FilterMenu>
       </FilterBar>
 
-      <Columns id="chemicals" left={262} right={246} className="min-h-0 flex-1">
+      {/* Зурвасан диаграмын зураас 5 → 4px (хэрэглэгч 2026-11-19: "line chartuudiin line undriig 1px bagasga") */}
+      <Columns
+        id="chemicals"
+        left={262}
+        right={246}
+        className="min-h-0 flex-1 [&_.row-chart-track-inner]:h-[4px]!"
+      >
         {/* ---- ЗҮҮН: бодисын товьёог, доор нь хадгалах зориулалт ---- */}
         <div className="flex min-h-[240px] min-w-0 flex-col gap-2.5">
-          <div className="flex min-h-0 flex-1 flex-col rounded-xs border border-line bg-paper-2">
-            <div className="flex shrink-0 items-center justify-between gap-2 border-b border-line px-3 py-2">
-              <h2 className="display text-[13.5px] leading-none tracking-[0.06em] uppercase">
-                Бодисын товьёог
-              </h2>
-              <span className="num text-[10.5px] text-ink-3">
-                {num(substanceList.length)}
-              </span>
+          {pieRight ? null : (
+            <div ref={pieBox} data-pie className="shrink-0">
+              {storagePie}
+            </div>
+          )}
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xs border border-line bg-paper-2">
+            {/* Толгой нь "Хамрах хүрээ"-ний товьёогийнхтой нэг хэв (хэрэглэгч 2026-11-19) */}
+            <div className="flex shrink-0 items-baseline gap-2 border-b border-line px-2.5 py-1.5">
+              <span className="eyebrow min-w-0 flex-1 truncate">Бодисын товьёог</span>
+              <span className="num shrink-0 text-[10px] text-ink-3">{num(substanceList.length)}</span>
             </div>
             <div className="min-h-0 flex-1 overflow-hidden">
               {/*
@@ -662,30 +743,16 @@ export function ChemicalsDashboard() {
             </div>
           </div>
 
-          {/*
-            Хадгалах газрын зориулалт нь ердөө гурван утгатай тул баруун
-            талын өндөр диаграмуудын дунд байрлахад тэдгээрийг холдуулж
-            байв. Товьёогийн доор тогтмол өндрөөр суух нь зохимжтой —
-            бодисын нэрстэй хамт "юу, хаана хадгалагдаж байна" гэсэн нэг
-            асуултын хоёр тал болно.
-          */}
-          <Block title="Хадгалах газрын зориулалтаар" note="агуулахын тоо">
-            <RowChart
-              data={byStorage}
-              selected={storage}
-              onSelect={setStorage}
-              format={num}
-            />
-          </Block>
         </div>
 
         {/* ---- ТӨВ: индикатор + газрын зураг ---- */}
         <div className="flex min-h-0 min-w-0 flex-col gap-2.5">
-          <div className="grid shrink-0 grid-cols-2 divide-x divide-line rounded-xs border border-line bg-paper-2 sm:grid-cols-4">
-            <Cell label="Агуулах" value={num(picks.length)} />
-            <Cell label="Нийт тоо хэмжээ" value={num(totals.tons)} unit="тонн" />
-            <Cell label="Бодисын нэр төрөл" value={num(totals.names)} />
+          <div className="grid shrink-0 grid-cols-2 gap-2 sm:grid-cols-4">
+            <Cell icon={WarehouseIcon} label="Агуулах" value={num(picks.length)} />
+            <Cell icon={Package} label="Нийт тоо хэмжээ" value={num(totals.tons)} unit="тонн" />
+            <Cell icon={FlaskConical} label="Бодисын нэр төрөл" value={num(totals.names)} />
             <Cell
+              icon={CalendarClock}
               label="Хугацаа дууссан"
               value={num(totals.expired)}
               alert={totals.expired > 0}
@@ -695,6 +762,7 @@ export function ChemicalsDashboard() {
           <div className="relative min-h-[280px] flex-1 overflow-hidden rounded-xs border border-line">
             {data ? (
               <PointMap
+                credit="Суурь зураг: Esri · Дата: ArcGIS FeatureServer"
                 key={year}
                 points={points}
                 visible={visible}
@@ -716,16 +784,12 @@ export function ChemicalsDashboard() {
               </div>
             )}
 
-            <BasemapGallery
-              value={basemap}
-              onChange={setBasemap}
-              placement="top-left"
-            />
+            <BasemapGallery value={basemap} onChange={setBasemap} />
 
             {/*
-              Тэмдэглэгээний тайлбар — зургийн зүүн ДООД буланд, эх
-              сурвалжийн бичгийн яг дээр. Дээд булан нь суурь зургийн
-              товчинд үлдэнэ.
+              Тэмдэглэгээний тайлбар — зургийн БАРУУН ДООД буланд (хэрэглэгч
+              2026-11-19: зүүн доод буланд масштабыг дардаг байв). Зүүн доод
+              булан нь масштаб ба эх сурвалжийн мөрөнд үлдэнэ.
             */}
             <div
               /*
@@ -736,7 +800,7 @@ export function ChemicalsDashboard() {
                 дагуулын цас, элс) дээр ч тэмдэглэгээг тодруулна —
                 зургийн доод ирмэгийн эх сурвалжийн бичигтэй ижил арга.
               */
-              className="pointer-events-none absolute bottom-6 left-2.5 z-10 rounded-xs border border-line bg-paper/10 px-2 py-1.5 backdrop-blur-md"
+              className="pointer-events-none absolute right-2.5 bottom-2.5 z-10 rounded-xs border border-line bg-paper/10 px-2 py-1.5 backdrop-blur-md"
               style={{ filter: "drop-shadow(0 0 1.5px var(--paper)) drop-shadow(0 0 1.5px var(--paper))" }}
             >
               <div className="flex items-center gap-1.5">
@@ -755,6 +819,7 @@ export function ChemicalsDashboard() {
                   Гэрчилгээний хугацаа дууссан аж ахуйн нэгжийн байршил
                 </span>
               </div>
+              {offShown ? <OffDistrictLegend /> : null}
             </div>
 
             {/* ХӨВӨГЧ ТАЙЛБАР — хулганы хажууд */}
@@ -781,6 +846,9 @@ export function ChemicalsDashboard() {
                   {hovered.district ? (
                     <MapTipRow icon={Building2} text={districtName(hovered.district)} />
                   ) : null}
+                  {offDistrict.has(hovered.oid) ? (
+                    <MapTipRow icon={MapPinOff} text={offText(offDistrict.get(hovered.oid) ?? "")} />
+                  ) : null}
                   <MapTipRow
                     icon={CalendarClock}
                     text={
@@ -802,23 +870,23 @@ export function ChemicalsDashboard() {
               <RecordCard
                 w={selected}
                 state={expiryState(selected, todayKey)}
+                off={offDistrict.get(selected.oid) ?? null}
                 onClose={() => setPicked(null)}
                 onSubstance={setSubstance}
               />
             ) : null}
 
-            <p
-              className="pointer-events-none absolute bottom-1 left-2.5 z-10 text-[10px] leading-none text-ink-3"
-              style={{ filter: "drop-shadow(0 0 1.5px var(--paper)) drop-shadow(0 0 1.5px var(--paper))" }}
-            >
-              Суурь зураг: Esri · Дата: ArcGIS FeatureServer
-            </p>
           </div>
         </div>
 
         {/* ---- БАРУУН: задаргаа ---- */}
-        <div className="flex min-h-0 min-w-0 flex-col gap-2.5 overflow-y-auto">
-          <Block title="Дүүргээр" note="агуулахын тоо">
+        <div ref={rightCol} className="flex min-h-0 min-w-0 flex-col gap-2.5 overflow-y-auto">
+          {pieRight ? (
+            <div ref={pieBox} data-pie className="shrink-0">
+              {storagePie}
+            </div>
+          ) : null}
+          <Block title="Дүүргээр">
             <RowChart
               data={byDistrict}
               selected={district}
@@ -827,11 +895,11 @@ export function ChemicalsDashboard() {
             />
           </Block>
 
-          <Block title="Зөвшөөрлийн эрхээр" note="агуулахын тоо">
+          <Block title="Зөвшөөрлийн эрхээр">
             <RowChart data={byRight} selected={right} onSelect={setRight} format={num} />
           </Block>
 
-          <Block title="Гэрчилгээ дуусах оноор" note="агуулахын тоо">
+          <Block title="Гэрчилгээ дуусах оноор">
             <AreaChart
               data={byExpiry}
               height={96}
@@ -857,6 +925,9 @@ export function ChemicalsDashboard() {
 
 /* -------------------------------------------------------------------------- */
 
+/** Хадгалах газрын зориулалтын бөгжний өнгө — ангиллын дарааллаар (нэрлэсэн ангилал, дохионы өнгө биш) */
+const STORAGE_TONES = ["var(--data)", "var(--water)", "var(--moss)", "var(--ink-3)"];
+
 /**
  * Бодисын товьёог — хоёр түвшний, хайлттай, бүтэн өндрөөр гүйдэг.
  *
@@ -874,12 +945,10 @@ export function ChemicalsDashboard() {
  * бүлэгт хамаарахыг нь мэдэхгүй байж болно. Тиймээс хайх үед товьёог
  * хавтгай жагсаалт болж, мөр бүр бүлгээ хажуудаа бичнэ.
  *
- * ХЭМЖЭЭГ ХЭРХЭН ХАРУУЛАХ ВЭ. Урьд нь мөр бүрийн АРД тоотой
- * пропорциональ дүүргэлт суудаг байсныг ХАСАВ: 15 мөрийн дүүргэлт нь
- * нийлээд хатуу блок болж, жагсаалт биш диаграм мэт уншигдаж байв.
- * Одоо мөрийн ДООД ирмэгт 2px-ийн хэмжигчийн зураас татна — платформын
- * "хээрийн хэмжих хэрэгсэл" хэлээр ярьсан, мөрүүдийг хооронд нь
- * харьцуулах хэвээр боловч жин нь хамаагүй хөнгөн.
+ * ХАРАГДАЦ нь Химийн бодисын үндэсний бүртгэлийн ("Хамрах хүрээ")
+ * "Бодисын товьёог"-той ЯГ НЭГ (хэрэглэгч 2026-11-19): бүлэг бүр
+ * задардаг карт (сум · нэр · "N нэр" · агуулахын тоо), хэмжигчийн
+ * зураасгүй; мөрүүд нь `catalog-rows.tsx`-ээс (нэг газар засна).
  *
  * Товьёог нь НЭГ ЖАГСААЛТ. `Бусад`, `Бичилт дутуу` хоёр нь эцэст нь
  * эрэмбэлэгдэнэ (үлдэгдлийн мөр дээр гарах нь буруу) ч тусдаа хэсэг
@@ -914,193 +983,89 @@ function SubstanceIndex({
     [items, group],
   );
 
-  const max = Math.max(...groups.map((g) => g.n), 1);
-
-  const row = (g: { id: string; label: string; n: number }) => (
-    <div key={g.id}>
-      <GroupRow
-        label={g.label}
-        n={g.n}
-        share={g.n / max}
-        open={group === g.id}
-        onClick={() => onGroup(g.id)}
-      />
-      {group === g.id ? (
-        <div className="mb-1 ml-4 border-l border-line pr-1.5 pl-1.5">
-          {inGroup.length === 0 ? (
-            <p className="py-1.5 text-[10.5px] text-ink-3">Нэр бүртгэгдээгүй байна</p>
-          ) : (
-            inGroup.map((i) => (
-              <NameRow
-                key={i.name}
-                name={i.name}
-                n={i.n}
-                on={selected === i.name}
-                onPick={() => onPick(selected === i.name ? null : i.name)}
-              />
-            ))
-          )}
-        </div>
-      ) : null}
-    </div>
-  );
+  /* Бүлэг бүрийн нэрийн тоо — "· 1,321 нэр" (Хамрах хүрээний товьёогтой нэг) */
+  const names = React.useMemo(() => {
+    const m = new Map<string, number>();
+    for (const i of items) m.set(i.group, (m.get(i.group) ?? 0) + 1);
+    return m;
+  }, [items]);
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      {/* Хайлтын талбар нь зайтай, жагсаалт нь ирмэгт хүрнэ — тусгаарлах
-          зураас нь самбарын бүтэн өргөнийг хамарч байж жагсаалт мэт
-          уншигдана */}
-      <div className="shrink-0 px-2 pt-2 pb-1.5">
-        <input
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="Бодисын нэрээр хайх"
-          className="h-7 w-full rounded-xs border border-line bg-paper px-2 text-[12px] text-ink outline-none placeholder:text-ink-3 focus:border-line-2"
-        />
-      </div>
-
-      <div className="min-h-0 flex-1 overflow-y-auto pb-2">
-        {query ? (
-          found.length === 0 ? (
-            <p className="py-4 text-center text-[11.5px] text-ink-3">Илэрц олдсонгүй</p>
-          ) : (
-            <div className="px-1.5">
-              {found.map((i) => (
-                <NameRow
+      <CatalogSearch value={q} onChange={setQ} placeholder="Бодисын нэр" />
+      {query ? (
+        found.length === 0 ? (
+          <div className="hatch m-3 rounded-xs border border-dashed border-line-2 px-3 py-6 text-center text-[11.5px] text-ink-3">
+            Тохирох бүртгэл олдсонгүй
+          </div>
+        ) : (
+          <ul className="min-h-0 flex-1 divide-y divide-line overflow-y-auto">
+            {found.map((i) => (
+              <CatalogRow
+                key={i.name}
+                on={selected === i.name}
+                onClick={() => onPick(selected === i.name ? null : i.name)}
+                title={i.name}
+                note={GROUP_LABEL.get(i.group)}
+                value={num(i.n)}
+                unit="агуулах"
+              />
+            ))}
+          </ul>
+        )
+      ) : (
+        <ul className="min-h-0 flex-1 overflow-y-auto py-0.5">
+          {groups.map((g) => (
+            <CatalogGroup
+              key={g.id}
+              label={g.label}
+              note={`${num(names.get(g.id) ?? 0)} нэр`}
+              value={num(g.n)}
+              unit="агуулах"
+              open={group === g.id}
+              onClick={() => onGroup(g.id)}
+            >
+              {inGroup.map((i) => (
+                <CatalogName
                   key={i.name}
-                  name={i.name}
-                  n={i.n}
-                  note={GROUP_LABEL.get(i.group)}
                   on={selected === i.name}
-                  onPick={() => onPick(selected === i.name ? null : i.name)}
+                  onClick={() => onPick(selected === i.name ? null : i.name)}
+                  name={i.name}
+                  value={num(i.n)}
+                  unit="агуулах"
                 />
               ))}
-            </div>
-          )
-        ) : (
-          /* Мөрүүдийг хоосон зайгаар биш ЗУРААСААР тусгаарлана */
-          <div className="divide-y divide-line border-y border-line">
-            {groups.map((g) => row(g))}
-          </div>
-        )}
-      </div>
+            </CatalogGroup>
+          ))}
+        </ul>
+      )}
     </div>
-  );
-}
-
-/**
- * Товьёогийн бүлгийн мөр.
- *
- * `share` нь 0–1 хооронд — мөрийн доод ирмэгийн хэмжигчийн зураасны урт.
- */
-function GroupRow({
-  label,
-  n,
-  share,
-  open,
-  onClick,
-}: {
-  label: string;
-  n: number;
-  share: number;
-  open: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={cn(
-        "relative flex w-full items-center gap-1.5 py-[6px] pr-1.5 pl-2.5 text-left transition-colors",
-        open ? "bg-paper-hi text-ink" : "text-ink-2 hover:bg-paper-hi hover:text-ink",
-      )}
-    >
-      {/* Сонголтыг дүүргэлтээр биш ИРМЭГИЙН ЗУРААСААР тэмдэглэнэ */}
-      {open ? (
-        <span aria-hidden className="absolute inset-y-0 left-0 w-[2px] bg-data" />
-      ) : null}
-
-      <ChevronRight
-        size={11}
-        className={cn(
-          "shrink-0 text-ink-3 transition-transform",
-          open && "rotate-90 text-data",
-        )}
-      />
-      <span className={cn("min-w-0 flex-1 truncate text-[11.5px]", open && "font-medium")}>
-        {label}
-      </span>
-      <span className={cn("num shrink-0 text-[10.5px]", open ? "text-ink-2" : "text-ink-3")}>
-        {n}
-      </span>
-
-      <span
-        aria-hidden
-        className="absolute bottom-0 left-0 h-[2px]"
-        style={{
-          width: `${Math.max(share * 100, 1.5)}%`,
-          background: open
-            ? "var(--data)"
-            : "color-mix(in oklab, var(--data) 45%, transparent)",
-        }}
-      />
-    </button>
-  );
-}
-
-function NameRow({
-  name,
-  n,
-  note,
-  on,
-  onPick,
-}: {
-  name: string;
-  n: number;
-  /** Хайлтын үр дүнд бүлгийн нэрийг хажууд нь бичнэ */
-  note?: string;
-  on: boolean;
-  onPick: () => void;
-}) {
-  return (
-    <button
-      onClick={onPick}
-      title={name}
-      className={cn(
-        "flex w-full items-baseline justify-between gap-2 rounded-xs px-1.5 py-[3px] text-left transition-colors",
-        on
-          ? "bg-data/14 font-medium text-ink"
-          : "text-ink-2 hover:bg-paper-hi hover:text-ink",
-      )}
-    >
-      <span className="min-w-0 flex-1 truncate text-[11px] leading-snug">
-        {name}
-        {note ? <span className="ml-1 text-[9.5px] text-ink-3">· {note}</span> : null}
-      </span>
-      <span className="num shrink-0 text-[10.5px] text-ink-3">{n}</span>
-    </button>
   );
 }
 
 /* -------------------------------------------------------------------------- */
 
 function Cell({
+  icon: Icon,
   label,
   value,
   unit,
   alert,
 }: {
+  icon: LucideIcon;
   label: string;
   value: string;
   unit?: string;
   alert?: boolean;
 }) {
   return (
-    <div className="px-3 py-2">
-      <div className="eyebrow truncate">{label}</div>
-      <div className="mt-1.5 flex items-baseline gap-1">
+    <div className="flex min-w-0 flex-col items-center justify-center rounded-xs border border-line bg-paper-2 px-2 py-1.5">
+      <div className="eyebrow text-center">{label}</div>
+      <div className="mt-1 flex items-center gap-2">
+        <Icon size={22} strokeWidth={1.4} className={cn("shrink-0", alert ? "text-ochre" : "text-(--tone)")} aria-hidden />
         <span
           className={cn(
-            "num text-[19px] leading-none font-medium",
+            "num text-[18px] leading-none font-semibold",
             alert ? "text-ochre" : "text-ink",
           )}
         >
@@ -1167,11 +1132,14 @@ function StatusChip({ state }: { state: ExpiryState }) {
 function RecordCard({
   w,
   state,
+  off,
   onClose,
   onSubstance,
 }: {
   w: Warehouse;
   state: ExpiryState;
+  /** Цэгийн дүүрэг бүртгэлийнхээс зөрсөн бол координатын дүүрэг (`""` — хотоос гадна) */
+  off: string | null;
   onClose: () => void;
   onSubstance: (name: string) => void;
 }) {
@@ -1183,7 +1151,7 @@ function RecordCard({
       onClose={onClose}
       /* Өндөр нь агуулгаараа — `bottom` бэхлэвэл цөөн талбартай
          бичлэг дээр хоосон талбай үлдэнэ (2026-09-29) */
-      className="top-2 right-2 max-h-[calc(100%-2.5rem)] w-[292px]"
+      className="top-2 right-[46px] max-h-[calc(100%-2.5rem)] w-[292px]"
     >
 
       <div className="px-2.5 pt-2">
@@ -1195,6 +1163,9 @@ function RecordCard({
         <dl className="mt-2.5 space-y-1.5">
           <Field k="Байршил" v={w.place || "—"} />
           <Field k="Дүүрэг" v={districtName(w.district)} />
+          {off != null ? (
+            <Field k="Цэгийн байршил" v={<span className="text-water">{offText(off)}</span>} />
+          ) : null}
           <Field k="Зөвшөөрлийн эрх" v={w.rightsRaw || "—"} />
           <Field k="Хадгалах зориулалт" v={w.storage} />
           <Field

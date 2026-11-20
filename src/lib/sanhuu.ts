@@ -175,13 +175,6 @@ export function elapsed(t: Task, today: number): number | null {
   return span <= 0 ? 100 : ((today - a) / span) * 100;
 }
 
-/** Хугацааны явц хэрэгжилтээс хэдэн нэгжээр давсан бэ. Сөрөг бол түрүүлсэн */
-export function gapOf(t: Task, today: number): number | null {
-  const e = elapsed(t, today);
-  const progress = recordedProgress(t);
-  if (e == null || progress == null) return null;
-  return e - progress;
-}
 
 /* --------------------------------------------------------------------------
    ЗАНГИЛААНЫ НЭГТГЭЛ

@@ -30,7 +30,7 @@ import { esriModules } from "@/lib/arcgis-sdk";
 const SCENE_BASEMAPS = ["satellite", "hybrid", "topo-vector", "streets-vector", "gray-vector", "dark-gray-vector"];
 
 /** Esri-ийн хэмжилтийн виджетийн англи бичвэр → монгол (4.33-ын бүтэн бичвэрээр) */
-export const MEASURE_MN: Record<string, string> = {
+const MEASURE_MN: Record<string, string> = {
   Unit: "Нэгж",
   Metric: "Метрийн систем",
   Imperial: "Империйн систем",
@@ -97,7 +97,7 @@ const MODULES = [
  * барина — `host` дотор ямар ч виджет (хэмжилт, давхаргын жагсаалт, таних
  * тэмдэг). Толинд байхгүй бичвэр АНГЛИАРАА үлдэнэ.
  */
-export function localize(host: HTMLElement) {
+function localize(host: HTMLElement) {
   const shrink = () => {
     for (const el of host.querySelectorAll("calcite-label, calcite-select, calcite-button")) {
       if (el.getAttribute("scale") !== "s") el.setAttribute("scale", "s");

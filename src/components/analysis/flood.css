@@ -131,8 +131,6 @@
 .flood-app .hyeto-box .hint { margin: 4px 4px 0; }
 .flood-app canvas.hyeto { width: 100%; height: 96px; display: block; }
 .flood-app canvas.chart { width: 100%; height: 130px; display: block; margin-top: 12px; }
-.flood-app .chartkey { display: flex; gap: 14px; font-size: 11px; color: var(--muted); margin-top: 4px; flex-wrap: wrap; }
-.flood-app .chartkey span::before { content: ""; display: inline-block; width: 10px; height: 3px; background: var(--c); margin-right: 5px; vertical-align: middle; border-radius: 2px; }
 .flood-app .inflows { list-style: none; margin: 8px 0 0; padding: 0; }
 .flood-app .inflows li { display: grid; grid-template-columns: 1fr 76px 24px; gap: 6px; align-items: center; padding: 6px 0; border-top: 1px solid var(--line); font-size: 12px; }
 .flood-app .inflows input { width: 100%; background: var(--field); border: 1px solid var(--line); border-radius: 6px; padding: 3px 6px; }
@@ -186,7 +184,6 @@
 .flood-app .maptools { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); z-index: 2; display: flex; flex-direction: column; gap: 8px; align-items: flex-end; }
 .flood-app .maptools .seg { border-radius: 10px; }
 .flood-app .viewmode button { flex: none; font-weight: 700; padding: 7px 16px; font-size: 13px; overflow: visible; text-overflow: clip; }
-.flood-app.is3d .only2d { opacity: .45; pointer-events: none; }
 .flood-app .modebar { position: absolute; left: 12px; bottom: 26px; z-index: 2; display: flex; flex-direction: column; gap: 8px; max-width: calc(100% - 150px); }
 .flood-app .modebar .seg { border-radius: 10px; overflow-x: auto; }
 .flood-app .modebar .seg button { flex: none; padding: 6px 10px; }
@@ -234,8 +231,6 @@
 .flood-app .alerts li:first-child { border-top: 0; }
 .flood-app .alerts li.empty { display: block; color: var(--muted); }
 .flood-app .alerts .dot { width: 8px; height: 8px; border-radius: 50%; margin-top: 4px; background: var(--accent); }
-.flood-app .alerts .lv-warn .dot { background: var(--warn); }
-.flood-app .alerts .lv-danger .dot { background: var(--danger); box-shadow: 0 0 0 3px color-mix(in srgb, var(--danger) 25%, transparent); }
 .flood-app .alerts time { color: var(--muted); font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 10.5px; }
 
 .flood-app .runbar .summary .stale { display: block; margin-top: 6px; color: var(--warn); }
@@ -246,12 +241,8 @@
 .flood-app #areaInfo[hidden] { display: none; }
 .flood-app #areaInfo .note { display: block; margin-top: 4px; color: var(--warn); }
 .flood-app #areaInfo .tip2 { display: block; margin-top: 4px; }
-
-.flood-app .modebar .small-seg { align-self: flex-start; }
-.flood-app .modetools { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .flood-app .chip { border-radius: 10px; padding: 6px 12px; font-size: 12px; font-weight: 600; color: var(--muted); cursor: pointer; }
 .flood-app .chip.on { color: var(--accent); border-color: var(--accent); }
-.flood-app .modebar .small-seg button { font-size: 11.5px; padding: 5px 10px; }
 
 /* ---------- explanations ---------- */
 .flood-app .chart-head { display: flex; align-items: center; margin-top: 14px; font-size: 12.5px; text-transform: uppercase; }   /* том үсгээр — хэрэглэгч 2026-10-12 */
@@ -360,10 +351,6 @@
    (Товшилтын горимын мэдэгдэл .clickmode 2026-10-12-нд устсан.) */
 .flood-app .viewmode { padding: 2px; }
 .flood-app .viewmode button { padding: 3px 14px; font-size: 12px; line-height: 1.3; }
-
-/* Баруун самбар (2026-10-09): ангиллын мөр нөлөөтэйгээ, үр дүн бүлэгтэй, үйл явдлын бүртгэл */
-.flood-app .group-label { margin: 10px 0 5px; font-size: 10.5px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
-.flood-app .panel.right h2 + .group-label { margin-top: 0; }
 /* Тархалтын явцын диаграм 190px (хэрэглэгч 2026-10-12: эхлээд "dooshoo sunga" → самбарын ёроол
    хүртэл 274px болсныг "undriig bagasga"). Карт агуулгынхаа өндөртэй. */
 .flood-app .panel.right canvas.chart { height: 190px; }

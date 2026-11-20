@@ -375,28 +375,7 @@ export function piColor(pi: number): string {
   return PI_CLASS_COLOR[piClass(pi)];
 }
 
-/**
- * Геоаккумуляцийн индекс Igeo = log₂(C / 1.5·B).
- *
- * Müller (1969) -ийн долоон анги. Хуваарь нь ЛОГАРИФМ тул PI-тай
- * шууд харьцуулагдахгүй: Igeo 1 нь агууламж дэвсгэрээс 3 дахин их
- * гэсэн үг (1.5 × 2¹).
- *
- * Датад Igeo нь 0-оос доош бараг унадаггүй (эх сурвалж таслалттай)
- * тул 0 дээрх хил нь дэлгэц дээр бараг мэдэгдэхгүй — заагчийг 1 дээр
- * тавьдаг нь илүү мэдээлэл өгнө.
- */
-export const IGEO_CLASSES = [
-  { id: "0", label: "Igeo ≤ 0", note: "Бохирдоогүй" },
-  { id: "1", label: "Igeo 0–1", note: "Бохирдоогүйгээс дунд зэрэг" },
-  { id: "2", label: "Igeo 1–2", note: "Дунд зэргийн бохирдол" },
-  { id: "3", label: "Igeo 2–3", note: "Дунд зэргээс их бохирдол" },
-  { id: "4", label: "Igeo 3–4", note: "Их бохирдол" },
-  { id: "5", label: "Igeo 4–5", note: "Ихээс маш их бохирдол" },
-  { id: "6", label: "Igeo > 5", note: "Маш их бохирдол" },
-] as const;
-
-export function igeoClass(v: number): number {
+function igeoClass(v: number): number {
   if (v <= 0) return 0;
   return Math.min(6, Math.floor(v) + 1);
 }

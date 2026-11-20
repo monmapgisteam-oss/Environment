@@ -60,7 +60,7 @@ export const RIGHT_LABEL = new Map<string, string>(
   RIGHTS.map((r) => [r.id, r.label] as [string, string]),
 );
 
-export function splitRights(raw: string): string[] {
+function splitRights(raw: string): string[] {
   const x = raw.toLowerCase();
   const out: string[] = [];
   for (const r of RIGHTS) if (r.match.test(x)) out.push(r.id);
@@ -98,7 +98,7 @@ function parseDates(raw: string): { from: string | null; to: string | null } {
 }
 
 /** "2027.12.31" → 20271231 */
-export function dateKey(d: string | null): number | null {
+function dateKey(d: string | null): number | null {
   if (!d) return null;
   const [y, m, day] = d.split(".").map(Number);
   return y * 10000 + m * 100 + day;
@@ -531,10 +531,11 @@ export async function fetchChemicals(
     for (const s of substances) perSubstance.set(s, (perSubstance.get(s) ?? 0) + 1);
 
     /*
-      Координатыг ЗАСАХГҮЙ. Гурван бичлэгийн цэг нь бүртгэсэн дүүргээсээ
-      хол зайд (жишээ нь дүүрэг нь БГД боловч цэг нь хотоос 60 км зүүн
-      тийш) байдаг. Аль нь зөв болохыг эх сурвалж хэлэхгүй тул
-      байгаагаар нь үлдээв — цэгийг зөөвөл байхгүй баримт нэмнэ.
+      Координатыг ЗАСАХГҮЙ. 2023 оны 184-өөс 36, 2024 оны 20-оос 6 бичлэгийн
+      цэг бүртгэсэн дүүргээсээ өөр дүүрэгт (зарим нь 60 км зайд) буусан
+      (2026-11-19-нд хилээр тулгасан). Аль нь зөв болохыг эх сурвалж хэлэхгүй
+      тул байгаагаар нь үлдээв — самбар тэдгээрийг тусгай тэмдгээр тэмдэглэнэ
+      (`chemicals-dashboard.tsx`-ийн `offDistrict`).
     */
     points.oid.push(oid);
     points.lon.push(lon);

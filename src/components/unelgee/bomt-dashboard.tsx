@@ -18,6 +18,7 @@ import {
 import type { Datum } from "@/components/charts";
 import { BasemapGallery } from "@/components/map/basemap-gallery";
 import { UnelgeeLayers } from "@/components/unelgee/dept-layers";
+import { MapToolStack } from "@/components/map/tool-stack";
 import type { MapOverlay } from "@/components/wells/map";
 import { MapTip, MapTipRow, useMapTip } from "@/components/map/hover-tip";
 import { FilterBar, FilterMenu, PickList } from "@/components/wells/filter-bar";
@@ -466,7 +467,9 @@ export function BomtDashboard() {
               cluster={false}
             />
             <BasemapGallery value={basemap} onChange={setBasemap} />
-            <UnelgeeLayers current={["bomt"]} value={layers} onChange={setLayers} />
+            <MapToolStack>
+              <UnelgeeLayers inline current={["bomt"]} value={layers} onChange={setLayers} />
+            </MapToolStack>
             <MapLegend title="Мод тарих байршил" items={legend} selected={planting} onSelect={setPlanting} />
 
             {hovered ? (

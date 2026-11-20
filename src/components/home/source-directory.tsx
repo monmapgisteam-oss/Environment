@@ -1,7 +1,7 @@
 ﻿"use client";
 
 import { useState } from "react";
-import { Archive, ChevronRight, Database, Globe, Layers, ListTree, Search, Webhook, X } from "lucide-react";
+import { ChevronRight, Database, ListTree, Search, X } from "lucide-react";
 import { DEPARTMENTS as ALL_DEPARTMENTS } from "@/lib/departments";
 import { useAccess } from "@/components/auth/access";
 import { SOURCES, type Source } from "@/lib/sources";
@@ -60,7 +60,7 @@ export function SourceDirectory() {
   const [department, setDepartment] = useState("");
   const [type, setType] = useState<SourceType>("all");
   const [view, setView] = useState<View>("sources");
-  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [selectedDepartment, setSelectedDepartment] = useState("");
   /* Хэлтсийн бүртгэл зөвхөн өөрийн хэлтсийн эх сурвалжийг харна */
   const { departments: DEPARTMENTS, allows } = useAccess();
   const entries = allEntries.filter((source) => allows(source.slug));
@@ -90,8 +90,13 @@ export function SourceDirectory() {
   const sources = candidates.filter((source) => activeType === "all" || source.type === activeType);
   const groups = DEPARTMENTS.map((dept) => ({ dept, sources: sources.filter((source) => source.slug === dept.slug) }))
     .filter((group) => group.sources.length > 0);
+  const selected = groups.find(({ dept }) => dept.slug === selectedDepartment) ?? groups[0];
+  const midpoint = Math.ceil((selected?.sources.length ?? 0) / 2);
+  const sourceColumns = selected
+    ? [selected.sources.slice(0, midpoint), selected.sources.slice(midpoint)].filter((column) => column.length > 0)
+    : [];
   const filtered = Boolean(query || department || activeType !== "all");
-  const reset = () => { setQuery(""); setDepartment(""); setType("all"); setExpanded({}); };
+  const reset = () => { setQuery(""); setDepartment(""); setType("all"); setSelectedDepartment(""); };
   return (
     <section className="source-catalog" data-view={view} aria-label="Өгөгдлийн сан">
       {/*
@@ -119,11 +124,11 @@ export function SourceDirectory() {
         <div className="source-catalog-search-row">
           <label className="source-catalog-search">
             <Search size={17} aria-hidden />
-            <input aria-label="Эх сурвалж хайх" type="search" value={query} onChange={(e) => { setQuery(e.target.value); setExpanded({}); }} placeholder="Нэр, хэлтэс, серверийн хаягаар хайх…" />
-            {query && <button type="button" aria-label="Хайлт цэвэрлэх" onClick={() => { setQuery(""); setExpanded({}); }}><X size={15} aria-hidden /></button>}
+            <input aria-label="Эх сурвалж хайх" type="search" value={query} onChange={(e) => { setQuery(e.target.value); setSelectedDepartment(""); }} placeholder="Нэр, хэлтэс, серверийн хаягаар хайх…" />
+            {query && <button type="button" aria-label="Хайлт цэвэрлэх" onClick={() => { setQuery(""); setSelectedDepartment(""); }}><X size={15} aria-hidden /></button>}
           </label>
           <label className="source-catalog-select"><span>Хариуцсан хэлтэс</span>
-            <select aria-label="Хэлтсээр шүүх" value={department} onChange={(e) => { setDepartment(e.target.value); setExpanded({}); }}>
+            <select aria-label="Хэлтсээр шүүх" value={department} onChange={(e) => { setDepartment(e.target.value); setSelectedDepartment(""); }}>
               <option value="">Бүх хэлтэс</option>
               {DEPARTMENTS.map((dept) => <option key={dept.slug} value={dept.slug}>{dept.name} ({entries.filter((source) => source.slug === dept.slug).length})</option>)}
             </select>
@@ -131,7 +136,7 @@ export function SourceDirectory() {
         </div>
         <div className="source-catalog-filter-row">
           <div className="source-catalog-types" role="group" aria-label="Эх сурвалжийн төрлөөр шүүх">
-            {SOURCE_TYPES.filter((item) => (typeCounts.get(item.id) ?? 0) > 0).map((item) => <button key={item.id} type="button" aria-pressed={activeType === item.id} onClick={() => { setType(item.id); setExpanded({}); }}>
+            {SOURCE_TYPES.filter((item) => (typeCounts.get(item.id) ?? 0) > 0).map((item) => <button key={item.id} type="button" aria-pressed={activeType === item.id} onClick={() => { setType(item.id); setSelectedDepartment(""); }}>
               {item.label}<span className="num">{typeCounts.get(item.id)}</span>
             </button>)}
           </div>
@@ -140,44 +145,44 @@ export function SourceDirectory() {
       </div>
 
       <div className="source-catalog-results" role="status" aria-live="polite"><span><strong className="num">{sources.length}</strong> / {entries.length} эх сурвалж</span><span>{groups.length} хэлтэс</span></div>
-      <div className="source-catalog-groups">
-        {groups.map(({ dept, sources: rows }) => {
-          const isExpanded = expanded[dept.slug] ?? filtered;
-          return <section key={dept.slug} className="source-catalog-group" data-expanded={isExpanded} aria-labelledby={`source-department-${dept.slug}`}>
-            <header className="source-catalog-group-head">
-              <h2 id={`source-department-${dept.slug}`}>
-                <button type="button" className="source-catalog-toggle" aria-expanded={isExpanded} aria-controls={`source-list-${dept.slug}`} onClick={() => setExpanded((current) => ({ ...current, [dept.slug]: !isExpanded }))}>
-                  <span className="source-catalog-dept-icon"><dept.icon size={18} strokeWidth={1.6} aria-hidden /></span>
-                  <span className="source-catalog-dept-name">{dept.name}<span className="source-catalog-count num">{rows.length}</span></span>
-                  <ChevronRight className="source-catalog-chevron" size={16} aria-hidden />
-                </button>
-              </h2>
-            </header>
-            <ul id={`source-list-${dept.slug}`} className="source-catalog-list" hidden={!isExpanded}>
-              {rows.map((source) => {
-                const Icon = source.type === "snapshot" ? Archive
-                  : source.type === "portal" ? Layers
-                  : source.type === "api" ? Webhook
-                  : Globe;
-                return <li key={source.id} className="source-catalog-entry">
-                  <div className="source-catalog-entry-main">
-                    <h3>{source.name}</h3>
-                    <div className="source-catalog-meta">
-                      <span className={`source-catalog-kind is-${source.type}`}><Icon size={11} aria-hidden />{SOURCE_TYPES.find((item) => item.id === source.type)?.label}</span>
-                      <span className="source-catalog-host">{source.host}</span>
-                    </div>
-                    {source.type === "snapshot" && <p className="source-catalog-copy-note">Самбарт хадгалсан хуулбарыг ашигладаг.</p>}
-                    <details className="source-catalog-connection">
-                      <summary>Холболтын мэдээлэл<ChevronRight size={11} aria-hidden /></summary>
-                      <dl><div><dt>Үйлчилгээний төрөл</dt><dd>{source.kind}</dd></div><div><dt>Эх үйлчилгээний хаяг</dt><dd className="source-catalog-url">{source.url}</dd></div></dl>
-                    </details>
-                  </div>
-                </li>;
-              })}
-            </ul>
-          </section>;
-        })}
+      <div className="source-catalog-departments" role="group" aria-label="Хэлтэс сонгох">
+        {groups.map(({ dept, sources: rows }) => (
+          <button key={dept.slug} type="button" className="source-catalog-department" title={dept.name} aria-pressed={selected?.dept.slug === dept.slug} aria-controls="source-catalog-detail" onClick={() => setSelectedDepartment(dept.slug)}>
+            <span className="source-catalog-dept-icon"><dept.icon size={18} strokeWidth={1.6} aria-hidden /></span>
+            <span className="source-catalog-dept-name">{dept.name}</span>
+            <span className="source-catalog-count num">{rows.length}</span>
+            <ChevronRight size={14} aria-hidden />
+          </button>
+        ))}
       </div>
+
+      {selected && <section id="source-catalog-detail" className="source-catalog-detail" aria-labelledby="source-catalog-detail-title">
+        <header className="source-catalog-detail-head">
+          <div><selected.dept.icon size={17} strokeWidth={1.6} aria-hidden /><h2 id="source-catalog-detail-title" title={selected.dept.name}>{selected.dept.name}</h2></div>
+          <span><strong className="num">{selected.sources.length}</strong> эх сурвалж</span>
+        </header>
+        <div key={selected.dept.slug + activeType + query} className="source-catalog-table-scroll" tabIndex={0} aria-label="Эх сурвалжийн жагсаалт">
+          <div className="source-catalog-columns">
+            {sourceColumns.map((column, columnIndex) => <ol key={columnIndex} className="source-catalog-column" start={columnIndex * midpoint + 1}>
+              {column.map((source, index) => (
+                <li key={source.id} className="source-catalog-item">
+                  <details className="source-catalog-item-details">
+                    <summary>
+                      <span className="source-catalog-number num" aria-hidden="true">{String(columnIndex * midpoint + index + 1).padStart(2, "0")}</span>
+                      <span className="source-catalog-item-name">{source.name}</span>
+                      <ChevronRight className="source-catalog-item-arrow" size={15} aria-hidden />
+                    </summary>
+                    <div className="source-catalog-item-body">
+                      <dl><div><dt>Үйлчилгээний төрөл</dt><dd>{source.kind}</dd></div><div><dt>Эх үйлчилгээний хаяг</dt><dd className="source-catalog-url">{source.url}</dd></div></dl>
+                      {source.type === "snapshot" && <p className="source-catalog-copy-note">Самбарт хадгалсан хуулбарыг ашигладаг.</p>}
+                    </div>
+                  </details>
+                </li>
+              ))}
+            </ol>)}
+          </div>
+        </div>
+      </section>}
 
       {!sources.length && <div className="source-catalog-empty">
         <Search size={25} strokeWidth={1.5} aria-hidden />

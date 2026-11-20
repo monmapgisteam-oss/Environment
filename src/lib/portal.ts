@@ -19,7 +19,7 @@
 import { asset } from "@/lib/base-path";
 
 /** Порталын үндэс. Бүх зам эндээс эхэлнэ */
-export const PORTAL = "https://environment.ub.gov.mn/gis";
+const PORTAL = "https://environment.ub.gov.mn/gis";
 
 /** Хуваалцах API — токен, хэрэглэгчийн мэдээлэл, item бүгд энд */
 export const SHARING = `${PORTAL}/sharing/rest`;

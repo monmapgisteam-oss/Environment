@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { MapToolStack } from "@/components/map/tool-stack";
 import dynamic from "next/dynamic";
 import {
   Building2,
@@ -412,7 +413,9 @@ export function ReclamationDashboard() {
                   cluster={false}
                 />
                 <BasemapGallery value={basemap} onChange={setBasemap} />
-                <MineralLayers current="reclamation" value={layers} onChange={setLayers} />
+                <MapToolStack>
+                  <MineralLayers current="reclamation" value={layers} onChange={setLayers} />
+                </MapToolStack>
             
                 {/*
                   ХӨВӨГЧ ТАЙЛБАР. Он ба талбай нь энэ самбарын хос гол

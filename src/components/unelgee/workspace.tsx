@@ -89,7 +89,7 @@ function group(set: LayerSet, tab: string) {
         presentation="environment"
         access={{ scope: "unelgee-uur-amisgal", tab }}
         extraOverlays={layers}
-        mapTools={<UnelgeeLayers inline current={set.layers} value={layers} onChange={setLayers} />}
+        mapTools={<UnelgeeLayers inline current={set.layers.filter((id) => !set.mapOnly?.includes(id) || set.open?.includes(id))} value={layers} onChange={setLayers} />}
       />
     );
   };

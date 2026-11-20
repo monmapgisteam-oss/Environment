@@ -1,0 +1,162 @@
+/* Esri-ийн виджет, 3D хэмжилтийн цонх — workspace.css-ийн 3177–3336-р мөр (2026-11-18-нд хуваасан) */
+
+/*
+  ESRI-ИЙН ВИДЖЕТИЙН ТОВЧ — ПЛАТФОРМЫН ХӨВӨГЧ ТОВЧНЫ ЗАГВАРААР
+  ({@link src/components/wells/map.tsx}; хэрэглэгч 2026-11-02: "map baruun
+  tald bga iconuudiig 1 design bolgoy buyu 2d, 3d adilhan designtai bolgo").
+  Зургийн баруун ирмэгт платформын 2D/3D сэлгэгч, ойртуулах товч (28px,
+  `rounded-xs`, `line-2` хүрээ, `paper` 90% + blur, `elevated`) ба баруун дээд
+  булангийн Esri `Expand` товчнууд (суурь зураг · давхарга · хэмжилт — 32px
+  калцитын саарал хайрцаг) хоёр өөр загвараар зэрэгцэж байв. ⚠ Эхлээд
+  ЭСРЭГЭЭР нь (сэлгэгчийг Esri-ийн загварт) хийгээд хэрэглэгч буцаасан:
+  ЖИШИГ нь ПЛАТФОРМЫНХ — Esri-ийн товчийг түүнд тааруулна. 2D (суурь зургийн
+  галерей), 3D (гурван хэрэгсэл) хоёуланд нэг дүрэм; нээлттэй нь 2D/3D-ийн
+  сонгогдсон товчтой ижил (`--data` 15% дэвсгэр, `--data` бичвэр).
+*/
+.wells-esri .esri-ui .esri-widget--button {
+  /* Товч нь `calcite-action` — дотоод дэвсгэр, бичвэрийн өнгө нь shadow DOM-д, зөвхөн эдгээр хувьсагчаар хүрнэ */
+  --calcite-action-background-color: transparent;
+  --calcite-action-background-color-hover: transparent;
+  --calcite-action-background-color-pressed: transparent;
+  --calcite-action-text-color: var(--ink-2);
+  --calcite-action-text-color-pressed: var(--ink);
+  --calcite-action-corner-radius: 2px;
+  --calcite-ui-icon-color: currentColor;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--line-2);
+  border-radius: 2px;
+  background: color-mix(in oklab, var(--paper) 90%, transparent);
+  color: var(--ink-2);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(8px);
+  font-size: 11px;
+  transition: color 120ms, background-color 120ms;
+}
+.wells-esri .esri-ui .esri-widget--button:hover {
+  --calcite-action-text-color: var(--ink);
+  background: var(--paper-hi);
+  color: var(--ink);
+}
+.wells-esri .esri-ui .esri-widget--button[aria-expanded="true"] {
+  --calcite-action-text-color: var(--data);
+  background: color-mix(in oklab, var(--data) 15%, var(--paper));
+  color: var(--data);
+}
+.wells-esri .esri-ui .esri-expand__toggle calcite-icon {
+  --calcite-icon-size: 14px;
+}
+/* Esri-ийн гадна хайрцаг (32px, калцитын саарал дэвсгэр, өөрийн сүүдэр) — тунгалаг, товчныхоо хэмжээтэй */
+.wells-esri .esri-ui .esri-component.esri-expand {
+  /* Esri-ийн `.esri-expand { min-width: 32px }` — 28px товч 32px савны ЗҮҮН талд суугаад
+     бусад товчноос 4px дотогш зөрдөг байв (хэрэглэгч 2026-11-18: "basemap gantsaaraa neg egneend orohgui") */
+  min-width: 28px;
+  min-height: 28px;
+  background: transparent;
+  box-shadow: none;
+}
+.wells-esri .esri-ui .esri-expand__toggle {
+  width: 28px;
+  height: 28px;
+}
+/* Хоорондын зай платформын хос товчныхтой ойролцоо */
+.wells-esri .esri-ui-top-right .esri-component {
+  margin-bottom: 8px;
+}
+
+/*
+  3D ХЭМЖИЛТИЙН ЦОНХ ({@link src/lib/scene-tools.ts}) — хэрэгсэл сонгох мөр,
+  доор нь Esri-ийн идэвхтэй хэрэгслийн самбар. Бүх 3D зурагт нэг загвар.
+*/
+.scene-measure {
+  width: 260px;
+  background: var(--paper-2);
+  color: var(--ink);
+}
+.scene-measure-bar {
+  display: flex;
+  gap: 4px;
+  padding: 8px;
+  border-bottom: 1px solid var(--line);
+}
+.scene-measure-bar button {
+  flex: 1 1 0;
+  padding: 5px 6px;
+  border: 1px solid var(--line-2);
+  border-radius: 2px;
+  font-size: 11.5px;
+  color: var(--ink-2);
+  white-space: nowrap;
+  transition: color 120ms, border-color 120ms, background 120ms;
+}
+.scene-measure-bar button:hover {
+  color: var(--ink);
+}
+.scene-measure-bar button.is-on {
+  color: var(--moss);
+  border-color: color-mix(in oklab, var(--moss) 60%, transparent);
+  background: color-mix(in oklab, var(--moss) 10%, transparent);
+}
+.scene-measure-bar button.is-clear {
+  flex: 0 0 auto;
+}
+.scene-measure .esri-measurement,
+.scene-measure .esri-widget {
+  background: transparent;
+}
+/* Esri-ийн англи заавар ("Start to measure by clicking …") — дэлгэцэд заавар бичихгүй дүрэм */
+.scene-measure [class*="hint"] {
+  display: none;
+}
+/*
+  НЯГТ (хэрэглэгч 2026-11-02: "хэмжээг нь янзал"). Esri-ийн анхдагч самбар
+  12px зай, 24px завсар, 20px гарчиг, 32px унждаг цэс, 32px товчтой тул
+  260px-ийн цонхыг бараг хагас дэлгэц өндөр болгож байв. Одоо платформын
+  нягт сүлжээний хэмжээ (11–12px бичвэр); утга, нэр нэг мөрөнд.
+  "New measurement" товч НУУГДАНА — дээрх "Цэвэрлэх" яг тэр ажлыг хийнэ.
+*/
+/*
+  Esri `.esri-ui-corner .esri-component > .esri-widget--panel` нь 300px тогтмол —
+  260px-ийн цонхноос халиж утга тасарч байв. Сонгогч нь ДӨРВӨН ангитай: гурван
+  ангитай Esri-ийн дүрмийг давах ёстой (SDK-ийн CSS хожуу ачаалагддаг).
+*/
+.scene-measure .esri-measurement .esri-widget.esri-widget--panel {
+  width: 100%;
+}
+.scene-measure .esri-measurement-widget-content {
+  gap: 8px;
+  padding: 8px;
+  font-size: 11.5px;
+}
+.scene-measure .esri-unit-select__label {
+  --calcite-label-margin-bottom: 0;
+  color: var(--ink-3);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+.scene-measure .esri-measurement-widget-content__measurement {
+  gap: 0;
+  border-top: 1px solid var(--line);
+}
+.scene-measure .esri-measurement-widget-content__measurement-item {
+  flex-direction: row;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--line);
+}
+.scene-measure .esri-measurement-widget-content__measurement-item > :first-child {
+  color: var(--ink-2);
+}
+.scene-measure .esri-measurement-widget-content__measurement-item__value {
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+.scene-measure .esri-measurement-widget-content__measurement-item--disabled {
+  color: var(--ink-3);
+}
+.scene-measure .esri-measurement-widget-content__actions {
+  display: none;
+}
+

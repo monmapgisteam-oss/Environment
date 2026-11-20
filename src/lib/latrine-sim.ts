@@ -103,12 +103,12 @@ export const MATS: Material[] = (
 /** Нүхний шингэн дэх E.coli, log10 CFU/100 мл */
 export const C0E_LOG = 7;
 /** кг N / хүн / жил */
-export const N_PP = 4.5;
+const N_PP = 4.5;
 /** мг/л NO₃-N (= 50 мг/л NO₃) */
 export const NORM_N = 11.3;
 /** 4-р сарын 1 – 10-р сарын 31 (хөрс гэссэн үе), жилийн өдөр */
-export const ACT0 = 90;
-export const ACT1 = 304;
+const ACT0 = 90;
+const ACT1 = 304;
 export const isWinter = (d: number) => {
   const y = d % 365;
   return y < ACT0 || y >= ACT1;
@@ -379,7 +379,7 @@ export type ColLayer = {
 };
 
 /** Хөрсний профайлын доод хил, м — түүнээс доош геологи */
-export const SOIL_BOTTOM = 2;
+const SOIL_BOTTOM = 2;
 
 /** Жорлонд хамаарах цооног: BORE_REACH дотор, ижил геологийн ангид, хамгийн ойр */
 export function boreholeFor(lon: number, lat: number, mat: number): Borehole | null {
@@ -438,7 +438,7 @@ export const colSig = (c: ColLayer[] | undefined) =>
   c ? c.map((l) => `${l.top.toFixed(2)}:${l.cls}:${l.Ks.toPrecision(3)}`).join(",") : "";
 
 /* ── van Genuchten: K/Ks → θ ─────────────────────────────────────── */
-export function thetaFromK(T: Texture) {
+function thetaFromK(T: Texture) {
   const m = 1 - 1 / T.vn;
   const NS = 400;
   const se = new Float64Array(NS);
@@ -550,7 +550,7 @@ function rowsOf(col: ColLayer[], nz: number, h: number, from: number, to: number
   }
   return { lay, al: w > 0 ? Math.exp(s / w) : TEX[col[col.length - 1].cls].a };
 }
-export function flowField(p: SimParams, T: Texture) {
+function flowField(p: SimParams, T: Texture) {
   const col: ColLayer[] = p.col?.length
     ? p.col
     : [{ top: 0, bot: 1e3, cls: MATS[p.mat].t, Ks: T.Ks, name: MATS[p.mat].n, src: "", gravel: null, kind: 2 }];
@@ -1018,11 +1018,4 @@ export function simulate(p: SimParams): SimResult {
   out.Cgw = Cgw;
   return out;
 }
-
-/** Хугацааг ашиглаж эхэлснээс (4-р сарын 1) — эх хуудасны `fmtY` */
-export function fmtSince(d: number | null): string {
-  if (d == null) return "–";
-  const e = Math.max(0, d - ACT0);
-  const y = e / 365;
-  return y < 1 ? `${Math.max(1, Math.round(e / 30.4))} сар` : `${y.toFixed(y < 10 ? 1 : 0)} жил`;
-}
+

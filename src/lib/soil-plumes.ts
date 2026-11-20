@@ -70,7 +70,7 @@ import { colSig, defaultParams, fetchLatrineSim, simulate, type SimData, type Si
 import { RE3, RN3, rampC, type Species } from "@/lib/latrine-sim-3d";
 import { fetchGeology, type Geology } from "@/lib/geology";
 
-export const YEARS = 10;
+const YEARS = 10;
 /** Загварын агшин 15 хоног; хадгалах нь 4 дэх бүр — 60 хоног */
 const KEEP = 4;
 export const STEP_DAYS = 15 * KEEP;

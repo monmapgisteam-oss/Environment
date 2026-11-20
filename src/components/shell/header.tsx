@@ -25,10 +25,6 @@ const PAGE_NAMES: [string, string, string][] = [
   ["/sources", "Өгөгдлийн сан", "Database"],
   ["/access", "Эрхийн зохицуулалт", "Access control"],
   ["/log", "Лог бүртгэл", "Activity log"],
-  ["/reports", "Тайлан", "Reports"],
-  ["/alerts", "Дохиолол", "Alerts"],
-  ["/map", "Газрын зураг", "Map"],
-  ["/settings", "Тохиргоо", "Settings"],
 ];
 
 export function Header() {

@@ -1,0 +1,32 @@
+/* Мэдээллийн самбар хаалттай цэс ба бусад — workspace.css-ийн 3337–3367-р мөр (2026-11-18-нд хуваасан) */
+
+/*
+  МЭДЭЭЛЛИЙН САМБАР ХААЛТТАЙ ЦЭС ({@link src/components/auth/tab-access.tsx},
+  хэрэглэгч 2026-10-23). Газрын зургаас бусад бүх элемент (диаграм,
+  үзүүлэлт, жагсаалт, дэлгэрэнгүй цонх) үл үзэгдэнэ — зураг байрандаа.
+*/
+.access-nodb * {
+  visibility: hidden;
+}
+.access-nodb .wells-esri,
+.access-nodb .wells-esri * {
+  visibility: visible;
+}
+
+/* Агуулга руу шилжих холбоос — зөвхөн гарын фокус авахад харагдана */
+.skip-link {
+  position: fixed;
+  top: 8px;
+  left: 8px;
+  z-index: 100;
+  padding: 8px 12px;
+  border: 1px solid var(--line-2);
+  border-radius: 2px;
+  background: var(--paper-2);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
+  transform: translateY(-200%);
+}
+.skip-link:focus-visible { transform: none; }
+#main:focus { outline: none; }

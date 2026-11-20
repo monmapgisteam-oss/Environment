@@ -5,11 +5,11 @@ import dynamic from "next/dynamic";
 import {
   Boxes,
   Building2,
-  ChevronDown,
   ClipboardList,
   FlaskConical,
   Loader2,
   MapPin,
+  MapPinOff,
   Recycle,
   Search,
   Table2,
@@ -36,7 +36,17 @@ import {
   type Index,
   type LocStat,
 } from "@/lib/chemsystem";
+import { pointsOnBuildings, type Building } from "@/lib/buildings";
+import { inUlaanbaatar } from "@/lib/ub-boundary";
 import { cn, num } from "@/lib/utils";
+import {
+  CatalogGroup as GroupBlock,
+  CatalogName as NameRow,
+  CatalogRow as Row,
+  PlaceCard,
+} from "@/components/hyanalt/catalog-rows";
+import { offDistricts, offText } from "@/lib/district-check";
+import { OffDistrictLegend, mismatchPin, useUbDistricts } from "@/components/map/off-district";
 import type { LucideIcon } from "lucide-react";
 
 const PointMap = dynamic(
@@ -64,14 +74,29 @@ const PointMap = dynamic(
    шүүж байна) харагдахаа больдог. Одоо хоёулаа үргэлж дүүрэн бөгөөд
    ИЖИЛ бүтэцтэй (`Panel`) — ижил харагдах нь хамаарлыг өөрөө хэлнэ.
 
-   ⚠ ГАЗРЫН ЗУРАГТ ЗӨВХӨН НИЙСЛЭЛИЙНХ. Орон нутгийн хаягтай 93 агуулахын
-   координат БҮРТГЭГДСЭН ч хаягтайгаа таарахгүй: бүгд Улаанбаатарын
-   төвөөс медиан 2.8 км-ийн дотор багширсан байна. Ховдын хаягтай
-   агуулахын цэг бодит Ховдоос 1,136 км, Говь-Алтайнх 815 км зөрнө.
-   Зурагт буулгавал байхгүй зүйл харуулна тул жагсаалтад л үлдээнэ.
+   ⚠⚠ ОРОН НУТГИЙНХ ч ГАЗРЫН ЗУРАГТ ГАРНА (хэрэглэгч 2026-11-16). Орон нутгийн
+   хаягтай агуулахын координат Улаанбаатарын төвд багширдаг нь АЛДАА БИШ:
+   компанийн агуулах нь хөдөө, координат нь Улаанбаатар дахь ОФФИСЫНХ.
+   Урьд нь "хаягтайгаа таарахгүй" гэж зурагт буулгадаггүй байв — буцаасан.
    -------------------------------------------------------------------------- */
 
 type Scope = "city" | "rural";
+
+/*
+  БАРИЛГЫН ДАВХЦЛААР ТҮВШИН (хэрэглэгч 2026-11-16): барилга дээр буусан цэг ердийн (0 —
+  төрийн байгууллага, сургууль, оффис, үйлдвэр …); "Театр", "Музей", "Цэцэрлэг" ба
+  Засгийн газрын ордон (нэрээр) — ШАР (1); зам, гудамж зэрэг барилгагүй газар — УЛААН (2).
+*/
+const WARN_USE = /театр|музей|цэцэрлэг/i;
+function levelOf(b: Building | null): number {
+  if (!b) return 2;
+  return WARN_USE.test(b.use) || /засгийн газрын ордон/i.test(b.name) ? 1 : 0;
+}
+
+/** Барилгагүй газар буусан цэгийн өнгө — `--clay`-ийн тогтмол hex (газрын зураг горимоос үл хамаарна) */
+const ALERT_COLOR = "#e47b7b";
+/** Театр, музей, цэцэрлэг, Засгийн газрын ордон дээрх цэг — `--ochre`-ийн тогтмол hex */
+const WARN_COLOR = "#e5b75a";
 
 export function ChemSystemDashboard() {
   const [data, setData] = React.useState<ChemSystem | null>(null);
@@ -102,6 +127,41 @@ export function ChemSystemDashboard() {
   }, []);
 
   const ix = React.useMemo<Index | null>(() => (data ? buildIndex(data) : null), [data]);
+
+  /*
+    БАЙРШЛЫН ТҮВШИН (хэрэглэгч 2026-11-16) — бүх агуулахыг `merged_buildings_arkhai`-тай
+    давхцуулна (`levelOf`): 0 ердийн · 1 шар · 2 улаан. Хилийн дотор хоёр хүрээнд ижил
+    дүрэм. Хилээс гадна: орон нутаг 0 (координат хаягтайгаа нийцэх боломжтой),
+    Улаанбаатар 2. Давхарга ирэх хүртэл (эсвэл унавал) орон нутгийн хилийн доторх
+    нь улаан, бусад 0.
+  */
+  const checked = React.useMemo(
+    () => (ix ? ix.stats.filter((s) => Number.isFinite(s.loc.lon) && Number.isFinite(s.loc.lat) && inUlaanbaatar(s.loc.lon, s.loc.lat)) : []),
+    [ix],
+  );
+  const [buildingLevel, setBuildingLevel] = React.useState<Map<number, number> | null>(null);
+  React.useEffect(() => {
+    if (!checked.length) return;
+    const ac = new AbortController();
+    pointsOnBuildings(checked.map((s) => [s.loc.lon, s.loc.lat]), ac.signal)
+      .then((hits) => setBuildingLevel(new Map(checked.map((s, i) => [s.loc.id, levelOf(hits[i])]))))
+      .catch((e: Error) => {
+        if (e.name !== "AbortError") console.warn("Барилгын давхарга уншигдсангүй:", e.message);
+      });
+    return () => ac.abort();
+  }, [checked]);
+  const levels = React.useMemo(() => {
+    const m = new Map<number, number>();
+    if (!ix) return m;
+    for (const s of ix.stats) {
+      if (!Number.isFinite(s.loc.lon) || !Number.isFinite(s.loc.lat)) continue;
+      const rural = s.place.inCity === false;
+      const inside = inUlaanbaatar(s.loc.lon, s.loc.lat);
+      if (!inside) m.set(s.loc.id, rural ? 0 : 2);
+      else m.set(s.loc.id, buildingLevel?.get(s.loc.id) ?? (rural ? 2 : 0));
+    }
+    return m;
+  }, [ix, buildingLevel]);
 
   /** Хамрах хүрээ — ХАЯГААС, координатаас БИШ */
   const inScope = React.useMemo(() => {
@@ -271,10 +331,10 @@ export function ChemSystemDashboard() {
 
   /* ---------------- Газрын зураг ---------------- */
 
-  /* Зурагт ЗӨВХӨН нийслэлийнх — орон нутгийнхны координат нь орлуулга */
+  /* Хоёр хамрах хүрээ хоёулаа зурагт (орон нутгийнхын координат — УБ дахь оффис) */
   const mapped = React.useMemo(
-    () => (scope === "city" ? shownLocs : []),
-    [shownLocs, scope],
+    () => shownLocs.filter((s) => Number.isFinite(s.loc.lon) && Number.isFinite(s.loc.lat)),
+    [shownLocs],
   );
 
   const points = React.useMemo<MapPoints>(
@@ -289,6 +349,28 @@ export function ChemSystemDashboard() {
   const visible = React.useMemo(() => Uint32Array.from(mapped.map((_, i) => i)), [mapped]);
 
   /*
+    ХАЯГИЙН ДҮҮРГЭЭС ӨӨР ДҮҮРЭГТ БУУСАН агуулах (2026-11-19; аудитаар нийслэлийн хаягтай 423-аас
+    142). Шүүлт хаягийн дүүргээр хэвээр, цэг дээр тусгай тэмдэг. Орон нутгийн хаягтай нь
+    харьцуулахгүй — тэдний координат УБ дахь оффисынх (дээрх `alerts`-ийн тайлбарыг үз).
+  */
+  const ubBounds = useUbDistricts();
+  const offDistrict = React.useMemo(
+    () =>
+      offDistricts(
+        ubBounds,
+        mapped
+          .filter((s) => s.place.inCity !== false && s.place.district)
+          .map((s) => ({ oid: s.loc.id, lon: s.loc.lon, lat: s.loc.lat, district: s.place.district })),
+      ),
+    [ubBounds, mapped],
+  );
+  const offMarks = React.useMemo(() => {
+    const m: Record<number, string> = {};
+    for (const o of offDistrict.keys()) m[o] = mismatchPin();
+    return Object.keys(m).length ? m : undefined;
+  }, [offDistrict]);
+
+  /*
     Цэгийн ХЭМЖЭЭ = бүртгэгдсэн бодисын нэрийн тоо, ЛОГАРИФМ хуваарьтай
     (дундаж 43, дээд 1,114 тул шугаман дээр нэг агуулах бүхнийг дардаг).
     Өнгө нь ганц `--data`: энэ нь ангилал биш хэмжээ тул шатлалын хоёр
@@ -301,10 +383,24 @@ export function ChemSystemDashboard() {
         [0, DATA_COLOR],
         [Math.log10(1200), DATA_COLOR],
       ] as [number, string][],
-      firefly: true,
+      /* ESRI-ИЙН FIREFLY тэмдэг (хэрэглэгч 2026-11-13) — химийн агуулахын
+         самбартай ижил: цагаан цөм + `DATA_COLOR`-оор будсан гэрэл */
+      firefly: "graded" as const,
     }),
     [mapped],
   );
+
+  /*
+    ХАРДЛАГАТАЙ БАЙРШИЛ (хэрэглэгч 2026-11-16): орон нутгийн хаягтай атлаа
+    координат нь Улаанбаатарын хилийн дотор — түвшин нь барилгаас (`levels`, дээрхийг үз).
+    Цэг ба түүнийг агуулсан бөөгнөрөл түвшний өнгөөр.
+  */
+  const alerts = React.useMemo(
+    () => ({ levels: mapped.map((s) => levels.get(s.loc.id) ?? 0), colors: [WARN_COLOR, ALERT_COLOR] }),
+    [mapped, levels],
+  );
+  const warnCount = alerts.levels.filter((l) => l === 1).length;
+  const alertCount = alerts.levels.filter((l) => l === 2).length;
 
   const focus = React.useMemo<Extent | null>(() => {
     const s = selLoc == null ? null : mapped.find((x) => x.loc.id === selLoc);
@@ -453,7 +549,12 @@ export function ChemSystemDashboard() {
     <div className="flex h-full min-h-0 flex-col gap-2">
       {/* ---------------- Хамрах хүрээ ---------------- */}
       <div className="flex shrink-0 flex-wrap items-center gap-x-2 gap-y-1.5 rounded-xs border border-line bg-paper-2 px-2.5 py-1.5">
-        <span className="eyebrow shrink-0">Хамрах хүрээ</span>
+        {/* Самбарын НЭР — бусад самбарын толгойтой ижил хэв (хэрэглэгч 2026-11-19: "Хамрах хүрээ ner ni bish …
+            himiin bodisiin undesni burtgel bolgo") */}
+        <span className="shrink-0 text-[12px] font-semibold tracking-[0.02em] text-ink uppercase">
+          Химийн бодисын үндэсний бүртгэл
+        </span>
+        <span className="mx-0.5 h-4 w-px shrink-0 bg-line" aria-hidden />
 
         {/*
           ⚠⚠ ХУУЧИН ТОВЧНУУД ХЭВЭЭР (хэрэглэгчийн шийдвэр, 2026-09-23:
@@ -596,8 +697,18 @@ export function ChemSystemDashboard() {
                 highlight={spot ? [spot.loc.lon, spot.loc.lat] : null}
                 clusterMaxZoom={13}
                 grades={grades}
+                alerts={alerts}
+                marks={offMarks}
               />
-              <BasemapGallery value={basemap} onChange={setBasemap} placement="top-left" />
+              {alertCount + warnCount > 0 || offDistrict.size > 0 ? (
+                <div className="absolute bottom-7 left-2 z-[1] flex flex-col gap-1 rounded-xs border border-line bg-paper/90 px-2 py-1.5 text-[10px] text-ink-2 backdrop-blur">
+                  <span className="flex items-center gap-1.5"><i className="size-2 rounded-full" style={{ background: DATA_COLOR }} />Агуулах</span>
+                  <span className="flex items-center gap-1.5"><i className="size-2 rounded-full" style={{ background: ALERT_COLOR }} />Байршил тодруулах шаардлагатай <span className="num text-ink-3">{num(alertCount)}</span></span>
+                  {warnCount > 0 && <span className="flex items-center gap-1.5"><i className="size-2 rounded-full" style={{ background: WARN_COLOR }} />Театр, музей, цэцэрлэг, Засгийн газрын ордон дээр <span className="num text-ink-3">{num(warnCount)}</span></span>}
+                  {offDistrict.size > 0 && <OffDistrictLegend className="flex items-center gap-1.5" />}
+                </div>
+              ) : null}
+              <BasemapGallery value={basemap} onChange={setBasemap} />
 
               {hovered ? (
                 <MapTip state={tip}>
@@ -608,24 +719,17 @@ export function ChemSystemDashboard() {
                       text={`${num(hovered.chemicals)} нэр төрлийн бодис`}
                       num
                     />
+                    {offDistrict.has(hovered.loc.id) ? (
+                      <MapTipRow icon={MapPinOff} text={offText(offDistrict.get(hovered.loc.id) ?? "")} />
+                    ) : null}
                   </div>
                 </MapTip>
               ) : null}
             </>
           ) : (
-            /*
-              Координат нь БҮРТГЭГДСЭН ч хаягтайгаа таарахгүй: Ховдын
-              хаягтай агуулахын цэг бодит Ховдоос 1,136 км зөрж, УБ-ын
-              төвд буудаг. 93 бичлэгийн координат бүгд хотын төвөөс
-              медиан 2.8 км-ийн дотор багширсан.
-
-              "Байршил бүртгэгдээгүй" гэж бичих нь ХУДАЛ байв — тэднийг
-              харуулахгүй байгаа шалтгаанаа товч, үнэн зөв хэлнэ.
-            */
             <div className="hatch flex h-full items-center justify-center px-6">
               <p className="max-w-[320px] text-center text-[12px] leading-snug text-ink-3">
-                Бүртгэсэн координат нь хаягтайгаа таарахгүй тул газрын зурагт
-                харуулаагүй
+                Тохирох агуулах байхгүй
               </p>
             </div>
           )}
@@ -648,6 +752,11 @@ export function ChemSystemDashboard() {
                 <div className="mt-1 text-[10.5px] leading-snug text-ink-3">
                   {picked.loc.address}
                 </div>
+                {offDistrict.has(picked.loc.id) ? (
+                  <div className="mt-1 text-[10.5px] leading-snug text-water">
+                    {offText(offDistrict.get(picked.loc.id) ?? "")}
+                  </div>
+                ) : null}
                 <div className="mt-1.5 flex flex-wrap items-baseline gap-x-3 text-[10px]">
                   {picked.org?.reg ? (
                     <span className="num text-ink-3">Регистр {picked.org.reg}</span>
@@ -709,105 +818,6 @@ export function ChemSystemDashboard() {
       <p className="shrink-0 px-0.5 text-[10.5px] leading-none text-ink-3">
         Эх сурвалж: {data.source.system} · Суурь зураг: Esri
       </p>
-    </div>
-  );
-}
-
-/**
- * Байршлын диаграм — агуулахын жагсаалтын ДЭЭР.
- *
- * ⚠⚠ ТОВЧНЫ ОРОНД ДИАГРАМ (хэрэглэгчийн хүсэлт, 2026-09-23:
- * "Дүүргээр serial chart харуулъя"). Товчнууд нэр, тоо хоёрыг л
- * хэлдэг байсан бол зурвас нь ХАРЬЦААГ нэмж хэлнэ.
- *
- * ⚠⚠ МӨР НЬ НЭГ ЭГНЭЭ (хэрэглэгчийн хүсэлт, 2026-09-23: "Дүүргээр
- * картын өндрийг багасгах боломж бий юу"). `RowChart dense` нь нэрийг
- * дээр нь, зурвасыг доор нь тавьдаг тул мөр ~31px болж, найман дүүрэг
- * 280px эзэлдэг байв. Нэр, зурвас, тоо гурвыг ЗЭРЭГЦҮҮЛЭХЭД мөр
- * ~21px — карт **190px** болж багасна.
- *
- * ⚠ Ингэснээр `RowChart`-аас САЛСАН: тэр бүрэлдэхүүн нэрээ мөрийн
- * дээр тавьдаг бөгөөд тэр байрлалыг проп-оор өөрчлөх боломжгүй.
- * Зурвасны утга, сонголтын зан төлөв нь адилхан хэвээр.
- *
- * ⚠ Нэрийн багана ТОГТМОЛ өргөнтэй (92px): зурваснууд НЭГ эгнээнээс
- * эхлэхгүй бол урт нь харьцуулагдахаа болино.
- *
- * ⚠ ӨНГӨ нь ГАНЦ (`--tone`): дүүрэг бол нэрлэсэн ангилал, эрэмбэтэй
- * хэмжүүр БИШ тул мөр бүрийг өөр өнгөөр ялгавал утгагүй солонго
- * болно. Ялгаа нь уртаараа гарна.
- */
-function PlaceCard({
-  title,
-  rows,
-  show,
-  picked,
-  onPick,
-}: {
-  title: string;
-  rows: [string, number][];
-  /** Карт харагдах эсэх — хайлт, сонголтоос ҮЛ ХАМААРНА (карт үсрэхгүй) */
-  show: boolean;
-  picked: string | null;
-  onPick: (key: string) => void;
-}) {
-  const max = Math.max(...rows.map(([, n]) => n), 1);
-  if (!show) return null;
-  return (
-    <div className="shrink-0 overflow-hidden rounded-xs border border-line bg-paper-2">
-      <div className="flex items-baseline gap-2 border-b border-line px-2.5 py-1.5">
-        <span className="eyebrow min-w-0 flex-1 truncate">{title}</span>
-        {picked ? (
-          <button
-            onClick={() => onPick(picked)}
-            className="shrink-0 text-[10px] text-(--tone) transition-colors hover:text-ink"
-          >
-            Цэвэрлэх
-          </button>
-        ) : (
-          <span className="num shrink-0 text-[10px] text-ink-3">
-            {num(rows.length)}
-          </span>
-        )}
-      </div>
-      {/* Агуулга нь картаасаа урт бол картынхаа ДОТОР гүйнэ (22 аймаг)
-          — багана өөрөө хөдлөхгүй */}
-      <div className="max-h-[186px] overflow-y-auto py-1">
-        {rows.map(([key, n]) => {
-          const on = picked === key;
-          return (
-            <button
-              key={key}
-              onClick={() => onPick(key)}
-              aria-pressed={on}
-              title={`${key} · ${num(n)}`}
-              className={cn(
-                "flex w-full items-center gap-2 px-2.5 py-[3px] text-left transition-colors",
-                on ? "bg-(--tone)/10" : "hover:bg-paper-hi",
-                picked && !on && "opacity-55",
-              )}
-            >
-              <span
-                className={cn(
-                  "w-[92px] shrink-0 truncate text-[11px]",
-                  on ? "font-medium text-ink" : "text-ink-2",
-                )}
-              >
-                {key}
-              </span>
-              <span className="h-[5px] min-w-0 flex-1 overflow-hidden rounded-full bg-paper-hi">
-                <span
-                  className="block h-full rounded-full bg-(--tone)"
-                  style={{ width: `${Math.max((n / max) * 100, 2)}%` }}
-                />
-              </span>
-              <span className="num w-[30px] shrink-0 text-right text-[11px] text-ink-2">
-                {num(n)}
-              </span>
-            </button>
-          );
-        })}
-      </div>
     </div>
   );
 }
@@ -1141,80 +1151,6 @@ function Panel({
   );
 }
 
-/**
- * Жагсаалтын нэг мөр.
- *
- * Нэр нь ХОЁР МӨРӨНД буудаг: аж ахуйн нэгжийн нэр урт бөгөөд нэг
- * мөрөнд таславал "Дундговь аймгийн мэргэжлийн хян…" гэж бүгд ижил
- * эхэлсэн, ялгагдахгүй мөрүүд болно.
- *
- * Хэмжигчийн зураас БАЙХГҮЙ: тоо нь баруун талдаа аль хэдийн
- * бичигдсэн байхад зураас нэмэлт мэдээлэл өгөхгүй, зөвхөн чимэг болно.
- */
-function Row({
-  on,
-  onClick,
-  onEnter,
-  onLeave,
-  title,
-  note,
-  value,
-  unit,
-}: {
-  on: boolean;
-  onClick: () => void;
-  onEnter?: () => void;
-  onLeave?: () => void;
-  title: string;
-  note?: string;
-  value: string;
-  unit?: string;
-}) {
-  return (
-    <li>
-      <button
-        onClick={onClick}
-        onMouseEnter={onEnter}
-        onMouseLeave={onLeave}
-        className={cn(
-          "relative block w-full px-2.5 py-2 text-left transition-colors",
-          on ? "bg-(--tone)/10" : "hover:bg-paper-hi",
-        )}
-      >
-        {on ? (
-          <span aria-hidden className="absolute inset-y-0 left-0 w-[2px] bg-(--tone)" />
-        ) : null}
-
-        <div className="flex items-start gap-2">
-          <span
-            className={cn(
-              "line-clamp-2 min-w-0 flex-1 text-[11.5px] leading-snug text-ink",
-              on && "font-medium",
-            )}
-            title={title}
-          >
-            {title}
-          </span>
-          <span className="num shrink-0 pt-[1px] text-[11px] leading-snug text-ink-2">
-            {value}
-          </span>
-        </div>
-
-        {note || unit ? (
-          <div className="mt-0.5 flex items-baseline gap-2">
-            <span className="min-w-0 flex-1 truncate text-[10px] leading-snug text-ink-3">
-              {note}
-            </span>
-            {unit ? (
-              <span className="shrink-0 text-[9.5px] leading-snug text-ink-3">{unit}</span>
-            ) : null}
-          </div>
-        ) : null}
-      </button>
-    </li>
-  );
-}
-
 function Pill({
   on,
   onClick,
@@ -1289,116 +1225,3 @@ function groupOf(name: string): string {
   return g;
 }
 
-/**
- * Товьёогийн бүлгийн мөр ба задарсан нэрс.
- *
- * ⚠⚠ ХЭМЖИГЧИЙН ЗУРААС ХАСАГДСАН (хэрэглэгчийн шийдвэр, 2026-09-23:
- * "Бодисын товьёог энд баганан чарт хэрэггүй юм байна"). Товьёог нь
- * ЖАГСААЛТ — хайж олох, задлах зам бөгөөд бүлгүүдийн харьцааг
- * зурагладаг диаграм БИШ. Тоонууд нь өөрсдөө эрэмбэлэгдсэн тул
- * зураас нэмэлт мэдээлэл өгөхгүй, зөвхөн мөрийг өндөрсгөж байв.
- * Дахин бүү нэм.
- */
-function GroupBlock({
-  label,
-  note,
-  value,
-  unit,
-  open,
-  onClick,
-  children,
-}: {
-  label: string;
-  /** Нэрийн тоо — "· 1,321 нэр" */
-  note?: string;
-  value: string;
-  unit: string;
-  open: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <li className="px-1.5 py-1">
-      <div
-        className={cn(
-          "rounded-md border px-1.5 py-1.5 transition-colors",
-          open ? "border-(--tone)/45 bg-paper-3" : "border-line bg-paper-2 hover:border-line-2",
-        )}
-      >
-        <button onClick={onClick} aria-expanded={open} className="block w-full text-left">
-          <div className="flex items-baseline gap-1.5">
-            <ChevronDown
-              size={12}
-              strokeWidth={2}
-              aria-hidden
-              className={cn(
-                "shrink-0 translate-y-[2px] transition-transform",
-                open ? "text-(--tone)" : "-rotate-90 text-ink-3",
-              )}
-            />
-            <span className="min-w-0 flex-1 text-[12px] leading-snug font-medium text-ink">
-              {label}
-              {note ? (
-                <span className="ml-1.5 text-[10px] font-normal whitespace-nowrap text-ink-3">
-                  · {note}
-                </span>
-              ) : null}
-            </span>
-            <span className="num shrink-0 text-[11.5px] text-ink-2">{value}</span>
-            <span className="shrink-0 text-[10px] text-ink-3">{unit}</span>
-          </div>
-        </button>
-
-        {open ? (
-          <div className="mt-1.5 ml-[18px] divide-y divide-line border-l border-line-2">
-            {children}
-          </div>
-        ) : null}
-      </div>
-    </li>
-  );
-}
-
-/** Задарсан бүлэг доторх бодисын мөр */
-function NameRow({
-  on,
-  onClick,
-  name,
-  value,
-  unit,
-}: {
-  on: boolean;
-  onClick: () => void;
-  name: string;
-  value: string;
-  unit?: string;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={cn(
-        "relative block w-full px-2.5 py-1.5 text-left transition-colors",
-        on ? "bg-(--tone)/10" : "hover:bg-paper-hi",
-      )}
-    >
-      {on ? (
-        <span aria-hidden className="absolute inset-y-0 left-0 w-[2px] bg-(--tone)" />
-      ) : null}
-      <div className="flex items-start gap-2">
-        <span
-          className={cn(
-            "line-clamp-2 min-w-0 flex-1 text-[11px] leading-snug text-ink-2",
-            on && "font-medium text-ink",
-          )}
-          title={name}
-        >
-          {name}
-        </span>
-        <span className="num shrink-0 pt-[1px] text-[10.5px] leading-snug text-ink-2">
-          {value}
-          {unit ? <span className="ml-1 text-ink-3">{unit}</span> : null}
-        </span>
-      </div>
-    </button>
-  );
-}

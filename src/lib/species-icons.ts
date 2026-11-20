@@ -39,7 +39,7 @@ const RULES: [RegExp, keyof typeof ICONS][] = [
 ];
 
 /** Монгол нэрээс ангиллын тэмдгийн түлхүүр. Танихгүй бол хөхтөн гэж үзнэ. */
-export function speciesIconKey(name: string): keyof typeof ICONS {
+function speciesIconKey(name: string): keyof typeof ICONS {
   const s = name.toLocaleLowerCase("mn-MN");
   for (const [re, key] of RULES) if (re.test(s)) return key;
   return "mammal";
