@@ -920,9 +920,11 @@ html[data-department-preview="true"] .workspace-main { --workspace-gutter: 0px; 
   margin-right: 2px;
   color: var(--moss);
 }
-.pe-table tbody tr.is-hot td.is-frozen,
-.pe-table tbody tr.is-picked td.is-frozen {
+.pe-table tbody tr.is-hot td.is-frozen {
   background: var(--paper-hi);
+}
+.pe-table tbody tr.is-picked td.is-frozen {
+  background: color-mix(in oklab, rgb(255 210 0) 24%, var(--paper-2));
 }
 .pe-table th {
   cursor: context-menu;
@@ -1037,12 +1039,13 @@ html[data-department-preview="true"] .workspace-main { --workspace-gutter: 0px; 
   background: rgb(255 230 0 / 0.14);
   color: var(--ink);
 }
+/* Сонгосон мөр — зураг дээрх сонголтын шар цагирагтай нэг өнгө, hover-оос тод */
 .pe-table tbody tr.is-picked td {
-  background: color-mix(in oklab, var(--moss) 12%, transparent);
+  background: rgb(255 210 0 / 0.24);
   color: var(--ink);
 }
 .pe-table tbody tr.is-picked td:first-child {
-  box-shadow: inset 3px 0 0 var(--moss);
+  box-shadow: inset 3px 0 0 rgb(240 190 0);
 }
 .pe-empty {
   padding: 18px;
