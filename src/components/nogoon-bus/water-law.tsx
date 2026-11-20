@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { ExternalLink, Search, X } from "lucide-react";
-import { cn, num } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import { WATER_LAW, type WaterLawGroup, type WaterLawItem } from "@/lib/water-law";
 
 /*
@@ -21,11 +21,10 @@ import { WATER_LAW, type WaterLawGroup, type WaterLawItem } from "@/lib/water-la
 
   ⚠⚠ САЙЖРУУЛАЛТ (хэрэглэгч 2026-11-20: "ene hesgiig saijruulah sanaa" →
   "za saijruulaad hiigeerei"):
-  · БАРУУН ТАЛД САМБАР: сонгоогүй үед бүлгийн ТОЙМ (баримтын тоо, хүчинтэй,
-    хүчингүй, холбоосгүй, хэсэг бүрийн тоо ба хугацаа); мөр дарахад тэр
-    баримтын ДЭЛГЭРЭНГҮЙ (бүтэн нэр, батлах акт, огноо, дугаар, тэмдэглэл,
+  · БАРУУН ТАЛД САМБАР зөвхөн мөр сонгосон үед — тэр баримтын ДЭЛГЭРЭНГҮЙ (бүтэн нэр, батлах акт, огноо, дугаар, тэмдэглэл,
     хүчингүй болсон шалтгаан, эх сурвалж нээх товч). Esc хаана.
-    Өргөн дэлгэцэд нэр, огнооны хоорондох хоосон зайг самбар эзэлнэ.
+    ⚠ Сонгоогүй үеийн ТОЙМ (тоо, хэсгээр) БУЦААГДСАН (хэрэглэгч мөн өдөр: "iim
+    iluu ym hrgguireee") — дахин бүү нэм.
   · Мөр дарахад холбоос ШУУД нээгдэхгүй — сонгоно; эх сурвалж руу мөрийн
     төгсгөлийн тэмдэг эсвэл самбарын товч.
   · Нэр ХОЁР мөр хүртэл залгана (урт нэр тасардаг байв). Акт, тэмдэглэл
@@ -91,8 +90,6 @@ const byDate = (a: WaterLawItem, b: WaterLawItem) => (b.date ?? "").localeCompar
 const norm = (s: string) => s.toLowerCase().replace(/[“”"«»]/g, "").replace(/\s+/g, " ");
 const text = (it: WaterLawItem) =>
   norm([it.title, it.act, it.date, it.no, it.note, it.repealed].filter(Boolean).join(" "));
-
-const yearOf = (it: WaterLawItem) => it.date?.slice(0, 4);
 
 export function WaterLaw() {
   const [groupId, setGroupId] = React.useState<WaterLawGroup["id"]>(WATER_LAW[0].id);
@@ -294,10 +291,10 @@ export function WaterLaw() {
           )}
         </div>
 
-        {/* Баруун самбар: дэлгэрэнгүй эсвэл тойм */}
-        {group.items.length || chosen ? (
+        {/* Баруун самбар — зөвхөн мөр сонгосон үед */}
+        {chosen ? (
           <aside className="min-h-0 shrink-0 overflow-y-auto border-t border-line bg-paper lg:w-[360px] lg:border-t-0 lg:border-l 2xl:w-[420px]">
-            {chosen ? <Detail item={chosen} onClose={() => setChosen(null)} /> : <Overview group={group} />}
+            <Detail item={chosen} onClose={() => setChosen(null)} />
           </aside>
         ) : null}
       </div>
@@ -519,53 +516,6 @@ function Detail({ item: it, onClose }: { item: WaterLawItem; onClose: () => void
           Холбоос олдоогүй
         </p>
       )}
-    </div>
-  );
-}
-
-function Overview({ group }: { group: WaterLawGroup }) {
-  const items = group.items;
-  const repealed = items.filter((it) => it.repealed).length;
-  const nolink = items.filter((it) => !it.url).length;
-  const sections = sectionsOf(items);
-  const span = (list: WaterLawItem[]) => {
-    const years = list.map(yearOf).filter((y): y is string => !!y).sort();
-    if (!years.length) return "—";
-    return years[0] === years[years.length - 1] ? years[0] : `${years[0]}–${years[years.length - 1]}`;
-  };
-  return (
-    <div className="p-4">
-      <p className="eyebrow">Тойм</p>
-      <h3 className="display mt-1 text-[15px] text-ink">{group.label}</h3>
-      <div className="mt-3 grid grid-cols-2 gap-px overflow-hidden rounded-xs border border-line bg-line">
-        {[
-          { label: "Баримт", value: items.length },
-          { label: "Хүчинтэй", value: items.length - repealed },
-          { label: "Хүчингүй", value: repealed, tone: repealed ? "text-(--ochre)" : undefined },
-          { label: "Холбоосгүй", value: nolink },
-        ].map((s) => (
-          <div key={s.label} className="bg-paper-2 px-3 py-2.5">
-            <p className="text-[11px] text-ink-3">{s.label}</p>
-            <p className={cn("num mt-0.5 text-[19px] font-semibold text-ink", s.tone)}>{num(s.value)}</p>
-          </div>
-        ))}
-      </div>
-
-      <p className="eyebrow mt-5 mb-1.5">Хэсгээр</p>
-      <ul className="divide-y divide-line border-y border-line">
-        {sections.map((s, i) => (
-          <li key={`${s.name ?? ""}-${i}`} className="py-2" title={s.name}>
-            <div className="flex items-baseline justify-between gap-3 text-[12px]">
-              <span className="min-w-0 truncate text-ink">{shortOf(s.name) || group.label}</span>
-              <span className="num shrink-0 font-medium text-ink">{s.items.length}</span>
-            </div>
-            <div className="mt-1.5 h-1 overflow-hidden rounded-[1px] bg-line">
-              <div className="h-full bg-(--tone)/55" style={{ width: `${(s.items.length / items.length) * 100}%` }} />
-            </div>
-            <p className="num mt-1 text-[10.5px] text-ink-3">{span(s.items)}</p>
-          </li>
-        ))}
-      </ul>
     </div>
   );
 }
