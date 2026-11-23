@@ -81,3 +81,10 @@ public/data/~$*
 
 # Нэвтрэлттэй өгөгдлийн эх файл — порталд item болж байршина (scripts/upload-portal-data.mjs)
 /data-private/
+
+# Аюулгүй байдлын аудитын дүн, нотолгоо, шалгах скрипт — РЕПО НИЙТЭД
+# НЭЭЛТТЭЙ тул сул талын жагсаалтыг git-д ОРУУЛАХГҮЙ (CLAUDE.md дүрэм).
+/docs/security-review-*.md
+/docs/security-evidence-*/
+/scripts/security-*.mjs
+/scripts/security-*.py

@@ -248,6 +248,10 @@ export async function completeSignIn(search: string): Promise<string> {
  * очих ба сүүлийнх нь өмнөхийг нь хүчингүй болгоно.
  */
 let renewing: Promise<Session | null> | null = null;
+/* ⚠⚠ Гарах үед нэмэгдэнэ. Нисэж яваа сунгалт энэ тооллыг эхэндээ авч,
+   хадгалахын ӨМНӨ дахин шалгана — гарсны дараа ирсэн хуучин сунгалт
+   сессийг БУЦААЖ АМИЛУУЛАХГҮЙ (гарах/сунгах уралдаан). */
+let sessionEpoch = 0;
 
 export async function getToken(): Promise<string | null> {
   const s = readSession();
@@ -263,16 +267,20 @@ export async function getToken(): Promise<string | null> {
 }
 
 async function renew(refresh: string): Promise<Session | null> {
+  const started = sessionEpoch;
   try {
     const body = await postForm(`${SHARING}/oauth2/token`, {
       client_id: APP_ID,
       grant_type: "refresh_token",
       refresh_token: refresh,
     });
-    return await adopt(body, refresh);
+    /* Сунгалт явж байх хооронд хэрэглэгч гарсан бол бичихгүй */
+    if (sessionEpoch !== started) return null;
+    return await adopt(body, refresh, started);
   } catch {
-    /* Сунгалт бүтэлгүйтэв — сессийг цэвэрлэж дахин нэвтрүүлнэ */
-    writeSession(null);
+    /* Сунгалт бүтэлгүйтэв — сессийг цэвэрлэж дахин нэвтрүүлнэ (зөвхөн
+       энэ эрин хүчинтэй хэвээр бол: гарсан бол аль хэдийн цэвэрлэгдсэн) */
+    if (sessionEpoch === started) writeSession(null);
     return null;
   }
 }
@@ -286,6 +294,15 @@ async function renew(refresh: string): Promise<Session | null> {
  * Порталаас бүрэн гарах нь `portalSignOutUrl()`-аар.
  */
 export function signOut() {
+  /* Эринг нэмж нисэж яваа сунгалтыг хүчингүй болгоно — хожим ирэх хариу
+     сессийг буцааж бичихгүй (F05 уралдаан) */
+  sessionEpoch++;
+  renewing = null;
+  const s = readSession();
+  /* Токенуудыг порталд цуцлуулна: сэргээх токеныг цуцлахад холбоотой
+     хандах токенууд мөн хүчингүй болно. Блоклохгүй. */
+  if (s?.refresh) void revokeToken(s.refresh);
+  if (s?.token) void revokeToken(s.token);
   writeSession(null);
 }
 
@@ -350,7 +367,11 @@ async function postForm(url: string, fields: Record<string, string>) {
  * тохиолдолд ХУУЧНЫГ нь үлдээнэ, эс тэгвээс дараагийн сунгалт боломжгүй
  * болж хэрэглэгч гэнэт гарна.
  */
-async function adopt(body: TokenBody, keepRefresh?: string): Promise<Session> {
+async function adopt(
+  body: TokenBody,
+  keepRefresh?: string,
+  epoch = sessionEpoch,
+): Promise<Session> {
   const token = body.access_token!;
   const username = body.username ?? "";
   const profile = await fetchProfile(token, username);
@@ -367,8 +388,35 @@ async function adopt(body: TokenBody, keepRefresh?: string): Promise<Session> {
     refreshExpires:
       Date.now() + (body.refresh_token_expires_in ?? 14 * 24 * 3600) * 1000,
   };
+  /* `fetchProfile`-ийн await явж байх хооронд гарсан бол бичихгүй:
+     амилуулахын оронд шинэ токеныг нь буцааж цуцлана */
+  if (epoch !== sessionEpoch) {
+    void revokeToken(token);
+    throw new Error("Сесси гарсан");
+  }
   writeSession(s);
   return s;
+}
+
+/**
+ * Токеныг порталд цуцлуулна (Esri `revokeToken`).
+ *
+ * Сэргээх токеныг цуцлахад түүнтэй холбоотой хандах токенууд мөн
+ * хүчингүй болдог. Гарах үйлдлийг БЛОКЛОХГҮЙ (fire-and-forget); алдааг
+ * чимээгүй залгина — портал хүрэхгүй байсан ч локал сесси цэвэрлэгдэнэ.
+ */
+async function revokeToken(token: string): Promise<void> {
+  if (!token) return;
+  try {
+    await fetch(`${SHARING}/oauth2/revokeToken`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ client_id: APP_ID, auth_token: token, f: "json" }),
+      keepalive: true,
+    });
+  } catch {
+    /* Портал хүрсэнгүй — локал цэвэрлэгээ хангалттай хамгаалалт */
+  }
 }
 
 type Profile = { username: string; fullName: string; avatar: string | null; role?: string };

@@ -51,8 +51,15 @@ const SECURED_HOSTS = ["environment.ub.gov.mn"];
 /** Энэ хаяг нэвтрэлт шаардах уу? */
 export function needsToken(url: string): boolean {
   try {
-    const { hostname } = new URL(url, "https://x.invalid");
-    return SECURED_HOSTS.includes(hostname);
+    const { hostname, protocol, port } = new URL(url, "https://x.invalid");
+    /* ⚠ Токеныг ЗӨВХӨН HTTPS, ЗӨВХӨН стандарт порт дээр хавсаргана: host-оор
+       л шалгавал `http://…` (ил текст) эсвэл `…:8443` руу токен урсаж, прокси
+       лог, кэшэд унаж болзошгүй. Портал 443 дээр тул өөр порт татгалзана. */
+    return (
+      SECURED_HOSTS.includes(hostname) &&
+      protocol === "https:" &&
+      (port === "" || port === "443")
+    );
   } catch {
     return false;
   }

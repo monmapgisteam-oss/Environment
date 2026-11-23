@@ -32,7 +32,7 @@ import { useAuth } from "@/components/auth/provider";
 
 /* ---------- Хүснэгтийн хуваалцсан төлөв (бүх бүрэлдэхүүнд нэг) ---------- */
 
-type Store = { status: "idle" | "loading" | "ready"; rows: AccessRow[] | null };
+type Store = { status: "idle" | "loading" | "ready" | "error"; rows: AccessRow[] | null };
 let store: Store = { status: "idle", rows: null };
 const listeners = new Set<() => void>();
 const emit = () => listeners.forEach((l) => l());
@@ -45,13 +45,19 @@ function load() {
   if (store.status !== "idle") return;
   store = { ...store, status: "loading" };
   void readAccess()
-    .catch((e) => {
-      /* Унших боломжгүй бол анхдагч эрхээр — гэхдээ шалтгааныг нуухгүй */
-      console.error("Эрхийн тохиргоо уншигдсангүй:", e);
-      return null;
-    })
     .then((rows) => {
+      /* `null` = хүснэгт хараахан үүсээгүй (баримтжсан: анхдагч эрхээр).
+         Уншилтын АЛДАА нь энд ирэхгүй — доорх `catch` түүнийг барина. */
       store = { status: "ready", rows };
+      emit();
+    })
+    .catch((e) => {
+      /* ⚠⚠ УНШИЛТЫН АЛДАА ХААЛТТАЙ (F08): сүлжээ/эрхийн алдааг "хүснэгт
+         байхгүй"-тэй андуурвал алсаас хаасан (`removed`) бүртгэл анхдагч
+         эрхээ буцааж авна. Алдааны үед анхдагч эрх ОЛГОХГҮЙ — зөвхөн
+         жинхэнэ эзгүй хүснэгт (resolved `null`) анхдагчаар ажиллана. */
+      console.error("Эрхийн тохиргоо уншигдсангүй:", e);
+      store = { status: "error", rows: null };
       emit();
     });
 }
@@ -120,11 +126,21 @@ export function useAccess() {
     const signed = Boolean(username);
     const admin = role === "org_admin";
     const u = normName(username);
+    const errored = remote.status === "error";
     const row = remote.rows?.find((r) => r.username === u);
-    /* Хүснэгтийн мөр давуу; `removed` бол анхдагч ч хүчингүй */
-    const grant: Grant | null = row ? (row.removed ? null : withHome(u, row.grant)) : defaultGrant(u);
+    /* Хүснэгтийн мөр давуу; `removed` бол анхдагч ч хүчингүй.
+       ⚠ Уншилт алдсан бол (`errored`) анхдагч эрх ОЛГОХГҮЙ — хаалттай.
+       Админ (`role === "org_admin"`) нь өөр замаар шалгагдах тул хэвээр. */
+    const grant: Grant | null = row
+      ? row.removed
+        ? null
+        : withHome(u, row.grant)
+      : errored
+        ? null
+        : defaultGrant(u);
     const pending =
-      signed && (remote.status !== "ready" || (!grant && role === undefined));
+      signed &&
+      ((remote.status !== "ready" && !errored) || (!grant && !errored && role === undefined));
     const blocked = signed && !admin && !preview && !grant && !pending;
     /* Урьдчилсан харагдацад бүх хэсэг, цэс нээлттэй (дээрх тэмдэглэл) */
     const open = admin || preview;

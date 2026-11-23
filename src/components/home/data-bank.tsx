@@ -325,15 +325,28 @@ async function mountTarget(
 /** Бүртгэлийн цонхонд тухайн давхаргын нэг мөр */
 async function fetchRecord(t: Target, oid: number): Promise<[string, string][]> {
   const url = await layerUrl(t, new AbortController().signal);
-  const j = await arcgisJson<{ fields?: { name: string; alias?: string; type: string }[]; features?: { attributes: Record<string, unknown> }[] }>(
-    `${url}/query?${new URLSearchParams({ objectIds: String(oid), outFields: "*", returnGeometry: "false", f: "json" })}`,
+  /* ⚠⚠ F09: талбарын нэрсийг ЭХЛЭЭД давхаргын тодорхойлолтоос авч, ХУВИЙН
+     талбаруудыг `outFields`-ээс хасна — эс тэгвээс (`outFields:"*"`) утас,
+     регистр зэрэг хувийн утга хөтөч рүү ИРЭЭД л дараа нь нуугдана. Жинхэнэ
+     хамгаалалт нь порталын hosted view / сервер тал (хөтчийн жагсаалтыг
+     дуудагч өөрчилж болно) — энэ нь энэ апп-ын урсгалыг хаана. */
+  const meta = await arcgisJson<{ fields?: { name: string; alias?: string; type: string }[] }>(
+    `${url}?f=json`,
+    "Бүртгэл",
+  );
+  const fields = (meta.fields ?? []).filter(
+    (f) => !PRIVATE_FIELD.test(`${f.name} ${f.alias || f.name}`),
+  );
+  const outFields = fields.length ? fields.map((f) => f.name).join(",") : "*";
+  const j = await arcgisJson<{ features?: { attributes: Record<string, unknown> }[] }>(
+    `${url}/query?${new URLSearchParams({ objectIds: String(oid), outFields, returnGeometry: "false", f: "json" })}`,
     "Бүртгэл",
   );
   const a = j.features?.[0]?.attributes ?? {};
   const rows: [string, string][] = [];
-  for (const f of j.fields ?? []) {
+  for (const f of fields) {
     const alias = f.alias || f.name;
-    if (isSystemField(f.name, alias) || PRIVATE_FIELD.test(`${f.name} ${alias}`)) continue;
+    if (isSystemField(f.name, alias)) continue;
     const v = a[f.name];
     let text = v == null || v === "" ? "—" : String(v);
     if (f.type === "esriFieldTypeDate" && typeof v === "number" && v > 0) {

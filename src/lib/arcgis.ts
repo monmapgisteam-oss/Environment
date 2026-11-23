@@ -137,9 +137,29 @@ export async function arcgisBlobUrl(
   if (!res.ok) throw new Error(`${label} татагдсангүй (${res.status})`);
 
   const blob = await res.blob();
+  const type = blob.type.toLowerCase();
+  /* ⚠⚠ АЮУЛГҮЙ БАЙДАЛ: `blob:` хаяг нь үүсгэгч тал (апп)-ын origin-д
+     харьяалагдана. SVG / XML / HTML-ийг ШИНЭ ТАБД баримт болгон нээхэд
+     (`window.open`, `<a target=_blank>`) дотор нь суусан скрипт апп-ын
+     origin дээр ажиллаж, `localStorage`-ийн `arcgis.session` (хандах,
+     сэргээх токен)-ийг уншиж чадна. Тийм хавсралтыг энд БҮРМӨСӨН
+     татгалзана — зөвхөн растер зураг (`<img>`), PDF үлдэнэ. */
+  if (/svg|xml|html/.test(type)) {
+    throw new Error(`${label}: энэ төрлийн файл аюулгүйн шалтгаанаар нээгдэхгүй`);
+  }
+  /* Зарлагдсан MIME нь буруу эсвэл хоосон байж болох тул агуулгыг нь ч
+     үзнэ: `<` -ээр эхэлсэн файл (SVG/XML/HTML) гарцаагүй татгалзана.
+     Растер зураг, PDF (`%PDF`) хоёртын эхлэлтэй тул дамжина. */
+  const head = new TextDecoder()
+    .decode(new Uint8Array(await blob.slice(0, 64).arrayBuffer()))
+    .trimStart()
+    .toLowerCase();
+  if (head.startsWith("<")) {
+    throw new Error(`${label}: энэ төрлийн файл аюулгүйн шалтгаанаар нээгдэхгүй`);
+  }
   /* ArcGIS алдаагаа HTTP 200 + JSON-оор буцаадаг тул төрлийг шалгана:
      зургийн оронд алдааны бичвэр ирвэл хоосон дөрвөлжин гарах байв */
-  if (anyType ? /json|html/.test(blob.type) : !blob.type.startsWith("image/")) {
+  if (anyType ? /json/.test(type) : !type.startsWith("image/")) {
     throw new Error(`${label}: зураг ирсэнгүй`);
   }
   return URL.createObjectURL(blob);
