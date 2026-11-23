@@ -65,6 +65,9 @@ const PointMap = dynamic(
 
 type SourceId = "pit" | "city";
 
+/** Нийтийн байгууламжийн тэмдэг — харанхуйн `--data`, горимоос үл хамаарна */
+const cityPin = () => "#94d7b9";
+
 const SOURCES = [
   { id: "pit" as const, label: "Нүхэн жорлон", icon: Toilet },
   { id: "city" as const, label: "Нийтийн ариун цэврийн байгууламж", icon: Droplets },
@@ -578,6 +581,44 @@ export function OrchinDashboard() {
     setKhoroo(null);
   }
 
+  /*
+    ЗУРАГ ДЭЭРХ ЦЭГ → ШҮҮЛТ (хэрэглэгч 2026-11-23: "map deer bga point deer
+    darj db shuugdmeer bn"). Эх сурвалжид жорлон тутмын PLI байхгүй, диаграм
+    нь хөндлөн хүснэгтээс уншдаг тул НЭГ жорлонгоор шүүх боломжгүй — товшсон
+    цэгийн ХОРОО (ба дүүрэг) шүүлт болно: хорооны диаграм, бүс, индикатор,
+    зураг бүгд тэр хороог харна. Ижил хороог дахин товшиход цуцлагдана.
+    Түүхий багц ирээгүй үед цэг нь ~220м-ийн нүд — хороо мэдэгдэхгүй тул
+    дүүргээр л шүүнэ.
+  */
+  function pickPoint(oid: number) {
+    let d: string | null = null;
+    let k: string | null = null;
+    if (pit) {
+      if (raw && oid < raw.n) {
+        d = raw.districts[raw.district[oid]] ?? null;
+        k = raw.khoroos[raw.khoroo[oid]] ?? null;
+      } else if (data) {
+        d = data.districts[data.cellDistrict[oid]] ?? null;
+      }
+    } else {
+      const c = city.find((x) => x.oid === oid);
+      if (c) {
+        d = c.district;
+        k = c.khoroo == null ? null : khorooKey(c);
+      }
+    }
+    if (d === "Тодорхойгүй") d = null;
+    if (k === "Тодорхойгүй") k = null;
+    if (!d && !k) return;
+    if (k ? khoroo === k : district === d && !khoroo) {
+      setDistrict(null);
+      setKhoroo(null);
+      return;
+    }
+    setDistrict(d);
+    setKhoroo(k);
+  }
+
   function reset() {
     setDistrict(null);
     setZone(null);
@@ -764,7 +805,7 @@ export function OrchinDashboard() {
                   visible={cellIdx}
                   weights={mapPoints.w}
                   basemap={basemap}
-                  onSelect={() => {}}
+                  onSelect={pickPoint}
                   focus={focus}
                   cluster={false}
                   firefly={PIT_FIRE}
@@ -776,11 +817,14 @@ export function OrchinDashboard() {
                   visible={cityIdx}
                   labels={cityLabels}
                   basemap={basemap}
-                  onSelect={() => {}}
+                  onSelect={pickPoint}
                   onHover={tip.onHover}
                   focus={focus}
                   cluster={false}
                   pulse
+                  /* Харанхуй горимын өнгө хоёр горимд (хэрэглэгч 2026-11-23) —
+                     анхдагч `--data` гэрэлд бараан ногоон болж хиймэл дагуулд уусдаг */
+                  pulseColor={cityPin}
                 />
               )}
               <BasemapGallery value={basemap} onChange={setBasemap} />
@@ -864,8 +908,11 @@ export function OrchinDashboard() {
                 onSelect={setKhoroo}
                 selectedGroup={district}
                 onSelectGroup={pickDistrict}
-                defaultOpen={pit ? "first" : "all"}
-                storageKey={`orchin.toilets.${source}.groups`}
+                defaultOpen={pit ? "first" : 4}
+                /* Нийтийн байгууламж: тоогоороо эхний ДӨРӨВ дүүрэг задарсан, бусад
+                   (Баянгол, Хан-Уул) хураагдсан (хэрэглэгч 2026-11-23, зургаар).
+                   Түлхүүрийн `-2`: урьдын хадгалсан төлөв шинэ анхдагчийг дарахгүй. */
+                storageKey={`orchin.toilets.${source}.groups-2`}
               />
             </div>
           </Card>

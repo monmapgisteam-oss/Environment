@@ -642,6 +642,8 @@ const LOOKS: Record<string, Look> = {
     points: (d) => ({
       cluster: false,
       pulse: true,
+      /* Самбартай нэг тогтмол өнгө (2026-11-23) */
+      pulseColor: () => "#94d7b9",
       labels: {
         text: d.attrs.map((a) => {
           const du = s(a.duureg) || "Тодорхойгүй";

@@ -1154,8 +1154,8 @@ export function GroupedRowChart({
   onSelect?: (key: string | null) => void;
   selectedGroup?: Selection;
   onSelectGroup?: (key: string | null) => void;
-  /** Эхлээд ямар бүлэг задарсан байх вэ */
-  defaultOpen?: "all" | "first" | "none";
+  /** Эхлээд ямар бүлэг задарсан байх вэ (тоо — эхний N бүлэг) */
+  defaultOpen?: "all" | "first" | "none" | number;
   /**
    * Өгвөл хураалтын төлөв `localStorage`-д үлдэж, хуудас дахин
    * ачаалахад сэргэнэ. Өгөхгүй бол зөвхөн санах ойд.
@@ -1208,7 +1208,9 @@ export function GroupedRowChart({
 
   const openByDefault = React.useCallback(
     (i: number) =>
-      defaultOpen === "all" ? true : defaultOpen === "first" ? i === 0 : false,
+      typeof defaultOpen === "number"
+        ? i < defaultOpen
+        : defaultOpen === "all" ? true : defaultOpen === "first" ? i === 0 : false,
     [defaultOpen],
   );
 

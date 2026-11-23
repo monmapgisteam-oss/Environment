@@ -373,18 +373,21 @@ export function dataLayers(E: Esri, mode: Mode) {
       { ratio: 1, color: col(mode.fire.core, 0.92) },
     ],
   };
+  /*
+    Ойрын цэг — ESRI-ИЙН FIREFLY тэмдэг (хэрэглэгч 2026-11-23, ариун цэврийн
+    байгууламж: "1:24,600-аас ойр pointuud firefly"): цагаан цөм + палитрын
+    `glow` өнгөөр будсан гэрэл. Урьд нь 1.2–2.6px энгийн цэг байв. Хэмжээ нь
+    тэмдгийн хамгийн том давхарга (гэрэл); гэр хорооллын ~20 м зайтай цэгүүд
+    нийлэхгүйн тулд жижиг.
+  */
   const dotRenderer = {
     type: "simple",
-    symbol: {
-      type: "simple-marker",
-      color: col(mode.fire.glow, 0.9),
-      outline: { color: [0, 0, 0, 0.5], width: 0.3 },
-    },
+    symbol: gradedMultiSymbol(mode.fire.glow),
     visualVariables: [
       sizeByZoom([
-        [zDot - 0.6, 1.2],
-        [15, 1.8],
-        [18, 2.6],
+        [zDot - 0.6, 3.5],
+        [15, 9],
+        [18, 14],
       ]),
     ],
   };
