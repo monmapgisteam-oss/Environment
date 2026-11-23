@@ -9,7 +9,6 @@ import {
   FULL_RULE,
   grantAllowsScope,
   grantAllowsTab,
-  isAdminName,
   normName,
   tabRule,
   type Grant,
@@ -23,7 +22,7 @@ import { useAuth } from "@/components/auth/provider";
 
 /*
   Нэвтэрсэн бүртгэлийн хандах эрх ({@link src/lib/access.ts}).
-  · админ (`portaladmin` эсвэл порталын `org_admin`) — бүгд + тохиргоо;
+  · админ (порталын `org_admin`) — бүгд + тохиргоо;
   · хүснэгтийн мөр (супер админы хадгалсан) → тэр эрх;
   · мөргүй бол кодын анхдагч (`ACCOUNTS`);
   · аль нь ч биш → ХААГДСАН (`blocked`).
@@ -98,7 +97,6 @@ export function useAccess() {
   const preview = React.useSyncExternalStore(noSub, previewNow, previewServer);
   const username = session?.username;
   const stored = session?.role;
-  const nameAdmin = isAdminName(username);
   const [fetched, setFetched] = React.useState<string | null | undefined>(undefined);
   const remote = useAccessRows();
 
@@ -107,7 +105,7 @@ export function useAccess() {
   }, [username]);
 
   React.useEffect(() => {
-    if (stored || !username || nameAdmin) return;
+    if (stored || !username) return;
     let alive = true;
     void fetchRole().then((r) => {
       if (alive) setFetched(r);
@@ -115,18 +113,18 @@ export function useAccess() {
     return () => {
       alive = false;
     };
-  }, [stored, username, nameAdmin]);
+  }, [stored, username]);
 
   const role = stored ?? fetched;
   return React.useMemo(() => {
     const signed = Boolean(username);
-    const admin = nameAdmin || role === "org_admin";
+    const admin = role === "org_admin";
     const u = normName(username);
     const row = remote.rows?.find((r) => r.username === u);
     /* Хүснэгтийн мөр давуу; `removed` бол анхдагч ч хүчингүй */
     const grant: Grant | null = row ? (row.removed ? null : withHome(u, row.grant)) : defaultGrant(u);
     const pending =
-      signed && !nameAdmin && (remote.status !== "ready" || (!grant && role === undefined));
+      signed && (remote.status !== "ready" || (!grant && role === undefined));
     const blocked = signed && !admin && !preview && !grant && !pending;
     /* Урьдчилсан харагдацад бүх хэсэг, цэс нээлттэй (дээрх тэмдэглэл) */
     const open = admin || preview;
@@ -146,7 +144,7 @@ export function useAccess() {
       analysis: allows(ANALYSIS),
       departments: DEPARTMENTS.filter((d) => allows(d.slug)),
     };
-  }, [username, nameAdmin, role, remote, preview]);
+  }, [username, role, remote, preview]);
 }
 
 /** Эрхгүй хуудсанд гарах блок */

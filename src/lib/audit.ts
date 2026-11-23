@@ -4,14 +4,13 @@
   Хэрэглэгч 2026-11-09: "лог бүртгэл товч эрх товчны доор … энэ систем рүү
   орсон бүртгэл хэзээ орсон хэзээ гарсан юу харсан, ямар дата edit хийсэн гэдэг
   маш нарийн мэдээллийг мэдэх хэрэгтэй — өгөгдөл засах бүрэн эрхийг хэлтэст
-  шилжүүлсэн тул хянах нь чухал". Зөвхөн `portaladmin` харна (`/log`).
+  шилжүүлсэн тул хянах нь чухал". Зөвхөн порталын админ (`org_admin`) харна (`/log`).
 
   Хадгалалт нь `Environment_Permissions`-тэй НЭГ арга ({@link ./access-remote}):
-  порталын hosted ХҮСНЭГТ `Environment_Log`, `portaladmin` анх лог бичихэд
-  өөрөө үүсч (`createService` → `addToDefinition`) org-д хуваалцагдана — бүх
-  нэвтэрсэн хэрэглэгч ӨӨРИЙН токеноор мөр нэмнэ. Хайлт нь ЭЗЭН `portaladmin`-ыг
-  шаардана (хуурамч хүснэгтээс сэргийлнэ). Хүснэгт байхгүй, хэрэглэгч админ биш
-  бол үйл явдал чимээгүй хаягдана — лог нь үндсэн ажлыг хэзээ ч зогсоохгүй.
+  порталын hosted ХҮСНЭГТ `Environment_Log`, org-д хуваалцсан — бүх нэвтэрсэн
+  хэрэглэгч ӨӨРИЙН токеноор мөр нэмнэ. Хүснэгтийг тогтмол item ID-аар олно
+  (хуурамч ижил нэртэй хүснэгтээс сэргийлнэ). Хүснэгт олдохгүй бол үйл явдал
+  чимээгүй хаягдана — лог нь үндсэн ажлыг хэзээ ч зогсоохгүй.
 
   Мөр: `username · kind · at · path · scope · tab · layer · ref_oid · action ·
   detail (JSON, ≤ 4000) · sid` — `sid` нь нэвтрэлт бүрийн санамсаргүй
@@ -32,11 +31,9 @@
 */
 
 import { arcgisJson } from "@/lib/arcgis";
-import { ADMIN_USERNAME, isAdminName, normName } from "@/lib/access";
+import { normName } from "@/lib/access";
 import { readSession } from "@/lib/auth";
 import { SHARING } from "@/lib/portal";
-
-const LOG_TITLE = "Environment_Log";
 
 export type AuditKind = "login" | "logout" | "view" | "tab" | "edit" | "schema" | "access";
 
@@ -66,7 +63,12 @@ export type AuditRow = {
   sid: string | null;
 };
 
-type Item = { title?: string; owner?: string; url?: string; id?: string };
+/**
+ * `Environment_Log` hosted хүснэгтийн item. ⚠ Гарчиг + эзний НЭРЭЭР хайхаа
+ * больсон (2026-11-23): админы нэвтрэх нэр хөтчийн багцад ил бичигддэг байв.
+ * Анх үүсгэх код устсан — хүснэгт 2026-11-09-нд үүссэн; git түүхэнд бий.
+ */
+const LOG_ITEM_ID = "ec4e7aca123944d18d36be6be3a4040c";
 
 const form = (fields: Record<string, string>): RequestInit => ({
   method: "POST",
@@ -76,82 +78,19 @@ const form = (fields: Record<string, string>): RequestInit => ({
 
 let tableUrl: string | null = null;
 let tableP: Promise<string | null> | null = null;
-/** Олдоогүй гэж дахин хайх хугацаа (мс) — хэрэглэгч бүр хайлтаар порталыг дарахгүй */
+/** Олдоогүй гэж дахин хайх хугацаа (мс) — хэрэглэгч бүр порталыг дарахгүй */
 const RETRY_MS = 10 * 60_000;
 let missingAt = 0;
 
-async function findTable(): Promise<string | null> {
-  const q = `title:"${LOG_TITLE}" type:"Feature Service" owner:${ADMIN_USERNAME}`;
-  const j = await arcgisJson<{ results?: Item[] }>(`${SHARING}/search?${new URLSearchParams({ q, num: "20", f: "json" })}`, "Лог хайх");
-  const hit = (j.results ?? []).find((x) => x.title === LOG_TITLE && normName(x.owner) === ADMIN_USERNAME && x.url);
-  return hit?.url ? `${hit.url}/0` : null;
-}
-
-/** Хүснэгт үүсгэнэ — ЗӨВХӨН `portaladmin` */
-async function createTable(): Promise<string> {
-  const created = await arcgisJson<{ encodedServiceURL?: string; serviceurl?: string; itemId?: string }>(
-    `${SHARING}/content/users/${ADMIN_USERNAME}/createService`,
-    "Лог хүснэгт үүсгэх",
-    form({
-      outputType: "featureService",
-      createParameters: JSON.stringify({
-        name: LOG_TITLE,
-        serviceDescription: "Байгаль орчны нэгдсэн системийн хэрэглэгчийн үйлдлийн лог",
-        hasStaticData: false,
-        maxRecordCount: 2000,
-        capabilities: "Query,Editing,Create",
-        spatialReference: { wkid: 102100 },
-        allowGeometryUpdates: false,
-        units: "esriMeters",
-      }),
-    }),
-  );
-  const service = created.encodedServiceURL ?? created.serviceurl;
-  if (!service || !created.itemId) throw new Error("Лог хүснэгт үүссэнгүй");
-  const str = (name: string, length: number) => ({ name, type: "esriFieldTypeString", length, nullable: true, editable: true });
-  await arcgisJson(
-    `${service.replace("/rest/services/", "/rest/admin/services/")}/addToDefinition`,
-    "Лог хүснэгтийн бүтэц",
-    form({
-      addToDefinition: JSON.stringify({
-        tables: [
-          {
-            name: "log",
-            type: "Table",
-            objectIdField: "OBJECTID",
-            fields: [
-              { name: "OBJECTID", type: "esriFieldTypeOID", nullable: false, editable: false },
-              { ...str("username", 128), nullable: false },
-              str("kind", 32),
-              { name: "at", type: "esriFieldTypeDate", nullable: false, editable: true },
-              str("path", 512),
-              str("scope", 64),
-              str("tab", 64),
-              str("layer", 256),
-              { name: "ref_oid", type: "esriFieldTypeInteger", nullable: true, editable: true },
-              str("action", 32),
-              str("detail", 4000),
-              str("sid", 40),
-            ],
-            indexes: [{ name: "at_idx", fields: "at", isAscending: false, isUnique: false }],
-          },
-        ],
-      }),
-    }),
-  );
-  await arcgisJson(`${SHARING}/content/users/${ADMIN_USERNAME}/items/${created.itemId}/share`, "Лог хүснэгт хуваалцах", form({ org: "true", everyone: "false" }));
-  return `${service}/0`;
-}
-
-/** Хүснэгтийн хаяг — байхгүй бол админ үүсгэнэ, бусдад `null` */
+/** Хүснэгтийн хаяг — олдохгүй бол `null` (үйл явдал чимээгүй хаягдана) */
 function logTable(): Promise<string | null> {
   if (tableUrl) return Promise.resolve(tableUrl);
   if (tableP) return tableP;
   if (missingAt && Date.now() - missingAt < RETRY_MS) return Promise.resolve(null);
   tableP = (async () => {
     try {
-      let url = await findTable();
-      if (!url && isAdminName(readSession()?.username)) url = await createTable();
+      const item = await arcgisJson<{ url?: string }>(`${SHARING}/content/items/${LOG_ITEM_ID}?f=json`, "Лог хайх");
+      const url = item.url ? `${item.url}/0` : null;
       if (url) tableUrl = url;
       else missingAt = Date.now();
       return url;

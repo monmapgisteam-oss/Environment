@@ -3,13 +3,14 @@
 
   Селбэ төслийн `permsRemote.ts`-ийн арга (хэрэглэгч 2026-10-16: "хэрхэн
   ажиллаж байгаа санааг Selbe-ээс ав"):
-  · хүснэгт `Environment_Permissions` нь супер админ (`portaladmin`) АНХ
-    ХАДГАЛАХАД автоматаар үүснэ (`createService` → `addToDefinition`) ба
-    байгууллагад (org) хуваалцагдана — бүх нэвтэрсэн хэрэглэгч уншина;
+  · хүснэгт `Environment_Permissions` байгууллагад (org) хуваалцсан — бүх
+    нэвтэрсэн хэрэглэгч уншина;
   · мөр бүр нэг бүртгэл: `username` · `views` (эрхийн JSON) · `removed`;
-  · ⚠ ЭЗНИЙГ ШАЛГАНА: ижил нэртэй item-ыг org-ийн хэн ч үүсгэж болох тул
-    ЗӨВХӨН `portaladmin`-ийн эзэмшдэгийг хүлээн авна — эс тэгвээс хуурамч
-    хүснэгтээр эрх олгох боломжтой болно;
+  · ⚠⚠ ХҮСНЭГТИЙГ ТОГТМОЛ ITEM ID-ААР олно (2026-11-23). Урьд нь гарчиг +
+    эзний НЭРЭЭР хайдаг байсан тул админы нэвтрэх нэр хөтчийн багцад ил
+    бичигддэг байв. ID нь мөн хуурамч ижил нэртэй item-аас хамгаална. Анх
+    үүсгэх код (`createService` → `addToDefinition`) УСТСАН — хүснэгт
+    2026-10-23-нд үүссэн; дахин хэрэгтэй бол git түүхээс.
   · ⚠ ХЯЗГААР: бичих эрх нь item-ийн хуваалцлаар — org-д засах эрхтэй хэн
     ч REST-ээр шууд засаж чадна. Сервер талгүй системд үүнээс чанга
     хамгаалалт байхгүй.
@@ -17,15 +18,14 @@
 */
 
 import { arcgisJson } from "@/lib/arcgis";
-import { ADMIN_USERNAME, normName, parseGrant, type Grant } from "@/lib/access";
+import { normName, parseGrant, type Grant } from "@/lib/access";
 import { SHARING } from "@/lib/portal";
 import { logEvent } from "@/lib/audit";
 
-const TITLE = "Environment_Permissions";
+/** `Environment_Permissions` hosted хүснэгтийн item */
+const ITEM_ID = "4db24a9afcd14756ae67dfb6349021b9";
 
 export type AccessRow = { username: string; grant: Grant; removed: boolean };
-
-type Item = { title?: string; owner?: string; url?: string; id?: string };
 
 let urlCache: string | null = null;
 
@@ -35,71 +35,11 @@ const form = (fields: Record<string, string>): RequestInit => ({
   body: new URLSearchParams({ ...fields, f: "json" }),
 });
 
-/** Хүснэгтийн давхаргын хаяг — олдохгүй бол `null` */
+/** Хүснэгтийн давхаргын хаяг — item олдохгүй бол `null` */
 async function findTable(): Promise<string | null> {
   if (urlCache) return urlCache;
-  const q = `title:"${TITLE}" type:"Feature Service" owner:${ADMIN_USERNAME}`;
-  const j = await arcgisJson<{ results?: Item[] }>(
-    `${SHARING}/search?${new URLSearchParams({ q, num: "20", f: "json" })}`,
-    "Эрхийн тохиргоо хайх",
-  );
-  const hit = (j.results ?? []).find(
-    (x) => x.title === TITLE && normName(x.owner) === ADMIN_USERNAME && x.url,
-  );
-  urlCache = hit?.url ? `${hit.url}/0` : null;
-  return urlCache;
-}
-
-/** Хүснэгт үүсгэнэ — ЗӨВХӨН `portaladmin` (дуудагч шалгана) */
-async function createTable(): Promise<string> {
-  const created = await arcgisJson<{ encodedServiceURL?: string; serviceurl?: string; itemId?: string }>(
-    `${SHARING}/content/users/${ADMIN_USERNAME}/createService`,
-    "Эрхийн хүснэгт үүсгэх",
-    form({
-      outputType: "featureService",
-      createParameters: JSON.stringify({
-        name: TITLE,
-        serviceDescription: "Байгаль орчны нэгдсэн системийн хэрэглэгчийн эрх",
-        hasStaticData: false,
-        maxRecordCount: 2000,
-        capabilities: "Query,Editing,Create,Update,Delete",
-        spatialReference: { wkid: 102100 },
-        allowGeometryUpdates: false,
-        units: "esriMeters",
-      }),
-    }),
-  );
-  const service = created.encodedServiceURL ?? created.serviceurl;
-  if (!service || !created.itemId) throw new Error("Эрхийн хүснэгт үүссэнгүй");
-
-  await arcgisJson(
-    `${service.replace("/rest/services/", "/rest/admin/services/")}/addToDefinition`,
-    "Эрхийн хүснэгтийн бүтэц",
-    form({
-      addToDefinition: JSON.stringify({
-        tables: [
-          {
-            name: "permissions",
-            type: "Table",
-            objectIdField: "OBJECTID",
-            fields: [
-              { name: "OBJECTID", type: "esriFieldTypeOID", nullable: false, editable: false },
-              { name: "username", type: "esriFieldTypeString", length: 256, nullable: false, editable: true },
-              { name: "views", type: "esriFieldTypeString", length: 8000, nullable: true, editable: true },
-              { name: "removed", type: "esriFieldTypeSmallInteger", nullable: true, editable: true },
-            ],
-          },
-        ],
-      }),
-    }),
-  );
-  /* Байгууллага даяар УНШИХ — нийтэд БИШ */
-  await arcgisJson(
-    `${SHARING}/content/users/${ADMIN_USERNAME}/items/${created.itemId}/share`,
-    "Эрхийн хүснэгт хуваалцах",
-    form({ org: "true", everyone: "false" }),
-  );
-  urlCache = `${service}/0`;
+  const item = await arcgisJson<{ url?: string }>(`${SHARING}/content/items/${ITEM_ID}?f=json`, "Эрхийн тохиргоо хайх");
+  urlCache = item?.url ? `${item.url}/0` : null;
   return urlCache;
 }
 
@@ -160,11 +100,12 @@ export async function readAccess(): Promise<AccessRow[] | null> {
 }
 
 /**
- * Бүртгэлийн эрхийг хадгална (байвал засна, үгүй бол нэмнэ). Хүснэгт
- * байхгүй бол ЭНД үүснэ — зөвхөн админы хадгалалтаас дуудагдана.
+ * Бүртгэлийн эрхийг хадгална (байвал засна, үгүй бол нэмнэ) — зөвхөн
+ * админы хадгалалтаас дуудагдана.
  */
 export async function saveAccess(rows: AccessRow[]): Promise<void> {
-  const url = (await findTable()) ?? (await createTable());
+  const url = await findTable();
+  if (!url) throw new Error("Эрхийн хүснэгт олдсонгүй");
   const all = await queryRows(url);
   const have = latest(all);
   const adds: unknown[] = [];

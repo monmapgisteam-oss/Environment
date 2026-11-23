@@ -2,9 +2,10 @@
 
 import * as React from "react";
 import { ArrowLeft, Check, ChevronLeft, ChevronRight, Loader2, LockKeyhole, Minus, Plus, RotateCcw, Save, Search, ShieldCheck, UnlockKeyhole, Users, X } from "lucide-react";
-import { ACCOUNTS, ADMIN_USERNAME, VIEW_PARTS, clearDetail, homeScopes, layerKey, normName, normViews, tabRule, viewKey, withHome, type Grant } from "@/lib/access";
+import { ACCOUNTS, VIEW_PARTS, clearDetail, homeScopes, layerKey, normName, normViews, tabRule, viewKey, withHome, type Grant } from "@/lib/access";
 import { readAccess, saveAccess, type AccessRow } from "@/lib/access-remote";
 import { NoAccess, setAccessRows, useAccess, useAccessRows } from "@/components/auth/access";
+import { useAuth } from "@/components/auth/provider";
 import { CATALOG, type CatalogScope, type CatalogTab } from "@/components/access/catalog";
 import { cn } from "@/lib/utils";
 import styles from "./access-directory.module.css";
@@ -45,6 +46,8 @@ function sameDraft(a: Draft, b: Draft): boolean {
 
 export function AccessDirectory() {
   const { admin } = useAccess();
+  /* Админ өөрийнхөө эрхийг энд засахгүй — нэр нь кодод бичигдэхгүй, сессээс */
+  const me = normName(useAuth().session?.username);
   const remote = useAccessRows();
   const [drafts, setDrafts] = React.useState<Record<string, Draft>>({});
   const [added, setAdded] = React.useState<string[]>([]);
@@ -71,7 +74,7 @@ export function AccessDirectory() {
     ...ACCOUNTS.map((account) => account.username),
     ...(remote.rows ?? []).map((row) => row.username),
     ...added,
-  ])].filter((username) => username !== ADMIN_USERNAME);
+  ])].filter((username) => username !== me);
   const extraNames = names.filter((username) => !ACCOUNTS.some((account) => account.username === username)).sort();
   const nameOf = (username: string) => {
     const account = ACCOUNTS.find((item) => item.username === username);
@@ -164,7 +167,7 @@ export function AccessDirectory() {
     if (locked) return;
     const username = normName(newName);
     if (!username) return;
-    if (username === ADMIN_USERNAME) {
+    if (username === me) {
       setMsg({ ok: false, text: "Удирдах хэрэглэгчийн эрхийг өөрчлөх боломжгүй" });
       return;
     }

@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { ChevronDown, ChevronRight, Clock3, Eye, KeyRound, LogIn, LogOut, PencilLine, RefreshCw, ScrollText, Search, TableProperties, Users } from "lucide-react";
-import { ACCOUNTS, ADMIN_USERNAME, normName } from "@/lib/access";
+import { ACCOUNTS } from "@/lib/access";
 import { readLog, type AuditKind, type AuditRow } from "@/lib/audit";
 import { DEPARTMENTS } from "@/lib/departments";
 import { num } from "@/lib/utils";
@@ -37,8 +37,8 @@ const PAGES: Record<string, string> = { "/": "Ерөнхий самбар", "/an
 
 const dept = (slug: string | null) => DEPARTMENTS.find((d) => d.slug === slug);
 const account = (u: string) => ACCOUNTS.find((a) => a.username === u);
+/* Админы нэвтрэх нэр кодод бичигдэхгүй (аюулгүй байдал) — тэр мөр нэрээрээ гарна */
 function userName(u: string): string {
-  if (normName(u) === ADMIN_USERNAME) return "Порталын администратор";
   return account(u)?.name ?? u;
 }
 function pageName(path: string | null): string {

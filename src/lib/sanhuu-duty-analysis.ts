@@ -1,4 +1,4 @@
-import { asset } from "@/lib/base-path";
+import { fetchPortalData } from "@/lib/portal-data";
 import type { PlanData, Staff, Task } from "@/lib/sanhuu";
 
 export const DUTY_STATUSES = [
@@ -51,11 +51,9 @@ export type DutyAnalysis = {
   findings: DutyFinding[];
 };
 
-export async function fetchDutyAnalysis(signal?: AbortSignal): Promise<DutyAnalysis> {
-  // eslint-disable-next-line no-restricted-globals -- reviewed same-origin static data, not ArcGIS
-  const response = await fetch(asset("/data/sanhuu-duty-analysis.json"), { signal });
-  if (!response.ok) throw new Error(`Шинжилгээний мэдээллийг ачаалах боломжгүй байна (${response.status})`);
-  return response.json() as Promise<DutyAnalysis>;
+/** Порталын item-д (`lib/portal-data.ts`) — нэвтрэлттэй */
+export function fetchDutyAnalysis(signal?: AbortSignal): Promise<DutyAnalysis> {
+  return fetchPortalData<DutyAnalysis>("duty", "Чиг үүргийн шинжилгээ", signal);
 }
 
 /** Change detection only, not a security hash. Performance changes don't invalidate a duty review. */

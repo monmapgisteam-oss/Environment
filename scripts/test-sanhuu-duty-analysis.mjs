@@ -9,10 +9,10 @@ const { outputText } = ts.transpileModule(source, {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2021 },
 });
 const exports = {};
-vm.runInNewContext(outputText, { exports, require(id) { assert.equal(id, "@/lib/base-path"); return { asset: (path) => path }; } });
+vm.runInNewContext(outputText, { exports, require(id) { assert.equal(id, "@/lib/portal-data"); return { fetchPortalData: () => { throw new Error("not in tests"); } }; } });
 const { dutyReviewChanged, filterDutyFindings, dutyCsv, DUTY_STATUSES, EMPTY_DUTY_FILTERS } = exports;
-const review = JSON.parse(readFileSync(new URL("../public/data/sanhuu-duty-analysis.json", import.meta.url), "utf8"));
-const plan = JSON.parse(readFileSync(new URL("../public/data/sanhuu-2026.json", import.meta.url), "utf8"));
+const review = JSON.parse(readFileSync(new URL("../data-private/sanhuu-duty-analysis.json", import.meta.url), "utf8"));
+const plan = JSON.parse(readFileSync(new URL("../data-private/sanhuu-2026.json", import.meta.url), "utf8"));
 const finding = (id) => review.findings.find((f) => f.id === id);
 const task = (no) => plan.tasks.find((t) => t.no === no);
 

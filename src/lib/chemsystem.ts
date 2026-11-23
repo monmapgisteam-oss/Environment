@@ -8,8 +8,10 @@
  * бүтэцтэй хоёр бүртгэл.
  *
  * ⚠⚠ ДАТА НЬ ХОРМЫН ХУВИЛБАРААР ИРНЭ, API-аас ШУУД БИШ.
- * `scripts/fetch-chemsystem.mjs` нь бүтээх үед татаж
- * `public/data/chemsystem.json`-д бичдэг. Шалтгаан нь аюулгүй байдал:
+ * `scripts/fetch-chemsystem.mjs` нь татаж `data-private/chemsystem.json`-д
+ * бичнэ, `scripts/upload-portal-data.mjs` түүнийг порталын item болгон
+ * шинэчилнэ — хөтөч токеноор уншина (2026-11-23-ээс; урьд нь нийтэд
+ * нээлттэй `public/data/`-д байсан). Шалтгаан нь аюулгүй байдал:
  * API нь `Authorization: Bearer` түлхүүр шаарддаг бөгөөд сайт
  * статикаар экспортлогддог тул хөтөч рүү өгсөн түлхүүр нь хэн бүхэнд
  * ил болно. Тэр түлхүүр нь ердийн уншигч биш — тодорхойлолтод
@@ -17,7 +19,7 @@
  * Хөтчөөс шууд татах гэж БҮҮ оролд.
  */
 
-import { asset } from "@/lib/base-path";
+import { fetchPortalData } from "@/lib/portal-data";
 
 /**
  * Эх системийн API-ийн хаяг.
@@ -31,7 +33,6 @@ import { asset } from "@/lib/base-path";
 /* 2026-11-09: `b.sanbit.mn` гэрчилгээ нь хуучирч холбогдохоо больсон → `chemsystem.mn` (мөн `scripts/fetch-chemsystem.mjs`) */
 export const CHEMSYSTEM_API = "https://chemsystem.mn/api/v1";
 
-const SNAPSHOT = "/data/chemsystem.json";
 
 export type Chemical = {
   id: number;
@@ -105,11 +106,9 @@ export type ChemSystem = {
   disposals: Disposal[];
 };
 
-export async function fetchChemSystem(signal?: AbortSignal): Promise<ChemSystem> {
-  // eslint-disable-next-line no-restricted-globals -- өөрийн статик JSON хормын хувилбар — портал биш
-  const res = await fetch(asset(SNAPSHOT), signal ? { signal } : undefined);
-  if (!res.ok) throw new Error(`Химийн бүртгэл татагдсангүй (${res.status})`);
-  return (await res.json()) as ChemSystem;
+/** Хормын хувилбар порталын item-д (`lib/portal-data.ts`) — нэвтрэлттэй */
+export function fetchChemSystem(signal?: AbortSignal): Promise<ChemSystem> {
+  return fetchPortalData<ChemSystem>("chemsystem", "Химийн бүртгэл", signal);
 }
 
 /* --------------------------------------------------------------------------

@@ -13,13 +13,13 @@ const exports = {};
 vm.runInNewContext(outputText, {
   exports,
   require(id) {
-    assert.equal(id, "@/lib/base-path");
-    return { asset: (path) => path };
+    assert.equal(id, "@/lib/portal-data");
+    return { fetchPortalData: () => { throw new Error("not in tests"); } };
   },
   Date,
 });
 const { dayOf, planDay, deadlineOf, recordedProgress, summarizeTasks, rollup } = exports;
-const data = JSON.parse(readFileSync(new URL("../public/data/sanhuu-2026.json", import.meta.url), "utf8"));
+const data = JSON.parse(readFileSync(new URL("../data-private/sanhuu-2026.json", import.meta.url), "utf8"));
 const today = dayOf("2026-09-22");
 const task = { ...data.tasks[0], performance: 30, progress: 30, start: "2026-01-01", end: "2026-12-31" };
 

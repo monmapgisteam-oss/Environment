@@ -7,8 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "fetch:chemsystem": "node scripts/fetch-chemsystem.mjs",
-    "prebuild": "npm run fetch:chemsystem"
+    "fetch:chemsystem": "node scripts/fetch-chemsystem.mjs"
   },
   "dependencies": {
     "clsx": "^2.1.1",

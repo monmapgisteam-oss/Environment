@@ -25,9 +25,8 @@
  * гүйцэтгэлийг 0% болгодог тул зөвхөн N-ээс мэдээлэлгүй ажлыг ялгахгүй.
  */
 
-import { asset } from "@/lib/base-path";
+import { fetchPortalData } from "@/lib/portal-data";
 
-const SNAPSHOT = "/data/sanhuu-2026.json";
 
 /* --------------------------------------------------------------------------
    БҮТЭЦ
@@ -83,11 +82,9 @@ export type PlanData = {
   tasks: Task[];
 };
 
-export async function fetchPlan(signal?: AbortSignal): Promise<PlanData> {
-  // eslint-disable-next-line no-restricted-globals -- өөрийн статик JSON — портал биш
-  const res = await fetch(asset(SNAPSHOT), signal ? { signal } : undefined);
-  if (!res.ok) throw new Error(`Төлөвлөгөөний биелэлт татагдсангүй (${res.status})`);
-  return (await res.json()) as PlanData;
+/** Порталын item-д (`lib/portal-data.ts`) — нэвтрэлттэй */
+export function fetchPlan(signal?: AbortSignal): Promise<PlanData> {
+  return fetchPortalData<PlanData>("sanhuu", "Төлөвлөгөөний биелэлт", signal);
 }
 
 /* --------------------------------------------------------------------------

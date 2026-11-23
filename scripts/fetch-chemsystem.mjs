@@ -3,8 +3,11 @@
  *
  * ⚠⚠ ТҮЛХҮҮР ХӨТӨЧ РҮҮ ХЭЗЭЭ Ч ЯВАХГҮЙ. Энэ скрипт нь БҮТЭЭХ ҮЕД л
  * ажиллана: түлхүүрийг орчны хувьсагчаас (`CHEMSYSTEM_KEY`) уншиж,
- * үр дүнг `public/data/chemsystem.json`-д бичнэ. Хөтөч зөвхөн тэр
- * файлыг уншина.
+ * үр дүнг `data-private/chemsystem.json`-д (gitignore) бичнэ.
+ *
+ * ⚠⚠ 2026-11-23-ээс ГАРААР шинэчилнэ (хэрэглэгчийн сонголт): бүтээлтийн
+ * `prebuild` ба CI-ийн алхам хасагдсан. Файл нь порталын item болж
+ * байршина — `scripts/upload-portal-data.mjs chemsystem`.
  *
  * Яагаад ийм байх ЁСТОЙ вэ: сайт статикаар экспортлогдож GitHub Pages
  * дээр нийтэд нээлттэй байрладаг. `NEXT_PUBLIC_*` ч бай, кодод шууд
@@ -16,10 +19,9 @@
  *
  * Ажиллуулах:
  *   CHEMSYSTEM_KEY=… node scripts/fetch-chemsystem.mjs
+ *   PORTAL_TOKEN=… node scripts/upload-portal-data.mjs chemsystem
  *
- * CI дээр түлхүүрийг Actions Secret-ээс өгнө. Түлхүүр байхгүй бол
- * скрипт ЧИМЭЭГҮЙ гарна — өмнөх хувилбар байрандаа үлдэж, бүтээлт
- * унахгүй.
+ * Түлхүүр байхгүй бол скрипт ЧИМЭЭГҮЙ гарна — өмнөх хувилбар үлдэнэ.
  */
 
 import { writeFile, mkdir, access } from "node:fs/promises";
@@ -27,7 +29,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
-const OUT = join(ROOT, "public", "data", "chemsystem.json");
+const OUT = join(ROOT, "data-private", "chemsystem.json");
 
 /* ⚠ Ижил утга `src/lib/chemsystem.ts`-ийн `CHEMSYSTEM_API`-д бий
    (эх сурвалжийн хуудас түүнийг уншина). Энэ файл нь `.mjs` тул
