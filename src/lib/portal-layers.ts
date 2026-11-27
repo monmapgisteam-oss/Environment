@@ -416,20 +416,29 @@ async function pagesOf(
 ): Promise<Raw[]> {
   const service = serviceOf(info.set, info.id);
   const size = info.pageSize;
-  const page = (offset: number) =>
-    arcgisJson<{ features?: Raw[] }>(
-      `${service}/${info.layerId}/query?` +
-        new URLSearchParams({
-          where: whereOf(info.set, info.id),
-          outSR: "4326",
-          resultOffset: String(offset),
-          resultRecordCount: String(size),
-          orderByFields: info.objectIdField,
-          f: "geojson",
-          ...params,
-        }),
+  /* ⚠⚠ УРТ АСУУЛГА POST-ООР (2026-11-27): хяналт шалгалтын Survey123 маягт
+     1,196 талбартай болсны дараа `outFields` ~17 КБ болж, хостинг серверийн
+     nginx "414 Request-URI Too Large" буцааж самбар бүхэлдээ нээгдэхгүй байв.
+     Параметрүүд биед (form-urlencoded) явна; токен нь хаягт хэвээр
+     (`arcgisJson`). Богино асуулга GET хэвээр — бусад давхаргад өөрчлөлтгүй. */
+  const page = (offset: number) => {
+    const query = new URLSearchParams({
+      where: whereOf(info.set, info.id),
+      outSR: "4326",
+      resultOffset: String(offset),
+      resultRecordCount: String(size),
+      orderByFields: info.objectIdField,
+      f: "geojson",
+      ...params,
+    });
+    const url = `${service}/${info.layerId}/query`;
+    const long = url.length + query.toString().length > 4000;
+    return arcgisJson<{ features?: Raw[] }>(
+      long ? url : `${url}?${query}`,
       info.name,
+      long ? { method: "POST", body: query } : undefined,
     ).then((j) => j.features ?? []);
+  };
 
   const known = info.count > 0 ? Math.ceil(info.count / size) : 1;
   const pages = await Promise.all(
